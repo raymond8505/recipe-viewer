@@ -1,0 +1,16 @@
+{
+  "permissions": {
+    "allow": [
+      "mcp__claude_ai_Workflows__search_recipes",
+      "Read(//c/Users/crazy/.claude/skills/coding//**)",
+      "Read(//c/Users/crazy/.claude/skills/coding/**)",
+      "Read(//c/Users/crazy/OneDrive/Desktop/projects/voila-shopper//**)",
+      "Read(//c/Users/crazy/OneDrive/Desktop/projects/voila-shopper/**)",
+      "Bash(yarn create:*)",
+      "Bash(npx create-next-app@14 . --typescript --tailwind --app --src-dir --no-eslint --import-alias \"@/*\" --no-turbopack)",
+      "Bash(yarn install:*)",
+      "Bash(yarn test:run)",
+      "Bash(yarn add:*)"
+    ]
+  }
+}
