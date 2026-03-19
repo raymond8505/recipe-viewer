@@ -1,4 +1,5 @@
 import { getSupabaseClient } from "./supabase";
+import { features } from "./features";
 import type { RecipeRow, RecipesResult } from "@/types/recipe";
 
 const PAGE_SIZE = 24;
@@ -19,9 +20,12 @@ export async function getRecipes(opts?: {
     .select("id, url, source, metadata", { count: "exact" })
     .not("metadata->schema->>name", "ilike", "%(NEEDS RE-SCRAPE)%")
     .not("metadata->schema->>name", "ilike", "%null%")
-    .in("source", ["raymonds.recipes"])
     .range(from, to)
     .order("id", { ascending: false });
+
+  if (features.filterByOwnSource) {
+    queryBuilder = queryBuilder.in("source", ["raymonds.recipes"]);
+  }
 
   if (opts?.query) {
     queryBuilder = queryBuilder.ilike("metadata->schema->>name", `%${opts.query}%`);

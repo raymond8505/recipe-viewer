@@ -1,5 +1,8 @@
+"use client";
+
 import Image from "next/image";
 import Link from "next/link";
+import { useState } from "react";
 import type { RecipeRow } from "@/types/recipe";
 import { formatDuration, getFirstImage, toArray } from "@/lib/format";
 
@@ -7,43 +10,47 @@ interface RecipeCardProps {
   recipe: RecipeRow;
 }
 
+function ImagePlaceholder() {
+  return (
+    <div className="flex items-center justify-center text-gray-300 w-full aspect-square bg-gray-100">
+      <svg className="w-12 h-12" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          strokeWidth={1.5}
+          d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"
+        />
+      </svg>
+    </div>
+  );
+}
+
 export default function RecipeCard({ recipe }: RecipeCardProps) {
   const { metadata: { schema }, id } = recipe;
   const image = getFirstImage(schema.image);
   const totalTime = formatDuration(schema.totalTime ?? schema.cookTime);
   const categories = toArray(schema.recipeCategory);
+  const [imgError, setImgError] = useState(false);
 
   return (
     <Link
       href={`/recipes/${id}`}
       className="group flex flex-col rounded-2xl overflow-hidden border border-gray-200 bg-white hover:shadow-lg transition-shadow duration-200"
     >
-      <div className="w-full bg-gray-100">
-        {image ? (
-          <Image
-            src={image}
-            alt={schema.name}
-            width={0}
-            height={0}
-            sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
-            className="w-full h-auto group-hover:scale-105 transition-transform duration-200"
-          />
-        ) : (
-          <div className="flex items-center justify-center text-gray-300 min-h-40">
-            <svg
-              className="w-12 h-12"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={1.5}
-                d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"
-              />
-            </svg>
+      <div className="w-full">
+        {image && !imgError ? (
+          <div className="relative w-full aspect-square overflow-hidden bg-gray-100">
+            <Image
+              src={image}
+              alt={schema.name}
+              fill
+              sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
+              className="object-cover group-hover:scale-105 transition-transform duration-200"
+              onError={() => setImgError(true)}
+            />
           </div>
+        ) : (
+          <ImagePlaceholder />
         )}
       </div>
 
