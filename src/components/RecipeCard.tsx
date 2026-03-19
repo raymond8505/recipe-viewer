@@ -18,17 +18,18 @@ export default function RecipeCard({ recipe }: RecipeCardProps) {
       href={`/recipes/${id}`}
       className="group flex flex-col rounded-2xl overflow-hidden border border-gray-200 bg-white hover:shadow-lg transition-shadow duration-200"
     >
-      <div className="relative w-full aspect-video bg-gray-100">
+      <div className="w-full bg-gray-100">
         {image ? (
           <Image
             src={image}
             alt={schema.name}
-            fill
-            className="object-cover group-hover:scale-105 transition-transform duration-200"
+            width={0}
+            height={0}
             sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
+            className="w-full h-auto group-hover:scale-105 transition-transform duration-200"
           />
         ) : (
-          <div className="absolute inset-0 flex items-center justify-center text-gray-300">
+          <div className="flex items-center justify-center text-gray-300 min-h-40">
             <svg
               className="w-12 h-12"
               fill="none"

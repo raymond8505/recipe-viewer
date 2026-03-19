@@ -59,14 +59,15 @@ export default function RecipeDetail({ recipe }: RecipeDetailProps) {
 
       {/* Image */}
       {image && (
-        <div className="relative w-full aspect-video rounded-2xl overflow-hidden mb-8 bg-gray-100">
+        <div className="w-full rounded-2xl overflow-hidden mb-8 bg-gray-100">
           <Image
             src={image}
             alt={schema.name}
-            fill
-            className="object-cover"
-            priority
+            width={0}
+            height={0}
             sizes="(max-width: 768px) 100vw, 768px"
+            className="w-full h-auto"
+            priority
           />
         </div>
       )}
@@ -157,9 +158,10 @@ export default function RecipeDetail({ recipe }: RecipeDetailProps) {
       {/* Nutrition */}
       {schema.nutrition && hasNutritionData(schema.nutrition) && (
         <div className="mt-8 p-4 border border-gray-200 rounded-2xl">
-          <h2 className="text-xl font-semibold text-gray-900 mb-4">
-            Nutrition
-          </h2>
+          <div className="flex items-baseline gap-2 mb-4">
+            <h2 className="text-xl font-semibold text-gray-900">Nutrition</h2>
+            <span className="text-sm text-gray-500">per serving</span>
+          </div>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm">
             {schema.nutrition.calories && (
               <NutritionStat label="Calories" value={schema.nutrition.calories} />
@@ -182,6 +184,12 @@ export default function RecipeDetail({ recipe }: RecipeDetailProps) {
           </div>
         </div>
       )}
+
+      {/* JSON-LD */}
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(schema, null, 2) }}
+      />
     </article>
   );
 }
