@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
+import DraggableRibbon from "./DraggableRibbon";
 
 interface AddTimerModalProps {
   /** Pre-fill for edit mode. If provided, modal shows "Edit Timer" / "Save". */
@@ -88,10 +89,11 @@ export default function AddTimerModal({
     Math.floor((initialSeconds ?? 300) / 60),
   );
   const [seconds, setSeconds] = useState((initialSeconds ?? 300) % 60);
-  const labelRef = useRef<HTMLInputElement>(null);
+  const closeButtonRef = useRef<HTMLButtonElement>(null);
 
+  // Focus the close button on mount so the on-screen keyboard stays down
   useEffect(() => {
-    labelRef.current?.focus();
+    closeButtonRef.current?.focus();
   }, []);
 
   useEffect(() => {
@@ -114,8 +116,9 @@ export default function AddTimerModal({
   };
 
   return (
+    // On mobile: bottom sheet. On sm+: centered dialog.
     <div
-      className="absolute inset-0 z-20 flex items-center justify-center bg-black/50 p-4"
+      className="absolute inset-0 z-20 flex flex-col justify-end sm:items-center sm:justify-center bg-black/50"
       role="dialog"
       aria-modal="true"
       aria-label={isEditMode ? "Edit timer" : "Add timer"}
@@ -123,13 +126,14 @@ export default function AddTimerModal({
         if (e.target === e.currentTarget) onClose();
       }}
     >
-      <div className="w-full max-w-sm bg-white rounded-2xl shadow-2xl overflow-hidden">
+      <div className="w-full sm:max-w-sm bg-white rounded-t-2xl sm:rounded-2xl shadow-2xl overflow-hidden max-h-[90dvh] flex flex-col">
         {/* Header */}
-        <div className="flex items-center justify-between px-6 pt-6 pb-4">
+        <div className="flex items-center justify-between px-6 pt-6 pb-4 shrink-0">
           <h2 className="text-xl font-semibold text-gray-900">
             {isEditMode ? "Edit Timer" : "New Timer"}
           </h2>
           <button
+            ref={closeButtonRef}
             onClick={onClose}
             className="p-2 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors"
             aria-label="Close"
@@ -138,7 +142,7 @@ export default function AddTimerModal({
           </button>
         </div>
 
-        <div className="px-6 pb-6 space-y-5">
+        <div className="px-6 pb-6 space-y-5 overflow-y-auto">
           {/* Label */}
           <div>
             <label
@@ -148,7 +152,6 @@ export default function AddTimerModal({
               Label
             </label>
             <input
-              ref={labelRef}
               id="timer-label"
               type="text"
               value={label}
@@ -223,8 +226,8 @@ export default function AddTimerModal({
               </div>
             </div>
 
-            {/* Quick presets */}
-            <div className="flex flex-wrap gap-2 mt-4">
+            {/* Quick presets — horizontal ribbon, no wrapping */}
+            <DraggableRibbon className="gap-2 mt-4">
               {QUICK_MINUTES.map((m) => (
                 <button
                   key={m}
@@ -232,12 +235,12 @@ export default function AddTimerModal({
                     setMinutes(m);
                     setSeconds(0);
                   }}
-                  className="px-4 py-2 rounded-lg bg-orange-50 hover:bg-orange-100 text-orange-700 text-sm font-medium transition-colors"
+                  className="snap-start shrink-0 px-4 py-2 rounded-lg bg-orange-50 hover:bg-orange-100 active:bg-orange-200 text-orange-700 text-sm font-medium transition-colors"
                 >
                   {m}m
                 </button>
               ))}
-            </div>
+            </DraggableRibbon>
           </div>
 
           {/* Actions */}

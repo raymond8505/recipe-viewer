@@ -2,6 +2,14 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Hide scrollbar on ribbon containers while preserving scroll behaviour */
+.ribbon-scroll {
+  scrollbar-width: none;
+}
+.ribbon-scroll::-webkit-scrollbar {
+  display: none;
+}
+
 @keyframes timer-done-pulse {
   0%, 100% { background-color: rgb(254 226 226); } /* red-100 */
   50% { background-color: rgb(252 165 165); } /* red-300 */

@@ -25,12 +25,12 @@ export default function TimerColumn({
   onResetAll,
 }: TimerColumnProps) {
   return (
-    <div className="w-1/4 border-l border-gray-200 flex flex-col min-w-0">
+    <div className="w-full border-l border-gray-200 flex flex-col min-w-0">
       {/* Sticky header */}
-      <div className="shrink-0 bg-white border-b border-gray-200 px-4 py-3 flex flex-col gap-2">
+      <div className="shrink-0 bg-white border-b border-gray-200 px-4 py-3 flex items-center gap-2">
         <button
           onClick={onAddTimer}
-          className="w-full py-3 rounded-xl bg-orange-500 hover:bg-orange-600 active:bg-orange-700 text-white font-semibold text-base transition-colors flex items-center justify-center gap-2"
+          className="flex-1 py-3 rounded-xl bg-orange-500 hover:bg-orange-600 active:bg-orange-700 text-white font-semibold text-base transition-colors flex items-center justify-center gap-2 whitespace-nowrap"
         >
           <PlusIcon />
           Add Timer
@@ -38,7 +38,7 @@ export default function TimerColumn({
         {timers.length > 0 && (
           <button
             onClick={onResetAll}
-            className="w-full py-2 rounded-xl border border-gray-300 hover:bg-gray-50 text-gray-600 text-sm font-medium transition-colors"
+            className="shrink-0 py-3 px-3 rounded-xl border border-gray-300 hover:bg-gray-50 text-gray-600 text-sm font-medium transition-colors whitespace-nowrap"
           >
             Reset All
           </button>
