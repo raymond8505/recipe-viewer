@@ -9,6 +9,10 @@ import {
   getFirstImage,
   toArray,
 } from "@/lib/format";
+import { useTimers } from "@/hooks/useTimers";
+import type { Timer } from "@/hooks/useTimers";
+import TimerColumn from "@/components/cooking/TimerColumn";
+import AddTimerModal from "@/components/cooking/AddTimerModal";
 
 interface CookingModeProps {
   recipe: RecipeRow;
@@ -17,11 +21,20 @@ interface CookingModeProps {
 
 export default function CookingMode({ recipe, onClose }: CookingModeProps) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const [isFullscreen, setIsFullscreen] = useState(false);
+  // Fullscreen state is always derived from the real browser state via the event.
+  // Initialize from current DOM state so it's correct even if fullscreen was
+  // entered before this component mounted.
+  const [isFullscreen, setIsFullscreen] = useState(
+    () => typeof document !== "undefined" && document.fullscreenElement != null
+  );
+  const [showAddTimer, setShowAddTimer] = useState(false);
+  const [editingTimer, setEditingTimer] = useState<Timer | null>(null);
+  const { timers, addTimer, editTimer, togglePause, resetTimer, dismissTimer, removeTimer, resetAll } = useTimers(recipe.url);
 
   useEffect(() => {
     const handleFullscreenChange = () => {
-      setIsFullscreen(!!document.fullscreenElement);
+      // Compare against our container so we only react to our own fullscreen state
+      setIsFullscreen(document.fullscreenElement === containerRef.current);
     };
     document.addEventListener("fullscreenchange", handleFullscreenChange);
     return () => document.removeEventListener("fullscreenchange", handleFullscreenChange);
@@ -250,10 +263,44 @@ export default function CookingMode({ recipe, onClose }: CookingModeProps) {
         </div>
       </div>
 
-      {/* Right column — 1/4, empty for future use */}
-      <div className="w-1/4 border-l border-gray-200 overflow-y-auto" />
+      {/* Right column — timers */}
+      <TimerColumn
+        timers={timers}
+        onAddTimer={() => setShowAddTimer(true)}
+        onEditTimer={(id) => {
+          const t = timers.find((t) => t.id === id);
+          if (t) setEditingTimer(t);
+        }}
+        onTogglePauseTimer={togglePause}
+        onResetTimer={resetTimer}
+        onRemoveTimer={removeTimer}
+        onDismissTimer={dismissTimer}
+        onResetAll={resetAll}
+      />
 
       </div>{/* end columns */}
+
+      {/* Modals — children of cooking mode wrapper, not the column */}
+      {showAddTimer && (
+        <AddTimerModal
+          onAdd={(label, duration) => {
+            addTimer(label, duration);
+            setShowAddTimer(false);
+          }}
+          onClose={() => setShowAddTimer(false)}
+        />
+      )}
+      {editingTimer && (
+        <AddTimerModal
+          initialLabel={editingTimer.label}
+          initialSeconds={editingTimer.duration}
+          onAdd={(label, duration) => {
+            editTimer(editingTimer.id, label, duration);
+            setEditingTimer(null);
+          }}
+          onClose={() => setEditingTimer(null)}
+        />
+      )}
     </div>
   );
 }

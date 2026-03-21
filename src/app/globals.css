@@ -1,3 +1,12 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+@keyframes timer-done-pulse {
+  0%, 100% { background-color: rgb(254 226 226); } /* red-100 */
+  50% { background-color: rgb(252 165 165); } /* red-300 */
+}
+
+.animate-timer-done {
+  animation: timer-done-pulse 2s ease-in-out infinite;
+}
