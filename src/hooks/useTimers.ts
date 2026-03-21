@@ -29,9 +29,9 @@ export function loadTimers(recipeHash: string): Timer[] {
     const store: TimerStore = JSON.parse(raw);
     // Normalize: backfill paused/finished for timers saved before these fields existed
     return (store[recipeHash] ?? []).map((t) => ({
-      paused: false,
-      finished: false,
       ...t,
+      paused: t.paused ?? false,
+      finished: t.finished ?? false,
     }));
   } catch {
     return [];
