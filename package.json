@@ -7,7 +7,8 @@
     "build": "next build",
     "start": "next start",
     "test": "vitest",
-    "test:run": "vitest run"
+    "test:run": "vitest run",
+    "deploy:quick": "yarn build && deploy"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.49.4",
