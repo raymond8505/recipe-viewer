@@ -6,6 +6,7 @@ import {
   getFirstImage,
   toArray,
 } from "@/lib/format";
+import CookingModeButton from "./CookingModeButton";
 
 interface RecipeDetailProps {
   recipe: RecipeRow;
@@ -39,9 +40,12 @@ export default function RecipeDetail({ recipe }: RecipeDetailProps) {
           )}
         </div>
 
-        <h1 className="text-3xl sm:text-4xl font-bold text-gray-900 leading-tight mb-4">
-          {schema.name}
-        </h1>
+        <div className="flex items-center gap-4 mb-4">
+          <h1 className="text-3xl sm:text-4xl font-bold text-gray-900 leading-tight">
+            {schema.name}
+          </h1>
+          <CookingModeButton recipe={recipe} />
+        </div>
 
         {schema.description && (
           <p className="text-gray-600 text-lg leading-relaxed">
