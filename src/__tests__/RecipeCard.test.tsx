@@ -7,13 +7,15 @@ const mockRecipe: RecipeRow = {
   id: "test-id-123",
   url: "https://example.com/recipe",
   source: "example.com",
-  schema: {
-    name: "Chocolate Cake",
-    description: "A rich, moist chocolate cake perfect for any occasion.",
-    totalTime: "PT1H",
-    recipeCategory: ["Dessert"],
-    recipeIngredient: ["2 cups flour", "1 cup sugar"],
-    recipeInstructions: [{ text: "Mix ingredients." }, { text: "Bake at 350°F." }],
+  metadata: {
+    schema: {
+      name: "Chocolate Cake",
+      description: "A rich, moist chocolate cake perfect for any occasion.",
+      totalTime: "PT1H",
+      recipeCategory: ["Dessert"],
+      recipeIngredient: ["2 cups flour", "1 cup sugar"],
+      recipeInstructions: [{ text: "Mix ingredients." }, { text: "Bake at 350°F." }],
+    },
   },
 };
 
@@ -55,7 +57,9 @@ describe("RecipeCard", () => {
   it("renders image when provided", () => {
     const recipeWithImage: RecipeRow = {
       ...mockRecipe,
-      schema: { ...mockRecipe.schema, image: "https://example.com/cake.jpg" },
+      metadata: {
+        schema: { ...mockRecipe.metadata.schema, image: "https://example.com/cake.jpg" },
+      },
     };
     render(<RecipeCard recipe={recipeWithImage} />);
     const img = screen.getByRole("img");
