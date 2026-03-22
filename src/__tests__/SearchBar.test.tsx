@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, fireEvent } from "@testing-library/react";
+import { render, screen, fireEvent, act } from "@testing-library/react";
 import SearchBar from "@/components/SearchBar";
 import { useRouter, useSearchParams } from "next/navigation";
 
@@ -26,9 +26,29 @@ describe("SearchBar", () => {
   });
 
   it("shows the defaultValue in the input", () => {
+    vi.mocked(useSearchParams).mockReturnValue({
+      get: vi.fn((key) => (key === "q" ? "pasta" : null)),
+      toString: vi.fn(() => "q=pasta"),
+    } as never);
     render(<SearchBar defaultValue="pasta" />);
     const input = screen.getByRole("searchbox") as HTMLInputElement;
-    expect(input.defaultValue).toBe("pasta");
+    expect(input.value).toBe("pasta");
+  });
+
+  it("syncs input value when searchParams changes externally", () => {
+    const { rerender } = render(<SearchBar />);
+
+    vi.mocked(useSearchParams).mockReturnValue({
+      get: vi.fn((key) => (key === "q" ? "tacos" : null)),
+      toString: vi.fn(() => "q=tacos"),
+    } as never);
+
+    act(() => {
+      rerender(<SearchBar />);
+    });
+
+    const input = screen.getByRole("searchbox") as HTMLInputElement;
+    expect(input.value).toBe("tacos");
   });
 
   it("sets q param when typing a value", () => {
@@ -39,7 +59,7 @@ describe("SearchBar", () => {
 
   it("removes q param when input is cleared", () => {
     vi.mocked(useSearchParams).mockReturnValue({
-      get: vi.fn(),
+      get: vi.fn((key) => (key === "q" ? "pasta" : null)),
       toString: vi.fn(() => "q=pasta"),
     } as never);
 

@@ -6,11 +6,37 @@ const PAGE_SIZE = 24;
 
 export type SortOption = "newest" | "oldest" | "name-asc" | "name-desc";
 
+export async function getSources(): Promise<string[]> {
+  const supabase = getSupabaseClient();
+
+  let queryBuilder = supabase
+    .from("recipes")
+    .select("source")
+    .not("metadata->schema->>name", "ilike", "%(NEEDS RE-SCRAPE)%")
+    .not("metadata->schema->>name", "ilike", "%null%");
+
+  if (features.filterByOwnSource) {
+    queryBuilder = queryBuilder.in("source", ["raymonds.recipes"]);
+  }
+
+  if (features.filterByStatus) {
+    queryBuilder = queryBuilder.eq("metadata->>status", "published");
+  }
+
+  const { data, error } = await queryBuilder;
+
+  if (error || !data) return [];
+
+  const sources = [...new Set(data.map((r) => r.source).filter(Boolean))];
+  return sources.sort();
+}
+
 export async function getRecipes(opts?: {
   query?: string;
   page?: number;
   limit?: number;
   sort?: SortOption;
+  source?: string;
 }): Promise<RecipesResult> {
   const supabase = getSupabaseClient();
   const page = opts?.page ?? 1;
@@ -40,6 +66,10 @@ export async function getRecipes(opts?: {
 
   if (features.filterByStatus) {
     queryBuilder = queryBuilder.eq("metadata->>status", "published");
+  }
+
+  if (opts?.source) {
+    queryBuilder = queryBuilder.eq("source", opts.source);
   }
 
   if (opts?.query) {

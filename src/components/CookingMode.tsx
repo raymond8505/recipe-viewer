@@ -11,6 +11,7 @@ import {
 } from "@/lib/format";
 import { useTimers } from "@/hooks/useTimers";
 import type { Timer } from "@/hooks/useTimers";
+import { registerCookingModeRecipe, unregisterCookingModeRecipe } from "@/lib/windowApi";
 import TimerColumn from "@/components/cooking/TimerColumn";
 import TimerCard from "@/components/cooking/TimerCard";
 import AddTimerModal from "@/components/cooking/AddTimerModal";
@@ -32,6 +33,15 @@ export default function CookingMode({ recipe, onClose }: CookingModeProps) {
   const [showAddTimer, setShowAddTimer] = useState(false);
   const [editingTimer, setEditingTimer] = useState<Timer | null>(null);
   const { timers, addTimer, editTimer, togglePause, resetTimer, dismissTimer, removeTimer, resetAll } = useTimers(recipe.url);
+
+  // Instruction completion — not persisted between sessions
+  const [schema, setSchema] = useState(recipe.metadata.schema);
+
+  useEffect(() => {
+    registerCookingModeRecipe(recipe.metadata.schema, setSchema);
+    return () => unregisterCookingModeRecipe();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Instruction completion — not persisted between sessions
   const [completedSteps, setCompletedSteps] = useState<Set<string>>(new Set());
@@ -71,7 +81,6 @@ export default function CookingMode({ recipe, onClose }: CookingModeProps) {
     }
   };
 
-  const { metadata: { schema } } = recipe;
   const image = getFirstImage(schema.image);
   const prepTime = formatDuration(schema.prepTime);
   const cookTime = formatDuration(schema.cookTime);

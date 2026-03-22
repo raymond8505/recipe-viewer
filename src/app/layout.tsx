@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
+import WindowApiProvider from "@/components/WindowApiProvider";
+import AgentChatWidget from "@/components/AgentChatWidget";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -10,6 +12,9 @@ export const metadata: Metadata = {
     template: "%s | Recipe Viewer",
   },
   description: "Browse and share recipes",
+  other: {
+    "x-agent-api": "window.recipeTools",
+  },
 };
 
 export default function RootLayout({
@@ -30,6 +35,8 @@ export default function RootLayout({
             </a>
           </div>
         </header>
+        <WindowApiProvider />
+        {/* <AgentChatWidget /> */}
         <main className="max-w-6xl mx-auto px-4 sm:px-6 py-8">{children}</main>
       </body>
     </html>

@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter, useSearchParams } from "next/navigation";
-import { useCallback, useTransition } from "react";
+import { useCallback, useEffect, useState, useTransition } from "react";
 
 interface SearchBarProps {
   defaultValue?: string;
@@ -11,9 +11,15 @@ export default function SearchBar({ defaultValue }: SearchBarProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [isPending, startTransition] = useTransition();
+  const [inputValue, setInputValue] = useState(defaultValue ?? "");
+
+  useEffect(() => {
+    setInputValue(searchParams.get("q") ?? "");
+  }, [searchParams]);
 
   const handleChange = useCallback(
     (value: string) => {
+      setInputValue(value);
       const params = new URLSearchParams(searchParams.toString());
       if (value) {
         params.set("q", value);
@@ -48,7 +54,7 @@ export default function SearchBar({ defaultValue }: SearchBarProps) {
       </div>
       <input
         type="search"
-        defaultValue={defaultValue}
+        value={inputValue}
         onChange={(e) => handleChange(e.target.value)}
         placeholder="Search recipes…"
         className="w-full pl-12 pr-4 py-3 rounded-xl border border-gray-200 bg-white text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-400 focus:border-transparent transition"

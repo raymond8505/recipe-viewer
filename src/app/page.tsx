@@ -1,9 +1,12 @@
 import { Suspense } from "react";
 import type { Metadata } from "next";
-import { getRecipes, type SortOption } from "@/lib/recipes";
+import { getRecipes, getSources, type SortOption } from "@/lib/recipes";
+import { features } from "@/lib/features";
 import RecipeGrid from "@/components/RecipeGrid";
+import RecipeStateProvider from "@/components/RecipeStateProvider";
 import SearchBar from "@/components/SearchBar";
 import SortBar from "@/components/SortBar";
+import SourceFilter from "@/components/SourceFilter";
 import Pagination from "@/components/Pagination";
 
 const PAGE_SIZE = 24;
@@ -14,23 +17,21 @@ export const metadata: Metadata = {
 };
 
 interface HomeProps {
-  searchParams: Promise<{ q?: string; page?: string; sort?: string }>;
+  searchParams: Promise<{ q?: string; page?: string; sort?: string; source?: string }>;
 }
 
 export default async function Home({ searchParams }: HomeProps) {
-  const { q, page: pageParam, sort: sortParam } = await searchParams;
+  const { q, page: pageParam, sort: sortParam, source: sourceParam } = await searchParams;
   const query = q ?? "";
   const page = Math.max(1, Number(pageParam ?? 1));
   const sort: SortOption = VALID_SORTS.has(sortParam as SortOption)
     ? (sortParam as SortOption)
     : "newest";
 
-  const { data: recipes, count } = await getRecipes({
-    query,
-    page,
-    limit: PAGE_SIZE,
-    sort,
-  });
+  const [{ data: recipes, count }, sources] = await Promise.all([
+    getRecipes({ query, page, limit: PAGE_SIZE, sort, source: sourceParam }),
+    features.showSourceFilter ? getSources() : Promise.resolve([]),
+  ]);
 
   return (
     <div className="space-y-6">
@@ -47,6 +48,13 @@ export default async function Home({ searchParams }: HomeProps) {
         <SortBar current={sort} />
       </Suspense>
 
+      {sources.length > 1 && (
+        <Suspense>
+          <SourceFilter sources={sources} current={sourceParam} />
+        </Suspense>
+      )}
+
+      <RecipeStateProvider schemas={recipes.map((r) => r.metadata.schema)} />
       <RecipeGrid recipes={recipes} />
 
       <Suspense>
