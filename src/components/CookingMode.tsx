@@ -106,7 +106,7 @@ export default function CookingMode({ recipe, onClose }: CookingModeProps) {
       </div>
 
       {/* Mobile timer ribbon — sticky below header, only on small screens */}
-      <div className="md:hidden shrink-0 bg-white border-b border-gray-200">
+      <div className="lg:hidden shrink-0 bg-white border-b border-gray-200">
         {/* Add timer + Reset all — inline, add timer grows */}
         <div className="flex items-center gap-2 px-3 pt-2 pb-1">
           <button
@@ -344,7 +344,7 @@ export default function CookingMode({ recipe, onClose }: CookingModeProps) {
         </div>
 
         {/* Right column — timers (desktop only) */}
-        <div className="hidden md:flex md:flex-col w-1/4">
+        <div className="hidden lg:flex lg:flex-col w-1/4">
           <TimerColumn
             timers={timers}
             onAddTimer={() => setShowAddTimer(true)}
