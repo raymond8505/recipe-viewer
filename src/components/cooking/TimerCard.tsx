@@ -75,7 +75,7 @@ export default function TimerCard({
         >
           <p className="text-sm font-medium text-red-700 truncate px-4 pt-3 pb-0.5">{timer.label}</p>
           <div className="px-4 pb-3">
-            <p className="text-2xl font-mono font-bold tabular-nums text-red-600">Done!</p>
+            <p className="text-3xl sm:text-2xl font-mono font-bold tabular-nums text-red-600">Done!</p>
             <p className="text-xs text-red-400 mt-0.5">Tap to dismiss</p>
           </div>
         </button>
@@ -110,7 +110,7 @@ export default function TimerCard({
   return (
     <div className={`rounded-xl border overflow-hidden ${isDone ? "border-gray-300 bg-gray-50" : "border-gray-200 bg-white"}`}>
       {/* Label row */}
-      <p className="text-sm font-medium text-gray-700 truncate px-3 pt-2.5 pb-0.5">{timer.label}</p>
+      <p className="text-base sm:text-sm font-medium text-gray-700 truncate px-3 pt-2.5 pb-0.5">{timer.label}</p>
 
       {/* Controls row — play/pause | time | reset+delete */}
       <div className="flex items-stretch pb-1">
@@ -133,7 +133,7 @@ export default function TimerCard({
           onClick={() => onEdit(timer.id)}
           aria-label={`Edit ${timer.label} timer`}
         >
-          <p className={`text-2xl font-mono font-bold tabular-nums ${isDone ? "text-gray-400" : "text-gray-900"}`}>
+          <p className={`text-3xl sm:text-2xl font-mono font-bold tabular-nums ${isDone ? "text-gray-400" : "text-gray-900"}`}>
             {formatRemaining(timer.remaining)}
           </p>
           {isPaused && (

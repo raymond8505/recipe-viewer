@@ -256,12 +256,12 @@ export default function CookingMode({ recipe, onClose }: CookingModeProps) {
               {/* Ingredients */}
               {schema.recipeIngredient && schema.recipeIngredient.length > 0 && (
                 <div className="sm:col-span-1">
-                  <h2 className="text-xl font-semibold text-gray-900 mb-4">
+                  <h2 className="text-2xl sm:text-xl font-semibold text-gray-900 mb-4">
                     Ingredients
                   </h2>
                   <ul className="space-y-2">
                     {schema.recipeIngredient.map((ingredient, i) => (
-                      <li key={i} className="flex items-start gap-2 text-base sm:text-sm text-gray-700">
+                      <li key={i} className="flex items-start gap-2 text-lg sm:text-sm text-gray-700">
                         <span className="mt-1.5 w-1.5 h-1.5 rounded-full bg-orange-400 shrink-0" />
                         {ingredient}
                       </li>
@@ -273,14 +273,14 @@ export default function CookingMode({ recipe, onClose }: CookingModeProps) {
               {/* Instructions */}
               {schema.recipeInstructions && schema.recipeInstructions.length > 0 && (
                 <div className="sm:col-span-2">
-                  <h2 className="text-xl font-semibold text-gray-900 mb-4">
+                  <h2 className="text-2xl sm:text-xl font-semibold text-gray-900 mb-4">
                     Instructions
                   </h2>
                   {schema.recipeInstructions[0]["@type"] === "HowToSection" ? (
                     <div className="space-y-6">
                       {(schema.recipeInstructions as HowToSection[]).map((section, i) => (
                         <div key={i}>
-                          <h3 className="text-xs font-semibold uppercase tracking-widest text-orange-500 mb-3">
+                          <h3 className="text-sm sm:text-xs font-semibold uppercase tracking-widest text-orange-500 mb-3">
                             {section.name}
                           </h3>
                           <ol className="space-y-3">
@@ -296,10 +296,10 @@ export default function CookingMode({ recipe, onClose }: CookingModeProps) {
                                   aria-pressed={done}
                                   aria-label={`Step ${j + 1}: ${done ? "completed" : "mark complete"}`}
                                 >
-                                  <span className={`shrink-0 w-7 h-7 rounded-full text-sm font-bold flex items-center justify-center transition-colors ${done ? "bg-green-500 text-white" : "bg-orange-500 text-white"}`}>
+                                  <span className={`shrink-0 w-8 h-8 sm:w-7 sm:h-7 rounded-full text-base sm:text-sm font-bold flex items-center justify-center transition-colors ${done ? "bg-green-500 text-white" : "bg-orange-500 text-white"}`}>
                                     {done ? <CheckIcon /> : j + 1}
                                   </span>
-                                  <p className={`text-base sm:text-sm leading-relaxed pt-0.5 transition-colors ${done ? "line-through text-gray-400" : "text-gray-700"}`}>
+                                  <p className={`text-xl sm:text-base leading-relaxed pt-0.5 transition-colors ${done ? "line-through text-gray-400" : "text-gray-700"}`}>
                                     {step.text}
                                   </p>
                                 </li>
@@ -323,10 +323,10 @@ export default function CookingMode({ recipe, onClose }: CookingModeProps) {
                             aria-pressed={done}
                             aria-label={`Step ${i + 1}: ${done ? "completed" : "mark complete"}`}
                           >
-                            <span className={`shrink-0 w-7 h-7 rounded-full text-sm font-bold flex items-center justify-center transition-colors ${done ? "bg-green-500 text-white" : "bg-orange-500 text-white"}`}>
+                            <span className={`shrink-0 w-8 h-8 sm:w-7 sm:h-7 rounded-full text-base sm:text-sm font-bold flex items-center justify-center transition-colors ${done ? "bg-green-500 text-white" : "bg-orange-500 text-white"}`}>
                               {done ? <CheckIcon /> : i + 1}
                             </span>
-                            <p className={`text-base sm:text-sm leading-relaxed pt-0.5 transition-colors ${done ? "line-through text-gray-400" : "text-gray-700"}`}>
+                            <p className={`text-xl sm:text-base leading-relaxed pt-0.5 transition-colors ${done ? "line-through text-gray-400" : "text-gray-700"}`}>
                               {step.text}
                             </p>
                           </li>

@@ -11,8 +11,8 @@
 }
 
 @keyframes timer-done-pulse {
-  0%, 100% { background-color: rgb(254 226 226); } /* red-100 */
-  50% { background-color: rgb(252 165 165); } /* red-300 */
+  0%, 100% { background-color: rgb(255 237 213); } /* orange-100 */
+  50% { background-color: rgb(253 186 116); } /* orange-300 */
 }
 
 .animate-timer-done {
