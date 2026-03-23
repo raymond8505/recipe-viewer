@@ -2,7 +2,6 @@ import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
 import WindowApiProvider from "@/components/WindowApiProvider";
-import AgentChatWidget from "@/components/AgentChatWidget";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -36,8 +35,7 @@ export default function RootLayout({
           </div>
         </header>
         <WindowApiProvider />
-        {/* <AgentChatWidget /> */}
-        <main className="max-w-6xl mx-auto px-4 sm:px-6 py-8">{children}</main>
+<main className="max-w-6xl mx-auto px-4 sm:px-6 py-8">{children}</main>
       </body>
     </html>
   );

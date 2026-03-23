@@ -8,6 +8,8 @@ export interface RecipeRow {
 export interface HowToStep {
   "@type"?: "HowToStep" | string;
   text: string;
+  name?: string;
+  timeRequired?: string;
 }
 
 export interface HowToSection {

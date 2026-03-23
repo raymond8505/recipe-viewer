@@ -93,10 +93,11 @@ function hasActiveAlarm(timers: Timer[]): boolean {
 
 export function useTimers(recipeUrl: string) {
   const recipeHash = hashUrl(recipeUrl);
-  const [timers, setTimers] = useState<Timer[]>([]);
+  const [timers, setTimers] = useState<Timer[]>(() => loadTimers(recipeHash));
   const hashRef = useRef(recipeHash);
   hashRef.current = recipeHash;
 
+  // Re-sync when the recipe URL changes (recipeHash changes between renders)
   useEffect(() => {
     setTimers(loadTimers(recipeHash));
   }, [recipeHash]);
@@ -125,7 +126,7 @@ export function useTimers(recipeUrl: string) {
       label,
       duration,
       remaining: duration,
-      paused: false,
+      paused: true,
       finished: false,
     };
     setTimers((prev) => {

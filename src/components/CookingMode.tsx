@@ -8,6 +8,7 @@ import {
   formatDate,
   getFirstImage,
   toArray,
+  parseDurationToSeconds,
 } from "@/lib/format";
 import { useTimers } from "@/hooks/useTimers";
 import type { Timer } from "@/hooks/useTimers";
@@ -40,6 +41,23 @@ export default function CookingMode({ recipe, onClose }: CookingModeProps) {
   useEffect(() => {
     registerCookingModeRecipe(recipe.metadata.schema, setSchema);
     return () => unregisterCookingModeRecipe();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Seed timers from steps that declare both name + timeRequired, but only
+  // if no timers are already stored for this recipe.
+  useEffect(() => {
+    if (timers.length > 0) return;
+    for (const item of schema.recipeInstructions ?? []) {
+      const steps =
+        item["@type"] === "HowToSection"
+          ? (item as HowToSection).itemListElement
+          : [item as HowToStep];
+      for (const step of steps) {
+        const secs = parseDurationToSeconds(step.timeRequired);
+        if (step.name && secs) addTimer(step.name, secs);
+      }
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
