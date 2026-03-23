@@ -7,6 +7,7 @@ import {
   toArray,
 } from "@/lib/format";
 import CookingModeButton from "./CookingModeButton";
+import IngredientItem from "./IngredientItem";
 
 interface RecipeDetailProps {
   recipe: RecipeRow;
@@ -106,7 +107,7 @@ export default function RecipeDetail({ recipe }: RecipeDetailProps) {
               {schema.recipeIngredient.map((ingredient, i) => (
                 <li key={i} className="flex items-start gap-2 text-sm text-gray-700">
                   <span className="mt-1.5 w-1.5 h-1.5 rounded-full bg-orange-400 shrink-0" />
-                  {ingredient}
+                  <IngredientItem ingredient={ingredient} />
                 </li>
               ))}
             </ul>

@@ -17,6 +17,7 @@ import TimerColumn from "@/components/cooking/TimerColumn";
 import TimerCard from "@/components/cooking/TimerCard";
 import AddTimerModal from "@/components/cooking/AddTimerModal";
 import DraggableRibbon from "@/components/cooking/DraggableRibbon";
+import IngredientItem from "@/components/IngredientItem";
 
 interface CookingModeProps {
   recipe: RecipeRow;
@@ -263,7 +264,7 @@ export default function CookingMode({ recipe, onClose }: CookingModeProps) {
                     {schema.recipeIngredient.map((ingredient, i) => (
                       <li key={i} className="flex items-start gap-2 text-lg sm:text-sm text-gray-700">
                         <span className="mt-1.5 w-1.5 h-1.5 rounded-full bg-orange-400 shrink-0" />
-                        {ingredient}
+                        <IngredientItem ingredient={ingredient} />
                       </li>
                     ))}
                   </ul>

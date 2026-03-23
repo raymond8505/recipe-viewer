@@ -145,12 +145,13 @@ describe("RecipeDetail", () => {
   });
 
   it("renders ingredients list", () => {
-    render(
+    const { container } = render(
       <RecipeDetail
         recipe={makeRecipe({ recipeIngredient: ["2 cups flour", "1 cup sugar"] })}
       />
     );
-    expect(screen.getByText("2 cups flour")).toBeTruthy();
-    expect(screen.getByText("1 cup sugar")).toBeTruthy();
+    // Convertable ingredients are split into amount + unit select + rest
+    expect(container.textContent).toContain("flour");
+    expect(container.textContent).toContain("sugar");
   });
 });
