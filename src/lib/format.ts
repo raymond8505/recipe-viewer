@@ -51,6 +51,40 @@ export function formatDate(iso: string | undefined | null): string | null {
   });
 }
 
+import type { RecipeIngredient } from "@/types/recipe";
+
+/**
+ * Get the ingredient text from a string or RecipeIngredient object.
+ */
+export function getIngredientText(ingredient: string | RecipeIngredient): string {
+  return typeof ingredient === "string" ? ingredient : ingredient.name;
+}
+
+/**
+ * Group an ingredient list by group. Returns a single group with
+ * a null heading when no ingredient defines group.
+ */
+export function groupIngredients(
+  ingredients: Array<string | RecipeIngredient>
+): Array<{ heading: string | null; items: Array<string | RecipeIngredient> }> {
+  const hasGroups = ingredients.some(
+    (i) => typeof i !== "string" && i.group != null
+  );
+  if (!hasGroups) return [{ heading: null, items: ingredients }];
+
+  const order: Array<string | null> = [];
+  const map = new Map<string | null, Array<string | RecipeIngredient>>();
+  for (const ing of ingredients) {
+    const group = typeof ing === "string" ? null : (ing.group ?? null);
+    if (!map.has(group)) {
+      order.push(group);
+      map.set(group, []);
+    }
+    map.get(group)!.push(ing);
+  }
+  return order.map((heading) => ({ heading, items: map.get(heading)! }));
+}
+
 /**
  * Get the first image URL from a recipe image field (string or string[]).
  */

@@ -7,6 +7,8 @@ import {
   formatDate,
   getFirstImage,
   toArray,
+  groupIngredients,
+  getIngredientText,
 } from "@/lib/format";
 import { useScaling } from "@/hooks/useScaling";
 import CookingModeButton from "./CookingModeButton";
@@ -104,14 +106,23 @@ export default function RecipeDetail({ recipe }: RecipeDetailProps) {
             <h2 className="text-xl font-semibold text-gray-900 mb-4">
               Ingredients
             </h2>
-            <ul className="space-y-2">
-              {schema.recipeIngredient.map((ingredient, i) => (
-                <li key={i} className="flex items-start gap-2 text-sm text-gray-700">
-                  <span className="mt-1.5 w-1.5 h-1.5 rounded-full bg-orange-400 shrink-0" />
-                  <IngredientItem ingredient={ingredient} scale={scale} onScaleChange={setScale} />
-                </li>
-              ))}
-            </ul>
+            {groupIngredients(schema.recipeIngredient).map(({ heading, items }, gi) => (
+              <div key={gi} className={gi > 0 ? "mt-4" : ""}>
+                {heading && (
+                  <h3 className="text-xs font-semibold uppercase tracking-widest text-orange-500 mb-2">
+                    {heading}
+                  </h3>
+                )}
+                <ul className="space-y-2">
+                  {items.map((ingredient, i) => (
+                    <li key={i} className="flex items-start gap-2 text-sm text-gray-700">
+                      <span className="mt-1.5 w-1.5 h-1.5 rounded-full bg-orange-400 shrink-0" />
+                      <IngredientItem ingredient={getIngredientText(ingredient)} scale={scale} onScaleChange={setScale} />
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ))}
           </div>
         )}
 

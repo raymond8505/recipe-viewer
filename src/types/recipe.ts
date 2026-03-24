@@ -1,3 +1,8 @@
+export interface RecipeIngredient {
+  name: string;
+  group?: string;
+}
+
 export interface RecipeRow {
   id: string;
   url: string;
@@ -31,7 +36,7 @@ export interface SchemaRecipe {
   recipeYield?: string | string[];
   recipeCuisine?: string;
   recipeCategory?: string | string[];
-  recipeIngredient?: string[];
+  recipeIngredient?: Array<string | RecipeIngredient>;
   recipeInstructions?: Array<HowToStep | HowToSection>;
   keywords?: string;
   nutrition?: {

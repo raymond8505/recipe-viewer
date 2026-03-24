@@ -157,4 +157,29 @@ describe("RecipeDetail", () => {
     expect(container.textContent).toContain("flour");
     expect(container.textContent).toContain("sugar");
   });
+
+  it("renders ingredients grouped by group with headings", () => {
+    render(
+      <RecipeDetail
+        recipe={makeRecipe({
+          recipeIngredient: [
+            { name: "2 cups flour", group: "Cake" },
+            { name: "1 cup milk", group: "Cake" },
+            { name: "1 tsp vanilla", group: "Frosting" },
+          ],
+        })}
+      />
+    );
+    expect(screen.getByText("Cake")).toBeTruthy();
+    expect(screen.getByText("Frosting")).toBeTruthy();
+  });
+
+  it("renders ungrouped ingredients without section headings", () => {
+    render(
+      <RecipeDetail
+        recipe={makeRecipe({ recipeIngredient: ["2 cups flour", "1 cup sugar"] })}
+      />
+    );
+    expect(screen.queryByRole("heading", { level: 3 })).toBeNull();
+  });
 });

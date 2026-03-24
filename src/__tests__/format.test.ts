@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { formatDuration, formatDate, getFirstImage, toArray } from "@/lib/format";
+import { formatDuration, formatDate, getFirstImage, toArray, groupIngredients, getIngredientText } from "@/lib/format";
 
 describe("formatDuration", () => {
   it("formats hours and minutes", () => {
@@ -90,5 +90,59 @@ describe("toArray", () => {
 
   it("filters empty strings", () => {
     expect(toArray(["Breakfast", "", "Lunch"])).toEqual(["Breakfast", "Lunch"]);
+  });
+});
+
+describe("getIngredientText", () => {
+  it("returns a plain string as-is", () => {
+    expect(getIngredientText("2 cups flour")).toBe("2 cups flour");
+  });
+
+  it("returns the text field from a RecipeIngredient object", () => {
+    expect(getIngredientText({ name: "1 cup sugar", group: "Cake" })).toBe("1 cup sugar");
+  });
+});
+
+describe("groupIngredients", () => {
+  it("returns a single null-headed group when no group is set", () => {
+    const result = groupIngredients(["2 cups flour", "1 cup sugar"]);
+    expect(result).toHaveLength(1);
+    expect(result[0].heading).toBeNull();
+    expect(result[0].items).toHaveLength(2);
+  });
+
+  it("groups ingredients by group", () => {
+    const ingredients = [
+      { name: "2 cups flour", group: "Cake" },
+      { name: "1 tsp vanilla", group: "Frosting" },
+      { name: "1 cup sugar", group: "Cake" },
+    ];
+    const result = groupIngredients(ingredients);
+    expect(result).toHaveLength(2);
+    expect(result[0].heading).toBe("Cake");
+    expect(result[0].items).toHaveLength(2);
+    expect(result[1].heading).toBe("Frosting");
+    expect(result[1].items).toHaveLength(1);
+  });
+
+  it("preserves insertion order of groups", () => {
+    const ingredients = [
+      { name: "a", group: "B" },
+      { name: "b", group: "A" },
+      { name: "c", group: "B" },
+    ];
+    const result = groupIngredients(ingredients);
+    expect(result.map((g) => g.heading)).toEqual(["B", "A"]);
+  });
+
+  it("puts ingredients without group into a null-headed group", () => {
+    const ingredients = [
+      "plain string",
+      { name: "grouped", group: "Sauce" },
+    ];
+    const result = groupIngredients(ingredients);
+    expect(result).toHaveLength(2);
+    expect(result[0].heading).toBeNull();
+    expect(result[1].heading).toBe("Sauce");
   });
 });
