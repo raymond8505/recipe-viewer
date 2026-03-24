@@ -12,6 +12,7 @@ import { useScaling } from "@/hooks/useScaling";
 import CookingModeButton from "./CookingModeButton";
 import IngredientItem from "./IngredientItem";
 import ServingsControl from "./ServingsControl";
+import NutritionPanel from "./NutritionPanel";
 
 interface RecipeDetailProps {
   recipe: RecipeRow;
@@ -24,7 +25,7 @@ export default function RecipeDetail({ recipe }: RecipeDetailProps) {
   const cookTime = formatDuration(schema.cookTime);
   const totalTime = formatDuration(schema.totalTime);
   const categories = toArray(schema.recipeCategory);
-  const { scale, servings, setScale, setServings } = useScaling(schema.recipeYield);
+  const { scale, servings, originalServings, setScale, setServings } = useScaling(schema.recipeYield);
 
   return (
     <article className="max-w-3xl mx-auto">
@@ -161,34 +162,7 @@ export default function RecipeDetail({ recipe }: RecipeDetailProps) {
       </div>
 
       {/* Nutrition */}
-      {schema.nutrition && hasNutritionData(schema.nutrition) && (
-        <div className="mt-8 p-4 border border-gray-200 rounded-2xl">
-          <div className="flex items-baseline gap-2 mb-4">
-            <h2 className="text-xl font-semibold text-gray-900">Nutrition</h2>
-            <span className="text-sm text-gray-500">per serving</span>
-          </div>
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm">
-            {schema.nutrition.calories && (
-              <NutritionStat label="Calories" value={schema.nutrition.calories} />
-            )}
-            {schema.nutrition.proteinContent && (
-              <NutritionStat label="Protein" value={schema.nutrition.proteinContent} />
-            )}
-            {schema.nutrition.carbohydrateContent && (
-              <NutritionStat label="Carbs" value={schema.nutrition.carbohydrateContent} />
-            )}
-            {schema.nutrition.fatContent && (
-              <NutritionStat label="Fat" value={schema.nutrition.fatContent} />
-            )}
-            {schema.nutrition.fiberContent && (
-              <NutritionStat label="Fiber" value={schema.nutrition.fiberContent} />
-            )}
-            {schema.nutrition.sodiumContent && (
-              <NutritionStat label="Sodium" value={schema.nutrition.sodiumContent} />
-            )}
-          </div>
-        </div>
-      )}
+      {schema.nutrition && <NutritionPanel nutrition={schema.nutrition} totalServings={originalServings} />}
 
       {/* JSON-LD */}
       <script
@@ -217,15 +191,3 @@ function NutritionStat({ label, value }: { label: string; value: string }) {
   );
 }
 
-function hasNutritionData(
-  n: NonNullable<RecipeRow["metadata"]["schema"]["nutrition"]>
-): boolean {
-  return !!(
-    n.calories ||
-    n.proteinContent ||
-    n.carbohydrateContent ||
-    n.fatContent ||
-    n.fiberContent ||
-    n.sodiumContent
-  );
-}

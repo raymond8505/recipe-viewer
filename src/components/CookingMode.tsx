@@ -20,6 +20,7 @@ import AddTimerModal from "@/components/cooking/AddTimerModal";
 import DraggableRibbon from "@/components/cooking/DraggableRibbon";
 import IngredientItem from "@/components/IngredientItem";
 import ServingsControl from "@/components/ServingsControl";
+import NutritionPanel from "@/components/NutritionPanel";
 
 interface CookingModeProps {
   recipe: RecipeRow;
@@ -39,7 +40,7 @@ export default function CookingMode({ recipe, onClose }: CookingModeProps) {
   const { timers, addTimer, editTimer, togglePause, resetTimer, dismissTimer, removeTimer, resetAll } = useTimers(recipe.url);
 
   const [schema, setSchema] = useState(recipe.metadata.schema);
-  const { scale, servings, setScale, setServings } = useScaling(schema.recipeYield);
+  const { scale, servings, originalServings, setScale, setServings } = useScaling(schema.recipeYield);
 
   useEffect(() => {
     registerCookingModeRecipe(recipe.metadata.schema, setSchema);
@@ -337,34 +338,7 @@ export default function CookingMode({ recipe, onClose }: CookingModeProps) {
             </div>
 
             {/* Nutrition */}
-            {schema.nutrition && hasNutritionData(schema.nutrition) && (
-              <div className="mt-8 p-4 border border-gray-200 rounded-2xl">
-                <div className="flex items-baseline gap-2 mb-4">
-                  <h2 className="text-xl font-semibold text-gray-900">Nutrition</h2>
-                  <span className="text-sm text-gray-500">per serving</span>
-                </div>
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm">
-                  {schema.nutrition.calories && (
-                    <NutritionStat label="Calories" value={schema.nutrition.calories} />
-                  )}
-                  {schema.nutrition.proteinContent && (
-                    <NutritionStat label="Protein" value={schema.nutrition.proteinContent} />
-                  )}
-                  {schema.nutrition.carbohydrateContent && (
-                    <NutritionStat label="Carbs" value={schema.nutrition.carbohydrateContent} />
-                  )}
-                  {schema.nutrition.fatContent && (
-                    <NutritionStat label="Fat" value={schema.nutrition.fatContent} />
-                  )}
-                  {schema.nutrition.fiberContent && (
-                    <NutritionStat label="Fiber" value={schema.nutrition.fiberContent} />
-                  )}
-                  {schema.nutrition.sodiumContent && (
-                    <NutritionStat label="Sodium" value={schema.nutrition.sodiumContent} />
-                  )}
-                </div>
-              </div>
-            )}
+            {schema.nutrition && <NutritionPanel nutrition={schema.nutrition} totalServings={originalServings} />}
           </div>
         </div>
 
@@ -421,27 +395,6 @@ function Stat({ label, value }: { label: string; value: string }) {
   );
 }
 
-function NutritionStat({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="bg-gray-50 rounded-lg p-2 text-center">
-      <p className="text-xs text-gray-500 mb-0.5">{label}</p>
-      <p className="font-medium text-gray-900">{value}</p>
-    </div>
-  );
-}
-
-function hasNutritionData(
-  n: NonNullable<RecipeRow["metadata"]["schema"]["nutrition"]>
-): boolean {
-  return !!(
-    n.calories ||
-    n.proteinContent ||
-    n.carbohydrateContent ||
-    n.fatContent ||
-    n.fiberContent ||
-    n.sodiumContent
-  );
-}
 
 function CheckIcon() {
   return (
