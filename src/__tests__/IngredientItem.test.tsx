@@ -1,11 +1,12 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
 import IngredientItem from "@/components/IngredientItem";
 
 describe("IngredientItem", () => {
-  it("renders plain text for non-convertable ingredients", () => {
-    render(<IngredientItem ingredient="3 large eggs" />);
-    expect(screen.getByText("3 large eggs")).toBeTruthy();
+  it("renders amount and rest for unit-less ingredients", () => {
+    const { container } = render(<IngredientItem ingredient="3 large eggs" />);
+    expect(container.textContent).toContain("3");
+    expect(container.textContent).toContain("large eggs");
   });
 
   it("renders plain text for ingredients with no amount", () => {
@@ -64,5 +65,70 @@ describe("IngredientItem", () => {
     const { container } = render(<IngredientItem ingredient="1 cup" />);
     expect(container.textContent).not.toContain("undefined");
     expect(container.textContent).not.toContain("null");
+  });
+});
+
+describe("IngredientItem — scaling", () => {
+  it("doubles the displayed amount when scale=2", () => {
+    const { container } = render(<IngredientItem ingredient="1 cup flour" scale={2} />);
+    expect(container.textContent).toContain("2");
+  });
+
+  it("halves the displayed amount when scale=0.5", () => {
+    const { container } = render(<IngredientItem ingredient="2 cups flour" scale={0.5} />);
+    expect(container.textContent).toContain("1");
+  });
+
+  it("shows unicode fraction for scaled fractional amount", () => {
+    const { container } = render(<IngredientItem ingredient="1 cup milk" scale={0.5} />);
+    expect(container.textContent).toContain("½");
+  });
+
+  it("amount is clickable when onScaleChange is provided", () => {
+    const onScaleChange = vi.fn();
+    render(<IngredientItem ingredient="2 cups flour" onScaleChange={onScaleChange} />);
+    const amountBtn = screen.getByRole("button", { name: /edit amount/i });
+    expect(amountBtn).toBeTruthy();
+  });
+
+  it("shows input on amount click and calls onScaleChange on Enter", () => {
+    const onScaleChange = vi.fn();
+    render(<IngredientItem ingredient="2 cups flour" onScaleChange={onScaleChange} />);
+    fireEvent.click(screen.getByRole("button", { name: /edit amount/i }));
+    const input = screen.getByRole("spinbutton");
+    fireEvent.change(input, { target: { value: "4" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+    expect(onScaleChange).toHaveBeenCalledWith(2); // 4 / 2 = scale 2
+  });
+
+  it("calls onScaleChange with correct ratio when unit is changed before editing", () => {
+    const onScaleChange = vi.fn();
+    render(<IngredientItem ingredient="1 cup water" onScaleChange={onScaleChange} />);
+    // switch to tsp (1 cup = ~48 tsp)
+    const select = screen.getByRole("combobox", { name: "unit" });
+    fireEvent.change(select, { target: { value: "tsp" } });
+    // click the amount to edit it
+    fireEvent.click(screen.getByRole("button", { name: /edit amount/i }));
+    const input = screen.getByRole("spinbutton");
+    // 1 cup = ~48 tsp; type 96 (double)
+    fireEvent.change(input, { target: { value: "96" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+    // newScale = 96 / 48 = 2
+    expect(onScaleChange).toHaveBeenCalledWith(expect.closeTo(2, 0));
+  });
+
+  it("does not show editable amount when onScaleChange is not provided", () => {
+    render(<IngredientItem ingredient="2 cups flour" />);
+    expect(screen.queryByRole("button", { name: /edit amount/i })).toBeNull();
+  });
+
+  it("cancels edit on Escape without calling onScaleChange", () => {
+    const onScaleChange = vi.fn();
+    render(<IngredientItem ingredient="2 cups flour" onScaleChange={onScaleChange} />);
+    fireEvent.click(screen.getByRole("button", { name: /edit amount/i }));
+    fireEvent.keyDown(screen.getByRole("spinbutton"), { key: "Escape" });
+    expect(onScaleChange).not.toHaveBeenCalled();
+    // amount button should be back
+    expect(screen.getByRole("button", { name: /edit amount/i })).toBeTruthy();
   });
 });

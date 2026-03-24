@@ -12,12 +12,14 @@ import {
 } from "@/lib/format";
 import { useTimers } from "@/hooks/useTimers";
 import type { Timer } from "@/hooks/useTimers";
+import { useScaling } from "@/hooks/useScaling";
 import { registerCookingModeRecipe, unregisterCookingModeRecipe } from "@/lib/windowApi";
 import TimerColumn from "@/components/cooking/TimerColumn";
 import TimerCard from "@/components/cooking/TimerCard";
 import AddTimerModal from "@/components/cooking/AddTimerModal";
 import DraggableRibbon from "@/components/cooking/DraggableRibbon";
 import IngredientItem from "@/components/IngredientItem";
+import ServingsControl from "@/components/ServingsControl";
 
 interface CookingModeProps {
   recipe: RecipeRow;
@@ -36,8 +38,8 @@ export default function CookingMode({ recipe, onClose }: CookingModeProps) {
   const [editingTimer, setEditingTimer] = useState<Timer | null>(null);
   const { timers, addTimer, editTimer, togglePause, resetTimer, dismissTimer, removeTimer, resetAll } = useTimers(recipe.url);
 
-  // Instruction completion — not persisted between sessions
   const [schema, setSchema] = useState(recipe.metadata.schema);
+  const { scale, servings, setScale, setServings } = useScaling(schema.recipeYield);
 
   useEffect(() => {
     registerCookingModeRecipe(recipe.metadata.schema, setSchema);
@@ -241,14 +243,9 @@ export default function CookingMode({ recipe, onClose }: CookingModeProps) {
                 {cookTime && <Stat label="Cook time" value={cookTime} />}
                 {totalTime && <Stat label="Total time" value={totalTime} />}
                 {schema.recipeYield && (
-                  <Stat
-                    label="Servings"
-                    value={
-                      Array.isArray(schema.recipeYield)
-                        ? schema.recipeYield[0]
-                        : schema.recipeYield
-                    }
-                  />
+                  servings != null
+                    ? <ServingsControl servings={servings} onChange={setServings} />
+                    : <Stat label="Servings" value={Array.isArray(schema.recipeYield) ? schema.recipeYield[0] : schema.recipeYield} />
                 )}
               </div>
             )}
@@ -264,7 +261,7 @@ export default function CookingMode({ recipe, onClose }: CookingModeProps) {
                     {schema.recipeIngredient.map((ingredient, i) => (
                       <li key={i} className="flex items-start gap-2 text-lg sm:text-sm text-gray-700">
                         <span className="mt-1.5 w-1.5 h-1.5 rounded-full bg-orange-400 shrink-0" />
-                        <IngredientItem ingredient={ingredient} />
+                        <IngredientItem ingredient={ingredient} scale={scale} onScaleChange={setScale} />
                       </li>
                     ))}
                   </ul>

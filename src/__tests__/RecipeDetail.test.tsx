@@ -65,14 +65,17 @@ describe("RecipeDetail", () => {
     expect(screen.getByText("40 min")).toBeTruthy();
   });
 
-  it("renders recipeYield from array (first element)", () => {
+  it("renders servings stepper from array yield (first element)", () => {
     render(<RecipeDetail recipe={makeRecipe({ recipeYield: ["4 servings", "8 pieces"] })} />);
-    expect(screen.getByText("4 servings")).toBeTruthy();
+    expect(screen.getByText("4")).toBeTruthy();
+    expect(screen.getByRole("button", { name: /increase servings/i })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /decrease servings/i })).toBeTruthy();
   });
 
-  it("renders recipeYield from string directly", () => {
+  it("renders servings stepper from string yield", () => {
     render(<RecipeDetail recipe={makeRecipe({ recipeYield: "6 servings" })} />);
-    expect(screen.getByText("6 servings")).toBeTruthy();
+    expect(screen.getByText("6")).toBeTruthy();
+    expect(screen.getByRole("button", { name: /increase servings/i })).toBeTruthy();
   });
 
   it("renders flat HowToStep instructions as a numbered list", () => {

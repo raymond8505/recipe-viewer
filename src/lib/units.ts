@@ -38,7 +38,7 @@ const ALIAS_ENTRIES: [string, string][] = Object.entries(UNIT_DEFS)
 
 export interface ParsedIngredient {
   amount: number;
-  unit: string;
+  unit: string | null;
   rest: string;
   original: string;
 }
@@ -79,17 +79,25 @@ export function parseIngredient(str: string): ParsedIngredient | null {
     }
   }
 
-  return null;
+  // Number found but no recognized unit — rest is everything after the amount
+  return {
+    amount: parseAmount(amountStr),
+    unit: null,
+    rest: afterAmount.trim(),
+    original: str,
+  };
 }
 
-export function convert(amount: number, fromUnit: string, toUnit: string): number {
+export function convert(amount: number, fromUnit: string | null, toUnit: string | null): number {
+  if (!fromUnit || !toUnit) return amount;
   const from = UNIT_DEFS[fromUnit];
   const to = UNIT_DEFS[toUnit];
   if (!from || !to || from.group !== to.group) return amount;
   return (amount * from.toBase) / to.toBase;
 }
 
-export function getUnitGroup(unit: string): string[] {
+export function getUnitGroup(unit: string | null): string[] {
+  if (!unit) return [];
   const def = UNIT_DEFS[unit];
   if (!def) return [unit];
   return def.group === "volume" ? VOLUME_ORDER : WEIGHT_ORDER;
@@ -97,6 +105,21 @@ export function getUnitGroup(unit: string): string[] {
 
 export function getUnitDisplay(unit: string): string {
   return UNIT_DEFS[unit]?.display ?? unit;
+}
+
+/**
+ * Extract the first numeric value from a recipeYield string.
+ * e.g. "4 servings" → 4, "Makes 6-8" → 6, "4" → 4
+ */
+export function parseServings(yld: string | string[] | undefined | null): number | null {
+  const raw = Array.isArray(yld) ? yld[0] : yld;
+  if (!raw) return null;
+  const m = raw.match(/\d+/);
+  return m ? parseInt(m[0], 10) : null;
+}
+
+export function roundToQuarter(n: number): number {
+  return Math.round(n * 4) / 4;
 }
 
 const FRACTIONS: [number, string][] = [

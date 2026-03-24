@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { parseIngredient, convert, getUnitGroup, formatAmount } from "@/lib/units";
+import { parseIngredient, convert, getUnitGroup, formatAmount, parseServings, roundToQuarter } from "@/lib/units";
 
 describe("parseIngredient", () => {
   it("parses integer amount with unit", () => {
@@ -43,8 +43,12 @@ describe("parseIngredient", () => {
     expect(r!.unit).toBe("tbsp");
   });
 
-  it("returns null for no known unit", () => {
-    expect(parseIngredient("3 large eggs")).toBeNull();
+  it("returns amount with null unit for no known unit", () => {
+    const r = parseIngredient("3 large eggs");
+    expect(r).not.toBeNull();
+    expect(r!.amount).toBe(3);
+    expect(r!.unit).toBeNull();
+    expect(r!.rest).toBe("large eggs");
   });
 
   it("returns null for no amount", () => {
@@ -76,7 +80,10 @@ describe("parseIngredient", () => {
   });
 
   it("does not match unit mid-word (large != liter)", () => {
-    expect(parseIngredient("1 large egg")).toBeNull();
+    const r = parseIngredient("1 large egg");
+    expect(r).not.toBeNull();
+    expect(r!.unit).toBeNull();
+    expect(r!.rest).toBe("large egg");
   });
 
   it("preserves rest text correctly", () => {
@@ -172,5 +179,60 @@ describe("formatAmount", () => {
 
   it("formats decimal for value not close to a fraction", () => {
     expect(formatAmount(1.57)).toBe("1.57");
+  });
+});
+
+describe("roundToQuarter", () => {
+  it("rounds down to nearest 0.25", () => {
+    expect(roundToQuarter(1.1)).toBe(1);
+  });
+
+  it("rounds up to nearest 0.25", () => {
+    expect(roundToQuarter(1.4)).toBe(1.5);
+  });
+
+  it("leaves exact quarters unchanged", () => {
+    expect(roundToQuarter(1.25)).toBe(1.25);
+    expect(roundToQuarter(1.5)).toBe(1.5);
+    expect(roundToQuarter(1.75)).toBe(1.75);
+    expect(roundToQuarter(2)).toBe(2);
+  });
+
+  it("rounds 1/3 cup (0.333) to 0.25", () => {
+    expect(roundToQuarter(1 / 3)).toBe(0.25);
+  });
+});
+
+describe("parseServings", () => {
+  it("parses plain number string", () => {
+    expect(parseServings("4")).toBe(4);
+  });
+
+  it("parses 'N servings' format", () => {
+    expect(parseServings("4 servings")).toBe(4);
+  });
+
+  it("parses 'Makes N' format", () => {
+    expect(parseServings("Makes 6")).toBe(6);
+  });
+
+  it("parses range and returns first number", () => {
+    expect(parseServings("6-8 servings")).toBe(6);
+  });
+
+  it("parses array by using first element", () => {
+    expect(parseServings(["8 servings", "8"])).toBe(8);
+  });
+
+  it("returns null for undefined", () => {
+    expect(parseServings(undefined)).toBeNull();
+  });
+
+  it("returns null for empty string", () => {
+    expect(parseServings("")).toBeNull();
+  });
+
+  it("returns null when no number present", () => {
+    expect(parseServings("a few servings")).toBeNull();
   });
 });

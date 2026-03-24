@@ -1,3 +1,5 @@
+"use client";
+
 import Image from "next/image";
 import type { RecipeRow, HowToStep, HowToSection } from "@/types/recipe";
 import {
@@ -6,20 +8,23 @@ import {
   getFirstImage,
   toArray,
 } from "@/lib/format";
+import { useScaling } from "@/hooks/useScaling";
 import CookingModeButton from "./CookingModeButton";
 import IngredientItem from "./IngredientItem";
+import ServingsControl from "./ServingsControl";
 
 interface RecipeDetailProps {
   recipe: RecipeRow;
 }
 
 export default function RecipeDetail({ recipe }: RecipeDetailProps) {
-  const { metadata: { schema }, url, source } = recipe;
+  const { metadata: { schema } } = recipe;
   const image = getFirstImage(schema.image);
   const prepTime = formatDuration(schema.prepTime);
   const cookTime = formatDuration(schema.cookTime);
   const totalTime = formatDuration(schema.totalTime);
   const categories = toArray(schema.recipeCategory);
+  const { scale, servings, setScale, setServings } = useScaling(schema.recipeYield);
 
   return (
     <article className="max-w-3xl mx-auto">
@@ -84,14 +89,9 @@ export default function RecipeDetail({ recipe }: RecipeDetailProps) {
           {cookTime && <Stat label="Cook time" value={cookTime} />}
           {totalTime && <Stat label="Total time" value={totalTime} />}
           {schema.recipeYield && (
-            <Stat
-              label="Servings"
-              value={
-                Array.isArray(schema.recipeYield)
-                  ? schema.recipeYield[0]
-                  : schema.recipeYield
-              }
-            />
+            servings != null
+              ? <ServingsControl servings={servings} onChange={setServings} />
+              : <Stat label="Servings" value={Array.isArray(schema.recipeYield) ? schema.recipeYield[0] : schema.recipeYield} />
           )}
         </div>
       )}
@@ -107,7 +107,7 @@ export default function RecipeDetail({ recipe }: RecipeDetailProps) {
               {schema.recipeIngredient.map((ingredient, i) => (
                 <li key={i} className="flex items-start gap-2 text-sm text-gray-700">
                   <span className="mt-1.5 w-1.5 h-1.5 rounded-full bg-orange-400 shrink-0" />
-                  <IngredientItem ingredient={ingredient} />
+                  <IngredientItem ingredient={ingredient} scale={scale} onScaleChange={setScale} />
                 </li>
               ))}
             </ul>
