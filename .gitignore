@@ -37,3 +37,6 @@ next-env.d.ts
 # deploy scripts
 *.sh
 *.bat
+
+# claude
+./claude/settings*.json
