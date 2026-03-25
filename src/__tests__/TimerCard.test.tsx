@@ -54,23 +54,23 @@ describe("TimerCard (running)", () => {
     expect(screen.getByText("1:30")).toBeTruthy();
   });
 
-  it("shows pause button", () => {
+  it("shows edit button", () => {
     render(<TimerCard timer={makeTimer()} {...defaultProps} />);
-    expect(screen.getByLabelText(/pause timer/i)).toBeTruthy();
+    expect(screen.getByLabelText(/edit pasta timer/i)).toBeTruthy();
   });
 
-  it("calls onTogglePause when pause button clicked", () => {
-    const onTogglePause = vi.fn();
-    render(<TimerCard timer={makeTimer()} {...defaultProps} onTogglePause={onTogglePause} />);
-    fireEvent.click(screen.getByLabelText(/pause timer/i));
-    expect(onTogglePause).toHaveBeenCalledWith("timer-1");
-  });
-
-  it("calls onEdit when body is tapped", () => {
+  it("calls onEdit when edit button is clicked", () => {
     const onEdit = vi.fn();
     render(<TimerCard timer={makeTimer()} {...defaultProps} onEdit={onEdit} />);
     fireEvent.click(screen.getByLabelText(/edit pasta timer/i));
     expect(onEdit).toHaveBeenCalledWith("timer-1");
+  });
+
+  it("calls onTogglePause when time area is tapped", () => {
+    const onTogglePause = vi.fn();
+    render(<TimerCard timer={makeTimer()} {...defaultProps} onTogglePause={onTogglePause} />);
+    fireEvent.click(screen.getByLabelText(/pause pasta timer/i));
+    expect(onTogglePause).toHaveBeenCalledWith("timer-1");
   });
 
   it("calls onReset when reset button clicked", () => {
@@ -87,20 +87,20 @@ describe("TimerCard (running)", () => {
 });
 
 describe("TimerCard (paused)", () => {
-  it("shows resume button for paused timer", () => {
+  it("time area shows resume label when paused", () => {
     render(<TimerCard timer={makeTimer({ paused: true })} {...defaultProps} />);
-    expect(screen.getByLabelText(/resume timer/i)).toBeTruthy();
+    expect(screen.getByLabelText(/resume pasta timer/i)).toBeTruthy();
   });
 
-  it("shows Paused label", () => {
+  it("time button has resume aria-label when paused", () => {
     render(<TimerCard timer={makeTimer({ paused: true })} {...defaultProps} />);
-    expect(screen.getByText("Paused")).toBeTruthy();
+    expect(screen.getByLabelText(/resume pasta timer/i)).toBeTruthy();
   });
 
-  it("calls onTogglePause to resume", () => {
+  it("calls onTogglePause when time area tapped while paused", () => {
     const onTogglePause = vi.fn();
     render(<TimerCard timer={makeTimer({ paused: true })} {...defaultProps} onTogglePause={onTogglePause} />);
-    fireEvent.click(screen.getByLabelText(/resume timer/i));
+    fireEvent.click(screen.getByLabelText(/resume pasta timer/i));
     expect(onTogglePause).toHaveBeenCalledWith("timer-1");
   });
 });
@@ -142,7 +142,7 @@ describe("TimerCard (finished)", () => {
     expect(screen.getByText("Done")).toBeTruthy();
   });
 
-  it("calls onEdit when finished card body is tapped", () => {
+  it("calls onEdit when edit button is clicked on finished timer", () => {
     const onEdit = vi.fn();
     render(<TimerCard timer={makeTimer({ remaining: 0, finished: true })} {...defaultProps} onEdit={onEdit} />);
     fireEvent.click(screen.getByLabelText(/edit pasta timer/i));

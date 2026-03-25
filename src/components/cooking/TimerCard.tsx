@@ -109,76 +109,75 @@ export default function TimerCard({
 
   return (
     <div className={`rounded-xl border overflow-hidden ${isDone ? "border-gray-300 bg-gray-50" : "border-gray-200 bg-white"}`}>
-      {/* Label row */}
-      <p className="text-base sm:text-sm font-medium text-gray-700 truncate px-3 pt-2.5 pb-0.5">{timer.label}</p>
-
-      {/* Controls row — play/pause | time | reset+delete */}
-      <div className="flex items-stretch pb-1">
-        {/* Play/pause — only for running/paused */}
-        {(isRunning || isPaused) ? (
-          <button
-            onClick={() => onTogglePause(timer.id)}
-            className="px-3 flex items-center justify-center text-orange-500 active:bg-orange-50 shrink-0"
-            aria-label={isPaused ? "Resume timer" : "Pause timer"}
-          >
-            {isPaused ? <PlayIcon /> : <PauseIcon />}
-          </button>
-        ) : (
-          <div className="w-4 shrink-0" />
-        )}
-
-        {/* Time — tappable to open edit modal */}
+      {/* Label + time — single tap target for play/pause when running or paused */}
+      {(isRunning || isPaused) ? (
         <button
-          className="flex-1 min-w-0 py-1.5 pr-2 text-left active:opacity-70"
-          onClick={() => onEdit(timer.id)}
-          aria-label={`Edit ${timer.label} timer`}
+          className="w-full text-left px-4 pt-2.5 pb-3 active:opacity-70"
+          onClick={() => onTogglePause(timer.id)}
+          aria-label={isPaused ? `Resume ${timer.label} timer` : `Pause ${timer.label} timer`}
         >
-          <p className={`text-3xl sm:text-2xl font-mono font-bold tabular-nums ${isDone ? "text-gray-400" : "text-gray-900"}`}>
+          <div className="flex items-center justify-between pb-0.5">
+            <p className="text-base sm:text-sm font-medium text-gray-700 truncate">{timer.label}</p>
+            {isPaused && <PauseIcon />}
+          </div>
+          <p className="text-3xl sm:text-2xl font-mono font-bold tabular-nums text-gray-900">
             {formatRemaining(timer.remaining)}
           </p>
-          {isPaused && (
-            <p className="text-xs text-orange-500 font-medium mt-0.5">Paused</p>
-          )}
-          {isDone && (
-            <p className="text-xs text-gray-400 mt-0.5">Done</p>
-          )}
         </button>
-
-        {/* Reset + delete */}
-        <div className="flex items-center gap-1 px-2 shrink-0">
-          <button
-            onClick={() => onReset(timer.id)}
-            className="p-2 rounded-lg text-gray-400 hover:text-gray-600 active:bg-gray-100"
-            aria-label="Reset timer"
-          >
-            <ResetIcon />
-          </button>
-          <button
-            onClick={() => setConfirming(true)}
-            className="p-2 rounded-lg text-gray-400 hover:text-gray-600 active:bg-gray-100"
-            aria-label="Delete timer"
-          >
-            <TrashIcon />
-          </button>
+      ) : (
+        <div className="px-4 pt-2.5 pb-3">
+          <p className="text-base sm:text-sm font-medium text-gray-700 truncate pb-0.5">{timer.label}</p>
+          <p className="text-3xl sm:text-2xl font-mono font-bold tabular-nums text-gray-400">
+            {formatRemaining(timer.remaining)}
+          </p>
+          <p className="text-xs text-gray-400 mt-0.5">Done</p>
         </div>
+      )}
+
+      {/* Bottom row — edit | reset | delete */}
+      <div className={`flex border-t ${isDone ? "border-gray-200" : "border-gray-100"}`}>
+        <button
+          onClick={() => onEdit(timer.id)}
+          className="flex-1 py-2.5 flex items-center justify-center text-gray-500 active:bg-gray-50"
+          aria-label={`Edit ${timer.label} timer`}
+        >
+          <EditIcon />
+        </button>
+        <div className={`w-px ${isDone ? "bg-gray-200" : "bg-gray-100"}`} />
+        <button
+          onClick={() => onReset(timer.id)}
+          className="flex-1 py-2.5 flex items-center justify-center text-gray-500 active:bg-gray-50"
+          aria-label="Reset timer"
+        >
+          <ResetIcon />
+        </button>
+        <div className={`w-px ${isDone ? "bg-gray-200" : "bg-gray-100"}`} />
+        <button
+          onClick={() => setConfirming(true)}
+          className="flex-1 py-2.5 flex items-center justify-center text-gray-500 active:bg-gray-50"
+          aria-label="Delete timer"
+        >
+          <TrashIcon />
+        </button>
       </div>
     </div>
   );
 }
 
-function PlayIcon() {
+function PauseIcon() {
   return (
-    <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-      <polygon points="5 3 19 12 5 21 5 3" />
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" className="text-orange-500 shrink-0" aria-hidden="true">
+      <rect x="6" y="4" width="4" height="16" rx="1" />
+      <rect x="14" y="4" width="4" height="16" rx="1" />
     </svg>
   );
 }
 
-function PauseIcon() {
+function EditIcon() {
   return (
-    <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-      <rect x="6" y="4" width="4" height="16" rx="1" />
-      <rect x="14" y="4" width="4" height="16" rx="1" />
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+      <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
     </svg>
   );
 }
