@@ -73,7 +73,8 @@ export async function getRecipes(opts?: {
   }
 
   if (opts?.query) {
-    queryBuilder = queryBuilder.ilike("metadata->schema->>name", `%${opts.query}%`);
+    const q = opts.query.slice(0, 200);
+    queryBuilder = queryBuilder.ilike("metadata->schema->>name", `%${q}%`);
   }
 
   const { data, error, count } = await queryBuilder;

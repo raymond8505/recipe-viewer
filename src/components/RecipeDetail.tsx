@@ -175,10 +175,10 @@ export default function RecipeDetail({ recipe }: RecipeDetailProps) {
       {/* Nutrition */}
       {schema.nutrition && <NutritionPanel nutrition={schema.nutrition} totalServings={originalServings} />}
 
-      {/* JSON-LD */}
+      {/* JSON-LD — escape </script> sequences to prevent tag injection */}
       <script
         type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(schema, null, 2) }}
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(schema, null, 2).replace(/</g, "\\u003c") }}
       />
     </article>
   );

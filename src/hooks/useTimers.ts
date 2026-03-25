@@ -26,13 +26,18 @@ export function loadTimers(recipeHash: string): Timer[] {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return [];
-    const store: TimerStore = JSON.parse(raw);
+    const store: unknown = JSON.parse(raw);
+    if (typeof store !== "object" || store === null || Array.isArray(store)) return [];
+    const bucket = (store as Record<string, unknown>)[recipeHash];
+    if (!Array.isArray(bucket)) return [];
     // Normalize: backfill paused/finished for timers saved before these fields existed
-    return (store[recipeHash] ?? []).map((t) => ({
-      ...t,
-      paused: t.paused ?? false,
-      finished: t.finished ?? false,
-    }));
+    return bucket
+      .filter((t): t is Timer => typeof t === "object" && t !== null && "id" in t && "duration" in t && "remaining" in t)
+      .map((t) => ({
+        ...t,
+        paused: t.paused ?? false,
+        finished: t.finished ?? false,
+      }));
   } catch {
     return [];
   }
