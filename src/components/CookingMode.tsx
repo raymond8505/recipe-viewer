@@ -15,6 +15,7 @@ import {
 import { useTimers } from "@/hooks/useTimers";
 import type { Timer } from "@/hooks/useTimers";
 import { useScaling } from "@/hooks/useScaling";
+import { useWakeLock } from "@/hooks/useWakeLock";
 import { registerCookingModeRecipe, unregisterCookingModeRecipe } from "@/lib/windowApi";
 import TimerColumn from "@/components/cooking/TimerColumn";
 import TimerCard from "@/components/cooking/TimerCard";
@@ -43,6 +44,7 @@ export default function CookingMode({ recipe, onClose }: CookingModeProps) {
 
   const [schema, setSchema] = useState(recipe.metadata.schema);
   const { scale, servings, originalServings, setScale, setServings } = useScaling(schema.recipeYield);
+  useWakeLock();
 
   useEffect(() => {
     registerCookingModeRecipe(recipe.metadata.schema, setSchema);
