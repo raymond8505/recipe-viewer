@@ -125,9 +125,10 @@ export function useTimers(recipeUrl: string) {
     return () => clearInterval(interval);
   }, []);
 
-  const addTimer = useCallback((label: string, duration: number) => {
+  const addTimer = useCallback((label: string, duration: number): string => {
+    const id = crypto.randomUUID();
     const newTimer: Timer = {
-      id: crypto.randomUUID(),
+      id,
       label,
       duration,
       remaining: duration,
@@ -139,6 +140,7 @@ export function useTimers(recipeUrl: string) {
       saveTimers(hashRef.current, updated);
       return updated;
     });
+    return id;
   }, []);
 
   // Update label and duration only; does not reset remaining
@@ -192,6 +194,16 @@ export function useTimers(recipeUrl: string) {
     });
   }, []);
 
+  const removeTimers = useCallback((ids: string[]) => {
+    const idSet = new Set(ids);
+    setTimers((prev) => {
+      const updated = prev.filter((t) => !idSet.has(t.id));
+      saveTimers(hashRef.current, updated);
+      if (!hasActiveAlarm(updated)) stopAlarm();
+      return updated;
+    });
+  }, []);
+
   const resetAll = useCallback(() => {
     setTimers((prev) => {
       const updated = prev.map((t) => ({
@@ -206,5 +218,5 @@ export function useTimers(recipeUrl: string) {
     });
   }, []);
 
-  return { timers, addTimer, editTimer, togglePause, resetTimer, dismissTimer, removeTimer, resetAll };
+  return { timers, addTimer, editTimer, togglePause, resetTimer, dismissTimer, removeTimer, removeTimers, resetAll };
 }

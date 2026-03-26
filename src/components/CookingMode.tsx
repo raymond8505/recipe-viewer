@@ -21,6 +21,8 @@ import TimerColumn from "@/components/cooking/TimerColumn";
 import TimerCard from "@/components/cooking/TimerCard";
 import AddTimerModal from "@/components/cooking/AddTimerModal";
 import DraggableRibbon from "@/components/cooking/DraggableRibbon";
+import MealSearch from "@/components/cooking/MealSearch";
+import MealTabs from "@/components/cooking/MealTabs";
 import IngredientItem from "@/components/IngredientItem";
 import ServingsControl from "@/components/ServingsControl";
 import NutritionPanel from "@/components/NutritionPanel";
@@ -40,10 +42,18 @@ export default function CookingMode({ recipe, onClose }: CookingModeProps) {
   );
   const [showAddTimer, setShowAddTimer] = useState(false);
   const [editingTimer, setEditingTimer] = useState<Timer | null>(null);
-  const { timers, addTimer, editTimer, togglePause, resetTimer, dismissTimer, removeTimer, resetAll } = useTimers(recipe.url);
+  const { timers, addTimer, editTimer, togglePause, resetTimer, dismissTimer, removeTimer, removeTimers, resetAll } = useTimers(recipe.url);
 
   const [schema, setSchema] = useState(recipe.metadata.schema);
   const { scale, servings, originalServings, setScale, setServings } = useScaling(schema.recipeYield);
+
+  // Meal state — primary recipe is always at index 0 and cannot be removed
+  const [mealRecipes, setMealRecipes] = useState<RecipeRow[]>([recipe]);
+  const [activeIndex, setActiveIndex] = useState(0);
+  // Maps recipe.id → timer IDs that were seeded when that recipe was added to the meal
+  const [mealTimerIds, setMealTimerIds] = useState<Map<string, string[]>>(() => new Map());
+
+  const activeSchema = activeIndex === 0 ? schema : mealRecipes[activeIndex].metadata.schema;
   useWakeLock();
 
   useEffect(() => {
@@ -69,16 +79,58 @@ export default function CookingMode({ recipe, onClose }: CookingModeProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Instruction completion — not persisted between sessions
-  const [completedSteps, setCompletedSteps] = useState<Set<string>>(new Set());
+  // Instruction completion — not persisted between sessions, tracked per recipe
+  const [completedStepsMap, setCompletedStepsMap] = useState<Map<string, Set<string>>>(
+    () => new Map([[recipe.id, new Set<string>()]])
+  );
+  const completedSteps = completedStepsMap.get(mealRecipes[activeIndex].id) ?? new Set<string>();
 
   const toggleStep = (key: string) => {
-    setCompletedSteps((prev) => {
-      const next = new Set(prev);
-      if (next.has(key)) next.delete(key);
-      else next.add(key);
+    const id = mealRecipes[activeIndex].id;
+    setCompletedStepsMap((prev) => {
+      const next = new Map(prev);
+      const bucket = new Set(next.get(id) ?? []);
+      if (bucket.has(key)) bucket.delete(key);
+      else bucket.add(key);
+      next.set(id, bucket);
       return next;
     });
+  };
+
+  const handleAddToMeal = (newRecipe: RecipeRow) => {
+    setMealRecipes((prev) => [...prev, newRecipe]);
+    setCompletedStepsMap((prev) => new Map(prev).set(newRecipe.id, new Set()));
+    // Seed this recipe's timers unconditionally (bypass the "skip if timers > 0" guard on mount)
+    const seededIds: string[] = [];
+    for (const item of newRecipe.metadata.schema.recipeInstructions ?? []) {
+      const steps =
+        item["@type"] === "HowToSection"
+          ? (item as HowToSection).itemListElement
+          : [item as HowToStep];
+      for (const step of steps) {
+        const secs = parseDurationToSeconds(step.timeRequired);
+        if (step.name && secs) seededIds.push(addTimer(step.name, secs));
+      }
+    }
+    if (seededIds.length > 0) {
+      setMealTimerIds((prev) => new Map(prev).set(newRecipe.id, seededIds));
+    }
+  };
+
+  const handleRemoveFromMeal = (index: number) => {
+    if (index === 0) return;
+    const removed = mealRecipes[index];
+    const timerIds = mealTimerIds.get(removed.id);
+    if (timerIds && timerIds.length > 0) {
+      removeTimers(timerIds);
+      setMealTimerIds((prev) => {
+        const next = new Map(prev);
+        next.delete(removed.id);
+        return next;
+      });
+    }
+    setMealRecipes((prev) => prev.filter((_, i) => i !== index));
+    setActiveIndex((prev) => (prev === index ? 0 : prev > index ? prev - 1 : prev));
   };
 
   useEffect(() => {
@@ -255,14 +307,38 @@ export default function CookingMode({ recipe, onClose }: CookingModeProps) {
               </div>
             )}
 
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-8">
+            {/* Meal bar — tabs and search inline */}
+            <div className="flex items-start gap-2 flex-wrap mb-6">
+              {mealRecipes.length > 1 && (
+                <MealTabs
+                  recipes={mealRecipes}
+                  activeIndex={activeIndex}
+                  onSelect={setActiveIndex}
+                  onRemove={handleRemoveFromMeal}
+                />
+              )}
+              <div className="relative flex-1 min-w-[200px]">
+                <MealSearch
+                  excludeIds={new Set(mealRecipes.map((r) => r.id))}
+                  onAdd={handleAddToMeal}
+                />
+              </div>
+            </div>
+
+            <div
+              id="meal-recipe-panel"
+              role={mealRecipes.length > 1 ? "tabpanel" : undefined}
+              aria-labelledby={mealRecipes.length > 1 ? `meal-tab-${mealRecipes[activeIndex].id}` : undefined}
+              tabIndex={mealRecipes.length > 1 ? 0 : undefined}
+              className="grid grid-cols-1 sm:grid-cols-3 gap-8"
+            >
               {/* Ingredients */}
-              {schema.recipeIngredient && schema.recipeIngredient.length > 0 && (
+              {activeSchema.recipeIngredient && activeSchema.recipeIngredient.length > 0 && (
                 <div className="sm:col-span-1">
                   <h2 className="text-2xl sm:text-xl font-semibold text-gray-900 mb-4">
                     Ingredients
                   </h2>
-                  {groupIngredients(schema.recipeIngredient).map(({ heading, items }, gi) => (
+                  {groupIngredients(activeSchema.recipeIngredient).map(({ heading, items }, gi) => (
                     <div key={gi} className={gi > 0 ? "mt-4" : ""}>
                       {heading && (
                         <h3 className="text-sm sm:text-xs font-semibold uppercase tracking-widest text-orange-500 mb-2">
@@ -273,7 +349,7 @@ export default function CookingMode({ recipe, onClose }: CookingModeProps) {
                         {items.map((ingredient, i) => (
                           <li key={i} className="flex items-start gap-2 text-lg sm:text-sm text-gray-700">
                             <span className="mt-1.5 w-1.5 h-1.5 rounded-full bg-orange-400 shrink-0" />
-                            <IngredientItem ingredient={getIngredientText(ingredient)} scale={scale} onScaleChange={setScale} />
+                            <IngredientItem ingredient={getIngredientText(ingredient)} scale={activeIndex === 0 ? scale : 1} onScaleChange={activeIndex === 0 ? setScale : undefined} />
                           </li>
                         ))}
                       </ul>
@@ -283,14 +359,14 @@ export default function CookingMode({ recipe, onClose }: CookingModeProps) {
               )}
 
               {/* Instructions */}
-              {schema.recipeInstructions && schema.recipeInstructions.length > 0 && (
+              {activeSchema.recipeInstructions && activeSchema.recipeInstructions.length > 0 && (
                 <div className="sm:col-span-2">
                   <h2 className="text-2xl sm:text-xl font-semibold text-gray-900 mb-4">
                     Instructions
                   </h2>
-                  {schema.recipeInstructions[0]["@type"] === "HowToSection" ? (
+                  {activeSchema.recipeInstructions[0]["@type"] === "HowToSection" ? (
                     <div className="space-y-6">
-                      {(schema.recipeInstructions as HowToSection[]).map((section, i) => (
+                      {(activeSchema.recipeInstructions as HowToSection[]).map((section, i) => (
                         <div key={i}>
                           <h3 className="text-sm sm:text-xs font-semibold uppercase tracking-widest text-orange-500 mb-3">
                             {section.name}
@@ -323,7 +399,7 @@ export default function CookingMode({ recipe, onClose }: CookingModeProps) {
                     </div>
                   ) : (
                     <ol className="space-y-4">
-                      {(schema.recipeInstructions as HowToStep[]).map((step, i) => {
+                      {(activeSchema.recipeInstructions as HowToStep[]).map((step, i) => {
                         const key = `${i}`;
                         const done = completedSteps.has(key);
                         return (
@@ -351,10 +427,10 @@ export default function CookingMode({ recipe, onClose }: CookingModeProps) {
             </div>
 
             {/* Notes */}
-            {schema.notes && (
+            {activeSchema.notes && (
               <div className="mt-8">
                 <h2 className="text-2xl sm:text-xl font-semibold text-gray-900 mb-3">Notes</h2>
-                <p className="text-xl sm:text-base text-gray-700 leading-relaxed whitespace-pre-line">{schema.notes}</p>
+                <p className="text-xl sm:text-base text-gray-700 leading-relaxed whitespace-pre-line">{activeSchema.notes}</p>
               </div>
             )}
 
