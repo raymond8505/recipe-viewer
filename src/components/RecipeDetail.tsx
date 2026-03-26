@@ -9,6 +9,7 @@ import {
   toArray,
   groupIngredients,
   getIngredientText,
+  toSchemaOrgJsonLd,
 } from "@/lib/format";
 import { useScaling } from "@/hooks/useScaling";
 import CookingModeButton from "./CookingModeButton";
@@ -183,10 +184,10 @@ export default function RecipeDetail({ recipe }: RecipeDetailProps) {
       {/* Nutrition */}
       {schema.nutrition && <NutritionPanel nutrition={schema.nutrition} totalServings={originalServings} />}
 
-      {/* JSON-LD — escape </script> sequences to prevent tag injection */}
+      {/* JSON-LD — Schema.org-compliant only; escape </script> sequences to prevent tag injection */}
       <script
         type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(schema, null, 2).replace(/</g, "\\u003c") }}
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(toSchemaOrgJsonLd(schema), null, 2).replace(/</g, "\\u003c") }}
       />
     </article>
   );

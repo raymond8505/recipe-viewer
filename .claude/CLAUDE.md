@@ -26,3 +26,14 @@ The app uses a custom schema that extends Schema.org/Recipe. Individual ingredie
 The helpers that implement this live in `src/lib/format.ts`:
 - `getIngredientText(ingredient)` — extracts the display string from either format
 - `groupIngredients(ingredients)` — returns `{ heading: string | null; items: [...] }[]` in insertion order
+
+## Schema.org JSON-LD Sanitization
+
+Custom fields (`notes`, ingredient `group` objects) must never appear in the JSON-LD `<script>` output — external tools only understand the standard Schema.org/Recipe spec.
+
+`toSchemaOrgJsonLd(schema)` in `src/lib/format.ts` is the single gatekeeper: it uses an **explicit allowlist** of standard fields and normalizes `recipeIngredient` objects to plain strings via `getIngredientText`.
+
+**Rules:**
+- Any new standard Schema.org/Recipe property added to `SchemaRecipe` must also be added to the `optionalFields` array in `toSchemaOrgJsonLd`, or it won't appear in JSON-LD output
+- Any new custom/app-level field on `SchemaRecipe` must be intentionally left out of `toSchemaOrgJsonLd`
+- `recipeIngredient` objects (`{ name, group }`) are internal-only — always flatten to strings before external serialization

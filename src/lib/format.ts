@@ -51,7 +51,7 @@ export function formatDate(iso: string | undefined | null): string | null {
   });
 }
 
-import type { RecipeIngredient } from "@/types/recipe";
+import type { RecipeIngredient, SchemaRecipe } from "@/types/recipe";
 
 /**
  * Get the ingredient text from a string or RecipeIngredient object.
@@ -94,6 +94,31 @@ export function getFirstImage(
   if (!image) return null;
   if (Array.isArray(image)) return image[0] ?? null;
   return image;
+}
+
+/**
+ * Return a Schema.org-compliant JSON-LD object for a recipe.
+ * Strips custom extensions (notes, ingredient group objects) so external
+ * tools that validate against the spec can parse the output cleanly.
+ */
+export function toSchemaOrgJsonLd(schema: SchemaRecipe): object {
+  const result: Record<string, unknown> = {
+    "@context": schema["@context"] ?? "https://schema.org",
+    "@type": schema["@type"] ?? "Recipe",
+    name: schema.name,
+  };
+  const optionalFields = [
+    "description", "image", "author", "cookTime", "prepTime", "totalTime",
+    "recipeYield", "recipeCuisine", "recipeCategory", "keywords",
+    "nutrition", "datePublished", "recipeInstructions",
+  ] as const;
+  for (const key of optionalFields) {
+    if (schema[key] != null) result[key] = schema[key];
+  }
+  if (schema.recipeIngredient?.length) {
+    result.recipeIngredient = schema.recipeIngredient.map(getIngredientText);
+  }
+  return result;
 }
 
 /**
