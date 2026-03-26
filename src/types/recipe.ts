@@ -54,6 +54,7 @@ export interface SchemaRecipe {
     cholesterolContent?: string;
   };
   datePublished?: string;
+  notes?: string;
 }
 
 export interface RecipesResult {

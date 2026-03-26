@@ -172,6 +172,14 @@ export default function RecipeDetail({ recipe }: RecipeDetailProps) {
         )}
       </div>
 
+      {/* Notes */}
+      {schema.notes && (
+        <div className="mt-8">
+          <h2 className="text-xl font-semibold text-gray-900 mb-3">Notes</h2>
+          <p className="text-gray-700 leading-relaxed whitespace-pre-line">{schema.notes}</p>
+        </div>
+      )}
+
       {/* Nutrition */}
       {schema.nutrition && <NutritionPanel nutrition={schema.nutrition} totalServings={originalServings} />}
 

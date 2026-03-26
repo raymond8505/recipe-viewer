@@ -350,6 +350,14 @@ export default function CookingMode({ recipe, onClose }: CookingModeProps) {
               )}
             </div>
 
+            {/* Notes */}
+            {schema.notes && (
+              <div className="mt-8">
+                <h2 className="text-2xl sm:text-xl font-semibold text-gray-900 mb-3">Notes</h2>
+                <p className="text-xl sm:text-base text-gray-700 leading-relaxed whitespace-pre-line">{schema.notes}</p>
+              </div>
+            )}
+
             {/* Nutrition */}
             {schema.nutrition && <NutritionPanel nutrition={schema.nutrition} totalServings={originalServings} />}
           </div>
