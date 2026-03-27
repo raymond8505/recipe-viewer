@@ -1,7 +1,8 @@
 import { Suspense } from "react";
 import type { Metadata } from "next";
 import { getRecipes, getSources, type SortOption } from "@/lib/recipes";
-import { features } from "@/lib/features";
+import { getFeatures } from "@/lib/features";
+import { getIsLoggedIn } from "@/lib/auth";
 import RecipeGrid from "@/components/RecipeGrid";
 import RecipeStateProvider from "@/components/RecipeStateProvider";
 import SearchBar from "@/components/SearchBar";
@@ -28,9 +29,12 @@ export default async function Home({ searchParams }: HomeProps) {
     ? (sortParam as SortOption)
     : "newest";
 
+  const isLoggedIn = await getIsLoggedIn();
+  const features = getFeatures(isLoggedIn);
+
   const [{ data: recipes, count }, sources] = await Promise.all([
-    getRecipes({ query, page, limit: PAGE_SIZE, sort, source: sourceParam }),
-    features.showSourceFilter ? getSources() : Promise.resolve([]),
+    getRecipes({ query, page, limit: PAGE_SIZE, sort, source: sourceParam, isLoggedIn }),
+    features.showSourceFilter ? getSources({ isLoggedIn }) : Promise.resolve([]),
   ]);
 
   return (

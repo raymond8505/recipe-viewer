@@ -1,13 +1,14 @@
 import { getSupabaseClient } from "./supabase";
-import { features } from "./features";
+import { getFeatures } from "./features";
 import type { RecipeRow, RecipesResult } from "@/types/recipe";
 
 const PAGE_SIZE = 24;
 
 export type SortOption = "newest" | "oldest" | "name-asc" | "name-desc";
 
-export async function getSources(): Promise<string[]> {
+export async function getSources(opts?: { isLoggedIn?: boolean }): Promise<string[]> {
   const supabase = getSupabaseClient();
+  const features = getFeatures(opts?.isLoggedIn ?? false);
 
   let queryBuilder = supabase
     .from("recipes")
@@ -37,8 +38,10 @@ export async function getRecipes(opts?: {
   limit?: number;
   sort?: SortOption;
   source?: string;
+  isLoggedIn?: boolean;
 }): Promise<RecipesResult> {
   const supabase = getSupabaseClient();
+  const features = getFeatures(opts?.isLoggedIn ?? false);
   const page = opts?.page ?? 1;
   const limit = opts?.limit ?? PAGE_SIZE;
   const from = (page - 1) * limit;

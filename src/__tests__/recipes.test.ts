@@ -8,7 +8,7 @@ const mockFeatures = vi.hoisted(() => ({
 
 const mockGetSupabaseClient = vi.hoisted(() => vi.fn());
 
-vi.mock("@/lib/features", () => ({ features: mockFeatures }));
+vi.mock("@/lib/features", () => ({ getFeatures: () => mockFeatures }));
 vi.mock("@/lib/supabase", () => ({ getSupabaseClient: mockGetSupabaseClient }));
 
 import { getRecipes, getRecipeById } from "@/lib/recipes";

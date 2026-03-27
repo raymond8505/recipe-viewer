@@ -180,7 +180,6 @@ export default function CookingMode({ recipe, onClose }: CookingModeProps) {
 
   useEffect(() => {
     document.body.style.overflow = "hidden";
-    containerRef.current?.requestFullscreen().catch(() => {});
     return () => {
       document.body.style.overflow = "";
       if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
@@ -209,7 +208,10 @@ export default function CookingMode({ recipe, onClose }: CookingModeProps) {
     >
       {/* Sticky header */}
       <div className="shrink-0 flex items-center justify-between px-4 py-2 border-b border-gray-200 bg-white">
-        <span className="text-sm font-medium text-gray-500">Cooking mode</span>
+        <button
+          onClick={() => { if (document.fullscreenElement) document.exitFullscreen(); }}
+          className="text-sm font-medium text-gray-500"
+        >Cooking mode</button>
         <div className="flex items-center gap-1">
           <button
             onClick={toggleFullscreen}
