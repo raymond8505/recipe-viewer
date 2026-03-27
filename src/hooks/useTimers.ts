@@ -132,7 +132,7 @@ export function useTimers(recipeUrl: string) {
       label,
       duration,
       remaining: duration,
-      paused: true,
+      paused: false,
       finished: false,
     };
     setTimers((prev) => {

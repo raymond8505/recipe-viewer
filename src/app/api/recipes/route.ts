@@ -1,6 +1,10 @@
 import { getRecipes } from "@/lib/recipes";
 
 export async function GET(request: Request) {
+  if (request.headers.get("x-requested-by") !== "recipe-viewer") {
+    return new Response("Forbidden", { status: 403 });
+  }
+
   const { searchParams } = new URL(request.url);
 
   const query = searchParams.get("q") ?? undefined;
