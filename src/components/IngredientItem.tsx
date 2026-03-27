@@ -72,7 +72,7 @@ export default function IngredientItem({
         />
       ) : (
         <span
-          onClick={onScaleChange ? startEdit : undefined}
+          onClick={onScaleChange ? (e) => { e.stopPropagation(); startEdit(); } : undefined}
           onKeyDown={onScaleChange ? (e) => { if (e.key === "Enter" || e.key === " ") startEdit(); } : undefined}
           role={onScaleChange ? "button" : undefined}
           aria-label={onScaleChange ? `Edit amount: ${displayAmount}` : undefined}

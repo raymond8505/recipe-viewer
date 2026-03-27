@@ -1,5 +1,5 @@
-import { describe, it, expect } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { describe, it, expect, vi, beforeEach } from "vitest";
+import { render, screen, fireEvent } from "@testing-library/react";
 import RecipeDetail from "@/components/RecipeDetail";
 import type { RecipeRow, HowToStep, HowToSection, SchemaRecipe } from "@/types/recipe";
 
@@ -181,5 +181,56 @@ describe("RecipeDetail", () => {
       />
     );
     expect(screen.queryByRole("heading", { level: 3 })).toBeNull();
+  });
+});
+
+describe("RecipeDetail — shopping list", () => {
+  beforeEach(() => {
+    Object.assign(navigator, {
+      clipboard: { writeText: vi.fn().mockResolvedValue(undefined) },
+    });
+  });
+
+  it("ingredient rows render as unchecked checkboxes", () => {
+    render(<RecipeDetail recipe={makeRecipe({ recipeIngredient: ["2 cups flour", "1 tsp salt"] })} />);
+    const boxes = screen.getAllByRole("checkbox");
+    expect(boxes[0].getAttribute("aria-checked")).toBe("false");
+    expect(boxes[1].getAttribute("aria-checked")).toBe("false");
+  });
+
+  it("clicking an ingredient checks it", () => {
+    render(<RecipeDetail recipe={makeRecipe({ recipeIngredient: ["2 cups flour"] })} />);
+    const box = screen.getByRole("checkbox", { name: "2 cups flour" });
+    fireEvent.click(box);
+    expect(box.getAttribute("aria-checked")).toBe("true");
+  });
+
+  it("clicking a checked ingredient unchecks it", () => {
+    render(<RecipeDetail recipe={makeRecipe({ recipeIngredient: ["2 cups flour"] })} />);
+    const box = screen.getByRole("checkbox", { name: "2 cups flour" });
+    fireEvent.click(box);
+    fireEvent.click(box);
+    expect(box.getAttribute("aria-checked")).toBe("false");
+  });
+
+  it("copy button is disabled when nothing is selected", () => {
+    render(<RecipeDetail recipe={makeRecipe({ recipeIngredient: ["2 cups flour"] })} />);
+    expect(screen.getByRole("button", { name: /copy shopping list/i })).toBeDisabled();
+  });
+
+  it("copy button becomes enabled when an ingredient is selected", () => {
+    render(<RecipeDetail recipe={makeRecipe({ recipeIngredient: ["2 cups flour"] })} />);
+    fireEvent.click(screen.getByRole("checkbox", { name: "2 cups flour" }));
+    expect(screen.getByRole("button", { name: /copy shopping list/i })).not.toBeDisabled();
+  });
+
+  it("clicking copy writes selected ingredients to clipboard", async () => {
+    render(<RecipeDetail recipe={makeRecipe({ recipeIngredient: ["2 cups flour", "1 tsp salt"] })} />);
+    fireEvent.click(screen.getByRole("checkbox", { name: "2 cups flour" }));
+    fireEvent.click(screen.getByRole("checkbox", { name: "1 tsp salt" }));
+    fireEvent.click(screen.getByRole("button", { name: /copy shopping list/i }));
+    await vi.waitFor(() => {
+      expect(navigator.clipboard.writeText).toHaveBeenCalledWith("2 cups flour\n1 tsp salt");
+    });
   });
 });

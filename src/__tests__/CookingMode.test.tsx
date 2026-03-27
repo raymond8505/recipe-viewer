@@ -117,3 +117,68 @@ describe("CookingMode — instruction completion", () => {
     expect(steps[1].getAttribute("aria-pressed")).toBe("false");
   });
 });
+
+describe("CookingMode — shopping list", () => {
+  beforeEach(() => {
+    Object.assign(navigator, {
+      clipboard: { writeText: vi.fn().mockResolvedValue(undefined) },
+    });
+  });
+
+  it("ingredient rows render as unchecked checkboxes", () => {
+    const recipe = makeRecipe({ recipeIngredient: ["2 cups flour", "1 tsp salt"] });
+    render(<CookingMode recipe={recipe} onClose={vi.fn()} />);
+    const boxes = screen.getAllByRole("checkbox");
+    expect(boxes[0].getAttribute("aria-checked")).toBe("false");
+    expect(boxes[1].getAttribute("aria-checked")).toBe("false");
+  });
+
+  it("clicking an ingredient marks it checked", () => {
+    const recipe = makeRecipe({ recipeIngredient: ["2 cups flour"] });
+    render(<CookingMode recipe={recipe} onClose={vi.fn()} />);
+    const box = screen.getByRole("checkbox", { name: "2 cups flour" });
+    fireEvent.click(box);
+    expect(box.getAttribute("aria-checked")).toBe("true");
+  });
+
+  it("clicking a checked ingredient unchecks it", () => {
+    const recipe = makeRecipe({ recipeIngredient: ["2 cups flour"] });
+    render(<CookingMode recipe={recipe} onClose={vi.fn()} />);
+    const box = screen.getByRole("checkbox", { name: "2 cups flour" });
+    fireEvent.click(box);
+    fireEvent.click(box);
+    expect(box.getAttribute("aria-checked")).toBe("false");
+  });
+
+  it("copy button is disabled when no ingredients are selected", () => {
+    const recipe = makeRecipe({ recipeIngredient: ["2 cups flour"] });
+    render(<CookingMode recipe={recipe} onClose={vi.fn()} />);
+    expect(screen.getByRole("button", { name: /copy shopping list/i })).toBeDisabled();
+  });
+
+  it("copy button becomes enabled when an ingredient is selected", () => {
+    const recipe = makeRecipe({ recipeIngredient: ["2 cups flour", "1 tsp salt"] });
+    render(<CookingMode recipe={recipe} onClose={vi.fn()} />);
+    fireEvent.click(screen.getByRole("checkbox", { name: "2 cups flour" }));
+    expect(screen.getByRole("button", { name: /copy shopping list, 1 item$/i })).not.toBeDisabled();
+  });
+
+  it("copy button aria-label reflects selection count", () => {
+    const recipe = makeRecipe({ recipeIngredient: ["2 cups flour", "1 tsp salt"] });
+    render(<CookingMode recipe={recipe} onClose={vi.fn()} />);
+    fireEvent.click(screen.getByRole("checkbox", { name: "2 cups flour" }));
+    fireEvent.click(screen.getByRole("checkbox", { name: "1 tsp salt" }));
+    expect(screen.getByRole("button", { name: /copy shopping list, 2 items/i })).toBeTruthy();
+  });
+
+  it("clicking copy writes selected ingredient text to clipboard", async () => {
+    const recipe = makeRecipe({ recipeIngredient: ["2 cups flour", "1 tsp salt"] });
+    render(<CookingMode recipe={recipe} onClose={vi.fn()} />);
+    fireEvent.click(screen.getByRole("checkbox", { name: "2 cups flour" }));
+    fireEvent.click(screen.getByRole("checkbox", { name: "1 tsp salt" }));
+    fireEvent.click(screen.getByRole("button", { name: /copy shopping list/i }));
+    await vi.waitFor(() => {
+      expect(navigator.clipboard.writeText).toHaveBeenCalledWith("2 cups flour\n1 tsp salt");
+    });
+  });
+});

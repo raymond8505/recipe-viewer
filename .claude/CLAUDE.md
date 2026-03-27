@@ -43,6 +43,24 @@ Cook mode supports grouping multiple recipes into a "meal" session. State lives 
 
 **MealSearch** is always rendered (no toggle). Click-outside clears query; ArrowDown from input moves focus to first result; ArrowUp from first result returns to input.
 
+## Shopping List Feature
+
+Ingredients in both `CookingMode` and `RecipeDetail` are tappable checkboxes that build a shopping list, copied to clipboard as newline-separated text.
+
+**State:**
+- `CookingMode`: `Set<string>` keyed as `"${recipeId}::${ingredientText}"` — shared across all meal recipes in a session
+- `RecipeDetail`: `Set<string>` keyed by bare ingredient text — separate, no cross-mode sharing
+
+**Copy output is raw ingredient text, not scaled.** `getIngredientText(ing)` is used — the original schema string, ignoring current scale. Intentional: shopping is about what to buy, not cook-time quantities.
+
+**Primary recipe copy reads from `schema` (live state), not `mealRecipes[0].metadata.schema`** — preserves window API overrides. Don't flatten this.
+
+**`CheckIcon` and `CopyIcon` are duplicated** as private functions in `CookingMode.tsx` and `RecipeDetail.tsx`. If a third component needs them, extract to `src/components/icons.tsx`.
+
+**`invisible` not conditional render** — the copy button is always in the DOM (using Tailwind `invisible` when disabled) so it never shifts the heading layout. Apply this pattern to any button that appears next to a heading.
+
+**`AgentChatWidget` tests are pre-broken** (not related to shopping list). Widget toggle changed from `<button>` to `<div>` without updating tests — 5 tests fail looking for `role="button" name=/agent api/i`.
+
 ## Schema.org JSON-LD Sanitization
 
 Custom fields (`notes`, ingredient `group` objects) must never appear in the JSON-LD `<script>` output — external tools only understand the standard Schema.org/Recipe spec.

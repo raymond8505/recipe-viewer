@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import Image from "next/image";
 import type { RecipeRow, HowToStep, HowToSection } from "@/types/recipe";
 import {
@@ -29,6 +30,28 @@ export default function RecipeDetail({ recipe }: RecipeDetailProps) {
   const totalTime = formatDuration(schema.totalTime);
   const categories = toArray(schema.recipeCategory);
   const { scale, servings, originalServings, setScale, setServings } = useScaling(schema.recipeYield);
+
+  const [selectedIngredients, setSelectedIngredients] = useState<Set<string>>(new Set());
+  const [copyFeedback, setCopyFeedback] = useState(false);
+
+  const toggleIngredient = (text: string) => {
+    setSelectedIngredients((prev) => {
+      const next = new Set(prev);
+      if (next.has(text)) next.delete(text); else next.add(text);
+      return next;
+    });
+  };
+
+  const copyShoppingList = async () => {
+    const lines = (schema.recipeIngredient ?? [])
+      .map(getIngredientText)
+      .filter((text) => selectedIngredients.has(text));
+    try {
+      await navigator.clipboard.writeText(lines.join("\n"));
+      setCopyFeedback(true);
+      setTimeout(() => setCopyFeedback(false), 2000);
+    } catch { /* silent fail */ }
+  };
 
   return (
     <article className="max-w-3xl mx-auto">
@@ -104,9 +127,19 @@ export default function RecipeDetail({ recipe }: RecipeDetailProps) {
         {/* Ingredients */}
         {schema.recipeIngredient && schema.recipeIngredient.length > 0 && (
           <div className="sm:col-span-1">
-            <h2 className="text-xl font-semibold text-gray-900 mb-4">
-              Ingredients
-            </h2>
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-xl font-semibold text-gray-900">
+                Ingredients
+              </h2>
+              <button
+                onClick={copyShoppingList}
+                disabled={selectedIngredients.size === 0}
+                className={`p-2 rounded-lg transition-colors ${selectedIngredients.size === 0 ? "invisible" : "text-gray-500 hover:bg-gray-100 hover:text-gray-800"}`}
+                aria-label={`Copy shopping list, ${selectedIngredients.size} item${selectedIngredients.size === 1 ? "" : "s"}`}
+              >
+                {copyFeedback ? <CheckIcon /> : <CopyIcon />}
+              </button>
+            </div>
             {groupIngredients(schema.recipeIngredient).map(({ heading, items }, gi) => (
               <div key={gi} className={gi > 0 ? "mt-4" : ""}>
                 {heading && (
@@ -115,12 +148,23 @@ export default function RecipeDetail({ recipe }: RecipeDetailProps) {
                   </h3>
                 )}
                 <ul className="space-y-2">
-                  {items.map((ingredient, i) => (
-                    <li key={i} className="flex items-start gap-2 text-sm text-gray-700">
-                      <span className="mt-1.5 w-1.5 h-1.5 rounded-full bg-orange-400 shrink-0" />
-                      <IngredientItem ingredient={getIngredientText(ingredient)} scale={scale} onScaleChange={setScale} />
-                    </li>
-                  ))}
+                  {items.map((ingredient, i) => {
+                    const text = getIngredientText(ingredient);
+                    const selected = selectedIngredients.has(text);
+                    return (
+                      <li
+                        key={i}
+                        className={`flex items-start gap-2 text-sm rounded-lg px-2 py-1 -mx-2 cursor-pointer select-none transition-colors active:opacity-60 ${selected ? "bg-green-50 text-gray-700" : "text-gray-700"}`}
+                        onClick={() => toggleIngredient(text)}
+                        role="checkbox"
+                        aria-checked={selected}
+                        aria-label={text}
+                      >
+                        <span className={`mt-1.5 w-1.5 h-1.5 rounded-full shrink-0 transition-colors ${selected ? "bg-green-500" : "bg-orange-400"}`} />
+                        <IngredientItem ingredient={text} scale={scale} onScaleChange={setScale} />
+                      </li>
+                    );
+                  })}
                 </ul>
               </div>
             ))}
@@ -211,3 +255,19 @@ function NutritionStat({ label, value }: { label: string; value: string }) {
   );
 }
 
+function CheckIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M20 6 9 17l-5-5" />
+    </svg>
+  );
+}
+
+function CopyIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <rect width="14" height="14" x="8" y="8" rx="2" ry="2" />
+      <path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2" />
+    </svg>
+  );
+}

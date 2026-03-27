@@ -131,4 +131,17 @@ describe("IngredientItem — scaling", () => {
     // amount button should be back
     expect(screen.getByRole("button", { name: /edit amount/i })).toBeTruthy();
   });
+
+  it("amount click does not bubble to parent when onScaleChange is provided", () => {
+    const parentClick = vi.fn();
+    const onScaleChange = vi.fn();
+    const { container } = render(
+      <div onClick={parentClick}>
+        <IngredientItem ingredient="2 cups flour" onScaleChange={onScaleChange} />
+      </div>
+    );
+    void container; // suppress unused warning
+    fireEvent.click(screen.getByRole("button", { name: /edit amount/i }));
+    expect(parentClick).not.toHaveBeenCalled();
+  });
 });

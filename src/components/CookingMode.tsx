@@ -79,6 +79,35 @@ export default function CookingMode({ recipe, onClose }: CookingModeProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Shopping list — single Set across all meal recipes; key = "${recipeId}::${ingredientText}"
+  const [selectedIngredients, setSelectedIngredients] = useState<Set<string>>(new Set());
+  const [copyFeedback, setCopyFeedback] = useState(false);
+
+  const toggleIngredient = (recipeId: string, text: string) => {
+    const key = `${recipeId}::${text}`;
+    setSelectedIngredients((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key); else next.add(key);
+      return next;
+    });
+  };
+
+  const copyShoppingList = async () => {
+    const lines: string[] = [];
+    for (const r of mealRecipes) {
+      const ings = r.id === recipe.id ? schema.recipeIngredient : r.metadata.schema.recipeIngredient;
+      for (const ing of (ings ?? [])) {
+        const text = getIngredientText(ing);
+        if (selectedIngredients.has(`${r.id}::${text}`)) lines.push(text);
+      }
+    }
+    try {
+      await navigator.clipboard.writeText(lines.join("\n"));
+      setCopyFeedback(true);
+      setTimeout(() => setCopyFeedback(false), 2000);
+    } catch { /* silent fail */ }
+  };
+
   // Instruction completion — not persisted between sessions, tracked per recipe
   const [completedStepsMap, setCompletedStepsMap] = useState<Map<string, Set<string>>>(
     () => new Map([[recipe.id, new Set<string>()]])
@@ -129,6 +158,13 @@ export default function CookingMode({ recipe, onClose }: CookingModeProps) {
         return next;
       });
     }
+    setSelectedIngredients((prev) => {
+      const next = new Set(prev);
+      for (const key of next) {
+        if (key.startsWith(`${removed.id}::`)) next.delete(key);
+      }
+      return next;
+    });
     setMealRecipes((prev) => prev.filter((_, i) => i !== index));
     setActiveIndex((prev) => (prev === index ? 0 : prev > index ? prev - 1 : prev));
   };
@@ -335,9 +371,19 @@ export default function CookingMode({ recipe, onClose }: CookingModeProps) {
               {/* Ingredients */}
               {activeSchema.recipeIngredient && activeSchema.recipeIngredient.length > 0 && (
                 <div className="sm:col-span-1">
-                  <h2 className="text-2xl sm:text-xl font-semibold text-gray-900 mb-4">
-                    Ingredients
-                  </h2>
+                  <div className="flex items-center justify-between mb-4">
+                    <h2 className="text-2xl sm:text-xl font-semibold text-gray-900">
+                      Ingredients
+                    </h2>
+                    <button
+                      onClick={copyShoppingList}
+                      disabled={selectedIngredients.size === 0}
+                      className={`p-2 rounded-lg transition-colors ${selectedIngredients.size === 0 ? "invisible" : "text-gray-500 hover:bg-gray-100 hover:text-gray-800"}`}
+                      aria-label={`Copy shopping list, ${selectedIngredients.size} item${selectedIngredients.size === 1 ? "" : "s"}`}
+                    >
+                      {copyFeedback ? <CheckIcon /> : <CopyIcon />}
+                    </button>
+                  </div>
                   {groupIngredients(activeSchema.recipeIngredient).map(({ heading, items }, gi) => (
                     <div key={gi} className={gi > 0 ? "mt-4" : ""}>
                       {heading && (
@@ -346,12 +392,23 @@ export default function CookingMode({ recipe, onClose }: CookingModeProps) {
                         </h3>
                       )}
                       <ul className="space-y-2">
-                        {items.map((ingredient, i) => (
-                          <li key={i} className="flex items-start gap-2 text-lg sm:text-sm text-gray-700">
-                            <span className="mt-1.5 w-1.5 h-1.5 rounded-full bg-orange-400 shrink-0" />
-                            <IngredientItem ingredient={getIngredientText(ingredient)} scale={activeIndex === 0 ? scale : 1} onScaleChange={activeIndex === 0 ? setScale : undefined} />
-                          </li>
-                        ))}
+                        {items.map((ingredient, i) => {
+                          const text = getIngredientText(ingredient);
+                          const selected = selectedIngredients.has(`${mealRecipes[activeIndex].id}::${text}`);
+                          return (
+                            <li
+                              key={i}
+                              className={`flex items-start gap-2 text-lg sm:text-sm rounded-lg px-2 py-1 -mx-2 cursor-pointer select-none transition-colors active:opacity-60 ${selected ? "bg-green-50 text-gray-700" : "text-gray-700"}`}
+                              onClick={() => toggleIngredient(mealRecipes[activeIndex].id, text)}
+                              role="checkbox"
+                              aria-checked={selected}
+                              aria-label={text}
+                            >
+                              <span className={`mt-1.5 w-1.5 h-1.5 rounded-full shrink-0 transition-colors ${selected ? "bg-green-500" : "bg-orange-400"}`} />
+                              <IngredientItem ingredient={text} scale={activeIndex === 0 ? scale : 1} onScaleChange={activeIndex === 0 ? setScale : undefined} />
+                            </li>
+                          );
+                        })}
                       </ul>
                     </div>
                   ))}
@@ -537,6 +594,15 @@ function CloseIcon() {
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <path d="M18 6 6 18" />
       <path d="m6 6 12 12" />
+    </svg>
+  );
+}
+
+function CopyIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <rect width="14" height="14" x="8" y="8" rx="2" ry="2" />
+      <path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2" />
     </svg>
   );
 }
