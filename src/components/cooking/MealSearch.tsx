@@ -57,7 +57,7 @@ export default function MealSearch({ excludeIds, onAdd }: MealSearchProps) {
       try {
         const res = await fetch(
           `/api/recipes?q=${encodeURIComponent(value.trim())}&limit=8`,
-          { signal: controller.signal }
+          { signal: controller.signal, headers: { "x-requested-by": "recipe-viewer" } }
         );
         const json: { data: RecipeRow[] } = await res.json();
         setResults(json.data.filter((r) => !excludeIds.has(r.id)));

@@ -5,6 +5,10 @@ vi.mock("@/lib/recipes", () => ({
   getRecipes: vi.fn().mockResolvedValue({ data: [], count: 0 }),
 }));
 
+vi.mock("@/lib/auth", () => ({
+  getIsLoggedIn: vi.fn().mockResolvedValue(false),
+}));
+
 function makeRequest(url: string, headers: Record<string, string> = {}) {
   return new Request(url, { headers });
 }
@@ -52,5 +56,21 @@ describe("GET /api/recipes", () => {
     const body = await res.json();
     expect(body.count).toBe(1);
     expect(body.data[0].metadata.schema.name).toBe("Pasta");
+  });
+
+  it("passes isLoggedIn from auth to getRecipes", async () => {
+    const { getRecipes } = await import("@/lib/recipes");
+    const { getIsLoggedIn } = await import("@/lib/auth");
+    vi.mocked(getIsLoggedIn).mockResolvedValueOnce(true);
+
+    await GET(
+      makeRequest("http://localhost:3000/api/recipes", {
+        "x-requested-by": "recipe-viewer",
+      })
+    );
+
+    expect(vi.mocked(getRecipes)).toHaveBeenCalledWith(
+      expect.objectContaining({ isLoggedIn: true })
+    );
   });
 });
