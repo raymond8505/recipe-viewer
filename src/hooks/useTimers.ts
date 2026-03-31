@@ -125,14 +125,14 @@ export function useTimers(recipeUrl: string) {
     return () => clearInterval(interval);
   }, []);
 
-  const addTimer = useCallback((label: string, duration: number): string => {
+  const addTimer = useCallback((label: string, duration: number, startPaused = false): string => {
     const id = crypto.randomUUID();
     const newTimer: Timer = {
       id,
       label,
       duration,
       remaining: duration,
-      paused: false,
+      paused: startPaused,
       finished: false,
     };
     setTimers((prev) => {

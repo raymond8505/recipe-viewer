@@ -73,7 +73,7 @@ export default function CookingMode({ recipe, onClose }: CookingModeProps) {
           : [item as HowToStep];
       for (const step of steps) {
         const secs = parseDurationToSeconds(step.timeRequired);
-        if (step.name && secs) addTimer(step.name, secs);
+        if (step.name && secs) addTimer(step.name, secs, true);
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -138,7 +138,7 @@ export default function CookingMode({ recipe, onClose }: CookingModeProps) {
           : [item as HowToStep];
       for (const step of steps) {
         const secs = parseDurationToSeconds(step.timeRequired);
-        if (step.name && secs) seededIds.push(addTimer(step.name, secs));
+        if (step.name && secs) seededIds.push(addTimer(step.name, secs, true));
       }
     }
     if (seededIds.length > 0) {

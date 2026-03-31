@@ -1,7 +1,8 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, fireEvent } from "@testing-library/react";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { render, screen, fireEvent, waitFor, act } from "@testing-library/react";
 import RecipeDetail from "@/components/RecipeDetail";
 import type { RecipeRow, HowToStep, HowToSection, SchemaRecipe } from "@/types/recipe";
+import { rescrapeFixture } from "./fixtures/rescrape";
 
 function makeRecipe(schema: Partial<SchemaRecipe> = {}): RecipeRow {
   return {
@@ -231,6 +232,76 @@ describe("RecipeDetail — shopping list", () => {
     fireEvent.click(screen.getByRole("button", { name: /copy shopping list/i }));
     await vi.waitFor(() => {
       expect(navigator.clipboard.writeText).toHaveBeenCalledWith("2 cups flour\n1 tsp salt");
+    });
+  });
+});
+
+describe("RecipeDetail — controls section", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("hides the Manage section when isLoggedIn is false", () => {
+    render(<RecipeDetail recipe={makeRecipe()} isLoggedIn={false} />);
+    expect(screen.queryByRole("region", { name: /recipe management/i })).toBeNull();
+    expect(screen.queryByRole("button", { name: /re-scrape/i })).toBeNull();
+  });
+
+  it("shows the Re-scrape button when isLoggedIn is true", () => {
+    render(<RecipeDetail recipe={makeRecipe()} isLoggedIn={true} />);
+    expect(screen.getByRole("button", { name: /re-scrape/i })).toBeTruthy();
+  });
+
+  it("shows loading state while re-scraping", async () => {
+    let resolve: (value: Response) => void;
+    const pending = new Promise<Response>((res) => { resolve = res; });
+    vi.stubGlobal("fetch", vi.fn().mockReturnValue(pending));
+
+    render(<RecipeDetail recipe={makeRecipe()} isLoggedIn={true} />);
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /re-scrape/i }));
+    });
+
+    expect(screen.getByRole("button", { name: /re-scraping/i })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /re-scraping/i })).toBeDisabled();
+
+    resolve!(new Response(JSON.stringify({ schema: rescrapeFixture }), { status: 200 }));
+  });
+
+  it("updates the recipe name after a successful re-scrape", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        new Response(JSON.stringify({ schema: rescrapeFixture }), { status: 200 })
+      )
+    );
+
+    render(<RecipeDetail recipe={makeRecipe({ name: "Old Recipe Name" })} isLoggedIn={true} />);
+    expect(screen.getByText("Old Recipe Name")).toBeTruthy();
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /re-scrape/i }));
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText(rescrapeFixture.name)).toBeTruthy();
+    });
+    expect(screen.getByText("Recipe updated.")).toBeTruthy();
+  });
+
+  it("shows error message when re-scrape fails", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(new Response(null, { status: 502 }))
+    );
+
+    render(<RecipeDetail recipe={makeRecipe()} isLoggedIn={true} />);
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /re-scrape/i }));
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText(/re-scrape failed/i)).toBeTruthy();
     });
   });
 });

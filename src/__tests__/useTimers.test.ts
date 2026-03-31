@@ -93,6 +93,14 @@ describe("useTimers", () => {
     expect(t.finished).toBe(false);
   });
 
+  it("addTimer with startPaused=true creates a paused timer", () => {
+    const { result } = renderHook(() => useTimers(RECIPE_URL));
+    act(() => { result.current.addTimer("Simmer", 300, true); });
+    const t = result.current.timers[0];
+    expect(t.paused).toBe(true);
+    expect(t.remaining).toBe(300);
+  });
+
   it("editTimer updates label and duration without touching remaining", () => {
     const { result } = renderHook(() => useTimers(RECIPE_URL));
     act(() => { result.current.addTimer("Old Label", 600); });

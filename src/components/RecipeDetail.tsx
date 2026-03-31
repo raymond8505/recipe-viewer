@@ -20,10 +20,11 @@ import NutritionPanel from "./NutritionPanel";
 
 interface RecipeDetailProps {
   recipe: RecipeRow;
+  isLoggedIn?: boolean;
 }
 
-export default function RecipeDetail({ recipe }: RecipeDetailProps) {
-  const { metadata: { schema } } = recipe;
+export default function RecipeDetail({ recipe, isLoggedIn = false }: RecipeDetailProps) {
+  const [schema, setSchema] = useState(recipe.metadata.schema);
   const image = getFirstImage(schema.image);
   const prepTime = formatDuration(schema.prepTime);
   const cookTime = formatDuration(schema.cookTime);
@@ -33,6 +34,20 @@ export default function RecipeDetail({ recipe }: RecipeDetailProps) {
 
   const [selectedIngredients, setSelectedIngredients] = useState<Set<string>>(new Set());
   const [copyFeedback, setCopyFeedback] = useState(false);
+  const [rescrapeState, setRescrapeState] = useState<"idle" | "loading" | "success" | "error">("idle");
+
+  const handleRescrape = async () => {
+    setRescrapeState("loading");
+    try {
+      const res = await fetch(`/api/recipes/${recipe.id}/rescrape`, { method: "POST" });
+      if (!res.ok) throw new Error();
+      const { schema: updated } = await res.json();
+      setSchema(updated);
+      setRescrapeState("success");
+    } catch {
+      setRescrapeState("error");
+    }
+  };
 
   const toggleIngredient = (text: string) => {
     setSelectedIngredients((prev) => {
@@ -227,6 +242,30 @@ export default function RecipeDetail({ recipe }: RecipeDetailProps) {
 
       {/* Nutrition */}
       {schema.nutrition && <NutritionPanel nutrition={schema.nutrition} totalServings={originalServings} />}
+
+      {/* Recipe Controls — logged-in only */}
+      {isLoggedIn && (
+        <section aria-label="Recipe management" className="mt-12 pt-6 border-t border-gray-100">
+          <h2 className="text-xs font-semibold uppercase tracking-widest text-gray-400 mb-4">
+            Manage
+          </h2>
+          <div className="flex flex-wrap items-center gap-3">
+            <button
+              onClick={handleRescrape}
+              disabled={rescrapeState === "loading"}
+              className="px-4 py-2 text-sm font-medium rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 disabled:opacity-50 transition-colors"
+            >
+              {rescrapeState === "loading" ? "Re-scraping\u2026" : "Re-scrape"}
+            </button>
+            {rescrapeState === "success" && (
+              <span className="text-sm text-green-600">Recipe updated.</span>
+            )}
+            {rescrapeState === "error" && (
+              <span className="text-sm text-red-600">Re-scrape failed. Try again.</span>
+            )}
+          </div>
+        </section>
+      )}
 
       {/* JSON-LD — Schema.org-compliant only; escape </script> sequences to prevent tag injection */}
       <script

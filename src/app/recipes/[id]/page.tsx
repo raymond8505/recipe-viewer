@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import { getRecipeById } from "@/lib/recipes";
 import { getFirstImage } from "@/lib/format";
+import { getIsLoggedIn } from "@/lib/auth";
 import RecipeDetail from "@/components/RecipeDetail";
 
 interface RecipePageProps {
@@ -41,11 +42,11 @@ export async function generateMetadata({
 
 export default async function RecipePage({ params }: RecipePageProps) {
   const { id } = await params;
-  const recipe = await getRecipeById(id);
+  const [recipe, isLoggedIn] = await Promise.all([getRecipeById(id), getIsLoggedIn()]);
 
   if (!recipe) {
     notFound();
   }
 
-  return <RecipeDetail recipe={recipe} />;
+  return <RecipeDetail recipe={recipe} isLoggedIn={isLoggedIn} />;
 }
