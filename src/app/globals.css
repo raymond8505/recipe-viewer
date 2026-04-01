@@ -18,3 +18,8 @@
 .animate-timer-done {
   animation: timer-done-pulse 2s ease-in-out infinite;
 }
+
+.cook-mode-container {
+  height: 100vh; /* fallback for browsers without svh support */
+  height: 100svh;
+}
