@@ -39,6 +39,7 @@ function sortedTimers(timers: Timer[]): Timer[] {
 
 export default function CookingMode({ recipe, onClose }: CookingModeProps) {
   const containerRef = useRef<HTMLDivElement>(null);
+  const pendingScrollId = useRef<string | null>(null);
   // Fullscreen state is always derived from the real browser state via the event.
   // Initialize from current DOM state so it's correct even if fullscreen was
   // entered before this component mounted.
@@ -209,6 +210,17 @@ export default function CookingMode({ recipe, onClose }: CookingModeProps) {
     };
   }, []);
 
+  useEffect(() => {
+    if (!pendingScrollId.current) return;
+    const els = document.querySelectorAll(`[data-timer-id="${pendingScrollId.current}"]`);
+    if (els.length > 0) {
+      els.forEach((el) =>
+        el.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "nearest" })
+      );
+      pendingScrollId.current = null;
+    }
+  }, [timers]);
+
   const toggleFullscreen = () => {
     if (document.fullscreenElement) {
       document.exitFullscreen();
@@ -277,7 +289,7 @@ export default function CookingMode({ recipe, onClose }: CookingModeProps) {
         {timers.length > 0 ? (
           <DraggableRibbon className="px-3 pb-3 pt-1 gap-2">
             {sortedTimers(timers).map((timer) => (
-              <div key={timer.id} className="snap-start shrink-0 w-44">
+              <div key={timer.id} data-timer-id={timer.id} className="snap-start shrink-0 w-44">
                 <TimerCard
                   timer={timer}
                   onTogglePause={togglePause}
@@ -546,7 +558,7 @@ export default function CookingMode({ recipe, onClose }: CookingModeProps) {
       {showAddTimer && (
         <AddTimerModal
           onAdd={(label, duration) => {
-            addTimer(label, duration);
+            pendingScrollId.current = addTimer(label, duration);
             setShowAddTimer(false);
           }}
           onClose={() => setShowAddTimer(false)}

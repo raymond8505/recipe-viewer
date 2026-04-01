@@ -27,6 +27,14 @@ The helpers that implement this live in `src/lib/format.ts`:
 - `getIngredientText(ingredient)` — extracts the display string from either format
 - `groupIngredients(ingredients)` — returns `{ heading: string | null; items: [...] }[]` in insertion order
 
+## Timer Container — Two Views
+
+The phrase "timer container" refers to the timer UI in **both** orientations:
+- **Portrait / mobile (`lg:hidden`):** horizontal `DraggableRibbon` strip at the top of the screen
+- **Landscape / desktop (`lg:flex`):** vertical `TimerColumn` on the right side
+
+Both views render the same timer data. When making changes to timer display, interaction, or scroll behaviour, both views must be updated. Both render `<div data-timer-id={timer.id}>` wrappers around each `TimerCard` so features can target timers by ID in either view with `querySelectorAll` (not `querySelector` — both elements exist in the DOM simultaneously, only one is visible via CSS).
+
 ## Meal Mode in Cook Mode
 
 Cook mode supports grouping multiple recipes into a "meal" session. State lives in `CookingMode.tsx` as plain `useState` — no context or hook.

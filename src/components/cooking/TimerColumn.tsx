@@ -53,16 +53,17 @@ export default function TimerColumn({
           <p className="text-sm text-gray-400 text-center mt-4">No timers yet</p>
         )}
         {timers.map((timer) => (
-          <TimerCard
-            key={timer.id}
-            timer={timer}
-            onTogglePause={onTogglePauseTimer}
-            onReset={onResetTimer}
-            onRemove={onRemoveTimer}
-            onDismiss={onDismissTimer}
-            onEdit={onEditTimer}
-            recipeName={timerRecipeNames?.get(timer.id)}
-          />
+          <div key={timer.id} data-timer-id={timer.id}>
+            <TimerCard
+              timer={timer}
+              onTogglePause={onTogglePauseTimer}
+              onReset={onResetTimer}
+              onRemove={onRemoveTimer}
+              onDismiss={onDismissTimer}
+              onEdit={onEditTimer}
+              recipeName={timerRecipeNames?.get(timer.id)}
+            />
+          </div>
         ))}
       </div>
     </div>
