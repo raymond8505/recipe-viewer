@@ -129,14 +129,18 @@ export default function TimerCard({
           {recipeName && <p className="text-xs text-gray-400 truncate mt-0.5">{recipeName}</p>}
         </button>
       ) : (
-        <div className="px-4 pt-2.5 pb-3">
+        <button
+          className="w-full text-left px-4 pt-2.5 pb-3 active:opacity-70"
+          onClick={() => onReset(timer.id)}
+          aria-label={`Restart ${timer.label} timer`}
+        >
           <p className="text-base sm:text-sm font-medium text-gray-700 truncate pb-0.5">{timer.label}</p>
           <p className="text-3xl sm:text-2xl font-mono font-bold tabular-nums text-gray-400">
             {formatRemaining(timer.remaining)}
           </p>
-          <p className="text-xs text-gray-400 mt-0.5">Done</p>
+          <p className="text-xs text-gray-400 mt-0.5">Tap to restart</p>
           {recipeName && <p className="text-xs text-gray-400 truncate mt-0.5">{recipeName}</p>}
-        </div>
+        </button>
       )}
 
       {/* Bottom row — edit | reset | delete */}

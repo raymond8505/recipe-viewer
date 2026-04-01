@@ -137,9 +137,16 @@ describe("TimerCard (alarm)", () => {
 });
 
 describe("TimerCard (finished)", () => {
-  it("shows Done text for finished timer", () => {
+  it("shows tap to restart hint for finished timer", () => {
     render(<TimerCard timer={makeTimer({ remaining: 0, finished: true })} {...defaultProps} />);
-    expect(screen.getByText("Done")).toBeTruthy();
+    expect(screen.getByText(/tap to restart/i)).toBeTruthy();
+  });
+
+  it("calls onReset when finished card body is tapped", () => {
+    const onReset = vi.fn();
+    render(<TimerCard timer={makeTimer({ remaining: 0, finished: true })} {...defaultProps} onReset={onReset} />);
+    fireEvent.click(screen.getByLabelText(/restart pasta timer/i));
+    expect(onReset).toHaveBeenCalledWith("timer-1");
   });
 
   it("calls onEdit when edit button is clicked on finished timer", () => {
