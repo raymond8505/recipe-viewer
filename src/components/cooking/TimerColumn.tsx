@@ -12,6 +12,7 @@ interface TimerColumnProps {
   onRemoveTimer: (id: string) => void;
   onDismissTimer: (id: string) => void;
   onResetAll: () => void;
+  timerRecipeNames?: Map<string, string>;
 }
 
 export default function TimerColumn({
@@ -23,9 +24,10 @@ export default function TimerColumn({
   onRemoveTimer,
   onDismissTimer,
   onResetAll,
+  timerRecipeNames,
 }: TimerColumnProps) {
   return (
-    <div className="w-full border-l border-gray-200 flex flex-col min-w-0">
+    <div className="w-full h-full border-l border-gray-200 flex flex-col min-w-0">
       {/* Sticky header */}
       <div className="shrink-0 bg-white border-b border-gray-200 px-4 py-3 flex items-center gap-2">
         <button
@@ -59,6 +61,7 @@ export default function TimerColumn({
             onRemove={onRemoveTimer}
             onDismiss={onDismissTimer}
             onEdit={onEditTimer}
+            recipeName={timerRecipeNames?.get(timer.id)}
           />
         ))}
       </div>

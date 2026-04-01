@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState, useEffect } from "react";
+import { useRef, useState, useEffect, useMemo } from "react";
 import Image from "next/image";
 import type { RecipeRow, HowToStep, HowToSection } from "@/types/recipe";
 import {
@@ -12,7 +12,7 @@ import {
   groupIngredients,
   getIngredientText,
 } from "@/lib/format";
-import { useTimers } from "@/hooks/useTimers";
+import { useTimers, timerState } from "@/hooks/useTimers";
 import type { Timer } from "@/hooks/useTimers";
 import { useScaling } from "@/hooks/useScaling";
 import { useWakeLock } from "@/hooks/useWakeLock";
@@ -30,6 +30,11 @@ import NutritionPanel from "@/components/NutritionPanel";
 interface CookingModeProps {
   recipe: RecipeRow;
   onClose: () => void;
+}
+
+const TIMER_PRIORITY = { alarm: 0, running: 1, paused: 2, finished: 3 } as const;
+function sortedTimers(timers: Timer[]): Timer[] {
+  return [...timers].sort((a, b) => TIMER_PRIORITY[timerState(a)] - TIMER_PRIORITY[timerState(b)]);
 }
 
 export default function CookingMode({ recipe, onClose }: CookingModeProps) {
@@ -54,6 +59,24 @@ export default function CookingMode({ recipe, onClose }: CookingModeProps) {
   const [mealTimerIds, setMealTimerIds] = useState<Map<string, string[]>>(() => new Map());
 
   const activeSchema = activeIndex === 0 ? schema : mealRecipes[activeIndex].metadata.schema;
+
+  // Maps timer ID → recipe name; only populated in meal mode (2+ recipes).
+  // Added-recipe timers are tracked in mealTimerIds; any timer not found there
+  // belongs to the primary recipe.
+  const timerRecipeNames = useMemo((): Map<string, string> => {
+    if (mealRecipes.length <= 1) return new Map();
+    const map = new Map<string, string>();
+    for (const [recipeId, ids] of mealTimerIds) {
+      const r = mealRecipes.find((r) => r.id === recipeId);
+      if (r) ids.forEach((id) => map.set(id, r.metadata.schema.name));
+    }
+    const primaryName = schema.name;
+    for (const t of timers) {
+      if (!map.has(t.id)) map.set(t.id, primaryName);
+    }
+    return map;
+  }, [mealRecipes, mealTimerIds, timers, schema.name]);
+
   useWakeLock();
 
   useEffect(() => {
@@ -253,7 +276,7 @@ export default function CookingMode({ recipe, onClose }: CookingModeProps) {
         {/* Horizontal scrollable timer cards */}
         {timers.length > 0 ? (
           <DraggableRibbon className="px-3 pb-3 pt-1 gap-2">
-            {timers.map((timer) => (
+            {sortedTimers(timers).map((timer) => (
               <div key={timer.id} className="snap-start shrink-0 w-44">
                 <TimerCard
                   timer={timer}
@@ -265,6 +288,7 @@ export default function CookingMode({ recipe, onClose }: CookingModeProps) {
                     const t = timers.find((t) => t.id === id);
                     if (t) setEditingTimer(t);
                   }}
+                  recipeName={timerRecipeNames.get(timer.id)}
                 />
               </div>
             ))}
@@ -501,7 +525,7 @@ export default function CookingMode({ recipe, onClose }: CookingModeProps) {
         {/* Right column — timers (desktop only) */}
         <div className="hidden lg:flex lg:flex-col w-1/4">
           <TimerColumn
-            timers={timers}
+            timers={sortedTimers(timers)}
             onAddTimer={() => setShowAddTimer(true)}
             onEditTimer={(id) => {
               const t = timers.find((t) => t.id === id);
@@ -512,6 +536,7 @@ export default function CookingMode({ recipe, onClose }: CookingModeProps) {
             onRemoveTimer={removeTimer}
             onDismissTimer={dismissTimer}
             onResetAll={resetAll}
+            timerRecipeNames={timerRecipeNames}
           />
         </div>
 

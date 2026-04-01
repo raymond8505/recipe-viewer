@@ -11,6 +11,7 @@ interface TimerCardProps {
   onRemove: (id: string) => void;
   onDismiss: (id: string) => void;
   onEdit: (id: string) => void;
+  recipeName?: string;
 }
 
 export function formatRemaining(seconds: number): string {
@@ -30,6 +31,7 @@ export default function TimerCard({
   onRemove,
   onDismiss,
   onEdit,
+  recipeName,
 }: TimerCardProps) {
   const [confirming, setConfirming] = useState(false);
   const state = timerState(timer);
@@ -77,6 +79,7 @@ export default function TimerCard({
           <div className="px-4 pb-3">
             <p className="text-3xl sm:text-2xl font-mono font-bold tabular-nums text-red-600">Done!</p>
             <p className="text-xs text-red-400 mt-0.5">Tap to dismiss</p>
+            {recipeName && <p className="text-xs text-red-300 truncate mt-0.5">{recipeName}</p>}
           </div>
         </button>
         {/* Reset + delete still accessible in alarm state */}
@@ -123,6 +126,7 @@ export default function TimerCard({
           <p className="text-3xl sm:text-2xl font-mono font-bold tabular-nums text-gray-900">
             {formatRemaining(timer.remaining)}
           </p>
+          {recipeName && <p className="text-xs text-gray-400 truncate mt-0.5">{recipeName}</p>}
         </button>
       ) : (
         <div className="px-4 pt-2.5 pb-3">
@@ -131,6 +135,7 @@ export default function TimerCard({
             {formatRemaining(timer.remaining)}
           </p>
           <p className="text-xs text-gray-400 mt-0.5">Done</p>
+          {recipeName && <p className="text-xs text-gray-400 truncate mt-0.5">{recipeName}</p>}
         </div>
       )}
 
