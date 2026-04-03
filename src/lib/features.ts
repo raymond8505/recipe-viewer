@@ -6,5 +6,7 @@ export function getFeatures(isLoggedIn: boolean) {
     filterByStatus: !isLoggedIn,
     // When true, the source filter UI is shown on the recipe grid.
     showSourceFilter: isLoggedIn,
+    // When true, the status filter UI is shown on the recipe grid.
+    showStatusFilter: isLoggedIn,
   };
 }

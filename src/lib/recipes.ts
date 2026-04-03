@@ -6,6 +6,45 @@ const PAGE_SIZE = 24;
 
 export type SortOption = "newest" | "oldest" | "name-asc" | "name-desc";
 
+export async function getStatusCounts(opts?: {
+  query?: string;
+  source?: string;
+  isLoggedIn?: boolean;
+}): Promise<Record<string, number>> {
+  const supabase = getSupabaseClient();
+  const features = getFeatures(opts?.isLoggedIn ?? false);
+
+  let queryBuilder = supabase
+    .from("recipes")
+    .select("status")
+    .not("metadata->schema->>name", "ilike", "%(NEEDS RE-SCRAPE)%")
+    .not("metadata->schema->>name", "ilike", "%null%");
+
+  if (features.filterByOwnSource) {
+    queryBuilder = queryBuilder.in("source", ["raymonds.recipes"]);
+  }
+
+  if (opts?.source) {
+    queryBuilder = queryBuilder.eq("source", opts.source);
+  }
+
+  if (opts?.query) {
+    const q = opts.query.slice(0, 200);
+    queryBuilder = queryBuilder.ilike("metadata->schema->>name", `%${q}%`);
+  }
+
+  const { data, error } = await queryBuilder;
+
+  if (error || !data) return {};
+
+  const counts: Record<string, number> = {};
+  for (const row of data) {
+    const key = row.status ?? "__null";
+    counts[key] = (counts[key] ?? 0) + 1;
+  }
+  return counts;
+}
+
 export async function getSources(opts?: { isLoggedIn?: boolean }): Promise<string[]> {
   const supabase = getSupabaseClient();
   const features = getFeatures(opts?.isLoggedIn ?? false);
@@ -23,7 +62,7 @@ export async function getSources(opts?: { isLoggedIn?: boolean }): Promise<strin
   if (features.filterByStatus) {
     queryBuilder = queryBuilder.eq("status", "published");
   } else {
-    queryBuilder = queryBuilder.neq("status", "archived");
+    queryBuilder = queryBuilder.or("status.neq.archived,status.is.null");
   }
 
   const { data, error } = await queryBuilder;
@@ -40,6 +79,7 @@ export async function getRecipes(opts?: {
   limit?: number;
   sort?: SortOption;
   source?: string;
+  status?: string;
   isLoggedIn?: boolean;
 }): Promise<RecipesResult> {
   const supabase = getSupabaseClient();
@@ -71,8 +111,10 @@ export async function getRecipes(opts?: {
 
   if (features.filterByStatus) {
     queryBuilder = queryBuilder.eq("status", "published");
+  } else if (opts?.status) {
+    queryBuilder = queryBuilder.eq("status", opts.status);
   } else {
-    queryBuilder = queryBuilder.neq("status", "archived");
+    queryBuilder = queryBuilder.or("status.neq.archived,status.is.null");
   }
 
   if (opts?.source) {

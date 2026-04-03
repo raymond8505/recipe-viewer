@@ -7,6 +7,7 @@ describe("getFeatures", () => {
     expect(features.filterByOwnSource).toBe(true);
     expect(features.filterByStatus).toBe(true);
     expect(features.showSourceFilter).toBe(false);
+    expect(features.showStatusFilter).toBe(false);
   });
 
   it("disables filters when logged in", () => {
@@ -14,5 +15,6 @@ describe("getFeatures", () => {
     expect(features.filterByOwnSource).toBe(false);
     expect(features.filterByStatus).toBe(false);
     expect(features.showSourceFilter).toBe(true);
+    expect(features.showStatusFilter).toBe(true);
   });
 });
