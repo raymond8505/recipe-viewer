@@ -10,7 +10,7 @@ function makeParams(id = "recipe-1") {
 }
 
 function makeSupabaseClient({
-  recipe = { id: "recipe-1", metadata: { schema: { name: "Test Recipe" }, status: "published" } },
+  recipe = { id: "recipe-1", status: "published", metadata: { schema: { name: "Test Recipe" } } },
   fetchError = null,
   updateError = null,
 }: {
@@ -69,19 +69,16 @@ describe("POST /api/recipes/[id]/archive", () => {
     expect(body.ok).toBe(true);
   });
 
-  it("merges existing metadata and sets status to archived", async () => {
+  it("sets status column to archived", async () => {
     const { getSupabaseClient } = await import("@/lib/supabase");
-    const existingMetadata = { schema: { name: "Test Recipe" }, status: "published" };
     const client = makeSupabaseClient({
-      recipe: { id: "recipe-1", metadata: existingMetadata },
+      recipe: { id: "recipe-1", status: "published", metadata: { schema: { name: "Test Recipe" } } },
     });
     vi.mocked(getSupabaseClient).mockReturnValue(client as never);
 
     await POST(new Request("http://localhost/", { method: "POST" }), makeParams());
 
     const updateCall = vi.mocked(client.from).mock.results[1]?.value.update as ReturnType<typeof vi.fn>;
-    expect(updateCall).toHaveBeenCalledWith({
-      metadata: { ...existingMetadata, status: "archived" },
-    });
+    expect(updateCall).toHaveBeenCalledWith({ status: "archived" });
   });
 });

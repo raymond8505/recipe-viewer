@@ -43,15 +43,9 @@ export async function POST(
 
   const result = await webhookRes.json() as { schema: SchemaRecipe; status: string };
 
-  const updatedMetadata = {
-    ...recipe.metadata,
-    schema: result.schema,
-    status: result.status,
-  };
-
   const { error: updateError } = await supabase
     .from("recipes")
-    .update({ metadata: updatedMetadata })
+    .update({ metadata: { ...recipe.metadata, schema: result.schema }, status: result.status })
     .eq("id", id);
 
   if (updateError) {

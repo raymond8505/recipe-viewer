@@ -31,7 +31,7 @@ type EditState = "idle" | "editing" | "saving" | "error";
 
 export default function RecipeDetail({ recipe, isLoggedIn = false }: RecipeDetailProps) {
   const [schema, setSchema] = useState(recipe.metadata.schema);
-  const [status, setStatus] = useState(recipe.metadata.status ?? "published");
+  const [status, setStatus] = useState(recipe.status ?? "draft");
   const image = getFirstImage(schema.image);
   const prepTime = formatDuration(schema.prepTime);
   const cookTime = formatDuration(schema.cookTime);
@@ -357,7 +357,7 @@ export default function RecipeDetail({ recipe, isLoggedIn = false }: RecipeDetai
                   aria-label="Recipe status"
                 >
                   <option value="published">Published</option>
-                  <option value="private">Private</option>
+                  <option value="draft">Draft</option>
                   <option value="archived">Archived</option>
                 </select>
                 <button

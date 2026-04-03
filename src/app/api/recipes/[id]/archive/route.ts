@@ -10,7 +10,7 @@ export async function POST(
 
   const { data: recipe, error: fetchError } = await supabase
     .from("recipes")
-    .select("id, metadata")
+    .select("id")
     .eq("id", id)
     .single();
 
@@ -18,11 +18,9 @@ export async function POST(
     return NextResponse.json({ error: "Recipe not found" }, { status: 404 });
   }
 
-  const merged = { ...recipe.metadata, status: "archived" };
-
   const { error: updateError } = await supabase
     .from("recipes")
-    .update({ metadata: merged })
+    .update({ status: "archived" })
     .eq("id", id);
 
   if (updateError) {

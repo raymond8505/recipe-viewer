@@ -21,11 +21,9 @@ export async function getSources(opts?: { isLoggedIn?: boolean }): Promise<strin
   }
 
   if (features.filterByStatus) {
-    queryBuilder = queryBuilder.eq("metadata->>status", "published");
+    queryBuilder = queryBuilder.eq("status", "published");
   } else {
-    queryBuilder = queryBuilder.or(
-      "metadata->>status.is.null,metadata->>status.neq.archived"
-    );
+    queryBuilder = queryBuilder.neq("status", "archived");
   }
 
   const { data, error } = await queryBuilder;
@@ -61,7 +59,7 @@ export async function getRecipes(opts?: {
 
   let queryBuilder = supabase
     .from("recipes")
-    .select("id, url, source, metadata", { count: "exact" })
+    .select("id, url, source, status, metadata", { count: "exact" })
     .not("metadata->schema->>name", "ilike", "%(NEEDS RE-SCRAPE)%")
     .not("metadata->schema->>name", "ilike", "%null%")
     .range(from, to)
@@ -72,11 +70,9 @@ export async function getRecipes(opts?: {
   }
 
   if (features.filterByStatus) {
-    queryBuilder = queryBuilder.eq("metadata->>status", "published");
+    queryBuilder = queryBuilder.eq("status", "published");
   } else {
-    queryBuilder = queryBuilder.or(
-      "metadata->>status.is.null,metadata->>status.neq.archived"
-    );
+    queryBuilder = queryBuilder.neq("status", "archived");
   }
 
   if (opts?.source) {
@@ -106,7 +102,7 @@ export async function getRecipeById(id: string): Promise<RecipeRow | null> {
 
   const { data, error } = await supabase
     .from("recipes")
-    .select("id, url, source, metadata")
+    .select("id, url, source, status, metadata")
     .eq("id", id)
     .single();
 

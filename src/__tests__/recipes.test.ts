@@ -34,13 +34,14 @@ function makeSupabaseMock(opts: {
     order: vi.fn(),
     in: vi.fn(),
     eq: vi.fn(),
+    neq: vi.fn(),
     or: vi.fn(),
     ilike: vi.fn(),
     single: vi.fn().mockResolvedValue({ data: singleData, error: singleError }),
   };
 
   // Each chainable method returns the same builder
-  (["select", "not", "range", "order", "in", "eq", "or", "ilike"] as const).forEach((key) => {
+  (["select", "not", "range", "order", "in", "eq", "neq", "or", "ilike"] as const).forEach((key) => {
     (builder[key] as ReturnType<typeof vi.fn>).mockReturnValue(builder);
   });
 
@@ -125,7 +126,7 @@ describe("getRecipes", () => {
     const { builder } = makeSupabaseMock();
     await getRecipes();
 
-    expect(builder.eq).toHaveBeenCalledWith("metadata->>status", "published");
+    expect(builder.eq).toHaveBeenCalledWith("status", "published");
   });
 
   it("does not apply status filter when filterByStatus is false", async () => {
@@ -135,21 +136,19 @@ describe("getRecipes", () => {
     expect(builder.eq).not.toHaveBeenCalled();
   });
 
-  it("excludes archived recipes via or filter when filterByStatus is false (logged-in)", async () => {
+  it("excludes archived recipes via neq filter when filterByStatus is false (logged-in)", async () => {
     const { builder } = makeSupabaseMock();
     await getRecipes();
 
-    expect(builder.or).toHaveBeenCalledWith(
-      "metadata->>status.is.null,metadata->>status.neq.archived"
-    );
+    expect(builder.neq).toHaveBeenCalledWith("status", "archived");
   });
 
-  it("does not apply or filter when filterByStatus is true (logged-out, published filter covers it)", async () => {
+  it("does not apply neq filter when filterByStatus is true (logged-out, published eq filter covers it)", async () => {
     mockFeatures.filterByStatus = true;
     const { builder } = makeSupabaseMock();
     await getRecipes();
 
-    expect(builder.or).not.toHaveBeenCalled();
+    expect(builder.neq).not.toHaveBeenCalled();
   });
 
   it("sorts by created_at ascending for 'oldest'", async () => {
