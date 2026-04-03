@@ -79,3 +79,11 @@ Custom fields (`notes`, ingredient `group` objects) must never appear in the JSO
 - Any new standard Schema.org/Recipe property added to `SchemaRecipe` must also be added to the `optionalFields` array in `toSchemaOrgJsonLd`, or it won't appear in JSON-LD output
 - Any new custom/app-level field on `SchemaRecipe` must be intentionally left out of `toSchemaOrgJsonLd`
 - `recipeIngredient` objects (`{ name, group }`) are internal-only — always flatten to strings before external serialization
+
+## Webhook / API Response Handling
+
+When a handler calls a state setter with data from `fetch` or a webhook response:
+
+1. **Never trust TypeScript type assertions on `res.json()`** — they are erased at runtime and do not validate shape. `as { schema: SchemaRecipe }` is a cast, not a parse.
+2. **Guard before the state setter**: check that the expected key is present (e.g. `if (!result.schema) throw new Error()`) so a malformed 200 response falls into the existing error state rather than setting state to `undefined`.
+3. **A state setter that receives `undefined` will not throw at the call site** — the crash happens on the next render when code accesses a property on the undefined value. Always validate at the boundary.
