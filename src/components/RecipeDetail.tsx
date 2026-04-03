@@ -386,13 +386,15 @@ export default function RecipeDetail({ recipe, isLoggedIn = false }: RecipeDetai
                 >
                   Edit
                 </button>
-                <button
-                  onClick={handleRescrape}
-                  disabled={rescrapeState === "loading"}
-                  className="px-4 py-2 text-sm font-medium rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 disabled:opacity-50 transition-colors"
-                >
-                  {rescrapeState === "loading" ? "Re-scraping\u2026" : "Re-scrape"}
-                </button>
+                {recipe.url !== window.location.href && (
+                  <button
+                    onClick={handleRescrape}
+                    disabled={rescrapeState === "loading"}
+                    className="px-4 py-2 text-sm font-medium rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 disabled:opacity-50 transition-colors"
+                  >
+                    {rescrapeState === "loading" ? "Re-scraping\u2026" : "Re-scrape"}
+                  </button>
+                )}
                 {rescrapeState === "success" && (
                   <span className="text-sm text-green-600">Recipe updated.</span>
                 )}
