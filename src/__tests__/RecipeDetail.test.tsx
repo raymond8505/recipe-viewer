@@ -1,6 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, fireEvent, waitFor, act } from "@testing-library/react";
-import { useRouter } from "next/navigation";
 import RecipeDetail from "@/components/RecipeDetail";
 import type { RecipeRow, HowToStep, HowToSection, SchemaRecipe } from "@/types/recipe";
 import { rescrapeFixture } from "./fixtures/rescrape";
@@ -306,64 +305,93 @@ describe("RecipeDetail — controls section", () => {
     });
   });
 
-  it("shows Delete button when logged in", () => {
+  it("shows Edit button when logged in", () => {
     render(<RecipeDetail recipe={makeRecipe()} isLoggedIn={true} />);
-    expect(screen.getByRole("button", { name: /^delete$/i })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /^edit$/i })).toBeTruthy();
   });
 
-  it("does not show Delete button when logged out", () => {
+  it("does not show Edit button when logged out", () => {
     render(<RecipeDetail recipe={makeRecipe()} isLoggedIn={false} />);
+    expect(screen.queryByRole("button", { name: /^edit$/i })).toBeNull();
+  });
+
+  it("does not show Delete button", () => {
+    render(<RecipeDetail recipe={makeRecipe()} isLoggedIn={true} />);
     expect(screen.queryByRole("button", { name: /^delete$/i })).toBeNull();
   });
 
-  it("shows confirmation when Delete is clicked", async () => {
-    render(<RecipeDetail recipe={makeRecipe()} isLoggedIn={true} />);
+  it("enters edit mode when Edit is clicked", async () => {
+    render(
+      <RecipeDetail
+        recipe={makeRecipe({ description: "Tasty.", notes: "Use fresh herbs." })}
+        isLoggedIn={true}
+      />
+    );
     await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: /^delete$/i }));
+      fireEvent.click(screen.getByRole("button", { name: /^edit$/i }));
     });
-    expect(screen.getByRole("button", { name: /confirm delete/i })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /^save$/i })).toBeTruthy();
     expect(screen.getByRole("button", { name: /^cancel$/i })).toBeTruthy();
+    expect(screen.getByRole("combobox", { name: /recipe status/i })).toBeTruthy();
   });
 
-  it("returns to idle state on Cancel", async () => {
-    render(<RecipeDetail recipe={makeRecipe()} isLoggedIn={true} />);
+  it("populates description textarea with current value in edit mode", async () => {
+    render(
+      <RecipeDetail recipe={makeRecipe({ description: "A hearty dish." })} isLoggedIn={true} />
+    );
     await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: /^delete$/i }));
+      fireEvent.click(screen.getByRole("button", { name: /^edit$/i }));
+    });
+    const textarea = screen.getByPlaceholderText(/description/i) as HTMLTextAreaElement;
+    expect(textarea.value).toBe("A hearty dish.");
+  });
+
+  it("shows notes textarea in edit mode even when schema has no notes", async () => {
+    render(<RecipeDetail recipe={makeRecipe()} isLoggedIn={true} />);
+    expect(screen.queryByText("Notes")).toBeNull();
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /^edit$/i }));
+    });
+    expect(screen.getByText("Notes")).toBeTruthy();
+    expect(screen.getByPlaceholderText(/add notes/i)).toBeTruthy();
+  });
+
+  it("cancel returns to view mode without saving", async () => {
+    render(<RecipeDetail recipe={makeRecipe({ description: "Original." })} isLoggedIn={true} />);
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /^edit$/i }));
     });
     await act(async () => {
       fireEvent.click(screen.getByRole("button", { name: /^cancel$/i }));
     });
-    expect(screen.getByRole("button", { name: /^delete$/i })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /^edit$/i })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /^save$/i })).toBeNull();
   });
 
-  it("calls archive endpoint and redirects on confirm", async () => {
-    const pushMock = vi.fn();
-    vi.mocked(useRouter).mockReturnValue({
-      push: pushMock,
-      replace: vi.fn(),
-      prefetch: vi.fn(),
-      back: vi.fn(),
-    } as never);
-
+  it("updates recipe state after a successful save", async () => {
+    const updatedSchema = { ...rescrapeFixture, description: "Updated description." };
     vi.stubGlobal(
       "fetch",
-      vi.fn().mockResolvedValue(new Response(JSON.stringify({ ok: true }), { status: 200 }))
+      vi.fn().mockResolvedValue(
+        new Response(JSON.stringify({ schema: updatedSchema, status: "published" }), { status: 200 })
+      )
     );
 
-    render(<RecipeDetail recipe={makeRecipe()} isLoggedIn={true} />);
+    render(<RecipeDetail recipe={makeRecipe({ name: "Old Name" })} isLoggedIn={true} />);
     await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: /^delete$/i }));
+      fireEvent.click(screen.getByRole("button", { name: /^edit$/i }));
     });
     await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: /confirm delete/i }));
+      fireEvent.click(screen.getByRole("button", { name: /^save$/i }));
     });
 
     await waitFor(() => {
-      expect(pushMock).toHaveBeenCalledWith("/");
+      expect(screen.getByText(updatedSchema.name)).toBeTruthy();
     });
+    expect(screen.getByRole("button", { name: /^edit$/i })).toBeTruthy();
   });
 
-  it("resets to idle when archive endpoint fails", async () => {
+  it("shows error message when save fails", async () => {
     vi.stubGlobal(
       "fetch",
       vi.fn().mockResolvedValue(new Response(null, { status: 500 }))
@@ -371,14 +399,15 @@ describe("RecipeDetail — controls section", () => {
 
     render(<RecipeDetail recipe={makeRecipe()} isLoggedIn={true} />);
     await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: /^delete$/i }));
+      fireEvent.click(screen.getByRole("button", { name: /^edit$/i }));
     });
     await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: /confirm delete/i }));
+      fireEvent.click(screen.getByRole("button", { name: /^save$/i }));
     });
 
     await waitFor(() => {
-      expect(screen.getByRole("button", { name: /^delete$/i })).toBeTruthy();
+      expect(screen.getByText(/save failed/i)).toBeTruthy();
     });
+    expect(screen.getByRole("button", { name: /^save$/i })).toBeTruthy();
   });
 });

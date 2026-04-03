@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 import Image from "next/image";
 import type { RecipeRow, HowToStep, HowToSection } from "@/types/recipe";
 import {
@@ -12,6 +11,10 @@ import {
   groupIngredients,
   getIngredientText,
   toSchemaOrgJsonLd,
+  instructionsToMarkdown,
+  markdownToInstructions,
+  ingredientsToText,
+  textToIngredients,
 } from "@/lib/format";
 import { useScaling } from "@/hooks/useScaling";
 import CookingModeButton from "./CookingModeButton";
@@ -24,9 +27,11 @@ interface RecipeDetailProps {
   isLoggedIn?: boolean;
 }
 
+type EditState = "idle" | "editing" | "saving" | "error";
+
 export default function RecipeDetail({ recipe, isLoggedIn = false }: RecipeDetailProps) {
-  const router = useRouter();
   const [schema, setSchema] = useState(recipe.metadata.schema);
+  const [status, setStatus] = useState(recipe.metadata.status ?? "published");
   const image = getFirstImage(schema.image);
   const prepTime = formatDuration(schema.prepTime);
   const cookTime = formatDuration(schema.cookTime);
@@ -37,7 +42,16 @@ export default function RecipeDetail({ recipe, isLoggedIn = false }: RecipeDetai
   const [selectedIngredients, setSelectedIngredients] = useState<Set<string>>(new Set());
   const [copyFeedback, setCopyFeedback] = useState(false);
   const [rescrapeState, setRescrapeState] = useState<"idle" | "loading" | "success" | "error">("idle");
-  const [archiveState, setArchiveState] = useState<"idle" | "confirming" | "loading">("idle");
+
+  // Edit mode state
+  const [editState, setEditState] = useState<EditState>("idle");
+  const [editDesc, setEditDesc] = useState("");
+  const [editIngredients, setEditIngredients] = useState("");
+  const [editInstructions, setEditInstructions] = useState("");
+  const [editNotes, setEditNotes] = useState("");
+  const [editStatus, setEditStatus] = useState("");
+
+  const isEditing = editState !== "idle";
 
   const handleRescrape = async () => {
     setRescrapeState("loading");
@@ -52,13 +66,41 @@ export default function RecipeDetail({ recipe, isLoggedIn = false }: RecipeDetai
     }
   };
 
-  const handleArchive = async () => {
-    setArchiveState("loading");
-    const res = await fetch(`/api/recipes/${recipe.id}/archive`, { method: "POST" });
-    if (res.ok) {
-      router.push("/");
-    } else {
-      setArchiveState("idle");
+  const handleEditStart = () => {
+    setEditDesc(schema.description ?? "");
+    setEditIngredients(ingredientsToText(schema.recipeIngredient ?? []));
+    setEditInstructions(instructionsToMarkdown(schema.recipeInstructions ?? []));
+    setEditNotes(schema.notes ?? "");
+    setEditStatus(status);
+    setEditState("editing");
+  };
+
+  const handleEditCancel = () => {
+    setEditState("idle");
+  };
+
+  const handleEditSave = async () => {
+    setEditState("saving");
+    const updatedSchema = {
+      ...schema,
+      description: editDesc || undefined,
+      recipeIngredient: textToIngredients(editIngredients),
+      recipeInstructions: markdownToInstructions(editInstructions),
+      notes: editNotes || undefined,
+    };
+    try {
+      const res = await fetch(`/api/recipes/${recipe.id}/update`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ schema: updatedSchema, status: editStatus }),
+      });
+      if (!res.ok) throw new Error();
+      const result = await res.json();
+      setSchema(result.schema);
+      setStatus(result.status);
+      setEditState("idle");
+    } catch {
+      setEditState("error");
     }
   };
 
@@ -108,10 +150,20 @@ export default function RecipeDetail({ recipe, isLoggedIn = false }: RecipeDetai
           <CookingModeButton recipe={recipe} />
         </div>
 
-        {schema.description && (
-          <p className="text-gray-600 text-lg leading-relaxed">
-            {schema.description}
-          </p>
+        {isEditing ? (
+          <textarea
+            value={editDesc}
+            onChange={(e) => setEditDesc(e.target.value)}
+            disabled={editState === "saving"}
+            placeholder="Description"
+            className="w-full rounded-lg border border-gray-200 p-3 text-gray-700 text-lg leading-relaxed min-h-[80px] focus:outline-none focus:ring-2 focus:ring-orange-300 disabled:opacity-60 resize-y"
+          />
+        ) : (
+          schema.description && (
+            <p className="text-gray-600 text-lg leading-relaxed">
+              {schema.description}
+            </p>
+          )
         )}
 
         <div className="flex flex-wrap items-center gap-x-6 gap-y-2 mt-4 text-sm text-gray-500">
@@ -153,59 +205,79 @@ export default function RecipeDetail({ recipe, isLoggedIn = false }: RecipeDetai
 
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-8">
         {/* Ingredients */}
-        {schema.recipeIngredient && schema.recipeIngredient.length > 0 && (
+        {(isEditing || (schema.recipeIngredient && schema.recipeIngredient.length > 0)) && (
           <div className="sm:col-span-1">
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-xl font-semibold text-gray-900">
                 Ingredients
               </h2>
-              <button
-                onClick={copyShoppingList}
-                disabled={selectedIngredients.size === 0}
-                className={`p-2 rounded-lg transition-colors ${selectedIngredients.size === 0 ? "invisible" : "text-gray-500 hover:bg-gray-100 hover:text-gray-800"}`}
-                aria-label={`Copy shopping list, ${selectedIngredients.size} item${selectedIngredients.size === 1 ? "" : "s"}`}
-              >
-                {copyFeedback ? <CheckIcon /> : <CopyIcon />}
-              </button>
+              {!isEditing && (
+                <button
+                  onClick={copyShoppingList}
+                  disabled={selectedIngredients.size === 0}
+                  className={`p-2 rounded-lg transition-colors ${selectedIngredients.size === 0 ? "invisible" : "text-gray-500 hover:bg-gray-100 hover:text-gray-800"}`}
+                  aria-label={`Copy shopping list, ${selectedIngredients.size} item${selectedIngredients.size === 1 ? "" : "s"}`}
+                >
+                  {copyFeedback ? <CheckIcon /> : <CopyIcon />}
+                </button>
+              )}
             </div>
-            {groupIngredients(schema.recipeIngredient).map(({ heading, items }, gi) => (
-              <div key={gi} className={gi > 0 ? "mt-4" : ""}>
-                {heading && (
-                  <h3 className="text-xs font-semibold uppercase tracking-widest text-orange-500 mb-2">
-                    {heading}
-                  </h3>
-                )}
-                <ul className="space-y-2">
-                  {items.map((ingredient, i) => {
-                    const text = getIngredientText(ingredient);
-                    const selected = selectedIngredients.has(text);
-                    return (
-                      <li
-                        key={i}
-                        className={`flex items-start gap-2 text-sm rounded-lg px-2 py-1 -mx-2 cursor-pointer select-none transition-colors active:opacity-60 ${selected ? "bg-green-50 text-gray-700" : "text-gray-700"}`}
-                        onClick={() => toggleIngredient(text)}
-                        role="checkbox"
-                        aria-checked={selected}
-                        aria-label={text}
-                      >
-                        <span className={`mt-1.5 w-1.5 h-1.5 rounded-full shrink-0 transition-colors ${selected ? "bg-green-500" : "bg-orange-400"}`} />
-                        <IngredientItem ingredient={text} scale={scale} onScaleChange={setScale} />
-                      </li>
-                    );
-                  })}
-                </ul>
-              </div>
-            ))}
+            {isEditing ? (
+              <textarea
+                value={editIngredients}
+                onChange={(e) => setEditIngredients(e.target.value)}
+                disabled={editState === "saving"}
+                placeholder={"One ingredient per line.\nUse ## Group Name for sections."}
+                className="w-full rounded-lg border border-gray-200 p-3 font-mono text-sm text-gray-700 min-h-[200px] focus:outline-none focus:ring-2 focus:ring-orange-300 disabled:opacity-60 resize-y"
+              />
+            ) : (
+              groupIngredients(schema.recipeIngredient!).map(({ heading, items }, gi) => (
+                <div key={gi} className={gi > 0 ? "mt-4" : ""}>
+                  {heading && (
+                    <h3 className="text-xs font-semibold uppercase tracking-widest text-orange-500 mb-2">
+                      {heading}
+                    </h3>
+                  )}
+                  <ul className="space-y-2">
+                    {items.map((ingredient, i) => {
+                      const text = getIngredientText(ingredient);
+                      const selected = selectedIngredients.has(text);
+                      return (
+                        <li
+                          key={i}
+                          className={`flex items-start gap-2 text-sm rounded-lg px-2 py-1 -mx-2 cursor-pointer select-none transition-colors active:opacity-60 ${selected ? "bg-green-50 text-gray-700" : "text-gray-700"}`}
+                          onClick={() => toggleIngredient(text)}
+                          role="checkbox"
+                          aria-checked={selected}
+                          aria-label={text}
+                        >
+                          <span className={`mt-1.5 w-1.5 h-1.5 rounded-full shrink-0 transition-colors ${selected ? "bg-green-500" : "bg-orange-400"}`} />
+                          <IngredientItem ingredient={text} scale={scale} onScaleChange={setScale} />
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </div>
+              ))
+            )}
           </div>
         )}
 
         {/* Instructions */}
-        {schema.recipeInstructions && schema.recipeInstructions.length > 0 && (
+        {(isEditing || (schema.recipeInstructions && schema.recipeInstructions.length > 0)) && (
           <div className="sm:col-span-2">
             <h2 className="text-xl font-semibold text-gray-900 mb-4">
               Instructions
             </h2>
-            {schema.recipeInstructions[0]["@type"] === "HowToSection" ? (
+            {isEditing ? (
+              <textarea
+                value={editInstructions}
+                onChange={(e) => setEditInstructions(e.target.value)}
+                disabled={editState === "saving"}
+                placeholder={"- Step one\n- Step two\n\n## Section Name\n- Step in section"}
+                className="w-full rounded-lg border border-gray-200 p-3 font-mono text-sm text-gray-700 min-h-[300px] focus:outline-none focus:ring-2 focus:ring-orange-300 disabled:opacity-60 resize-y"
+              />
+            ) : schema.recipeInstructions![0]["@type"] === "HowToSection" ? (
               <div className="space-y-6">
                 {(schema.recipeInstructions as HowToSection[]).map((section, i) => (
                   <div key={i}>
@@ -246,14 +318,24 @@ export default function RecipeDetail({ recipe, isLoggedIn = false }: RecipeDetai
       </div>
 
       {/* Notes */}
-      {schema.notes && (
+      {(isEditing || schema.notes) && (
         <div className="mt-8">
           <h2 className="text-xl font-semibold text-gray-900 mb-3">Notes</h2>
-          <p className="text-gray-700 leading-relaxed whitespace-pre-line">{schema.notes}</p>
+          {isEditing ? (
+            <textarea
+              value={editNotes}
+              onChange={(e) => setEditNotes(e.target.value)}
+              disabled={editState === "saving"}
+              placeholder="Add notes…"
+              className="w-full rounded-lg border border-gray-200 p-3 text-gray-700 leading-relaxed min-h-[120px] focus:outline-none focus:ring-2 focus:ring-orange-300 disabled:opacity-60 resize-y"
+            />
+          ) : (
+            <p className="text-gray-700 leading-relaxed whitespace-pre-line">{schema.notes}</p>
+          )}
         </div>
       )}
 
-      {/* Nutrition */}
+      {/* Nutrition — always read-only */}
       {schema.nutrition && <NutritionPanel nutrition={schema.nutrition} totalServings={originalServings} />}
 
       {/* Recipe Controls — logged-in only */}
@@ -263,50 +345,59 @@ export default function RecipeDetail({ recipe, isLoggedIn = false }: RecipeDetai
             Manage
           </h2>
           <div className="flex flex-wrap items-center gap-3">
-            <button
-              onClick={handleRescrape}
-              disabled={rescrapeState === "loading"}
-              className="px-4 py-2 text-sm font-medium rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 disabled:opacity-50 transition-colors"
-            >
-              {rescrapeState === "loading" ? "Re-scraping\u2026" : "Re-scrape"}
-            </button>
-            {rescrapeState === "success" && (
-              <span className="text-sm text-green-600">Recipe updated.</span>
-            )}
-            {rescrapeState === "error" && (
-              <span className="text-sm text-red-600">Re-scrape failed. Try again.</span>
-            )}
-            {archiveState === "idle" && (
-              <button
-                onClick={() => setArchiveState("confirming")}
-                className="px-4 py-2 text-sm font-medium rounded-lg border border-red-200 text-red-600 hover:bg-red-50 transition-colors"
-              >
-                Delete
-              </button>
-            )}
-            {archiveState === "confirming" && (
+            {isEditing ? (
               <>
-                <button
-                  onClick={handleArchive}
-                  className="px-4 py-2 text-sm font-medium rounded-lg bg-red-600 text-white hover:bg-red-700 transition-colors"
+                <select
+                  value={editStatus}
+                  onChange={(e) => setEditStatus(e.target.value)}
+                  disabled={editState === "saving"}
+                  className="px-3 py-2 text-sm font-medium rounded-lg border border-gray-200 text-gray-700 bg-white focus:outline-none focus:ring-2 focus:ring-orange-300 disabled:opacity-60"
+                  aria-label="Recipe status"
                 >
-                  Confirm delete?
+                  <option value="published">Published</option>
+                  <option value="private">Private</option>
+                  <option value="archived">Archived</option>
+                </select>
+                <button
+                  onClick={handleEditSave}
+                  disabled={editState === "saving"}
+                  className="px-4 py-2 text-sm font-medium rounded-lg bg-orange-500 text-white hover:bg-orange-600 disabled:opacity-50 transition-colors"
+                >
+                  {editState === "saving" ? "Saving\u2026" : "Save"}
                 </button>
                 <button
-                  onClick={() => setArchiveState("idle")}
-                  className="px-4 py-2 text-sm font-medium rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 transition-colors"
+                  onClick={handleEditCancel}
+                  disabled={editState === "saving"}
+                  className="px-4 py-2 text-sm font-medium rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 disabled:opacity-50 transition-colors"
                 >
                   Cancel
                 </button>
+                {editState === "error" && (
+                  <span className="text-sm text-red-600">Save failed. Try again.</span>
+                )}
               </>
-            )}
-            {archiveState === "loading" && (
-              <button
-                disabled
-                className="px-4 py-2 text-sm font-medium rounded-lg border border-red-200 text-red-400 opacity-50"
-              >
-                Deleting\u2026
-              </button>
+            ) : (
+              <>
+                <button
+                  onClick={handleEditStart}
+                  className="px-4 py-2 text-sm font-medium rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 transition-colors"
+                >
+                  Edit
+                </button>
+                <button
+                  onClick={handleRescrape}
+                  disabled={rescrapeState === "loading"}
+                  className="px-4 py-2 text-sm font-medium rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 disabled:opacity-50 transition-colors"
+                >
+                  {rescrapeState === "loading" ? "Re-scraping\u2026" : "Re-scrape"}
+                </button>
+                {rescrapeState === "success" && (
+                  <span className="text-sm text-green-600">Recipe updated.</span>
+                )}
+                {rescrapeState === "error" && (
+                  <span className="text-sm text-red-600">Re-scrape failed. Try again.</span>
+                )}
+              </>
             )}
           </div>
         </section>

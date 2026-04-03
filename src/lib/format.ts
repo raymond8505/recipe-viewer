@@ -51,7 +51,7 @@ export function formatDate(iso: string | undefined | null): string | null {
   });
 }
 
-import type { RecipeIngredient, SchemaRecipe } from "@/types/recipe";
+import type { HowToSection, HowToStep, RecipeIngredient, SchemaRecipe } from "@/types/recipe";
 
 /**
  * Get the ingredient text from a string or RecipeIngredient object.
@@ -118,6 +118,134 @@ export function toSchemaOrgJsonLd(schema: SchemaRecipe): object {
   if (schema.recipeIngredient?.length) {
     result.recipeIngredient = schema.recipeIngredient.map(getIngredientText);
   }
+  return result;
+}
+
+/**
+ * Convert structured recipe instructions to an editable markdown string.
+ *
+ * HowToSection → "## Section Name" header followed by its steps as "- text"
+ * Top-level HowToStep → "- text"
+ * Sections are separated by a blank line.
+ */
+export function instructionsToMarkdown(
+  instructions: Array<HowToStep | HowToSection>
+): string {
+  const blocks: string[] = [];
+  for (const item of instructions) {
+    if (item["@type"] === "HowToSection") {
+      const section = item as HowToSection;
+      const lines = [`## ${section.name}`];
+      for (const step of section.itemListElement) {
+        lines.push(`- ${step.text}`);
+      }
+      blocks.push(lines.join("\n"));
+    } else {
+      blocks.push(`- ${(item as HowToStep).text}`);
+    }
+  }
+  return blocks.join("\n\n");
+}
+
+/**
+ * Parse an editable markdown string back to structured recipe instructions.
+ *
+ * "## Section Name" → opens a new HowToSection
+ * "- text", "* text", "1. text" → HowToStep added to current section (or top-level)
+ * Bare non-empty lines → treated as a step
+ * Empty lines → ignored
+ */
+export function markdownToInstructions(
+  markdown: string
+): Array<HowToStep | HowToSection> {
+  const result: Array<HowToStep | HowToSection> = [];
+  let currentSection: HowToSection | null = null;
+
+  for (const rawLine of markdown.split("\n")) {
+    const line = rawLine.trim();
+    if (!line) continue;
+
+    if (line.startsWith("## ")) {
+      currentSection = {
+        "@type": "HowToSection",
+        name: line.slice(3).trim(),
+        itemListElement: [],
+      };
+      result.push(currentSection);
+      continue;
+    }
+
+    let text: string;
+    if (line.startsWith("- ") || line.startsWith("* ")) {
+      text = line.slice(2).trim();
+    } else if (/^\d+\.\s/.test(line)) {
+      text = line.replace(/^\d+\.\s+/, "").trim();
+    } else {
+      text = line;
+    }
+
+    if (!text) continue;
+    const step: HowToStep = { "@type": "HowToStep", text };
+    if (currentSection) {
+      currentSection.itemListElement.push(step);
+    } else {
+      result.push(step);
+    }
+  }
+
+  return result;
+}
+
+/**
+ * Convert a recipe ingredient list to an editable plain-text string.
+ *
+ * Groups are emitted as "## Group Name" headers before their ingredients.
+ * Ungrouped ingredients have no header. One ingredient per line.
+ */
+export function ingredientsToText(
+  ingredients: Array<string | RecipeIngredient>
+): string {
+  const groups = groupIngredients(ingredients);
+  const blocks: string[] = [];
+  for (const { heading, items } of groups) {
+    const lines: string[] = [];
+    if (heading) lines.push(`## ${heading}`);
+    for (const item of items) lines.push(getIngredientText(item));
+    blocks.push(lines.join("\n"));
+  }
+  return blocks.join("\n\n");
+}
+
+/**
+ * Parse an editable plain-text ingredient list back to structured ingredients.
+ *
+ * "## Group Name" → sets the current group for subsequent ingredients
+ * Other non-empty lines → ingredient; emits { name, group } if group is active,
+ *   otherwise a plain string
+ * Empty lines → ignored
+ */
+export function textToIngredients(
+  text: string
+): Array<string | RecipeIngredient> {
+  const result: Array<string | RecipeIngredient> = [];
+  let currentGroup: string | null = null;
+
+  for (const rawLine of text.split("\n")) {
+    const line = rawLine.trim();
+    if (!line) continue;
+
+    if (line.startsWith("## ")) {
+      currentGroup = line.slice(3).trim();
+      continue;
+    }
+
+    if (currentGroup) {
+      result.push({ name: line, group: currentGroup });
+    } else {
+      result.push(line);
+    }
+  }
+
   return result;
 }
 

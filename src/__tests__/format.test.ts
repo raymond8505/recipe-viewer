@@ -1,5 +1,16 @@
 import { describe, it, expect } from "vitest";
-import { formatDuration, formatDate, getFirstImage, toArray, groupIngredients, getIngredientText } from "@/lib/format";
+import {
+  formatDuration,
+  formatDate,
+  getFirstImage,
+  toArray,
+  groupIngredients,
+  getIngredientText,
+  instructionsToMarkdown,
+  markdownToInstructions,
+  ingredientsToText,
+  textToIngredients,
+} from "@/lib/format";
 
 describe("formatDuration", () => {
   it("formats hours and minutes", () => {
@@ -144,5 +155,139 @@ describe("groupIngredients", () => {
     expect(result).toHaveLength(2);
     expect(result[0].heading).toBeNull();
     expect(result[1].heading).toBe("Sauce");
+  });
+});
+
+describe("instructionsToMarkdown", () => {
+  it("converts flat HowToStep list to bullet lines", () => {
+    const result = instructionsToMarkdown([
+      { "@type": "HowToStep", text: "Boil water." },
+      { "@type": "HowToStep", text: "Add pasta." },
+    ]);
+    expect(result).toBe("- Boil water.\n\n- Add pasta.");
+  });
+
+  it("converts HowToSection list with headers", () => {
+    const result = instructionsToMarkdown([
+      {
+        "@type": "HowToSection",
+        name: "For the sauce",
+        itemListElement: [
+          { text: "Simmer tomatoes." },
+          { text: "Add garlic." },
+        ],
+      },
+    ]);
+    expect(result).toBe("## For the sauce\n- Simmer tomatoes.\n- Add garlic.");
+  });
+
+  it("returns empty string for empty array", () => {
+    expect(instructionsToMarkdown([])).toBe("");
+  });
+});
+
+describe("markdownToInstructions", () => {
+  it("parses bullet lines as flat HowToStep list", () => {
+    const result = markdownToInstructions("- Boil water.\n- Add pasta.");
+    expect(result).toHaveLength(2);
+    expect(result[0]).toMatchObject({ "@type": "HowToStep", text: "Boil water." });
+    expect(result[1]).toMatchObject({ "@type": "HowToStep", text: "Add pasta." });
+  });
+
+  it("parses numbered lines as HowToStep", () => {
+    const result = markdownToInstructions("1. First step\n2. Second step");
+    expect(result).toHaveLength(2);
+    expect(result[0]).toMatchObject({ text: "First step" });
+    expect(result[1]).toMatchObject({ text: "Second step" });
+  });
+
+  it("parses ## headers as HowToSection with nested steps", () => {
+    const result = markdownToInstructions("## Sauce\n- Simmer.\n- Season.");
+    expect(result).toHaveLength(1);
+    const section = result[0] as import("@/types/recipe").HowToSection;
+    expect(section["@type"]).toBe("HowToSection");
+    expect(section.name).toBe("Sauce");
+    expect(section.itemListElement).toHaveLength(2);
+  });
+
+  it("ignores empty lines", () => {
+    const result = markdownToInstructions("- Step one\n\n- Step two");
+    expect(result).toHaveLength(2);
+  });
+
+  it("returns empty array for empty string", () => {
+    expect(markdownToInstructions("")).toHaveLength(0);
+  });
+
+  it("round-trips through instructionsToMarkdown", () => {
+    const original = [
+      {
+        "@type": "HowToSection" as const,
+        name: "Prep",
+        itemListElement: [{ "@type": "HowToStep" as const, text: "Chop onions." }],
+      },
+    ];
+    const md = instructionsToMarkdown(original);
+    const parsed = markdownToInstructions(md);
+    expect(parsed).toHaveLength(1);
+    const section = parsed[0] as import("@/types/recipe").HowToSection;
+    expect(section.name).toBe("Prep");
+    expect(section.itemListElement[0].text).toBe("Chop onions.");
+  });
+});
+
+describe("ingredientsToText", () => {
+  it("converts plain strings to one per line", () => {
+    expect(ingredientsToText(["2 cups flour", "1 tsp salt"])).toBe(
+      "2 cups flour\n1 tsp salt"
+    );
+  });
+
+  it("emits ## headers for grouped ingredients", () => {
+    const result = ingredientsToText([
+      { name: "2 cups flour", group: "Cake" },
+      { name: "1 tsp vanilla", group: "Frosting" },
+    ]);
+    expect(result).toContain("## Cake");
+    expect(result).toContain("2 cups flour");
+    expect(result).toContain("## Frosting");
+    expect(result).toContain("1 tsp vanilla");
+  });
+
+  it("returns empty string for empty array", () => {
+    expect(ingredientsToText([])).toBe("");
+  });
+});
+
+describe("textToIngredients", () => {
+  it("parses plain lines as strings", () => {
+    const result = textToIngredients("2 cups flour\n1 tsp salt");
+    expect(result).toEqual(["2 cups flour", "1 tsp salt"]);
+  });
+
+  it("parses ## headers as group and attaches to following ingredients", () => {
+    const result = textToIngredients("## Cake\n2 cups flour\n1 cup sugar");
+    expect(result).toHaveLength(2);
+    expect(result[0]).toEqual({ name: "2 cups flour", group: "Cake" });
+    expect(result[1]).toEqual({ name: "1 cup sugar", group: "Cake" });
+  });
+
+  it("ignores empty lines", () => {
+    const result = textToIngredients("2 cups flour\n\n1 tsp salt");
+    expect(result).toHaveLength(2);
+  });
+
+  it("returns empty array for empty string", () => {
+    expect(textToIngredients("")).toHaveLength(0);
+  });
+
+  it("round-trips through ingredientsToText", () => {
+    const original = [
+      { name: "2 cups flour", group: "Batter" },
+      { name: "1 egg", group: "Batter" },
+    ];
+    const text = ingredientsToText(original);
+    const parsed = textToIngredients(text);
+    expect(parsed).toEqual(original);
   });
 });
