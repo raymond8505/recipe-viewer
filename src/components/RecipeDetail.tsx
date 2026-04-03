@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import Image from "next/image";
 import type { RecipeRow, HowToStep, HowToSection } from "@/types/recipe";
 import {
@@ -24,6 +25,7 @@ interface RecipeDetailProps {
 }
 
 export default function RecipeDetail({ recipe, isLoggedIn = false }: RecipeDetailProps) {
+  const router = useRouter();
   const [schema, setSchema] = useState(recipe.metadata.schema);
   const image = getFirstImage(schema.image);
   const prepTime = formatDuration(schema.prepTime);
@@ -35,6 +37,7 @@ export default function RecipeDetail({ recipe, isLoggedIn = false }: RecipeDetai
   const [selectedIngredients, setSelectedIngredients] = useState<Set<string>>(new Set());
   const [copyFeedback, setCopyFeedback] = useState(false);
   const [rescrapeState, setRescrapeState] = useState<"idle" | "loading" | "success" | "error">("idle");
+  const [archiveState, setArchiveState] = useState<"idle" | "confirming" | "loading">("idle");
 
   const handleRescrape = async () => {
     setRescrapeState("loading");
@@ -46,6 +49,16 @@ export default function RecipeDetail({ recipe, isLoggedIn = false }: RecipeDetai
       setRescrapeState("success");
     } catch {
       setRescrapeState("error");
+    }
+  };
+
+  const handleArchive = async () => {
+    setArchiveState("loading");
+    const res = await fetch(`/api/recipes/${recipe.id}/archive`, { method: "POST" });
+    if (res.ok) {
+      router.push("/");
+    } else {
+      setArchiveState("idle");
     }
   };
 
@@ -262,6 +275,38 @@ export default function RecipeDetail({ recipe, isLoggedIn = false }: RecipeDetai
             )}
             {rescrapeState === "error" && (
               <span className="text-sm text-red-600">Re-scrape failed. Try again.</span>
+            )}
+            {archiveState === "idle" && (
+              <button
+                onClick={() => setArchiveState("confirming")}
+                className="px-4 py-2 text-sm font-medium rounded-lg border border-red-200 text-red-600 hover:bg-red-50 transition-colors"
+              >
+                Delete
+              </button>
+            )}
+            {archiveState === "confirming" && (
+              <>
+                <button
+                  onClick={handleArchive}
+                  className="px-4 py-2 text-sm font-medium rounded-lg bg-red-600 text-white hover:bg-red-700 transition-colors"
+                >
+                  Confirm delete?
+                </button>
+                <button
+                  onClick={() => setArchiveState("idle")}
+                  className="px-4 py-2 text-sm font-medium rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 transition-colors"
+                >
+                  Cancel
+                </button>
+              </>
+            )}
+            {archiveState === "loading" && (
+              <button
+                disabled
+                className="px-4 py-2 text-sm font-medium rounded-lg border border-red-200 text-red-400 opacity-50"
+              >
+                Deleting\u2026
+              </button>
             )}
           </div>
         </section>

@@ -7,7 +7,7 @@ export interface RecipeRow {
   id: string;
   url: string;
   source: string;
-  metadata: { schema: SchemaRecipe };
+  metadata: { schema: SchemaRecipe; status?: string };
 }
 
 export interface HowToStep {

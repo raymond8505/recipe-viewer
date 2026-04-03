@@ -22,6 +22,10 @@ export async function getSources(opts?: { isLoggedIn?: boolean }): Promise<strin
 
   if (features.filterByStatus) {
     queryBuilder = queryBuilder.eq("metadata->>status", "published");
+  } else {
+    queryBuilder = queryBuilder.or(
+      "metadata->>status.is.null,metadata->>status.neq.archived"
+    );
   }
 
   const { data, error } = await queryBuilder;
@@ -69,6 +73,10 @@ export async function getRecipes(opts?: {
 
   if (features.filterByStatus) {
     queryBuilder = queryBuilder.eq("metadata->>status", "published");
+  } else {
+    queryBuilder = queryBuilder.or(
+      "metadata->>status.is.null,metadata->>status.neq.archived"
+    );
   }
 
   if (opts?.source) {

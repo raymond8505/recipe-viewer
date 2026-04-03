@@ -34,12 +34,13 @@ function makeSupabaseMock(opts: {
     order: vi.fn(),
     in: vi.fn(),
     eq: vi.fn(),
+    or: vi.fn(),
     ilike: vi.fn(),
     single: vi.fn().mockResolvedValue({ data: singleData, error: singleError }),
   };
 
   // Each chainable method returns the same builder
-  (["select", "not", "range", "order", "in", "eq", "ilike"] as const).forEach((key) => {
+  (["select", "not", "range", "order", "in", "eq", "or", "ilike"] as const).forEach((key) => {
     (builder[key] as ReturnType<typeof vi.fn>).mockReturnValue(builder);
   });
 
@@ -132,6 +133,23 @@ describe("getRecipes", () => {
     await getRecipes();
 
     expect(builder.eq).not.toHaveBeenCalled();
+  });
+
+  it("excludes archived recipes via or filter when filterByStatus is false (logged-in)", async () => {
+    const { builder } = makeSupabaseMock();
+    await getRecipes();
+
+    expect(builder.or).toHaveBeenCalledWith(
+      "metadata->>status.is.null,metadata->>status.neq.archived"
+    );
+  });
+
+  it("does not apply or filter when filterByStatus is true (logged-out, published filter covers it)", async () => {
+    mockFeatures.filterByStatus = true;
+    const { builder } = makeSupabaseMock();
+    await getRecipes();
+
+    expect(builder.or).not.toHaveBeenCalled();
   });
 
   it("sorts by created_at ascending for 'oldest'", async () => {

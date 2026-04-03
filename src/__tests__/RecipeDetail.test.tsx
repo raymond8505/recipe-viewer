@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, fireEvent, waitFor, act } from "@testing-library/react";
+import { useRouter } from "next/navigation";
 import RecipeDetail from "@/components/RecipeDetail";
 import type { RecipeRow, HowToStep, HowToSection, SchemaRecipe } from "@/types/recipe";
 import { rescrapeFixture } from "./fixtures/rescrape";
@@ -302,6 +303,82 @@ describe("RecipeDetail — controls section", () => {
 
     await waitFor(() => {
       expect(screen.getByText(/re-scrape failed/i)).toBeTruthy();
+    });
+  });
+
+  it("shows Delete button when logged in", () => {
+    render(<RecipeDetail recipe={makeRecipe()} isLoggedIn={true} />);
+    expect(screen.getByRole("button", { name: /^delete$/i })).toBeTruthy();
+  });
+
+  it("does not show Delete button when logged out", () => {
+    render(<RecipeDetail recipe={makeRecipe()} isLoggedIn={false} />);
+    expect(screen.queryByRole("button", { name: /^delete$/i })).toBeNull();
+  });
+
+  it("shows confirmation when Delete is clicked", async () => {
+    render(<RecipeDetail recipe={makeRecipe()} isLoggedIn={true} />);
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /^delete$/i }));
+    });
+    expect(screen.getByRole("button", { name: /confirm delete/i })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /^cancel$/i })).toBeTruthy();
+  });
+
+  it("returns to idle state on Cancel", async () => {
+    render(<RecipeDetail recipe={makeRecipe()} isLoggedIn={true} />);
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /^delete$/i }));
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /^cancel$/i }));
+    });
+    expect(screen.getByRole("button", { name: /^delete$/i })).toBeTruthy();
+  });
+
+  it("calls archive endpoint and redirects on confirm", async () => {
+    const pushMock = vi.fn();
+    vi.mocked(useRouter).mockReturnValue({
+      push: pushMock,
+      replace: vi.fn(),
+      prefetch: vi.fn(),
+      back: vi.fn(),
+    } as never);
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(new Response(JSON.stringify({ ok: true }), { status: 200 }))
+    );
+
+    render(<RecipeDetail recipe={makeRecipe()} isLoggedIn={true} />);
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /^delete$/i }));
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /confirm delete/i }));
+    });
+
+    await waitFor(() => {
+      expect(pushMock).toHaveBeenCalledWith("/");
+    });
+  });
+
+  it("resets to idle when archive endpoint fails", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(new Response(null, { status: 500 }))
+    );
+
+    render(<RecipeDetail recipe={makeRecipe()} isLoggedIn={true} />);
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /^delete$/i }));
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /confirm delete/i }));
+    });
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: /^delete$/i })).toBeTruthy();
     });
   });
 });
