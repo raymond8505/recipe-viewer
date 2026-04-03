@@ -24,14 +24,15 @@ export async function POST(
     return NextResponse.json({ error: "Recipe not found" }, { status: 404 });
   }
 
-  const body = await req.json() as { schema: SchemaRecipe; status: string };
+  const body = await req.json() as { schema: SchemaRecipe; status: string; url?: string };
+  const effectiveUrl = body.url ?? recipe.url;
 
   let webhookRes: Response;
   try {
     webhookRes = await fetch(webhookUrl, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ url: recipe.url, schema: body.schema, status: body.status }),
+      body: JSON.stringify({ url: effectiveUrl, schema: body.schema, status: body.status }),
     });
   } catch {
     return NextResponse.json({ error: "Webhook unreachable" }, { status: 502 });
@@ -45,7 +46,7 @@ export async function POST(
 
   const { error: updateError } = await supabase
     .from("recipes")
-    .update({ metadata: { ...recipe.metadata, schema: result.schema }, status: result.status })
+    .update({ url: effectiveUrl, metadata: { ...recipe.metadata, schema: result.schema }, status: result.status })
     .eq("id", id);
 
   if (updateError) {

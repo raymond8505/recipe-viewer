@@ -45,6 +45,7 @@ export default function RecipeDetail({ recipe, isLoggedIn = false }: RecipeDetai
 
   // Edit mode state
   const [editState, setEditState] = useState<EditState>("idle");
+  const [editUrl, setEditUrl] = useState("");
   const [editDesc, setEditDesc] = useState("");
   const [editIngredients, setEditIngredients] = useState("");
   const [editInstructions, setEditInstructions] = useState("");
@@ -70,6 +71,7 @@ export default function RecipeDetail({ recipe, isLoggedIn = false }: RecipeDetai
   };
 
   const handleEditStart = () => {
+    setEditUrl(recipe.url ?? "");
     setEditDesc(schema.description ?? "");
     setEditIngredients(ingredientsToText(schema.recipeIngredient ?? []));
     setEditInstructions(instructionsToMarkdown(schema.recipeInstructions ?? []));
@@ -95,7 +97,7 @@ export default function RecipeDetail({ recipe, isLoggedIn = false }: RecipeDetai
       const res = await fetch(`/api/recipes/${recipe.id}/update`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ schema: updatedSchema, status: editStatus }),
+        body: JSON.stringify({ schema: updatedSchema, status: editStatus, url: editUrl }),
       });
       if (!res.ok) throw new Error();
       const result = await res.json();
@@ -351,6 +353,19 @@ export default function RecipeDetail({ recipe, isLoggedIn = false }: RecipeDetai
           <div className="flex flex-wrap items-center gap-3">
             {isEditing ? (
               <>
+                <div className="w-full mb-1">
+                  <label className="block text-xs font-medium text-gray-500 mb-1">
+                    Source URL
+                  </label>
+                  <input
+                    type="url"
+                    value={editUrl}
+                    onChange={(e) => setEditUrl(e.target.value)}
+                    disabled={editState === "saving"}
+                    placeholder="https://example.com/recipe"
+                    className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-orange-300 disabled:opacity-60"
+                  />
+                </div>
                 <select
                   value={editStatus}
                   onChange={(e) => setEditStatus(e.target.value)}

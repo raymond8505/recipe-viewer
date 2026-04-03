@@ -453,4 +453,34 @@ describe("RecipeDetail — controls section", () => {
     });
     expect(screen.getByRole("button", { name: /^save$/i })).toBeTruthy();
   });
+
+  it("shows Source URL input pre-filled with recipe.url in edit mode", async () => {
+    render(
+      <RecipeDetail recipe={makeRecipe()} isLoggedIn={true} />
+    );
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /^edit$/i }));
+    });
+    const input = screen.getByPlaceholderText(/https:\/\/example\.com\/recipe/i) as HTMLInputElement;
+    expect(input.value).toBe("https://example.com");
+  });
+
+  it("includes url in the save request body", async () => {
+    const mockFetch = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ schema: rescrapeFixture, status: "draft" }), { status: 200 })
+    );
+    vi.stubGlobal("fetch", mockFetch);
+
+    render(<RecipeDetail recipe={makeRecipe()} isLoggedIn={true} />);
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /^edit$/i }));
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /^save$/i }));
+    });
+
+    await waitFor(() => expect(mockFetch).toHaveBeenCalled());
+    const body = JSON.parse(mockFetch.mock.calls[0][1].body);
+    expect(body.url).toBe("https://example.com");
+  });
 });
