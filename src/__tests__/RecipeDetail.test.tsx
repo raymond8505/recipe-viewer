@@ -305,6 +305,48 @@ describe("RecipeDetail — controls section", () => {
     });
   });
 
+  it("does not crash when rescrape response is missing schema key", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        new Response(JSON.stringify({}), { status: 200 })
+      )
+    );
+
+    render(<RecipeDetail recipe={makeRecipe({ name: "My Recipe" })} isLoggedIn={true} />);
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /re-scrape/i }));
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText(/re-scrape failed/i)).toBeTruthy();
+    });
+    // recipe name must still be in the DOM — schema must not have been set to undefined
+    expect(screen.getByText("My Recipe")).toBeTruthy();
+  });
+
+  it("does not crash when save response is missing schema key", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        new Response(JSON.stringify({ status: "published" }), { status: 200 })
+      )
+    );
+
+    render(<RecipeDetail recipe={makeRecipe({ name: "My Recipe" })} isLoggedIn={true} />);
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /^edit$/i }));
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /^save$/i }));
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText(/save failed/i)).toBeTruthy();
+    });
+    expect(screen.getByText("My Recipe")).toBeTruthy();
+  });
+
   it("shows Edit button when logged in", () => {
     render(<RecipeDetail recipe={makeRecipe()} isLoggedIn={true} />);
     expect(screen.getByRole("button", { name: /^edit$/i })).toBeTruthy();

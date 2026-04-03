@@ -59,6 +59,7 @@ export default function RecipeDetail({ recipe, isLoggedIn = false }: RecipeDetai
       const res = await fetch(`/api/recipes/${recipe.id}/rescrape`, { method: "POST" });
       if (!res.ok) throw new Error();
       const { schema: updated } = await res.json();
+      if (!updated) throw new Error();
       setSchema(updated);
       setRescrapeState("success");
     } catch {
@@ -96,6 +97,7 @@ export default function RecipeDetail({ recipe, isLoggedIn = false }: RecipeDetai
       });
       if (!res.ok) throw new Error();
       const result = await res.json();
+      if (!result.schema) throw new Error();
       setSchema(result.schema);
       setStatus(result.status);
       setEditState("idle");
