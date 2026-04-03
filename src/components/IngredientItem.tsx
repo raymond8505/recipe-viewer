@@ -70,21 +70,17 @@ export default function IngredientItem({
           autoFocus
           tabIndex={0}
         />
-      ) : (
-        <span
-          onClick={onScaleChange ? (e) => { e.stopPropagation(); startEdit(); } : undefined}
-          onKeyDown={onScaleChange ? (e) => { if (e.key === "Enter" || e.key === " ") startEdit(); } : undefined}
-          role={onScaleChange ? "button" : undefined}
-          aria-label={onScaleChange ? `Edit amount: ${displayAmount}` : undefined}
-          tabIndex={onScaleChange ? 0 : undefined}
-          className={
-            onScaleChange
-              ? "cursor-pointer underline underline-offset-2 decoration-orange-300 hover:decoration-orange-500"
-              : undefined
-          }
+      ) : onScaleChange ? (
+        <button
+          type="button"
+          onClick={(e) => { e.stopPropagation(); startEdit(); }}
+          className="cursor-pointer underline underline-offset-2 decoration-orange-300 hover:decoration-orange-500"
+          aria-label={parsed.rest ? `Edit amount for ${parsed.rest}` : `Edit amount: ${displayAmount}`}
         >
           {displayAmount}
-        </span>
+        </button>
+      ) : (
+        <span>{displayAmount}</span>
       )}
       {unitGroup.length > 0 && selectedUnit && (
         <>
