@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Image from "next/image";
 import type { RecipeRow, HowToStep, HowToSection } from "@/types/recipe";
 import {
@@ -50,6 +50,8 @@ export default function RecipeDetail({ recipe, isLoggedIn = false }: RecipeDetai
   const [editInstructions, setEditInstructions] = useState("");
   const [editNotes, setEditNotes] = useState("");
   const [editStatus, setEditStatus] = useState("");
+  const [isMounted, setIsMounted] = useState(false);
+  useEffect(() => setIsMounted(true), []);
 
   const isEditing = editState !== "idle";
 
@@ -386,7 +388,7 @@ export default function RecipeDetail({ recipe, isLoggedIn = false }: RecipeDetai
                 >
                   Edit
                 </button>
-                {recipe.url !== window.location.href && (
+                {isMounted && recipe.url !== window.location.href && (
                   <button
                     onClick={handleRescrape}
                     disabled={rescrapeState === "loading"}
