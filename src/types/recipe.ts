@@ -7,7 +7,7 @@ export interface RecipeRow {
   id: string;
   url: string;
   source: string;
-  status: 'published' | 'archived' | 'draft';
+  status: 'published' | 'archived' | 'draft' | null;
   metadata: { schema: SchemaRecipe };
 }
 

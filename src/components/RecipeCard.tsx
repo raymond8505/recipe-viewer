@@ -8,7 +8,14 @@ import { formatDuration, getFirstImage, toArray } from "@/lib/format";
 
 interface RecipeCardProps {
   recipe: RecipeRow;
+  showStatusBadge?: boolean;
 }
+
+const STATUS_STYLES: Record<string, string> = {
+  published: "bg-green-100 text-green-700",
+  draft: "bg-amber-100 text-amber-700",
+  archived: "bg-gray-100 text-gray-500",
+};
 
 function ImagePlaceholder() {
   return (
@@ -25,19 +32,27 @@ function ImagePlaceholder() {
   );
 }
 
-export default function RecipeCard({ recipe }: RecipeCardProps) {
+export default function RecipeCard({ recipe, showStatusBadge }: RecipeCardProps) {
   const { metadata: { schema }, id } = recipe;
   const image = getFirstImage(schema.image);
   const totalTime = formatDuration(schema.totalTime ?? schema.cookTime);
   const categories = toArray(schema.recipeCategory);
   const [imgError, setImgError] = useState(false);
+  const status = recipe.status ?? "draft";
 
   return (
     <Link
       href={`/recipes/${id}`}
       className="group flex flex-col rounded-2xl overflow-hidden border border-gray-200 bg-white hover:shadow-lg transition-shadow duration-200"
     >
-      <div className="w-full">
+      <div className="relative w-full">
+        {showStatusBadge && (
+          <span
+            className={`absolute top-2 right-2 z-10 px-2 py-0.5 text-xs font-medium rounded-full capitalize ${STATUS_STYLES[status] ?? "bg-gray-100 text-gray-500"}`}
+          >
+            {status}
+          </span>
+        )}
         {image && !imgError ? (
           <div className="relative w-full aspect-square overflow-hidden bg-gray-100">
             <Image

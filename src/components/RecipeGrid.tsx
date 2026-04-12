@@ -3,9 +3,10 @@ import RecipeCard from "./RecipeCard";
 
 interface RecipeGridProps {
   recipes: RecipeRow[];
+  showStatusBadge?: boolean;
 }
 
-export default function RecipeGrid({ recipes }: RecipeGridProps) {
+export default function RecipeGrid({ recipes, showStatusBadge }: RecipeGridProps) {
   if (recipes.length === 0) {
     return (
       <div className="text-center py-20 text-gray-400">
@@ -17,7 +18,7 @@ export default function RecipeGrid({ recipes }: RecipeGridProps) {
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
       {recipes.map((recipe) => (
-        <RecipeCard key={recipe.id} recipe={recipe} />
+        <RecipeCard key={recipe.id} recipe={recipe} showStatusBadge={showStatusBadge} />
       ))}
     </div>
   );

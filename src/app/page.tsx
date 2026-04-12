@@ -67,7 +67,7 @@ export default async function Home({ searchParams }: HomeProps) {
       )}
 
       <RecipeStateProvider schemas={recipes.map((r) => r.metadata.schema)} />
-      <RecipeGrid recipes={recipes} />
+      <RecipeGrid recipes={recipes} showStatusBadge={isLoggedIn} />
 
       <Suspense>
         <Pagination page={page} total={count} pageSize={PAGE_SIZE} />
