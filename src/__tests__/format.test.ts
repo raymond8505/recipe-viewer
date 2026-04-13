@@ -10,6 +10,7 @@ import {
   markdownToInstructions,
   ingredientsToText,
   textToIngredients,
+  toSchemaOrgJsonLd,
 } from "@/lib/format";
 
 describe("formatDuration", () => {
@@ -289,5 +290,36 @@ describe("textToIngredients", () => {
     const text = ingredientsToText(original);
     const parsed = textToIngredients(text);
     expect(parsed).toEqual(original);
+  });
+});
+
+describe("toSchemaOrgJsonLd", () => {
+  it("excludes notes from JSON-LD output", () => {
+    const result = toSchemaOrgJsonLd({ name: "Pasta", notes: "use fresh herbs" }) as Record<string, unknown>;
+    expect(result.notes).toBeUndefined();
+  });
+
+  it("excludes cookingNotes from JSON-LD output", () => {
+    const result = toSchemaOrgJsonLd({ name: "Pasta", cookingNotes: "less salt next time" }) as Record<string, unknown>;
+    expect(result.cookingNotes).toBeUndefined();
+  });
+
+  it("includes standard fields in JSON-LD output", () => {
+    const result = toSchemaOrgJsonLd({
+      name: "Pasta",
+      description: "A classic dish",
+      cookTime: "PT20M",
+    }) as Record<string, unknown>;
+    expect(result.name).toBe("Pasta");
+    expect(result.description).toBe("A classic dish");
+    expect(result.cookTime).toBe("PT20M");
+  });
+
+  it("normalizes ingredient objects to strings", () => {
+    const result = toSchemaOrgJsonLd({
+      name: "Pasta",
+      recipeIngredient: [{ name: "2 cups flour", group: "Dough" }, "1 tsp salt"],
+    }) as Record<string, unknown>;
+    expect(result.recipeIngredient).toEqual(["2 cups flour", "1 tsp salt"]);
   });
 });

@@ -153,7 +153,7 @@ export default function RecipeDetail({ recipe, isLoggedIn = false }: RecipeDetai
           <h1 className="text-3xl sm:text-4xl font-bold text-gray-900 leading-tight">
             {schema.name}
           </h1>
-          <CookingModeButton recipe={recipe} />
+          <CookingModeButton recipe={recipe} isLoggedIn={isLoggedIn} />
         </div>
 
         {isEditing ? (

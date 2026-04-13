@@ -98,8 +98,8 @@ export function getFirstImage(
 
 /**
  * Return a Schema.org-compliant JSON-LD object for a recipe.
- * Strips custom extensions (notes, ingredient group objects) so external
- * tools that validate against the spec can parse the output cleanly.
+ * Strips custom extensions (notes, cookingNotes, ingredient group objects) so
+ * external tools that validate against the spec can parse the output cleanly.
  */
 export function toSchemaOrgJsonLd(schema: SchemaRecipe): object {
   const result: Record<string, unknown> = {

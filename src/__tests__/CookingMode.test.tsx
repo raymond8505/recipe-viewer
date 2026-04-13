@@ -184,25 +184,31 @@ describe("CookingMode — shopping list", () => {
 });
 
 describe("CookingMode — cooking notes", () => {
-  it("renders cooking notes textareas (portrait + desktop)", () => {
+  it("does not render notes textarea when logged out", () => {
     const recipe = makeRecipe({ cookingNotes: "less salt next time" });
     render(<CookingMode recipe={recipe} onClose={vi.fn()} />);
+    expect(screen.queryByPlaceholderText(/note changes for next time/i)).toBeNull();
+  });
+
+  it("renders cooking notes textareas when logged in", () => {
+    const recipe = makeRecipe({ cookingNotes: "less salt next time" });
+    render(<CookingMode recipe={recipe} onClose={vi.fn()} isLoggedIn />);
     const textareas = screen.getAllByPlaceholderText(/note changes for next time/i);
     // Both portrait and desktop panels render (CSS hides one at runtime)
     expect(textareas.length).toBeGreaterThanOrEqual(1);
     expect((textareas[0] as HTMLTextAreaElement).value).toBe("less salt next time");
   });
 
-  it("shows empty textarea when recipe has no cookingNotes", () => {
+  it("shows empty textarea when recipe has no cookingNotes (logged in)", () => {
     const recipe = makeRecipe({});
-    render(<CookingMode recipe={recipe} onClose={vi.fn()} />);
+    render(<CookingMode recipe={recipe} onClose={vi.fn()} isLoggedIn />);
     const textareas = screen.getAllByPlaceholderText(/note changes for next time/i);
     expect((textareas[0] as HTMLTextAreaElement).value).toBe("");
   });
 
-  it("updating the textarea changes its value", () => {
+  it("updating the textarea changes its value (logged in)", () => {
     const recipe = makeRecipe({});
-    render(<CookingMode recipe={recipe} onClose={vi.fn()} />);
+    render(<CookingMode recipe={recipe} onClose={vi.fn()} isLoggedIn />);
     const textareas = screen.getAllByPlaceholderText(/note changes for next time/i);
     fireEvent.change(textareas[0], { target: { value: "add more garlic" } });
     expect((textareas[0] as HTMLTextAreaElement).value).toBe("add more garlic");

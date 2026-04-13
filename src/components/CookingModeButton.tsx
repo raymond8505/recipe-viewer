@@ -6,9 +6,10 @@ import CookingMode from "./CookingMode";
 
 interface CookingModeButtonProps {
   recipe: RecipeRow;
+  isLoggedIn?: boolean;
 }
 
-export default function CookingModeButton({ recipe }: CookingModeButtonProps) {
+export default function CookingModeButton({ recipe, isLoggedIn = false }: CookingModeButtonProps) {
   const [isOpen, setIsOpen] = useState(false);
 
   return (
@@ -21,7 +22,7 @@ export default function CookingModeButton({ recipe }: CookingModeButtonProps) {
         Cook
       </button>
       {isOpen && (
-        <CookingMode recipe={recipe} onClose={() => setIsOpen(false)} />
+        <CookingMode recipe={recipe} isLoggedIn={isLoggedIn} onClose={() => setIsOpen(false)} />
       )}
     </>
   );

@@ -73,22 +73,24 @@ export default function TimerColumn({
         ))}
       </div>
 
-      {/* Cooking notes — pinned at bottom */}
-      <div className="shrink-0 border-t border-gray-200 px-4 py-3">
-        <div className="flex items-center justify-between mb-1.5">
-          <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">Cooking notes</p>
-          {notesSaveState === "saving" && <span className="text-xs text-gray-400">Saving…</span>}
-          {notesSaveState === "saved" && <span className="text-xs text-green-500">Saved ✓</span>}
-          {notesSaveState === "error" && <span className="text-xs text-red-500">Error saving</span>}
+      {/* Cooking notes — pinned at bottom (only when onNotesChange provided, i.e. logged in) */}
+      {onNotesChange && (
+        <div className="shrink-0 border-t border-gray-200 px-4 py-3">
+          <div className="flex items-center justify-between mb-1.5">
+            <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">Cooking notes</p>
+            {notesSaveState === "saving" && <span className="text-xs text-gray-400">Saving…</span>}
+            {notesSaveState === "saved" && <span className="text-xs text-green-500">Saved ✓</span>}
+            {notesSaveState === "error" && <span className="text-xs text-red-500">Error saving</span>}
+          </div>
+          <textarea
+            value={cookingNotes}
+            onChange={(e) => onNotesChange(e.target.value)}
+            placeholder="Note changes for next time…"
+            rows={4}
+            className="w-full resize-none text-sm text-gray-700 placeholder-gray-400 focus:outline-none leading-relaxed"
+          />
         </div>
-        <textarea
-          value={cookingNotes}
-          onChange={(e) => onNotesChange?.(e.target.value)}
-          placeholder="Note changes for next time…"
-          rows={4}
-          className="w-full resize-none text-sm text-gray-700 placeholder-gray-400 focus:outline-none leading-relaxed"
-        />
-      </div>
+      )}
     </div>
   );
 }

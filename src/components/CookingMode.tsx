@@ -30,6 +30,7 @@ import NutritionPanel from "@/components/NutritionPanel";
 interface CookingModeProps {
   recipe: RecipeRow;
   onClose: () => void;
+  isLoggedIn?: boolean;
 }
 
 const TIMER_PRIORITY = { alarm: 0, running: 1, paused: 2, finished: 3 } as const;
@@ -37,7 +38,7 @@ function sortedTimers(timers: Timer[]): Timer[] {
   return [...timers].sort((a, b) => TIMER_PRIORITY[timerState(a)] - TIMER_PRIORITY[timerState(b)]);
 }
 
-export default function CookingMode({ recipe, onClose }: CookingModeProps) {
+export default function CookingMode({ recipe, onClose, isLoggedIn = false }: CookingModeProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const pendingScrollId = useRef<string | null>(null);
   // Fullscreen state is always derived from the real browser state via the event.
@@ -334,22 +335,24 @@ export default function CookingMode({ recipe, onClose }: CookingModeProps) {
         )}
       </div>
 
-      {/* Mobile cooking notes — sticky below timer ribbon, above scrollable content */}
-      <div className="lg:hidden shrink-0 bg-white border-b border-gray-200 px-3 py-2">
-        <div className="flex items-center justify-between mb-1">
-          <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">Cooking notes</p>
-          {notesSaveState === "saving" && <span className="text-xs text-gray-400">Saving…</span>}
-          {notesSaveState === "saved" && <span className="text-xs text-green-500">Saved ✓</span>}
-          {notesSaveState === "error" && <span className="text-xs text-red-500">Error saving</span>}
+      {/* Mobile cooking notes — sticky below timer ribbon, above scrollable content (logged-in only) */}
+      {isLoggedIn && (
+        <div className="lg:hidden shrink-0 bg-white border-b border-gray-200 px-3 py-2">
+          <div className="flex items-center justify-between mb-1">
+            <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">Cooking notes</p>
+            {notesSaveState === "saving" && <span className="text-xs text-gray-400">Saving…</span>}
+            {notesSaveState === "saved" && <span className="text-xs text-green-500">Saved ✓</span>}
+            {notesSaveState === "error" && <span className="text-xs text-red-500">Error saving</span>}
+          </div>
+          <textarea
+            value={cookingNotes}
+            onChange={(e) => setCookingNotes(e.target.value)}
+            placeholder="Note changes for next time…"
+            rows={3}
+            className="w-full resize-none text-sm text-gray-700 placeholder-gray-400 focus:outline-none leading-relaxed"
+          />
         </div>
-        <textarea
-          value={cookingNotes}
-          onChange={(e) => setCookingNotes(e.target.value)}
-          placeholder="Note changes for next time…"
-          rows={3}
-          className="w-full resize-none text-sm text-gray-700 placeholder-gray-400 focus:outline-none leading-relaxed"
-        />
-      </div>
+      )}
 
       {/* Main content row */}
       <div className="flex-1 flex overflow-hidden min-h-0">
@@ -590,9 +593,11 @@ export default function CookingMode({ recipe, onClose }: CookingModeProps) {
             onDismissTimer={dismissTimer}
             onResetAll={resetAll}
             timerRecipeNames={timerRecipeNames}
-            cookingNotes={cookingNotes}
-            onNotesChange={setCookingNotes}
-            notesSaveState={notesSaveState}
+            {...(isLoggedIn && {
+              cookingNotes,
+              onNotesChange: setCookingNotes,
+              notesSaveState,
+            })}
           />
         </div>
 

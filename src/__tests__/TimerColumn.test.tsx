@@ -91,4 +91,10 @@ describe("TimerColumn", () => {
     render(<TimerColumn timers={[]} {...defaultProps} notesSaveState="saved" />);
     expect(screen.getByText(/saved ✓/i)).toBeTruthy();
   });
+
+  it("does not render cooking notes section when onNotesChange is not provided", () => {
+    const { onNotesChange: _omit, ...propsWithoutNotes } = defaultProps;
+    render(<TimerColumn timers={[]} {...propsWithoutNotes} />);
+    expect(screen.queryByPlaceholderText(/note changes for next time/i)).toBeNull();
+  });
 });
