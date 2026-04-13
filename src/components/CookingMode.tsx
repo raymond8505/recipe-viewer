@@ -51,6 +51,9 @@ export default function CookingMode({ recipe, onClose }: CookingModeProps) {
   const { timers, addTimer, editTimer, togglePause, resetTimer, dismissTimer, removeTimer, removeTimers, resetAll } = useTimers(recipe.url);
 
   const [schema, setSchema] = useState(recipe.metadata.schema);
+  const [cookingNotes, setCookingNotes] = useState(() => recipe.metadata.schema.cookingNotes ?? "");
+  const [notesSaveState, setNotesSaveState] = useState<"idle" | "saving" | "saved" | "error">("idle");
+  const notesFirstRender = useRef(true);
   const { scale, servings, originalServings, setScale, setServings } = useScaling(schema.recipeYield);
 
   // Meal state — primary recipe is always at index 0 and cannot be removed
@@ -79,6 +82,27 @@ export default function CookingMode({ recipe, onClose }: CookingModeProps) {
   }, [mealRecipes, mealTimerIds, timers, schema.name]);
 
   useWakeLock();
+
+  useEffect(() => {
+    if (notesFirstRender.current) { notesFirstRender.current = false; return; }
+    const t = setTimeout(async () => {
+      setNotesSaveState("saving");
+      try {
+        const res = await fetch(`/api/recipes/${recipe.id}/notes`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ cookingNotes }),
+        });
+        if (!res.ok) throw new Error();
+        setNotesSaveState("saved");
+        setTimeout(() => setNotesSaveState("idle"), 2000);
+      } catch {
+        setNotesSaveState("error");
+      }
+    }, 1500);
+    return () => clearTimeout(t);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cookingNotes]);
 
   useEffect(() => {
     registerCookingModeRecipe(recipe.metadata.schema, setSchema);
@@ -308,6 +332,23 @@ export default function CookingMode({ recipe, onClose }: CookingModeProps) {
         ) : (
           <p className="text-xs text-gray-400 text-center pb-2">No timers yet</p>
         )}
+      </div>
+
+      {/* Mobile cooking notes — sticky below timer ribbon, above scrollable content */}
+      <div className="lg:hidden shrink-0 bg-white border-b border-gray-200 px-3 py-2">
+        <div className="flex items-center justify-between mb-1">
+          <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">Cooking notes</p>
+          {notesSaveState === "saving" && <span className="text-xs text-gray-400">Saving…</span>}
+          {notesSaveState === "saved" && <span className="text-xs text-green-500">Saved ✓</span>}
+          {notesSaveState === "error" && <span className="text-xs text-red-500">Error saving</span>}
+        </div>
+        <textarea
+          value={cookingNotes}
+          onChange={(e) => setCookingNotes(e.target.value)}
+          placeholder="Note changes for next time…"
+          rows={3}
+          className="w-full resize-none text-sm text-gray-700 placeholder-gray-400 focus:outline-none leading-relaxed"
+        />
       </div>
 
       {/* Main content row */}
@@ -549,6 +590,9 @@ export default function CookingMode({ recipe, onClose }: CookingModeProps) {
             onDismissTimer={dismissTimer}
             onResetAll={resetAll}
             timerRecipeNames={timerRecipeNames}
+            cookingNotes={cookingNotes}
+            onNotesChange={setCookingNotes}
+            notesSaveState={notesSaveState}
           />
         </div>
 

@@ -182,3 +182,29 @@ describe("CookingMode — shopping list", () => {
     });
   });
 });
+
+describe("CookingMode — cooking notes", () => {
+  it("renders cooking notes textareas (portrait + desktop)", () => {
+    const recipe = makeRecipe({ cookingNotes: "less salt next time" });
+    render(<CookingMode recipe={recipe} onClose={vi.fn()} />);
+    const textareas = screen.getAllByPlaceholderText(/note changes for next time/i);
+    // Both portrait and desktop panels render (CSS hides one at runtime)
+    expect(textareas.length).toBeGreaterThanOrEqual(1);
+    expect((textareas[0] as HTMLTextAreaElement).value).toBe("less salt next time");
+  });
+
+  it("shows empty textarea when recipe has no cookingNotes", () => {
+    const recipe = makeRecipe({});
+    render(<CookingMode recipe={recipe} onClose={vi.fn()} />);
+    const textareas = screen.getAllByPlaceholderText(/note changes for next time/i);
+    expect((textareas[0] as HTMLTextAreaElement).value).toBe("");
+  });
+
+  it("updating the textarea changes its value", () => {
+    const recipe = makeRecipe({});
+    render(<CookingMode recipe={recipe} onClose={vi.fn()} />);
+    const textareas = screen.getAllByPlaceholderText(/note changes for next time/i);
+    fireEvent.change(textareas[0], { target: { value: "add more garlic" } });
+    expect((textareas[0] as HTMLTextAreaElement).value).toBe("add more garlic");
+  });
+});

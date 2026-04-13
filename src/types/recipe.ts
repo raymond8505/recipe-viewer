@@ -56,6 +56,7 @@ export interface SchemaRecipe {
   };
   datePublished?: string;
   notes?: string;
+  cookingNotes?: string;
 }
 
 export interface RecipesResult {

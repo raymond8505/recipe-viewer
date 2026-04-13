@@ -21,6 +21,9 @@ const defaultProps = {
   onRemoveTimer: vi.fn(),
   onDismissTimer: vi.fn(),
   onResetAll: vi.fn(),
+  cookingNotes: "",
+  onNotesChange: vi.fn(),
+  notesSaveState: "idle" as const,
 };
 
 describe("TimerColumn", () => {
@@ -61,5 +64,31 @@ describe("TimerColumn", () => {
     render(<TimerColumn timers={[makeTimer()]} {...defaultProps} onResetAll={onResetAll} />);
     fireEvent.click(screen.getByRole("button", { name: /reset all/i }));
     expect(onResetAll).toHaveBeenCalled();
+  });
+
+  it("renders the cooking notes textarea", () => {
+    render(<TimerColumn timers={[]} {...defaultProps} cookingNotes="use more garlic" />);
+    const textarea = screen.getByPlaceholderText(/note changes for next time/i);
+    expect(textarea).toBeTruthy();
+    expect((textarea as HTMLTextAreaElement).value).toBe("use more garlic");
+  });
+
+  it("calls onNotesChange when textarea value changes", () => {
+    const onNotesChange = vi.fn();
+    render(<TimerColumn timers={[]} {...defaultProps} onNotesChange={onNotesChange} />);
+    fireEvent.change(screen.getByPlaceholderText(/note changes for next time/i), {
+      target: { value: "add salt earlier" },
+    });
+    expect(onNotesChange).toHaveBeenCalledWith("add salt earlier");
+  });
+
+  it("shows saving indicator when notesSaveState is saving", () => {
+    render(<TimerColumn timers={[]} {...defaultProps} notesSaveState="saving" />);
+    expect(screen.getByText(/saving…/i)).toBeTruthy();
+  });
+
+  it("shows saved indicator when notesSaveState is saved", () => {
+    render(<TimerColumn timers={[]} {...defaultProps} notesSaveState="saved" />);
+    expect(screen.getByText(/saved ✓/i)).toBeTruthy();
   });
 });
