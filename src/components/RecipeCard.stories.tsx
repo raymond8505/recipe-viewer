@@ -6,6 +6,7 @@ const baseRecipe: RecipeRow = {
   id: "1",
   url: "https://example.com/pasta-carbonara",
   source: "example.com",
+  status: "published",
   metadata: {
     schema: {
       name: "Pasta Carbonara",

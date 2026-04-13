@@ -106,21 +106,6 @@ describe("getRecipes", () => {
     expect(builder.ilike).not.toHaveBeenCalled();
   });
 
-  it("applies source filter when filterByOwnSource is true", async () => {
-    mockFeatures.filterByOwnSource = true;
-    const { builder } = makeSupabaseMock();
-    await getRecipes();
-
-    expect(builder.in).toHaveBeenCalledWith("source", ["raymonds.recipes"]);
-  });
-
-  it("does not apply source filter when filterByOwnSource is false", async () => {
-    const { builder } = makeSupabaseMock();
-    await getRecipes();
-
-    expect(builder.in).not.toHaveBeenCalled();
-  });
-
   it("applies status filter when filterByStatus is true", async () => {
     mockFeatures.filterByStatus = true;
     const { builder } = makeSupabaseMock();
@@ -266,13 +251,6 @@ describe("getStatusCounts", () => {
     expect(builder.neq).not.toHaveBeenCalled();
   });
 
-  it("applies filterByOwnSource when feature flag is true", async () => {
-    mockFeatures.filterByOwnSource = true;
-    const { builder } = makeSupabaseMock({ data: [] });
-    await getStatusCounts();
-
-    expect(builder.in).toHaveBeenCalledWith("source", ["raymonds.recipes"]);
-  });
 });
 
 describe("getRecipeById", () => {

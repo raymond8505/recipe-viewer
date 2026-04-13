@@ -12,17 +12,12 @@ export async function getStatusCounts(opts?: {
   isLoggedIn?: boolean;
 }): Promise<Record<string, number>> {
   const supabase = getSupabaseClient();
-  const features = getFeatures(opts?.isLoggedIn ?? false);
 
   let queryBuilder = supabase
     .from("recipes")
     .select("status")
     .not("metadata->schema->>name", "ilike", "%(NEEDS RE-SCRAPE)%")
     .not("metadata->schema->>name", "ilike", "%null%");
-
-  if (features.filterByOwnSource) {
-    queryBuilder = queryBuilder.in("source", ["raymonds.recipes"]);
-  }
 
   if (opts?.source) {
     queryBuilder = queryBuilder.eq("source", opts.source);
@@ -54,10 +49,6 @@ export async function getSources(opts?: { isLoggedIn?: boolean }): Promise<strin
     .select("source")
     .not("metadata->schema->>name", "ilike", "%(NEEDS RE-SCRAPE)%")
     .not("metadata->schema->>name", "ilike", "%null%");
-
-  if (features.filterByOwnSource) {
-    queryBuilder = queryBuilder.in("source", ["raymonds.recipes"]);
-  }
 
   if (features.filterByStatus) {
     queryBuilder = queryBuilder.eq("status", "published");
@@ -104,10 +95,6 @@ export async function getRecipes(opts?: {
     .not("metadata->schema->>name", "ilike", "%null%")
     .range(from, to)
     .order(column, { ascending });
-
-  if (features.filterByOwnSource) {
-    queryBuilder = queryBuilder.in("source", ["raymonds.recipes"]);
-  }
 
   if (features.filterByStatus) {
     queryBuilder = queryBuilder.eq("status", "published");
