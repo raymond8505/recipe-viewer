@@ -24,15 +24,24 @@ jobs:
           SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
           SUPABASE_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY }}
           AUTH_PASSWORD: ${{ secrets.AUTH_PASSWORD }}
+          GH_DEPLOY_KEY: ${{ secrets.GH_DEPLOY_KEY }}
         with:
           host: ${{ secrets.VPS_HOST }}
           username: ${{ secrets.VPS_USER }}
           key: ${{ secrets.VPS_SSH_KEY }}
-          envs: SUPABASE_URL,SUPABASE_KEY,AUTH_PASSWORD
+          envs: SUPABASE_URL,SUPABASE_KEY,AUTH_PASSWORD,GH_DEPLOY_KEY
           script: |
             set -e
-            cd ${{ secrets.VPS_DEPLOY_PATH }}
 
+            # Set up deploy key for private repo access
+            mkdir -p ~/.ssh && chmod 700 ~/.ssh
+            printf '%s\n' "${GH_DEPLOY_KEY}" > ~/.ssh/github_recipe_viewer
+            chmod 600 ~/.ssh/github_recipe_viewer
+            ssh-keyscan -t ed25519 github.com >> ~/.ssh/known_hosts 2>/dev/null
+            export GIT_SSH_COMMAND="ssh -i ~/.ssh/github_recipe_viewer"
+
+            cd ${{ secrets.VPS_DEPLOY_PATH }}
+            git remote set-url origin git@github.com:raymond8505/recipe-viewer.git
             git pull origin main
 
             # Write env file for docker compose build args and runtime
