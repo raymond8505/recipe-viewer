@@ -40,9 +40,17 @@ jobs:
             ssh-keyscan -t ed25519 github.com >> ~/.ssh/known_hosts 2>/dev/null
             export GIT_SSH_COMMAND="ssh -i ~/.ssh/github_recipe_viewer"
 
-            cd ${{ secrets.VPS_DEPLOY_PATH }}
-            git remote set-url origin git@github.com:raymond8505/recipe-viewer.git
-            git pull origin main
+            DEPLOY_PATH="${{ secrets.VPS_DEPLOY_PATH }}"
+
+            if [ -d "${DEPLOY_PATH}/.git" ]; then
+              cd "${DEPLOY_PATH}"
+              git remote set-url origin git@github.com:raymond8505/recipe-viewer.git
+              git pull origin main
+            else
+              mkdir -p "${DEPLOY_PATH}"
+              git clone git@github.com:raymond8505/recipe-viewer.git "${DEPLOY_PATH}"
+              cd "${DEPLOY_PATH}"
+            fi
 
             # Write env file for docker compose build args and runtime
             {
