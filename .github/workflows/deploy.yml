@@ -24,12 +24,15 @@ jobs:
           SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
           SUPABASE_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY }}
           AUTH_PASSWORD: ${{ secrets.AUTH_PASSWORD }}
+          RESCRAPE_WEBHOOK_URL: ${{ secrets.RESCRAPE_WEBHOOK_URL }}
+          EDIT_WEBHOOK_URL: ${{ secrets.EDIT_WEBHOOK_URL }}
+          MCP_API_TOKEN: ${{ secrets.MCP_API_TOKEN }}
           GH_DEPLOY_KEY: ${{ secrets.GH_DEPLOY_KEY }}
         with:
           host: ${{ secrets.VPS_HOST }}
           username: ${{ secrets.VPS_USER }}
           key: ${{ secrets.VPS_SSH_KEY }}
-          envs: SUPABASE_URL,SUPABASE_KEY,AUTH_PASSWORD,GH_DEPLOY_KEY
+          envs: SUPABASE_URL,SUPABASE_KEY,AUTH_PASSWORD,RESCRAPE_WEBHOOK_URL,EDIT_WEBHOOK_URL,MCP_API_TOKEN,GH_DEPLOY_KEY
           script: |
             set -e
 
@@ -66,6 +69,9 @@ jobs:
               echo "NEXT_PUBLIC_SUPABASE_URL=${SUPABASE_URL}"
               echo "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY=${SUPABASE_KEY}"
               echo "AUTH_PASSWORD=${AUTH_PASSWORD}"
+              echo "RESCRAPE_WEBHOOK_URL=${RESCRAPE_WEBHOOK_URL}"
+              echo "EDIT_WEBHOOK_URL=${EDIT_WEBHOOK_URL}"
+              echo "MCP_API_TOKEN=${MCP_API_TOKEN}"
             } > .env
 
             docker compose up -d --build --remove-orphans
