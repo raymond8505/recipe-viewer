@@ -23,25 +23,39 @@ jobs:
         env:
           SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
           SUPABASE_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY }}
+          AUTH_PASSWORD: ${{ secrets.AUTH_PASSWORD }}
         with:
           host: ${{ secrets.VPS_HOST }}
           username: ${{ secrets.VPS_USER }}
           key: ${{ secrets.VPS_SSH_KEY }}
-          envs: SUPABASE_URL,SUPABASE_KEY
+          envs: SUPABASE_URL,SUPABASE_KEY,AUTH_PASSWORD
           script: |
             set -e
             cd ${{ secrets.VPS_DEPLOY_PATH }}
 
             git pull origin main
 
-            # Write env file for docker compose build args (only if secrets are configured)
-            if [ -n "${SUPABASE_URL}" ] && [ -n "${SUPABASE_KEY}" ]; then
-              printf 'NEXT_PUBLIC_SUPABASE_URL=%s\nNEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY=%s\n' \
-                "${SUPABASE_URL}" \
-                "${SUPABASE_KEY}" > .env
-            fi
+            # Write env file for docker compose build args and runtime
+            {
+              echo "NEXT_PUBLIC_SUPABASE_URL=${SUPABASE_URL}"
+              echo "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY=${SUPABASE_KEY}"
+              echo "AUTH_PASSWORD=${AUTH_PASSWORD}"
+            } > .env
 
             docker compose up -d --build --remove-orphans
+
+            # Health check — wait up to 60s for the container to respond
+            echo "Waiting for container..."
+            for i in $(seq 1 12); do
+              docker exec recipe-viewer curl --silent --fail http://localhost:3001/ > /dev/null && \
+                echo "Health check passed!" && break || true
+              if [ "$i" = "12" ]; then
+                echo "Health check failed after 60s — recent logs:"
+                docker logs --tail 50 recipe-viewer
+                exit 1
+              fi
+              sleep 5
+            done
 
             # Clean up dangling images after build
             docker image prune -f
