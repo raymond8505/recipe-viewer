@@ -37,7 +37,7 @@ jobs:
             mkdir -p ~/.ssh && chmod 700 ~/.ssh
             printf '%s\n' "${GH_DEPLOY_KEY}" > ~/.ssh/github_recipe_viewer
             chmod 600 ~/.ssh/github_recipe_viewer
-            ssh-keyscan -t ed25519 github.com >> ~/.ssh/known_hosts 2>/dev/null
+            ssh-keyscan -t ed25519 github.com >> ~/.ssh/known_hosts 2>/dev/null || true
             export GIT_SSH_COMMAND="ssh -i ~/.ssh/github_recipe_viewer"
 
             DEPLOY_PATH="${{ secrets.VPS_DEPLOY_PATH }}"
@@ -54,7 +54,7 @@ jobs:
               git init
               git remote add origin git@github.com:raymond8505/recipe-viewer.git
               git fetch origin
-              git checkout -B main origin/main
+              git checkout -f -B main origin/main
             else
               # Fresh clone
               git clone git@github.com:raymond8505/recipe-viewer.git "${DEPLOY_PATH}"
