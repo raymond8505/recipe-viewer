@@ -23,3 +23,85 @@
   height: 100vh; /* fallback for browsers without svh support */
   height: 100svh;
 }
+
+/* ── Heads Up Mode ────────────────────────────────────────────────── */
+
+.headsup-container {
+  height: 100vh;
+  height: 100svh;
+}
+
+/* VS text: scale in with overshoot */
+@keyframes headsup-vs-entrance {
+  0% { transform: scale(0) rotate(-10deg); opacity: 0; }
+  70% { transform: scale(1.2) rotate(5deg); opacity: 1; }
+  100% { transform: scale(1) rotate(0deg); opacity: 1; }
+}
+.animate-vs-entrance {
+  animation: headsup-vs-entrance 0.6s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+}
+
+/* Card slide in from left */
+@keyframes headsup-slide-left {
+  0% { transform: translateX(-40px); opacity: 0; }
+  100% { transform: translateX(0); opacity: 1; }
+}
+.animate-slide-left {
+  animation: headsup-slide-left 0.4s ease-out forwards;
+}
+
+/* Card slide in from right */
+@keyframes headsup-slide-right {
+  0% { transform: translateX(40px); opacity: 0; }
+  100% { transform: translateX(0); opacity: 1; }
+}
+.animate-slide-right {
+  animation: headsup-slide-right 0.4s ease-out forwards;
+}
+
+/* Selection glow pulse */
+@keyframes headsup-glow {
+  0%, 100% { box-shadow: 0 0 15px rgba(249, 115, 22, 0.4); }
+  50% { box-shadow: 0 0 30px rgba(249, 115, 22, 0.8); }
+}
+.animate-selection-glow {
+  animation: headsup-glow 1s ease-in-out infinite;
+}
+
+/* Confirm flash */
+@keyframes headsup-confirm-flash {
+  0% { opacity: 0; }
+  50% { opacity: 1; }
+  100% { opacity: 0; }
+}
+.animate-confirm-flash {
+  animation: headsup-confirm-flash 0.3s ease-out;
+}
+
+/* Winner bounce */
+@keyframes headsup-winner-bounce {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.05); }
+}
+.animate-winner-bounce {
+  animation: headsup-winner-bounce 2s ease-in-out infinite;
+}
+
+/* Fade in */
+@keyframes headsup-fade-in {
+  0% { opacity: 0; }
+  100% { opacity: 1; }
+}
+.animate-fade-in {
+  animation: headsup-fade-in 0.4s ease-out forwards;
+}
+
+/* Portrait guard: phone rotation */
+@keyframes headsup-rotate-phone {
+  0%, 10% { transform: rotate(0deg); }
+  30%, 70% { transform: rotate(90deg); }
+  90%, 100% { transform: rotate(0deg); }
+}
+.animate-rotate-phone {
+  animation: headsup-rotate-phone 2.5s ease-in-out infinite;
+}

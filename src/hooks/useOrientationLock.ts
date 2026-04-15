@@ -13,8 +13,9 @@ export function useOrientationLock(): { isPortrait: boolean } {
     mql.addEventListener("change", handler);
 
     // Best-effort: lock to landscape if API available (only works in fullscreen on most browsers)
-    if ("orientation" in screen && "lock" in screen.orientation) {
-      screen.orientation.lock("landscape-primary").catch(() => {
+    const orient = screen.orientation as ScreenOrientation & { lock?: (o: string) => Promise<void> };
+    if (orient?.lock) {
+      orient.lock("landscape-primary").catch(() => {
         // Not supported or not in fullscreen — ignore
       });
     }
