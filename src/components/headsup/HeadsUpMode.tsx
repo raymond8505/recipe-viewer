@@ -1,8 +1,12 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
+import { useState } from "react";
 import { useHeadsUp } from "@/hooks/useHeadsUp";
 import { useOrientationLock } from "@/hooks/useOrientationLock";
+import { getFirstImage, formatDuration, toArray } from "@/lib/format";
+import type { RecipeRow } from "@/types/recipe";
 import HeadsUpPrompt from "./HeadsUpPrompt";
 import HeadsUpArena from "./HeadsUpArena";
 import HeadsUpVsSplash from "./HeadsUpVsSplash";
@@ -10,7 +14,7 @@ import HeadsUpWinner from "./HeadsUpWinner";
 import HeadsUpPortraitGuard from "./HeadsUpPortraitGuard";
 
 export default function HeadsUpMode() {
-  const { state, startSearch, select, deselect, splashDone, reset } = useHeadsUp();
+  const { state, startSearch, select, splashDone, reset } = useHeadsUp();
   const { isPortrait } = useOrientationLock();
 
   const { phase } = state;
@@ -45,23 +49,33 @@ export default function HeadsUpMode() {
         />
       )}
 
-      {(phase === "presenting" || phase === "selected" || phase === "confirming" || phase === "deciding") && state.currentRound && (
-        <HeadsUpArena
-          round={state.currentRound}
-          roundNumber={state.roundNumber}
+      {phase === "few_results" && (
+        <FewResultsGrid
           pool={state.pool}
-          selectedId={state.selectedId}
-          isConfirming={phase === "confirming"}
-          isDeciding={phase === "deciding"}
           prompt={state.prompt}
           onSelect={select}
         />
       )}
 
-      {phase === "splash" && state.currentRound && (
+      {(phase === "presenting" || phase === "confirming") &&
+        state.matchups[state.currentMatchupIndex] && (
+          <HeadsUpArena
+            matchup={state.matchups[state.currentMatchupIndex]}
+            roundNumber={state.roundNumber}
+            matchupIndex={state.currentMatchupIndex}
+            matchupCount={state.matchups.length}
+            pool={state.pool}
+            selectedId={state.selectedId}
+            isConfirming={phase === "confirming"}
+            prompt={state.prompt}
+            onSelect={select}
+          />
+        )}
+
+      {phase === "splash" && state.matchups[0] && (
         <HeadsUpVsSplash
-          roundNumber={state.roundNumber + 1}
-          round={state.currentRound}
+          roundNumber={state.roundNumber}
+          firstMatchup={state.matchups[0]}
           pool={state.pool}
           onComplete={splashDone}
         />
@@ -107,5 +121,116 @@ export default function HeadsUpMode() {
       {/* Portrait orientation guard */}
       {isPortrait && <HeadsUpPortraitGuard />}
     </div>
+  );
+}
+
+// ── Few-results grid (< 4 results) ──────────────────────────────────
+
+function FewResultsGrid({
+  pool,
+  prompt,
+  onSelect,
+}: {
+  pool: RecipeRow[];
+  prompt: string;
+  onSelect: (id: string) => void;
+}) {
+  return (
+    <div className="flex flex-col items-center justify-center h-full px-6 py-8">
+      <p className="text-xs font-bold uppercase tracking-[0.2em] text-orange-500 mb-2">
+        Pick your dinner
+      </p>
+      <p className="text-sm text-gray-400 italic mb-8">
+        &ldquo;{prompt}&rdquo;
+      </p>
+
+      <div className="flex items-stretch justify-center gap-4 w-full max-w-3xl">
+        {pool.map((recipe) => (
+          <FewResultsCard
+            key={recipe.id}
+            recipe={recipe}
+            onSelect={() => onSelect(recipe.id)}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function FewResultsCard({
+  recipe,
+  onSelect,
+}: {
+  recipe: RecipeRow;
+  onSelect: () => void;
+}) {
+  const { metadata: { schema } } = recipe;
+  const image = getFirstImage(schema.image);
+  const totalTime = formatDuration(schema.totalTime ?? schema.cookTime);
+  const categories = toArray(schema.recipeCategory);
+  const [imgError, setImgError] = useState(false);
+
+  return (
+    <button
+      type="button"
+      onClick={onSelect}
+      className="
+        flex-1 max-w-[240px] flex flex-col rounded-2xl overflow-hidden
+        bg-gray-800 border-2 border-gray-700
+        hover:border-orange-500 active:border-orange-400
+        transition-colors text-left
+        focus:outline-none focus:ring-2 focus:ring-orange-400
+        focus:ring-offset-2 focus:ring-offset-gray-900
+      "
+    >
+      <div className="relative w-full aspect-square">
+        {image && !imgError ? (
+          <Image
+            src={image}
+            alt={schema.name}
+            fill
+            sizes="240px"
+            className="object-cover"
+            onError={() => setImgError(true)}
+          />
+        ) : (
+          <div className="w-full h-full bg-gray-700 flex items-center justify-center">
+            <svg className="w-12 h-12 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={1.5}
+                d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"
+              />
+            </svg>
+          </div>
+        )}
+        <div className="absolute inset-x-0 bottom-0 h-1/3 bg-gradient-to-t from-gray-900/90 to-transparent" />
+        <h3 className="absolute bottom-3 left-3 right-3 text-base font-bold text-white leading-snug line-clamp-2 drop-shadow-lg">
+          {schema.name}
+        </h3>
+      </div>
+
+      <div className="p-3 space-y-1.5">
+        {schema.description && (
+          <p className="text-xs text-gray-300 line-clamp-2">{schema.description}</p>
+        )}
+        <div className="flex items-center gap-2 text-[11px] text-gray-500">
+          {totalTime && (
+            <span className="flex items-center gap-1">
+              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              {totalTime}
+            </span>
+          )}
+          {categories[0] && (
+            <span className="px-1.5 py-0.5 bg-orange-900/50 text-orange-400 rounded-full font-medium">
+              {categories[0]}
+            </span>
+          )}
+        </div>
+      </div>
+    </button>
   );
 }

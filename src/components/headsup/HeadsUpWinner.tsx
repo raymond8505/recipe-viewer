@@ -25,8 +25,11 @@ export default function HeadsUpWinner({ recipe, onPlayAgain }: HeadsUpWinnerProp
         Winner!
       </h1>
 
-      {/* Winner card */}
-      <div className="w-full max-w-sm rounded-2xl overflow-hidden bg-gray-800 border-2 border-orange-500 animate-selection-glow">
+      {/* Winner card — tapping opens the recipe page */}
+      <Link
+        href={`/recipes/${recipe.id}`}
+        className="block w-full max-w-sm rounded-2xl overflow-hidden bg-gray-800 border-2 border-orange-500 animate-selection-glow"
+      >
         {/* Image */}
         {image && !imgError ? (
           <div className="relative w-full aspect-video">
@@ -74,23 +77,10 @@ export default function HeadsUpWinner({ recipe, onPlayAgain }: HeadsUpWinnerProp
             )}
           </div>
         </div>
-      </div>
+      </Link>
 
-      {/* Action buttons */}
+      {/* Play again button */}
       <div className="flex items-center gap-4 mt-6">
-        <Link
-          href={`/recipes/${recipe.id}`}
-          className="
-            px-6 py-3 min-h-[48px]
-            font-bold uppercase tracking-wider text-sm
-            bg-orange-500 text-white rounded-2xl
-            hover:bg-orange-600 active:bg-orange-700
-            transition-colors
-            flex items-center justify-center
-          "
-        >
-          View Recipe
-        </Link>
         <button
           type="button"
           onClick={onPlayAgain}

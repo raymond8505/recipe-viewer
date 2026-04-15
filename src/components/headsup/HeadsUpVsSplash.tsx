@@ -2,18 +2,18 @@
 
 import { useEffect } from "react";
 import type { RecipeRow } from "@/types/recipe";
-import type { RoundPresentation } from "@/hooks/useHeadsUp";
+import type { Matchup } from "@/types/headsup";
 
 interface HeadsUpVsSplashProps {
   roundNumber: number;
-  round: RoundPresentation;
+  firstMatchup: Matchup;
   pool: RecipeRow[];
   onComplete: () => void;
 }
 
 export default function HeadsUpVsSplash({
   roundNumber,
-  round,
+  firstMatchup,
   pool,
   onComplete,
 }: HeadsUpVsSplashProps) {
@@ -22,9 +22,12 @@ export default function HeadsUpVsSplash({
     return () => clearTimeout(timer);
   }, [onComplete]);
 
-  const [leftOption, rightOption] = round.options;
-  const leftName = pool.find((r) => r.id === leftOption?.id)?.metadata.schema.name ?? leftOption?.label;
-  const rightName = pool.find((r) => r.id === rightOption?.id)?.metadata.schema.name ?? rightOption?.label;
+  const leftName =
+    pool.find((r) => r.id === firstMatchup.id1)?.metadata.schema.name ??
+    "???";
+  const rightName =
+    pool.find((r) => r.id === firstMatchup.id2)?.metadata.schema.name ??
+    "???";
 
   return (
     <div className="fixed inset-0 z-50 bg-gray-900 flex flex-col items-center justify-center">

@@ -2,71 +2,96 @@
 
 import { useReducer, useEffect, useRef, useCallback } from "react";
 import type { RecipeRow } from "@/types/recipe";
+import type { Matchup } from "@/types/headsup";
+import {
+  buildFirstRound,
+  buildNextRound,
+  totalRoundsFor,
+} from "@/lib/bracket";
 
-// ── Types ──────────────────────────────────────────────────────────────
+export type { Matchup };
 
-export interface RoundPresentation {
-  label: string;
-  options: { id: string; label: string }[];
-}
-
-export interface CompletedRound {
-  label: string;
-  options: { id: string; label: string }[];
-  winnerId: string;
-  loserIds: string[];
-}
+// ── Phases ────────────────────────────────────────────────────────────
 
 export type HeadsUpPhase =
   | "prompt"
   | "searching"
+  | "few_results"
   | "presenting"
-  | "selected"
   | "confirming"
-  | "deciding"
   | "splash"
   | "winner"
   | "error";
 
+// ── State ─────────────────────────────────────────────────────────────
+
 export interface HeadsUpState {
   phase: HeadsUpPhase;
   prompt: string;
-  allIds: string[];
   pool: RecipeRow[];
-  rounds: CompletedRound[];
-  currentRound: RoundPresentation | null;
+
+  // Bracket
+  matchups: Matchup[];
+  currentMatchupIndex: number;
   roundNumber: number;
+  totalRounds: number;
+  /** Winners from the current round so far, in bracket position order.
+   *  Bye winners are pre-filled; matchup slots start null and fill as
+   *  the user picks. */
+  bracketWinners: (string | null)[];
+  /** Index into bracketWinners for the next matchup slot to fill. */
+  nextWinnerSlot: number;
+
+  // UI
   selectedId: string | null;
   winner: RecipeRow | null;
   error: string | null;
 }
 
+// ── Actions ───────────────────────────────────────────────────────────
+
 type HeadsUpAction =
   | { type: "START_SEARCH"; prompt: string }
-  | { type: "SEARCH_COMPLETE"; recipes: RecipeRow[]; firstRound: RoundPresentation }
+  | { type: "SEARCH_COMPLETE"; recipes: RecipeRow[] }
   | { type: "SEARCH_ERROR"; message: string }
   | { type: "SELECT"; recipeId: string }
-  | { type: "DESELECT" }
-  | { type: "NEXT_ROUND"; round: RoundPresentation }
-  | { type: "DECLARE_WINNER"; winnerId: string }
-  | { type: "DECIDE_ERROR"; message: string }
+  | { type: "CONFIRM_DONE" }
   | { type: "SPLASH_DONE" }
   | { type: "RESET" };
 
-// ── Reducer ────────────────────────────────────────────────────────────
+// ── Initial state ─────────────────────────────────────────────────────
 
 const INITIAL_STATE: HeadsUpState = {
   phase: "prompt",
   prompt: "",
-  allIds: [],
   pool: [],
-  rounds: [],
-  currentRound: null,
+  matchups: [],
+  currentMatchupIndex: 0,
   roundNumber: 0,
+  totalRounds: 0,
+  bracketWinners: [],
+  nextWinnerSlot: 0,
   selectedId: null,
   winner: null,
   error: null,
 };
+
+// ── Helpers ───────────────────────────────────────────────────────────
+
+/** Find the index of the next null slot in bracketWinners at or after `from`. */
+function findNextNullSlot(winners: (string | null)[], from: number): number {
+  for (let i = from; i < winners.length; i++) {
+    if (winners[i] === null) return i;
+  }
+  return -1;
+}
+
+/** Collect all non-null winners from a bracketWinners array. */
+function collectWinners(bw: (string | null)[]): string[] {
+  return bw.filter((id): id is string => id !== null);
+}
+
+// ── Reducer ───────────────────────────────────────────────────────────
 
 function reducer(state: HeadsUpState, action: HeadsUpAction): HeadsUpState {
   switch (action.type) {
@@ -77,81 +102,148 @@ function reducer(state: HeadsUpState, action: HeadsUpAction): HeadsUpState {
         prompt: action.prompt,
       };
 
-    case "SEARCH_COMPLETE":
+    case "SEARCH_COMPLETE": {
+      const recipes = action.recipes;
+
+      // < 4 results: skip bracket, show all for direct pick
+      if (recipes.length < 4) {
+        return {
+          ...INITIAL_STATE,
+          phase: "few_results",
+          prompt: state.prompt,
+          pool: recipes,
+        };
+      }
+
+      // Build bracket round 1
+      const ids = recipes.map((r) => r.id);
+      const { matchups, bracketWinners } = buildFirstRound(ids);
+      const rounds = totalRoundsFor(recipes.length);
+
+      // If round 1 has no real matchups (all byes, only possible with
+      // exactly a power-of-2 count where N <= bracketSize/2 — shouldn't
+      // happen with N >= 4 but guard anyway), jump straight to round 2.
+      if (matchups.length === 0) {
+        const round2Winners = collectWinners(bracketWinners);
+        const round2Matchups = buildNextRound(round2Winners);
+        return {
+          ...INITIAL_STATE,
+          phase: "presenting",
+          prompt: state.prompt,
+          pool: recipes,
+          matchups: round2Matchups,
+          currentMatchupIndex: 0,
+          roundNumber: 2,
+          totalRounds: rounds,
+          bracketWinners: new Array(round2Matchups.length).fill(null),
+          nextWinnerSlot: 0,
+        };
+      }
+
       return {
-        ...state,
+        ...INITIAL_STATE,
         phase: "presenting",
-        pool: action.recipes,
-        allIds: action.recipes.map((r) => r.id),
-        currentRound: action.firstRound,
+        prompt: state.prompt,
+        pool: recipes,
+        matchups,
+        currentMatchupIndex: 0,
         roundNumber: 1,
+        totalRounds: rounds,
+        bracketWinners,
+        nextWinnerSlot: findNextNullSlot(bracketWinners, 0),
       };
+    }
 
     case "SEARCH_ERROR":
       return { ...state, phase: "error", error: action.message };
 
     case "SELECT": {
-      // Second click on same card → confirm
-      if (state.phase === "selected" && state.selectedId === action.recipeId) {
-        // Build the completed round
-        const currentRound = state.currentRound!;
-        const winnerId = action.recipeId;
-        const loserIds = currentRound.options
-          .map((o) => o.id)
-          .filter((id) => id !== winnerId);
-
-        const completedRound: CompletedRound = {
-          label: currentRound.label,
-          options: currentRound.options,
-          winnerId,
-          loserIds,
-        };
-
-        return {
-          ...state,
-          phase: "confirming",
-          rounds: [...state.rounds, completedRound],
-        };
+      if (state.phase === "few_results") {
+        // Direct pick from grid — immediate winner
+        const winnerRecipe =
+          state.pool.find((r) => r.id === action.recipeId) ?? null;
+        return { ...state, phase: "winner", winner: winnerRecipe };
       }
-      // First click or switch selection
+
+      // Bracket pick
+      const winnerId = action.recipeId;
+
+      // Fill the winner into bracketWinners at the current null slot
+      const newBracketWinners = [...state.bracketWinners];
+      newBracketWinners[state.nextWinnerSlot] = winnerId;
+
       return {
         ...state,
-        phase: "selected",
-        selectedId: action.recipeId,
+        phase: "confirming",
+        selectedId: winnerId,
+        bracketWinners: newBracketWinners,
       };
     }
 
-    case "DESELECT":
-      return { ...state, phase: "presenting", selectedId: null };
+    case "CONFIRM_DONE": {
+      const bw = state.bracketWinners;
+      const matchupIdx = state.currentMatchupIndex;
+      const isLastMatchup = matchupIdx >= state.matchups.length - 1;
 
-    case "NEXT_ROUND":
+      if (!isLastMatchup) {
+        // More matchups this round — advance
+        const nextSlot = findNextNullSlot(bw, state.nextWinnerSlot + 1);
+        return {
+          ...state,
+          phase: "presenting",
+          currentMatchupIndex: matchupIdx + 1,
+          selectedId: null,
+          nextWinnerSlot: nextSlot,
+        };
+      }
+
+      // Round complete — collect winners
+      const roundWinners = collectWinners(bw);
+
+      if (roundWinners.length === 1) {
+        // Tournament over
+        const winnerRecipe =
+          state.pool.find((r) => r.id === roundWinners[0]) ?? null;
+        return {
+          ...state,
+          phase: "winner",
+          winner: winnerRecipe,
+          selectedId: null,
+        };
+      }
+
+      // Build next round
+      const nextMatchups = buildNextRound(roundWinners);
+
+      if (nextMatchups.length === 1) {
+        // Final round — go straight to presenting (no splash for the final)
+        return {
+          ...state,
+          phase: "splash",
+          matchups: nextMatchups,
+          currentMatchupIndex: 0,
+          roundNumber: state.roundNumber + 1,
+          bracketWinners: new Array(nextMatchups.length).fill(null),
+          nextWinnerSlot: 0,
+          selectedId: null,
+        };
+      }
+
+      // Multi-matchup next round — splash transition
       return {
         ...state,
         phase: "splash",
-        currentRound: action.round,
-        selectedId: null,
-      };
-
-    case "DECLARE_WINNER": {
-      const winnerRecipe = state.pool.find((r) => r.id === action.winnerId) ?? null;
-      return {
-        ...state,
-        phase: "winner",
-        winner: winnerRecipe,
+        matchups: nextMatchups,
+        currentMatchupIndex: 0,
+        roundNumber: state.roundNumber + 1,
+        bracketWinners: new Array(nextMatchups.length).fill(null),
+        nextWinnerSlot: 0,
         selectedId: null,
       };
     }
 
-    case "DECIDE_ERROR":
-      return { ...state, phase: "error", error: action.message };
-
     case "SPLASH_DONE":
-      return {
-        ...state,
-        phase: "presenting",
-        roundNumber: state.roundNumber + 1,
-        selectedId: null,
-      };
+      return { ...state, phase: "presenting", selectedId: null };
 
     case "RESET":
       return INITIAL_STATE;
@@ -161,7 +253,7 @@ function reducer(state: HeadsUpState, action: HeadsUpAction): HeadsUpState {
   }
 }
 
-// ── Hook ───────────────────────────────────────────────────────────────
+// ── Hook ──────────────────────────────────────────────────────────────
 
 export function useHeadsUp() {
   const [state, dispatch] = useReducer(reducer, INITIAL_STATE);
@@ -174,7 +266,7 @@ export function useHeadsUp() {
     };
   }, []);
 
-  // Side effect: searching phase → fetch search + first decide call
+  // Side effect: searching phase → fetch search results
   useEffect(() => {
     if (state.phase !== "searching") return;
 
@@ -183,7 +275,6 @@ export function useHeadsUp() {
 
     (async () => {
       try {
-        // 1. Search for recipes
         const searchRes = await fetch("/api/headsup/search", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -193,109 +284,46 @@ export function useHeadsUp() {
 
         if (!searchRes.ok) {
           const body = await searchRes.json().catch(() => ({}));
-          dispatch({ type: "SEARCH_ERROR", message: body.error ?? `Search failed (${searchRes.status})` });
+          dispatch({
+            type: "SEARCH_ERROR",
+            message: body.error ?? `Search failed (${searchRes.status})`,
+          });
           return;
         }
 
         const searchData = await searchRes.json();
         if (!searchData.recipes || searchData.recipes.length < 2) {
-          dispatch({ type: "SEARCH_ERROR", message: "Not enough recipes found — try a broader search." });
+          dispatch({
+            type: "SEARCH_ERROR",
+            message: "Not enough recipes found — try a broader search.",
+          });
           return;
         }
 
-        const recipes: RecipeRow[] = searchData.recipes;
-        const allIds = recipes.map((r) => r.id);
-
-        // 2. Immediately request first round from decide webhook
-        const decideRes = await fetch("/api/headsup/decide", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ prompt: state.prompt, allIds, rounds: [] }),
-          signal: controller.signal,
+        dispatch({
+          type: "SEARCH_COMPLETE",
+          recipes: searchData.recipes as RecipeRow[],
         });
-
-        if (!decideRes.ok) {
-          const body = await decideRes.json().catch(() => ({}));
-          dispatch({ type: "SEARCH_ERROR", message: body.error ?? `Could not start game (${decideRes.status})` });
-          return;
-        }
-
-        const decideData = await decideRes.json();
-        if (decideData.done) {
-          // Webhook declared a winner immediately (unusual but handle it)
-          dispatch({ type: "SEARCH_COMPLETE", recipes, firstRound: { label: "", options: [] } });
-          dispatch({ type: "DECLARE_WINNER", winnerId: decideData.winnerId });
-          return;
-        }
-
-        if (!decideData.round?.label || !decideData.round?.options) {
-          dispatch({ type: "SEARCH_ERROR", message: "Invalid response from decision service." });
-          return;
-        }
-
-        dispatch({ type: "SEARCH_COMPLETE", recipes, firstRound: decideData.round });
       } catch (err) {
         if ((err as Error).name === "AbortError") return;
-        dispatch({ type: "SEARCH_ERROR", message: "Connection failed — check your network." });
+        dispatch({
+          type: "SEARCH_ERROR",
+          message: "Connection failed — check your network.",
+        });
       }
     })();
 
     return () => controller.abort();
   }, [state.phase, state.prompt]);
 
-  // Side effect: confirming phase → fetch decide webhook for next round
+  // Side effect: confirming phase → brief delay then advance
   useEffect(() => {
     if (state.phase !== "confirming") return;
+    const timer = setTimeout(() => dispatch({ type: "CONFIRM_DONE" }), 500);
+    return () => clearTimeout(timer);
+  }, [state.phase, state.bracketWinners]);
 
-    const controller = new AbortController();
-    abortRef.current = controller;
-
-    (async () => {
-      try {
-        const res = await fetch("/api/headsup/decide", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            prompt: state.prompt,
-            allIds: state.allIds,
-            rounds: state.rounds,
-          }),
-          signal: controller.signal,
-        });
-
-        if (!res.ok) {
-          const body = await res.json().catch(() => ({}));
-          dispatch({ type: "DECIDE_ERROR", message: body.error ?? `Decision failed (${res.status})` });
-          return;
-        }
-
-        const data = await res.json();
-
-        if (data.done) {
-          if (!data.winnerId) {
-            dispatch({ type: "DECIDE_ERROR", message: "No winner returned." });
-            return;
-          }
-          dispatch({ type: "DECLARE_WINNER", winnerId: data.winnerId });
-          return;
-        }
-
-        if (!data.round?.label || !data.round?.options) {
-          dispatch({ type: "DECIDE_ERROR", message: "Invalid round data from decision service." });
-          return;
-        }
-
-        dispatch({ type: "NEXT_ROUND", round: data.round });
-      } catch (err) {
-        if ((err as Error).name === "AbortError") return;
-        dispatch({ type: "DECIDE_ERROR", message: "Connection failed — check your network." });
-      }
-    })();
-
-    return () => controller.abort();
-  }, [state.phase, state.prompt, state.allIds, state.rounds]);
-
-  // ── Public API ─────────────────────────────────────────────────────
+  // ── Public API ────────────────────────────────────────────────────
 
   const startSearch = useCallback((prompt: string) => {
     dispatch({ type: "START_SEARCH", prompt });
@@ -303,10 +331,6 @@ export function useHeadsUp() {
 
   const select = useCallback((recipeId: string) => {
     dispatch({ type: "SELECT", recipeId });
-  }, []);
-
-  const deselect = useCallback(() => {
-    dispatch({ type: "DESELECT" });
   }, []);
 
   const splashDone = useCallback(() => {
@@ -318,5 +342,5 @@ export function useHeadsUp() {
     dispatch({ type: "RESET" });
   }, []);
 
-  return { state, startSearch, select, deselect, splashDone, reset };
+  return { state, startSearch, select, splashDone, reset };
 }
