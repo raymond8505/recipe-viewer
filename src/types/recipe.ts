@@ -7,9 +7,13 @@ export interface RecipeRow {
   id: string;
   url: string;
   source: string;
-  status: 'published' | 'archived' | 'draft' | null;
+  status: "published" | "archived" | "draft" | null;
   metadata: { schema: SchemaRecipe };
 }
+
+export type FlatRecipeRow = Omit<RecipeRow, "metadata"> & {
+  schema: SchemaRecipe;
+};
 
 export interface HowToStep {
   "@type"?: "HowToStep" | string;
@@ -57,6 +61,12 @@ export interface SchemaRecipe {
   datePublished?: string;
   notes?: string;
   cookingNotes?: string;
+}
+
+export interface RecipeStat {
+  label: string;
+  value: string;
+  icon: "clock" | "flame" | "servings" | "ingredients" | "globe" | "tag";
 }
 
 export interface RecipesResult {

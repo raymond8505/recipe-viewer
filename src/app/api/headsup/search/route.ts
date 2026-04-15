@@ -1,4 +1,6 @@
 import { NextResponse } from "next/server";
+import { getIsLoggedIn } from "@/lib/auth";
+import type { FlatRecipeRow } from "@/types/recipe";
 
 export async function POST(req: Request) {
   const webhookUrl = process.env.HEADSUP_SEARCH_WEBHOOK_URL;
@@ -17,12 +19,17 @@ export async function POST(req: Request) {
     );
   }
 
+  const isLoggedIn = await getIsLoggedIn();
+
   let webhookRes: Response;
   try {
     webhookRes = await fetch(webhookUrl, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ prompt: body.prompt }),
+      body: JSON.stringify({
+        prompt: body.prompt,
+        ...(!isLoggedIn && { status: "published" }),
+      }),
     });
   } catch {
     return NextResponse.json(
@@ -58,7 +65,7 @@ export async function POST(req: Request) {
 
   // Validate each recipe has required shape
   for (const r of data.recipes) {
-    if (!r.id || !r.metadata?.schema?.name) {
+    if (!r.id || !r.schema?.name) {
       return NextResponse.json(
         { error: "Invalid recipe data from search webhook" },
         { status: 502 },
@@ -66,5 +73,12 @@ export async function POST(req: Request) {
     }
   }
 
-  return NextResponse.json({ recipes: data.recipes });
+  const recipes = data.recipes.map(
+    ({ schema, ...rest }: FlatRecipeRow) => ({
+      ...rest,
+      metadata: { schema },
+    }),
+  );
+
+  return NextResponse.json({ recipes });
 }

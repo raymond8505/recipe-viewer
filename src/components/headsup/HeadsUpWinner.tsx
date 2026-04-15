@@ -4,7 +4,8 @@ import Image from "next/image";
 import Link from "next/link";
 import { useState } from "react";
 import type { RecipeRow } from "@/types/recipe";
-import { getFirstImage, formatDuration, toArray } from "@/lib/format";
+import { getFirstImage, extractRecipeStats } from "@/lib/format";
+import { StatIcon } from "./HeadsUpFighterCard";
 
 interface HeadsUpWinnerProps {
   recipe: RecipeRow;
@@ -14,66 +15,79 @@ interface HeadsUpWinnerProps {
 export default function HeadsUpWinner({ recipe, onPlayAgain }: HeadsUpWinnerProps) {
   const { metadata: { schema } } = recipe;
   const image = getFirstImage(schema.image);
-  const totalTime = formatDuration(schema.totalTime ?? schema.cookTime);
-  const categories = toArray(schema.recipeCategory);
+  const stats = extractRecipeStats(schema);
   const [imgError, setImgError] = useState(false);
 
   return (
     <div className="flex flex-col items-center justify-center h-full px-8 py-6 overflow-y-auto">
       {/* Winner title */}
-      <h1 className="text-4xl font-black uppercase tracking-wider text-orange-500 drop-shadow-[0_0_20px_rgba(249,115,22,0.5)] mb-6 animate-winner-bounce">
+      <h1 className="text-4xl font-black uppercase tracking-wider text-amber-300/80 mb-6 animate-winner-bounce">
         Winner!
       </h1>
 
       {/* Winner card — tapping opens the recipe page */}
       <Link
         href={`/recipes/${recipe.id}`}
-        className="block w-full max-w-sm rounded-2xl overflow-hidden bg-gray-800 border-2 border-orange-500 animate-selection-glow"
+        className="block w-full max-w-md"
       >
-        {/* Image */}
-        {image && !imgError ? (
-          <div className="relative w-full aspect-video">
-            <Image
-              src={image}
-              alt={schema.name}
-              fill
-              sizes="400px"
-              className="object-cover"
-              onError={() => setImgError(true)}
-            />
-          </div>
-        ) : (
-          <div className="w-full aspect-video bg-gray-700 flex items-center justify-center">
-            <svg className="w-12 h-12 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={1.5}
-                d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"
-              />
-            </svg>
-          </div>
-        )}
+        <div className="card-frame card-frame-winner animate-selection-glow">
+          <div className="card-inner">
+            {/* Inset image */}
+            <div className="image-frame">
+              <div className="relative w-full aspect-[4/3]">
+                {image && !imgError ? (
+                  <Image
+                    src={image}
+                    alt={schema.name}
+                    fill
+                    sizes="448px"
+                    className="object-cover"
+                    onError={() => setImgError(true)}
+                  />
+                ) : (
+                  <div className="w-full h-full bg-gray-700/50 flex items-center justify-center">
+                    <svg className="w-12 h-12 text-gray-500/50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={1.5}
+                        d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"
+                      />
+                    </svg>
+                  </div>
+                )}
+              </div>
+            </div>
 
-        {/* Details */}
-        <div className="p-4 space-y-2">
-          <h2 className="text-xl font-bold text-white">{schema.name}</h2>
-          {schema.description && (
-            <p className="text-sm text-gray-400 line-clamp-2">{schema.description}</p>
-          )}
-          <div className="flex items-center gap-3 text-xs text-gray-500">
-            {totalTime && (
-              <span className="flex items-center gap-1">
-                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-                {totalTime}
-              </span>
+            {/* Nameplate banner */}
+            <div className="card-nameplate">
+              <h2 className="text-xl font-semibold text-gray-100 leading-tight">
+                {schema.name}
+              </h2>
+            </div>
+
+            {/* Flavor text */}
+            {schema.description && (
+              <p className="text-sm text-gray-500 italic text-center px-3 py-1.5 line-clamp-2 leading-relaxed">
+                {schema.description}
+              </p>
             )}
-            {categories[0] && (
-              <span className="px-2 py-0.5 bg-orange-900/50 text-orange-400 rounded-full font-medium">
-                {categories[0]}
-              </span>
+
+            {/* Stats grid */}
+            {stats.length > 0 && (
+              <div className="stats-grid mt-auto">
+                {stats.map((stat) => (
+                  <div key={stat.label} className="stat-cell">
+                    <StatIcon icon={stat.icon} />
+                    <span className="text-xs font-medium text-gray-200 leading-none truncate max-w-full px-1">
+                      {stat.value}
+                    </span>
+                    <span className="text-[10px] text-gray-600 uppercase tracking-wide leading-none">
+                      {stat.label}
+                    </span>
+                  </div>
+                ))}
+              </div>
             )}
           </div>
         </div>
@@ -87,7 +101,7 @@ export default function HeadsUpWinner({ recipe, onPlayAgain }: HeadsUpWinnerProp
           className="
             px-6 py-3 min-h-[48px]
             font-bold uppercase tracking-wider text-sm
-            bg-gray-800 text-gray-200 rounded-2xl border border-gray-700
+            bg-gray-800 text-gray-200 rounded-2xl border border-amber-900/50
             hover:bg-gray-700 active:bg-gray-600
             transition-colors
           "

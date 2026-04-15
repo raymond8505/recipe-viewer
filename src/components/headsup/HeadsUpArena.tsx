@@ -35,7 +35,7 @@ export default function HeadsUpArena({
       {/* Header: round + matchup progress */}
       <div className="flex items-center justify-center px-6 py-3 shrink-0">
         <div className="text-center">
-          <span className="text-xs font-bold uppercase tracking-[0.2em] text-orange-500">
+          <span className="text-xs font-bold uppercase tracking-[0.2em] text-amber-400">
             Round {roundNumber}
           </span>
           {matchupCount > 1 && (
@@ -63,11 +63,11 @@ export default function HeadsUpArena({
         {/* VS divider */}
         <div className="flex items-center justify-center px-4 shrink-0">
           <div className="flex flex-col items-center gap-1">
-            <div className="w-px h-8 bg-gradient-to-b from-transparent via-orange-500 to-transparent" />
-            <span className="text-3xl font-black text-orange-500 drop-shadow-[0_0_12px_rgba(249,115,22,0.6)] select-none">
+            <div className="w-px h-8 bg-gradient-to-b from-transparent via-amber-500 to-transparent" />
+            <span className="text-3xl font-black text-amber-400 drop-shadow-[0_0_12px_rgba(218,165,32,0.6)] select-none">
               VS
             </span>
-            <div className="w-px h-8 bg-gradient-to-b from-transparent via-orange-500 to-transparent" />
+            <div className="w-px h-8 bg-gradient-to-b from-transparent via-amber-500 to-transparent" />
           </div>
         </div>
 
@@ -90,7 +90,7 @@ export default function HeadsUpArena({
       {isConfirming && (
         <div className="absolute inset-0 flex items-center justify-center bg-gray-900/70 z-10">
           <div className="flex flex-col items-center gap-3">
-            <span className="text-sm font-bold uppercase tracking-wider text-orange-400">
+            <span className="text-sm font-bold uppercase tracking-wider text-amber-400">
               Next matchup&hellip;
             </span>
           </div>

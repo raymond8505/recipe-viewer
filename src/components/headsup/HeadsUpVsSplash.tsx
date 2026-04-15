@@ -24,7 +24,7 @@ export default function HeadsUpVsSplash({
       </p>
 
       {/* VS text */}
-      <span className="text-7xl font-black text-orange-500 drop-shadow-[0_0_30px_rgba(249,115,22,0.6)] animate-vs-entrance select-none">
+      <span className="text-7xl font-black text-amber-400 drop-shadow-[0_0_30px_rgba(218,165,32,0.6)] animate-vs-entrance select-none">
         VS
       </span>
     </div>

@@ -5,8 +5,9 @@ import Link from "next/link";
 import { useState } from "react";
 import { useHeadsUp } from "@/hooks/useHeadsUp";
 import { useOrientationLock } from "@/hooks/useOrientationLock";
-import { getFirstImage, formatDuration, toArray } from "@/lib/format";
+import { getFirstImage, extractRecipeStats } from "@/lib/format";
 import type { RecipeRow } from "@/types/recipe";
+import { StatIcon } from "./HeadsUpFighterCard";
 import HeadsUpPrompt from "./HeadsUpPrompt";
 import HeadsUpArena from "./HeadsUpArena";
 import HeadsUpVsSplash from "./HeadsUpVsSplash";
@@ -134,7 +135,7 @@ function FewResultsGrid({
 }) {
   return (
     <div className="flex flex-col items-center justify-center h-full px-6 py-8">
-      <p className="text-xs font-bold uppercase tracking-[0.2em] text-orange-500 mb-2">
+      <p className="text-xs font-bold uppercase tracking-[0.2em] text-amber-400 mb-2">
         Pick your dinner
       </p>
       <p className="text-sm text-gray-400 italic mb-8">
@@ -163,8 +164,7 @@ function FewResultsCard({
 }) {
   const { metadata: { schema } } = recipe;
   const image = getFirstImage(schema.image);
-  const totalTime = formatDuration(schema.totalTime ?? schema.cookTime);
-  const categories = toArray(schema.recipeCategory);
+  const stats = extractRecipeStats(schema).slice(0, 4);
   const [imgError, setImgError] = useState(false);
 
   return (
@@ -172,59 +172,70 @@ function FewResultsCard({
       type="button"
       onClick={onSelect}
       className="
-        flex-1 max-w-[240px] flex flex-col rounded-2xl overflow-hidden
-        bg-gray-800 border-2 border-gray-700
-        hover:border-orange-500 active:border-orange-400
-        transition-colors text-left
-        focus:outline-none focus:ring-2 focus:ring-orange-400
+        flex-1 max-w-[240px]
+        focus:outline-none focus:ring-2 focus:ring-amber-400
         focus:ring-offset-2 focus:ring-offset-gray-900
+        transition-transform hover:scale-[1.02]
       "
     >
-      <div className="relative w-full aspect-square">
-        {image && !imgError ? (
-          <Image
-            src={image}
-            alt={schema.name}
-            fill
-            sizes="240px"
-            className="object-cover"
-            onError={() => setImgError(true)}
-          />
-        ) : (
-          <div className="w-full h-full bg-gray-700 flex items-center justify-center">
-            <svg className="w-12 h-12 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={1.5}
-                d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"
-              />
-            </svg>
+      <div className="card-frame">
+        <div className="card-inner">
+          {/* Inset image */}
+          <div className="image-frame">
+            <div className="relative w-full aspect-[4/3]">
+              {image && !imgError ? (
+                <Image
+                  src={image}
+                  alt={schema.name}
+                  fill
+                  sizes="240px"
+                  className="object-cover"
+                  onError={() => setImgError(true)}
+                />
+              ) : (
+                <div className="w-full h-full bg-gray-700/50 flex items-center justify-center">
+                  <svg className="w-10 h-10 text-gray-500/50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={1.5}
+                      d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"
+                    />
+                  </svg>
+                </div>
+              )}
+            </div>
           </div>
-        )}
-        <div className="absolute inset-x-0 bottom-0 h-1/3 bg-gradient-to-t from-gray-900/90 to-transparent" />
-        <h3 className="absolute bottom-3 left-3 right-3 text-base font-bold text-white leading-snug line-clamp-2 drop-shadow-lg">
-          {schema.name}
-        </h3>
-      </div>
 
-      <div className="p-3 space-y-1.5">
-        {schema.description && (
-          <p className="text-xs text-gray-300 line-clamp-2">{schema.description}</p>
-        )}
-        <div className="flex items-center gap-2 text-[11px] text-gray-500">
-          {totalTime && (
-            <span className="flex items-center gap-1">
-              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-              {totalTime}
-            </span>
+          {/* Nameplate banner */}
+          <div className="card-nameplate">
+            <h3 className="text-sm font-semibold text-gray-100 leading-tight line-clamp-1">
+              {schema.name}
+            </h3>
+          </div>
+
+          {/* Flavor text */}
+          {schema.description && (
+            <p className="text-[11px] text-gray-500 italic text-center px-1 py-0.5 line-clamp-1 leading-relaxed">
+              {schema.description}
+            </p>
           )}
-          {categories[0] && (
-            <span className="px-1.5 py-0.5 bg-orange-900/50 text-orange-400 rounded-full font-medium">
-              {categories[0]}
-            </span>
+
+          {/* Stats grid — 2 column for narrow cards */}
+          {stats.length > 0 && (
+            <div className="stats-grid stats-grid-2col mt-auto">
+              {stats.map((stat) => (
+                <div key={stat.label} className="stat-cell">
+                  <StatIcon icon={stat.icon} />
+                  <span className="text-[10px] font-medium text-gray-200 leading-none truncate max-w-full px-1">
+                    {stat.value}
+                  </span>
+                  <span className="text-[8px] text-gray-600 uppercase tracking-wide leading-none">
+                    {stat.label}
+                  </span>
+                </div>
+              ))}
+            </div>
           )}
         </div>
       </div>
