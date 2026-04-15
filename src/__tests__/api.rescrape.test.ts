@@ -13,11 +13,9 @@ function makeParams(id = "recipe-1") {
 function makeSupabaseClient({
   recipe = { id: "recipe-1", url: "https://example.com/recipe", metadata: { schema: { name: "Old Recipe" } } },
   fetchError = null,
-  updateError = null,
 }: {
   recipe?: object | null;
   fetchError?: object | null;
-  updateError?: object | null;
 } = {}) {
   return {
     from: vi.fn(() => ({
@@ -26,14 +24,11 @@ function makeSupabaseClient({
           single: vi.fn().mockResolvedValue({ data: recipe, error: fetchError }),
         })),
       })),
-      update: vi.fn(() => ({
-        eq: vi.fn().mockResolvedValue({ error: updateError }),
-      })),
     })),
   };
 }
 
-function makeWebhookResponse(ok: boolean, body: object = rescrapeFixture) {
+function makeWebhookResponse(ok: boolean, body: object = { schema: rescrapeFixture }) {
   return Promise.resolve(
     new Response(JSON.stringify(body), {
       status: ok ? 200 : 500,
@@ -90,16 +85,14 @@ describe("POST /api/recipes/[id]/rescrape", () => {
     expect(res.status).toBe(502);
   });
 
-  it("returns 500 when Supabase update fails", async () => {
+  it("returns 502 when webhook response has no schema key", async () => {
     vi.stubEnv("RESCRAPE_WEBHOOK_URL", "https://webhook.test/scrape");
     const { getSupabaseClient } = await import("@/lib/supabase");
-    vi.mocked(getSupabaseClient).mockReturnValue(
-      makeSupabaseClient({ updateError: { message: "RLS violation" } }) as never
-    );
-    vi.stubGlobal("fetch", vi.fn(() => makeWebhookResponse(true)));
+    vi.mocked(getSupabaseClient).mockReturnValue(makeSupabaseClient() as never);
+    vi.stubGlobal("fetch", vi.fn(() => makeWebhookResponse(true, { name: "Missing wrapper" })));
 
     const res = await POST(new Request("http://localhost/", { method: "POST" }), makeParams());
-    expect(res.status).toBe(500);
+    expect(res.status).toBe(502);
   });
 
   it("returns 200 with updated schema on success", async () => {

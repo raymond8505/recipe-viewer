@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import Image from "next/image";
-import type { RecipeRow, HowToStep, HowToSection } from "@/types/recipe";
+import type { RecipeRow, HowToStep, HowToSection, SchemaRecipe } from "@/types/recipe";
 import {
   formatDuration,
   formatDate,
@@ -51,10 +51,12 @@ export default function RecipeDetail({ recipe, isLoggedIn = false }: RecipeDetai
   const [editInstructions, setEditInstructions] = useState("");
   const [editNotes, setEditNotes] = useState("");
   const [editStatus, setEditStatus] = useState("");
+  const [preRescrapeSchema, setPreRescrapeSchema] = useState<SchemaRecipe | null>(null);
   const [isMounted, setIsMounted] = useState(false);
   useEffect(() => setIsMounted(true), []);
 
   const isEditing = editState !== "idle";
+  const isRescrapeReview = preRescrapeSchema !== null;
 
   const handleRescrape = async () => {
     setRescrapeState("loading");
@@ -63,7 +65,15 @@ export default function RecipeDetail({ recipe, isLoggedIn = false }: RecipeDetai
       if (!res.ok) throw new Error();
       const { schema: updated } = await res.json();
       if (!updated) throw new Error();
+      setPreRescrapeSchema(schema);
       setSchema(updated);
+      setEditUrl(recipe.url ?? "");
+      setEditDesc(updated.description ?? "");
+      setEditIngredients(ingredientsToText(updated.recipeIngredient ?? []));
+      setEditInstructions(instructionsToMarkdown(updated.recipeInstructions ?? []));
+      setEditNotes(updated.notes ?? "");
+      setEditStatus(status);
+      setEditState("editing");
       setRescrapeState("success");
     } catch {
       setRescrapeState("error");
@@ -81,6 +91,11 @@ export default function RecipeDetail({ recipe, isLoggedIn = false }: RecipeDetai
   };
 
   const handleEditCancel = () => {
+    if (preRescrapeSchema) {
+      setSchema(preRescrapeSchema);
+      setPreRescrapeSchema(null);
+      setRescrapeState("idle");
+    }
     setEditState("idle");
   };
 
@@ -104,6 +119,8 @@ export default function RecipeDetail({ recipe, isLoggedIn = false }: RecipeDetai
       if (!result.schema) throw new Error();
       setSchema(result.schema);
       setStatus(result.status);
+      setPreRescrapeSchema(null);
+      setRescrapeState("idle");
       setEditState("idle");
     } catch {
       setEditState("error");
@@ -353,6 +370,11 @@ export default function RecipeDetail({ recipe, isLoggedIn = false }: RecipeDetai
           <div className="flex flex-wrap items-center gap-3">
             {isEditing ? (
               <>
+                {isRescrapeReview && (
+                  <p className="w-full text-sm text-blue-700 bg-blue-50 rounded-lg px-3 py-2 mb-1">
+                    Reviewing re-scraped data. Edit if needed, then confirm or cancel.
+                  </p>
+                )}
                 <div className="w-full mb-1">
                   <label className="block text-xs font-medium text-gray-500 mb-1">
                     Source URL
@@ -382,7 +404,7 @@ export default function RecipeDetail({ recipe, isLoggedIn = false }: RecipeDetai
                   disabled={editState === "saving"}
                   className="px-4 py-2 text-sm font-medium rounded-lg bg-orange-500 text-white hover:bg-orange-600 disabled:opacity-50 transition-colors"
                 >
-                  {editState === "saving" ? "Saving\u2026" : "Save"}
+                  {editState === "saving" ? "Saving\u2026" : isRescrapeReview ? "Confirm" : "Save"}
                 </button>
                 <button
                   onClick={handleEditCancel}

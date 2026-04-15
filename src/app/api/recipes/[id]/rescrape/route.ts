@@ -38,15 +38,10 @@ export async function POST(
     return NextResponse.json({ error: "Webhook failed" }, { status: 502 });
   }
 
-  const updatedSchema = await webhookRes.json();
-
-  const { error: updateError } = await supabase
-    .from("recipes")
-    .update({ metadata: { schema: updatedSchema } })
-    .eq("id", id);
-
-  if (updateError) {
-    return NextResponse.json({ error: "Failed to save" }, { status: 500 });
+  const body = await webhookRes.json();
+  const updatedSchema = body?.schema;
+  if (!updatedSchema || typeof updatedSchema !== "object" || !updatedSchema.name) {
+    return NextResponse.json({ error: "Invalid webhook response" }, { status: 502 });
   }
 
   return NextResponse.json({ schema: updatedSchema });
