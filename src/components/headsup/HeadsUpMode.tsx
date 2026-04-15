@@ -67,16 +67,13 @@ export default function HeadsUpMode() {
             pool={state.pool}
             selectedId={state.selectedId}
             isConfirming={phase === "confirming"}
-            prompt={state.prompt}
             onSelect={select}
           />
         )}
 
-      {phase === "splash" && state.matchups[0] && (
+      {phase === "splash" && (
         <HeadsUpVsSplash
           roundNumber={state.roundNumber}
-          firstMatchup={state.matchups[0]}
-          pool={state.pool}
           onComplete={splashDone}
         />
       )}

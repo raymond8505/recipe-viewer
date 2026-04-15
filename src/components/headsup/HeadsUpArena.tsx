@@ -12,7 +12,6 @@ interface HeadsUpArenaProps {
   pool: RecipeRow[];
   selectedId: string | null;
   isConfirming: boolean;
-  prompt: string;
   onSelect: (recipeId: string) => void;
 }
 
@@ -24,7 +23,6 @@ export default function HeadsUpArena({
   pool,
   selectedId,
   isConfirming,
-  prompt,
   onSelect,
 }: HeadsUpArenaProps) {
   const leftRecipe = pool.find((r) => r.id === matchup.id1);
@@ -53,6 +51,7 @@ export default function HeadsUpArena({
         {/* Left fighter */}
         <div className="flex-1 min-w-0 flex items-center justify-center">
           <HeadsUpFighterCard
+            key={matchup.id1}
             recipe={leftRecipe}
             position="left"
             isSelected={selectedId === matchup.id1}
@@ -75,6 +74,7 @@ export default function HeadsUpArena({
         {/* Right fighter */}
         <div className="flex-1 min-w-0 flex items-center justify-center">
           <HeadsUpFighterCard
+            key={matchup.id2}
             recipe={rightRecipe}
             position="right"
             isSelected={selectedId === matchup.id2}
@@ -84,12 +84,7 @@ export default function HeadsUpArena({
         </div>
       </div>
 
-      {/* Footer: original prompt */}
-      <div className="flex items-center justify-center px-6 py-2 shrink-0">
-        <p className="text-xs text-gray-500 italic">
-          &ldquo;{prompt}&rdquo;
-        </p>
-      </div>
+      {/* TODO: find a better way to display the original prompt */}
 
       {/* Confirming overlay */}
       {isConfirming && (
