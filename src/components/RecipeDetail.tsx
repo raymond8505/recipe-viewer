@@ -52,11 +52,14 @@ export default function RecipeDetail({ recipe, isLoggedIn = false }: RecipeDetai
   const [editNotes, setEditNotes] = useState("");
   const [editStatus, setEditStatus] = useState("");
   const [preRescrapeSchema, setPreRescrapeSchema] = useState<SchemaRecipe | null>(null);
+  const [regenImageState, setRegenImageState] = useState<"idle" | "loading" | "success" | "error">("idle");
+  const [preRegenImageSchema, setPreRegenImageSchema] = useState<SchemaRecipe | null>(null);
   const [isMounted, setIsMounted] = useState(false);
   useEffect(() => setIsMounted(true), []);
 
   const isEditing = editState !== "idle";
   const isRescrapeReview = preRescrapeSchema !== null;
+  const isRegenImageReview = preRegenImageSchema !== null;
 
   const handleRescrape = async () => {
     setRescrapeState("loading");
@@ -80,6 +83,30 @@ export default function RecipeDetail({ recipe, isLoggedIn = false }: RecipeDetai
     }
   };
 
+  const handleRegenImage = async () => {
+    setRegenImageState("loading");
+    try {
+      const res = await fetch(`/api/recipes/${recipe.id}/regenerate-image`, { method: "POST" });
+      if (!res.ok) throw new Error();
+      const result = await res.json();
+      if (!result.image || typeof result.image !== "string") throw new Error();
+      setPreRescrapeSchema(null);
+      setRescrapeState("idle");
+      setPreRegenImageSchema(schema);
+      setSchema({ ...schema, image: result.image });
+      setEditUrl(recipe.url ?? "");
+      setEditDesc(schema.description ?? "");
+      setEditIngredients(ingredientsToText(schema.recipeIngredient ?? []));
+      setEditInstructions(instructionsToMarkdown(schema.recipeInstructions ?? []));
+      setEditNotes(schema.notes ?? "");
+      setEditStatus(status);
+      setEditState("editing");
+      setRegenImageState("success");
+    } catch {
+      setRegenImageState("error");
+    }
+  };
+
   const handleEditStart = () => {
     setEditUrl(recipe.url ?? "");
     setEditDesc(schema.description ?? "");
@@ -95,6 +122,10 @@ export default function RecipeDetail({ recipe, isLoggedIn = false }: RecipeDetai
       setSchema(preRescrapeSchema);
       setPreRescrapeSchema(null);
       setRescrapeState("idle");
+    } else if (preRegenImageSchema) {
+      setSchema(preRegenImageSchema);
+      setPreRegenImageSchema(null);
+      setRegenImageState("idle");
     }
     setEditState("idle");
   };
@@ -121,6 +152,8 @@ export default function RecipeDetail({ recipe, isLoggedIn = false }: RecipeDetai
       setStatus(result.status);
       setPreRescrapeSchema(null);
       setRescrapeState("idle");
+      setPreRegenImageSchema(null);
+      setRegenImageState("idle");
       setEditState("idle");
     } catch {
       setEditState("error");
@@ -375,6 +408,11 @@ export default function RecipeDetail({ recipe, isLoggedIn = false }: RecipeDetai
                     Reviewing re-scraped data. Edit if needed, then confirm or cancel.
                   </p>
                 )}
+                {isRegenImageReview && (
+                  <p className="w-full text-sm text-purple-700 bg-purple-50 rounded-lg px-3 py-2 mb-1">
+                    New image generated. Edit if needed, then confirm or cancel.
+                  </p>
+                )}
                 <div className="w-full mb-1">
                   <label className="block text-xs font-medium text-gray-500 mb-1">
                     Source URL
@@ -404,7 +442,7 @@ export default function RecipeDetail({ recipe, isLoggedIn = false }: RecipeDetai
                   disabled={editState === "saving"}
                   className="px-4 py-2 text-sm font-medium rounded-lg bg-orange-500 text-white hover:bg-orange-600 disabled:opacity-50 transition-colors"
                 >
-                  {editState === "saving" ? "Saving\u2026" : isRescrapeReview ? "Confirm" : "Save"}
+                  {editState === "saving" ? "Saving\u2026" : (isRescrapeReview || isRegenImageReview) ? "Confirm" : "Save"}
                 </button>
                 <button
                   onClick={handleEditCancel}
@@ -439,6 +477,16 @@ export default function RecipeDetail({ recipe, isLoggedIn = false }: RecipeDetai
                 )}
                 {rescrapeState === "error" && (
                   <span className="text-sm text-red-600">Re-scrape failed. Try again.</span>
+                )}
+                <button
+                  onClick={handleRegenImage}
+                  disabled={regenImageState === "loading"}
+                  className="px-4 py-2 text-sm font-medium rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 disabled:opacity-50 transition-colors"
+                >
+                  {regenImageState === "loading" ? "Generating\u2026" : "Regen Image"}
+                </button>
+                {regenImageState === "error" && (
+                  <span className="text-sm text-red-600">Image generation failed. Try again.</span>
                 )}
               </>
             )}
