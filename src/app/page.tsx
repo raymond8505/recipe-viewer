@@ -47,7 +47,7 @@ export default async function Home({ searchParams }: HomeProps) {
           <h1 className="text-2xl font-bold text-gray-900 mb-1">Recipes</h1>
           <p className="text-gray-500 text-sm">{count} recipes in the collection</p>
         </div>
-        <HeadsUpButton />
+        {isLoggedIn && <HeadsUpButton />}
       </div>
 
       <Suspense>
