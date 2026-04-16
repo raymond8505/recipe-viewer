@@ -1,5 +1,6 @@
 import { getSupabaseClient } from "./supabase";
 import { getFeatures } from "./features";
+import { normalizeRecipeInstructions } from "./format";
 import type { RecipeRow, RecipesResult } from "@/types/recipe";
 
 const PAGE_SIZE = 24;
@@ -137,5 +138,10 @@ export async function getRecipeById(id: string): Promise<RecipeRow | null> {
 
   if (error || !data) return null;
 
-  return data as RecipeRow;
+  const row = data as RecipeRow;
+  const raw = row.metadata?.schema?.recipeInstructions;
+  if (raw !== undefined && !Array.isArray(raw)) {
+    row.metadata.schema.recipeInstructions = normalizeRecipeInstructions(raw as unknown);
+  }
+  return row;
 }

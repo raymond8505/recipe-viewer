@@ -216,6 +216,15 @@ export function markdownToInstructions(
   return result;
 }
 
+export function normalizeRecipeInstructions(
+  raw: unknown,
+): Array<HowToStep | HowToSection> | undefined {
+  if (raw == null) return undefined;
+  if (typeof raw === "string") return markdownToInstructions(raw);
+  if (Array.isArray(raw)) return raw as Array<HowToStep | HowToSection>;
+  return [raw as HowToStep | HowToSection];
+}
+
 /**
  * Convert a recipe ingredient list to an editable plain-text string.
  *

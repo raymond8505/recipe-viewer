@@ -8,6 +8,7 @@ import {
   getIngredientText,
   instructionsToMarkdown,
   markdownToInstructions,
+  normalizeRecipeInstructions,
   ingredientsToText,
   textToIngredients,
   toSchemaOrgJsonLd,
@@ -321,5 +322,38 @@ describe("toSchemaOrgJsonLd", () => {
       recipeIngredient: [{ name: "2 cups flour", group: "Dough" }, "1 tsp salt"],
     }) as Record<string, unknown>;
     expect(result.recipeIngredient).toEqual(["2 cups flour", "1 tsp salt"]);
+  });
+});
+
+describe("normalizeRecipeInstructions", () => {
+  it("returns undefined for null", () => {
+    expect(normalizeRecipeInstructions(null)).toBeUndefined();
+  });
+
+  it("returns undefined for undefined", () => {
+    expect(normalizeRecipeInstructions(undefined)).toBeUndefined();
+  });
+
+  it("converts a plain string to HowToStep array", () => {
+    const result = normalizeRecipeInstructions("Mix the ingredients.");
+    expect(result).toEqual([{ "@type": "HowToStep", text: "Mix the ingredients." }]);
+  });
+
+  it("converts a multi-step string to HowToStep array", () => {
+    const result = normalizeRecipeInstructions("- Step one\n- Step two");
+    expect(result).toEqual([
+      { "@type": "HowToStep", text: "Step one" },
+      { "@type": "HowToStep", text: "Step two" },
+    ]);
+  });
+
+  it("returns an array as-is", () => {
+    const steps = [{ "@type": "HowToStep", text: "Bake" }];
+    expect(normalizeRecipeInstructions(steps)).toBe(steps);
+  });
+
+  it("wraps a single non-array object in an array", () => {
+    const step = { "@type": "HowToStep", text: "Stir" };
+    expect(normalizeRecipeInstructions(step)).toEqual([step]);
   });
 });
