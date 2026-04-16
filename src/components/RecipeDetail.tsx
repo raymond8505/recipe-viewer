@@ -230,6 +230,106 @@ export default function RecipeDetail({ recipe, isLoggedIn = false }: RecipeDetai
         </div>
       </header>
 
+      {/* Recipe Controls — logged-in only */}
+      {isLoggedIn && (
+        <section aria-label="Recipe management" className="mt-12 pt-6 border-t border-gray-100">
+          <h2 className="text-xs font-semibold uppercase tracking-widest text-gray-400 mb-4">
+            Manage
+          </h2>
+          <div className="flex flex-wrap items-center gap-3">
+            {isEditing ? (
+              <>
+                {isRescrapeReview && (
+                  <p className="w-full text-sm text-blue-700 bg-blue-50 rounded-lg px-3 py-2 mb-1">
+                    Reviewing re-scraped data. Edit if needed, then confirm or cancel.
+                  </p>
+                )}
+                {isRegenImageReview && (
+                  <p className="w-full text-sm text-purple-700 bg-purple-50 rounded-lg px-3 py-2 mb-1">
+                    New image generated. Edit if needed, then confirm or cancel.
+                  </p>
+                )}
+                <div className="w-full mb-1">
+                  <label className="block text-xs font-medium text-gray-500 mb-1">
+                    Source URL
+                  </label>
+                  <input
+                    type="url"
+                    value={editUrl}
+                    onChange={(e) => setEditUrl(e.target.value)}
+                    disabled={editState === "saving"}
+                    placeholder="https://example.com/recipe"
+                    className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-orange-300 disabled:opacity-60"
+                  />
+                </div>
+                <select
+                  value={editStatus}
+                  onChange={(e) => setEditStatus(e.target.value)}
+                  disabled={editState === "saving"}
+                  className="px-3 py-2 text-sm font-medium rounded-lg border border-gray-200 text-gray-700 bg-white focus:outline-none focus:ring-2 focus:ring-orange-300 disabled:opacity-60"
+                  aria-label="Recipe status"
+                >
+                  <option value="published">Published</option>
+                  <option value="draft">Draft</option>
+                  <option value="archived">Archived</option>
+                </select>
+                <button
+                  onClick={handleEditSave}
+                  disabled={editState === "saving"}
+                  className="px-4 py-2 text-sm font-medium rounded-lg bg-orange-500 text-white hover:bg-orange-600 disabled:opacity-50 transition-colors"
+                >
+                  {editState === "saving" ? "Saving\u2026" : (isRescrapeReview || isRegenImageReview) ? "Confirm" : "Save"}
+                </button>
+                <button
+                  onClick={handleEditCancel}
+                  disabled={editState === "saving"}
+                  className="px-4 py-2 text-sm font-medium rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 disabled:opacity-50 transition-colors"
+                >
+                  Cancel
+                </button>
+                {editState === "error" && (
+                  <span className="text-sm text-red-600">Save failed. Try again.</span>
+                )}
+              </>
+            ) : (
+              <>
+                <button
+                  onClick={handleEditStart}
+                  className="px-4 py-2 text-sm font-medium rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 transition-colors"
+                >
+                  Edit
+                </button>
+                {isMounted && recipe.url !== window.location.href && (
+                  <button
+                    onClick={handleRescrape}
+                    disabled={rescrapeState === "loading"}
+                    className="px-4 py-2 text-sm font-medium rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 disabled:opacity-50 transition-colors"
+                  >
+                    {rescrapeState === "loading" ? "Re-scraping\u2026" : "Re-scrape"}
+                  </button>
+                )}
+                {rescrapeState === "success" && (
+                  <span className="text-sm text-green-600">Recipe updated.</span>
+                )}
+                {rescrapeState === "error" && (
+                  <span className="text-sm text-red-600">Re-scrape failed. Try again.</span>
+                )}
+                <button
+                  onClick={handleRegenImage}
+                  disabled={regenImageState === "loading"}
+                  className="px-4 py-2 text-sm font-medium rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 disabled:opacity-50 transition-colors"
+                >
+                  {regenImageState === "loading" ? "Generating\u2026" : "Regen Image"}
+                </button>
+                {regenImageState === "error" && (
+                  <span className="text-sm text-red-600">Image generation failed. Try again.</span>
+                )}
+              </>
+            )}
+          </div>
+        </section>
+      )}
+
       {/* Image */}
       {image && (
         <div className="w-full rounded-2xl overflow-hidden mb-8 bg-gray-100">
@@ -393,106 +493,6 @@ export default function RecipeDetail({ recipe, isLoggedIn = false }: RecipeDetai
 
       {/* Nutrition — always read-only */}
       {schema.nutrition && <NutritionPanel nutrition={schema.nutrition} totalServings={originalServings} />}
-
-      {/* Recipe Controls — logged-in only */}
-      {isLoggedIn && (
-        <section aria-label="Recipe management" className="mt-12 pt-6 border-t border-gray-100">
-          <h2 className="text-xs font-semibold uppercase tracking-widest text-gray-400 mb-4">
-            Manage
-          </h2>
-          <div className="flex flex-wrap items-center gap-3">
-            {isEditing ? (
-              <>
-                {isRescrapeReview && (
-                  <p className="w-full text-sm text-blue-700 bg-blue-50 rounded-lg px-3 py-2 mb-1">
-                    Reviewing re-scraped data. Edit if needed, then confirm or cancel.
-                  </p>
-                )}
-                {isRegenImageReview && (
-                  <p className="w-full text-sm text-purple-700 bg-purple-50 rounded-lg px-3 py-2 mb-1">
-                    New image generated. Edit if needed, then confirm or cancel.
-                  </p>
-                )}
-                <div className="w-full mb-1">
-                  <label className="block text-xs font-medium text-gray-500 mb-1">
-                    Source URL
-                  </label>
-                  <input
-                    type="url"
-                    value={editUrl}
-                    onChange={(e) => setEditUrl(e.target.value)}
-                    disabled={editState === "saving"}
-                    placeholder="https://example.com/recipe"
-                    className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-orange-300 disabled:opacity-60"
-                  />
-                </div>
-                <select
-                  value={editStatus}
-                  onChange={(e) => setEditStatus(e.target.value)}
-                  disabled={editState === "saving"}
-                  className="px-3 py-2 text-sm font-medium rounded-lg border border-gray-200 text-gray-700 bg-white focus:outline-none focus:ring-2 focus:ring-orange-300 disabled:opacity-60"
-                  aria-label="Recipe status"
-                >
-                  <option value="published">Published</option>
-                  <option value="draft">Draft</option>
-                  <option value="archived">Archived</option>
-                </select>
-                <button
-                  onClick={handleEditSave}
-                  disabled={editState === "saving"}
-                  className="px-4 py-2 text-sm font-medium rounded-lg bg-orange-500 text-white hover:bg-orange-600 disabled:opacity-50 transition-colors"
-                >
-                  {editState === "saving" ? "Saving\u2026" : (isRescrapeReview || isRegenImageReview) ? "Confirm" : "Save"}
-                </button>
-                <button
-                  onClick={handleEditCancel}
-                  disabled={editState === "saving"}
-                  className="px-4 py-2 text-sm font-medium rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 disabled:opacity-50 transition-colors"
-                >
-                  Cancel
-                </button>
-                {editState === "error" && (
-                  <span className="text-sm text-red-600">Save failed. Try again.</span>
-                )}
-              </>
-            ) : (
-              <>
-                <button
-                  onClick={handleEditStart}
-                  className="px-4 py-2 text-sm font-medium rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 transition-colors"
-                >
-                  Edit
-                </button>
-                {isMounted && recipe.url !== window.location.href && (
-                  <button
-                    onClick={handleRescrape}
-                    disabled={rescrapeState === "loading"}
-                    className="px-4 py-2 text-sm font-medium rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 disabled:opacity-50 transition-colors"
-                  >
-                    {rescrapeState === "loading" ? "Re-scraping\u2026" : "Re-scrape"}
-                  </button>
-                )}
-                {rescrapeState === "success" && (
-                  <span className="text-sm text-green-600">Recipe updated.</span>
-                )}
-                {rescrapeState === "error" && (
-                  <span className="text-sm text-red-600">Re-scrape failed. Try again.</span>
-                )}
-                <button
-                  onClick={handleRegenImage}
-                  disabled={regenImageState === "loading"}
-                  className="px-4 py-2 text-sm font-medium rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 disabled:opacity-50 transition-colors"
-                >
-                  {regenImageState === "loading" ? "Generating\u2026" : "Regen Image"}
-                </button>
-                {regenImageState === "error" && (
-                  <span className="text-sm text-red-600">Image generation failed. Try again.</span>
-                )}
-              </>
-            )}
-          </div>
-        </section>
-      )}
 
       {/* JSON-LD — Schema.org-compliant only; escape </script> sequences to prevent tag injection */}
       <script
