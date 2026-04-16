@@ -275,4 +275,18 @@ describe("getRecipeById", () => {
     const result = await getRecipeById("bad-id");
     expect(result).toBeNull();
   });
+
+  it("normalizes string recipeInstructions to an array", async () => {
+    const recipe = {
+      id: "99",
+      url: "u",
+      source: "s",
+      metadata: { schema: { name: "Soup", recipeInstructions: "Boil water." } },
+    };
+    makeSupabaseMock({ singleData: recipe });
+
+    const result = await getRecipeById("99");
+    expect(Array.isArray(result!.metadata.schema.recipeInstructions)).toBe(true);
+    expect((result!.metadata.schema.recipeInstructions as { text: string }[])[0].text).toBe("Boil water.");
+  });
 });

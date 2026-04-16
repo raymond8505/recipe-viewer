@@ -269,7 +269,7 @@ describe("RecipeDetail — controls section", () => {
     resolve!(new Response(JSON.stringify({ schema: rescrapeFixture }), { status: 200 }));
   });
 
-  it("updates the recipe name after a successful re-scrape", async () => {
+  it("enters edit mode with rescraped data after a successful re-scrape", async () => {
     vi.stubGlobal(
       "fetch",
       vi.fn().mockResolvedValue(
@@ -285,9 +285,62 @@ describe("RecipeDetail — controls section", () => {
     });
 
     await waitFor(() => {
-      expect(screen.getByText(rescrapeFixture.name)).toBeTruthy();
+      expect(screen.getByRole("button", { name: /^confirm$/i })).toBeTruthy();
     });
-    expect(screen.getByText("Recipe updated.")).toBeTruthy();
+    expect(screen.getByRole("button", { name: /^cancel$/i })).toBeTruthy();
+    expect(screen.getByText(/reviewing re-scraped data/i)).toBeTruthy();
+    expect(screen.getByText(rescrapeFixture.name)).toBeTruthy();
+  });
+
+  it("reverts to original schema when rescrape review is cancelled", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        new Response(JSON.stringify({ schema: rescrapeFixture }), { status: 200 })
+      )
+    );
+
+    render(<RecipeDetail recipe={makeRecipe({ name: "Original Name" })} isLoggedIn={true} />);
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /re-scrape/i }));
+    });
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: /^confirm$/i })).toBeTruthy();
+    });
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /^cancel$/i }));
+    });
+
+    expect(screen.getByText("Original Name")).toBeTruthy();
+    expect(screen.queryByText(rescrapeFixture.name)).toBeNull();
+    expect(screen.queryByText(/reviewing re-scraped data/i)).toBeNull();
+  });
+
+  it("sends rescraped data to update endpoint when confirmed", async () => {
+    const mockFetch = vi.fn()
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ schema: rescrapeFixture }), { status: 200 })
+      )
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ schema: rescrapeFixture, status: "draft" }), { status: 200 })
+      );
+    vi.stubGlobal("fetch", mockFetch);
+
+    render(<RecipeDetail recipe={makeRecipe({ name: "Old" })} isLoggedIn={true} />);
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /re-scrape/i }));
+    });
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: /^confirm$/i })).toBeTruthy();
+    });
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /^confirm$/i }));
+    });
+
+    await waitFor(() => expect(mockFetch).toHaveBeenCalledTimes(2));
+    expect(mockFetch.mock.calls[1][0]).toContain("/update");
   });
 
   it("shows error message when re-scrape fails", async () => {

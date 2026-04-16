@@ -5,7 +5,7 @@ export async function POST(
   _req: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const webhookUrl = process.env.RESCRAPE_WEBHOOK_URL;
+  const webhookUrl = process.env.REGEN_IMAGE_WEBHOOK_URL;
   if (!webhookUrl) {
     return NextResponse.json({ error: "Webhook not configured" }, { status: 503 });
   }
@@ -13,13 +13,13 @@ export async function POST(
   const { id } = await params;
   const supabase = getSupabaseClient();
 
-  const { data: recipe, error: fetchError } = await supabase
+  const { data: recipe, error } = await supabase
     .from("recipes")
-    .select("id, url, metadata")
+    .select("id, metadata")
     .eq("id", id)
     .single();
 
-  if (fetchError || !recipe) {
+  if (error || !recipe) {
     return NextResponse.json({ error: "Recipe not found" }, { status: 404 });
   }
 
@@ -28,7 +28,7 @@ export async function POST(
     webhookRes = await fetch(webhookUrl, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ url: recipe.url }),
+      body: JSON.stringify({ schema: recipe.metadata.schema }),
     });
   } catch {
     return NextResponse.json({ error: "Webhook unreachable" }, { status: 502 });
@@ -39,10 +39,9 @@ export async function POST(
   }
 
   const body = await webhookRes.json();
-  const updatedSchema = body?.schema;
-  if (!updatedSchema || typeof updatedSchema !== "object" || !updatedSchema.name) {
+  if (!body?.image || typeof body.image !== "string") {
     return NextResponse.json({ error: "Invalid webhook response" }, { status: 502 });
   }
 
-  return NextResponse.json({ schema: updatedSchema });
+  return NextResponse.json({ image: body.image });
 }

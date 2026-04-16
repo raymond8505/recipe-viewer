@@ -24,7 +24,9 @@ export function formatDuration(iso: string | undefined | null): string | null {
  * Parse an ISO 8601 duration string into total seconds.
  * e.g. "PT30M" → 1800, "PT1H30M" → 5400, "PT45S" → 45
  */
-export function parseDurationToSeconds(iso: string | undefined | null): number | null {
+export function parseDurationToSeconds(
+  iso: string | undefined | null,
+): number | null {
   if (!iso) return null;
   const match = iso.match(/^PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?$/);
   if (!match) return null;
@@ -51,12 +53,20 @@ export function formatDate(iso: string | undefined | null): string | null {
   });
 }
 
-import type { HowToSection, HowToStep, RecipeIngredient, SchemaRecipe } from "@/types/recipe";
+import type {
+  HowToSection,
+  HowToStep,
+  RecipeIngredient,
+  RecipeStat,
+  SchemaRecipe,
+} from "@/types/recipe";
 
 /**
  * Get the ingredient text from a string or RecipeIngredient object.
  */
-export function getIngredientText(ingredient: string | RecipeIngredient): string {
+export function getIngredientText(
+  ingredient: string | RecipeIngredient,
+): string {
   return typeof ingredient === "string" ? ingredient : ingredient.name;
 }
 
@@ -65,10 +75,10 @@ export function getIngredientText(ingredient: string | RecipeIngredient): string
  * a null heading when no ingredient defines group.
  */
 export function groupIngredients(
-  ingredients: Array<string | RecipeIngredient>
+  ingredients: Array<string | RecipeIngredient>,
 ): Array<{ heading: string | null; items: Array<string | RecipeIngredient> }> {
   const hasGroups = ingredients.some(
-    (i) => typeof i !== "string" && i.group != null
+    (i) => typeof i !== "string" && i.group != null,
   );
   if (!hasGroups) return [{ heading: null, items: ingredients }];
 
@@ -89,11 +99,11 @@ export function groupIngredients(
  * Get the first image URL from a recipe image field (string or string[]).
  */
 export function getFirstImage(
-  image: string | string[] | undefined | null
+  image: string | string[] | undefined | null,
 ): string | null {
   if (!image) return null;
-  if (Array.isArray(image)) return image[0] ?? null;
-  return image;
+  if (Array.isArray(image)) return image[0].trimEnd() ?? null;
+  return image.trimEnd();
 }
 
 /**
@@ -108,9 +118,19 @@ export function toSchemaOrgJsonLd(schema: SchemaRecipe): object {
     name: schema.name,
   };
   const optionalFields = [
-    "description", "image", "author", "cookTime", "prepTime", "totalTime",
-    "recipeYield", "recipeCuisine", "recipeCategory", "keywords",
-    "nutrition", "datePublished", "recipeInstructions",
+    "description",
+    "image",
+    "author",
+    "cookTime",
+    "prepTime",
+    "totalTime",
+    "recipeYield",
+    "recipeCuisine",
+    "recipeCategory",
+    "keywords",
+    "nutrition",
+    "datePublished",
+    "recipeInstructions",
   ] as const;
   for (const key of optionalFields) {
     if (schema[key] != null) result[key] = schema[key];
@@ -129,7 +149,7 @@ export function toSchemaOrgJsonLd(schema: SchemaRecipe): object {
  * Sections are separated by a blank line.
  */
 export function instructionsToMarkdown(
-  instructions: Array<HowToStep | HowToSection>
+  instructions: Array<HowToStep | HowToSection>,
 ): string {
   const blocks: string[] = [];
   for (const item of instructions) {
@@ -156,7 +176,7 @@ export function instructionsToMarkdown(
  * Empty lines → ignored
  */
 export function markdownToInstructions(
-  markdown: string
+  markdown: string,
 ): Array<HowToStep | HowToSection> {
   const result: Array<HowToStep | HowToSection> = [];
   let currentSection: HowToSection | null = null;
@@ -196,6 +216,15 @@ export function markdownToInstructions(
   return result;
 }
 
+export function normalizeRecipeInstructions(
+  raw: unknown,
+): Array<HowToStep | HowToSection> | undefined {
+  if (raw == null) return undefined;
+  if (typeof raw === "string") return markdownToInstructions(raw);
+  if (Array.isArray(raw)) return raw as Array<HowToStep | HowToSection>;
+  return [raw as HowToStep | HowToSection];
+}
+
 /**
  * Convert a recipe ingredient list to an editable plain-text string.
  *
@@ -203,7 +232,7 @@ export function markdownToInstructions(
  * Ungrouped ingredients have no header. One ingredient per line.
  */
 export function ingredientsToText(
-  ingredients: Array<string | RecipeIngredient>
+  ingredients: Array<string | RecipeIngredient>,
 ): string {
   const groups = groupIngredients(ingredients);
   const blocks: string[] = [];
@@ -225,7 +254,7 @@ export function ingredientsToText(
  * Empty lines → ignored
  */
 export function textToIngredients(
-  text: string
+  text: string,
 ): Array<string | RecipeIngredient> {
   const result: Array<string | RecipeIngredient> = [];
   let currentGroup: string | null = null;
@@ -250,11 +279,51 @@ export function textToIngredients(
 }
 
 /**
+ * Extract key-value "stats" from a recipe schema for deck-builder card display.
+ * Only includes stats where the source field is present and truthy.
+ */
+export function extractRecipeStats(schema: SchemaRecipe): RecipeStat[] {
+  const stats: RecipeStat[] = [];
+
+  const time = formatDuration(schema.totalTime ?? schema.cookTime);
+  if (time) stats.push({ label: "Cook Time", value: time, icon: "clock" });
+
+  if (schema.nutrition?.calories) {
+    const raw = schema.nutrition.calories.replace(/\s*k?cal.*$/i, "").trim();
+    if (raw)
+      stats.push({ label: "Calories", value: `${raw} cal`, icon: "flame" });
+  }
+
+  const servings = toArray(schema.recipeYield)[0];
+  if (servings)
+    stats.push({ label: "Servings", value: servings, icon: "servings" });
+
+  if (schema.recipeIngredient?.length) {
+    stats.push({
+      label: "Ingredients",
+      value: `${schema.recipeIngredient.length} items`,
+      icon: "ingredients",
+    });
+  }
+
+  if (schema.recipeCuisine) {
+    stats.push({
+      label: "Cuisine",
+      value: schema.recipeCuisine,
+      icon: "globe",
+    });
+  }
+
+  const category = toArray(schema.recipeCategory)[0];
+  if (category) stats.push({ label: "Category", value: category, icon: "tag" });
+
+  return stats;
+}
+
+/**
  * Normalize recipeCategory/recipeCuisine to an array.
  */
-export function toArray(
-  val: string | string[] | undefined | null
-): string[] {
+export function toArray(val: string | string[] | undefined | null): string[] {
   if (!val) return [];
   if (Array.isArray(val)) return val.filter(Boolean);
   return [val];

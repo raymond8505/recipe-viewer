@@ -10,6 +10,7 @@ import SortBar from "@/components/SortBar";
 import SourceFilter from "@/components/SourceFilter";
 import StatusFilter from "@/components/StatusFilter";
 import Pagination from "@/components/Pagination";
+import HeadsUpButton from "@/components/headsup/HeadsUpButton";
 
 const PAGE_SIZE = 24;
 const VALID_SORTS = new Set<SortOption>(["newest", "oldest", "name-asc", "name-desc"]);
@@ -41,9 +42,12 @@ export default async function Home({ searchParams }: HomeProps) {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-gray-900 mb-1">Recipes</h1>
-        <p className="text-gray-500 text-sm">{count} recipes in the collection</p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900 mb-1">Recipes</h1>
+          <p className="text-gray-500 text-sm">{count} recipes in the collection</p>
+        </div>
+        <HeadsUpButton />
       </div>
 
       <Suspense>
