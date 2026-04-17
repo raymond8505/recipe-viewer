@@ -87,3 +87,13 @@ When a handler calls a state setter with data from `fetch` or a webhook response
 1. **Never trust TypeScript type assertions on `res.json()`** — they are erased at runtime and do not validate shape. `as { schema: SchemaRecipe }` is a cast, not a parse.
 2. **Guard before the state setter**: check that the expected key is present (e.g. `if (!result.schema) throw new Error()`) so a malformed 200 response falls into the existing error state rather than setting state to `undefined`.
 3. **A state setter that receives `undefined` will not throw at the call site** — the crash happens on the next render when code accesses a property on the undefined value. Always validate at the boundary.
+
+## Deploy Workflow — Env Var Checklist
+
+Whenever a new server-side env var is introduced (webhook URL, API token, feature flag, etc.), the deploy workflow **must** be updated in the same PR. The `appleboy/ssh-action` pattern in `.github/workflows/deploy.yml` requires the var in **three places** — missing any one silently drops it:
+
+1. `env:` block — binds the GitHub Secret to the job
+2. `envs:` comma-separated list — passes it through the SSH boundary
+3. The `.env` heredoc — writes it to disk on the VPS so Docker Compose picks it up
+
+**Before shipping any feature that reads `process.env.X`:** grep `deploy.yml` for `X` and confirm all three entries exist. If they don't, the var will be absent at runtime and the feature will silently 503.
