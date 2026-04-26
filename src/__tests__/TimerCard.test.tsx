@@ -69,7 +69,7 @@ describe("TimerCard (running)", () => {
   it("calls onTogglePause when time area is tapped", () => {
     const onTogglePause = vi.fn();
     render(<TimerCard timer={makeTimer()} {...defaultProps} onTogglePause={onTogglePause} />);
-    fireEvent.click(screen.getByLabelText(/pause pasta timer/i));
+    fireEvent.click(screen.getByLabelText(/pause pasta/i));
     expect(onTogglePause).toHaveBeenCalledWith("timer-1");
   });
 
@@ -89,18 +89,18 @@ describe("TimerCard (running)", () => {
 describe("TimerCard (paused)", () => {
   it("time area shows resume label when paused", () => {
     render(<TimerCard timer={makeTimer({ paused: true })} {...defaultProps} />);
-    expect(screen.getByLabelText(/resume pasta timer/i)).toBeTruthy();
+    expect(screen.getByLabelText(/resume pasta/i)).toBeTruthy();
   });
 
   it("time button has resume aria-label when paused", () => {
     render(<TimerCard timer={makeTimer({ paused: true })} {...defaultProps} />);
-    expect(screen.getByLabelText(/resume pasta timer/i)).toBeTruthy();
+    expect(screen.getByLabelText(/resume pasta/i)).toBeTruthy();
   });
 
   it("calls onTogglePause when time area tapped while paused", () => {
     const onTogglePause = vi.fn();
     render(<TimerCard timer={makeTimer({ paused: true })} {...defaultProps} onTogglePause={onTogglePause} />);
-    fireEvent.click(screen.getByLabelText(/resume pasta timer/i));
+    fireEvent.click(screen.getByLabelText(/resume pasta/i));
     expect(onTogglePause).toHaveBeenCalledWith("timer-1");
   });
 });
@@ -137,15 +137,15 @@ describe("TimerCard (alarm)", () => {
 });
 
 describe("TimerCard (finished)", () => {
-  it("shows tap to restart hint for finished timer", () => {
+  it("shows restart button for finished timer", () => {
     render(<TimerCard timer={makeTimer({ remaining: 0, finished: true })} {...defaultProps} />);
-    expect(screen.getByText(/tap to restart/i)).toBeTruthy();
+    expect(screen.getByLabelText(/restart pasta/i)).toBeTruthy();
   });
 
   it("calls onReset when finished card body is tapped", () => {
     const onReset = vi.fn();
     render(<TimerCard timer={makeTimer({ remaining: 0, finished: true })} {...defaultProps} onReset={onReset} />);
-    fireEvent.click(screen.getByLabelText(/restart pasta timer/i));
+    fireEvent.click(screen.getByLabelText(/restart pasta/i));
     expect(onReset).toHaveBeenCalledWith("timer-1");
   });
 

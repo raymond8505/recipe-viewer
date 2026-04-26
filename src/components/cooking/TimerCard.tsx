@@ -66,40 +66,35 @@ export default function TimerCard({
     );
   }
 
-  // Alarm state — whole card taps to dismiss
+  // Alarm state — left taps to dismiss, right has reset + delete
   if (isAlarm) {
     return (
-      <div className="rounded-xl border border-red-300 animate-timer-done overflow-hidden">
+      <div className="flex items-stretch rounded-xl border border-red-300 animate-timer-done overflow-hidden">
         <button
-          className="w-full text-left active:opacity-70"
+          className="flex-1 min-w-0 px-4 py-3 text-left active:opacity-70"
           onClick={() => onDismiss(timer.id)}
           aria-label={`${timer.label} timer done — tap to dismiss`}
         >
-          <p className="text-sm font-medium text-red-700 truncate px-4 pt-3 pb-0.5">{timer.label}</p>
-          <div className="px-4 pb-3">
-            <p className="text-3xl sm:text-2xl font-mono font-bold tabular-nums text-red-600">Done!</p>
-            <p className="text-xs text-red-400 mt-0.5">Tap to dismiss</p>
-            {recipeName && <p className="text-xs text-red-300 truncate mt-0.5">{recipeName}</p>}
-          </div>
+          <p className="text-base sm:text-sm font-medium text-red-700 truncate">{timer.label}</p>
+          <p className="text-3xl sm:text-2xl font-mono font-bold tabular-nums text-red-600">Done!</p>
+          <p className="text-xs text-red-400 mt-0.5">Tap to dismiss</p>
+          {recipeName && <p className="text-xs text-red-300 truncate mt-0.5">{recipeName}</p>}
         </button>
-        {/* Reset + delete still accessible in alarm state */}
-        <div className="flex border-t border-red-200">
+        <div className="w-12 shrink-0 flex flex-col border-l border-red-200">
           <button
             onClick={() => onReset(timer.id)}
-            className="flex-1 py-2.5 flex items-center justify-center gap-1.5 text-xs font-medium text-red-600 active:bg-red-100"
+            className="flex-1 flex items-center justify-center text-red-500 active:opacity-60"
             aria-label="Reset timer"
           >
             <ResetIcon />
-            Reset
           </button>
-          <div className="w-px bg-red-200" />
+          <div className="h-px mr-2 bg-red-200" />
           <button
             onClick={() => setConfirming(true)}
-            className="flex-1 py-2.5 flex items-center justify-center gap-1.5 text-xs font-medium text-red-600 active:bg-red-100"
+            className="flex-1 flex items-center justify-center text-red-500 active:opacity-60"
             aria-label="Delete timer"
           >
             <TrashIcon />
-            Delete
           </button>
         </div>
       </div>
@@ -110,66 +105,71 @@ export default function TimerCard({
   const isRunning = state === "running";
   const isPaused = state === "paused";
 
-  return (
-    <div className={`rounded-xl border overflow-hidden ${isDone ? "border-gray-300 bg-gray-50" : "border-gray-200 bg-white"}`}>
-      {/* Label + time — single tap target for play/pause when running or paused */}
-      {(isRunning || isPaused) ? (
-        <button
-          className="w-full text-left px-4 pt-2.5 pb-3 active:opacity-70"
-          onClick={() => onTogglePause(timer.id)}
-          aria-label={isPaused ? `Resume ${timer.label} timer` : `Pause ${timer.label} timer`}
-        >
-          <div className="flex items-center justify-between pb-0.5">
-            <p className="text-base sm:text-sm font-medium text-gray-700 truncate">{timer.label}</p>
-            {isPaused && <PauseIcon />}
-          </div>
-          <p className="text-3xl sm:text-2xl font-mono font-bold tabular-nums text-gray-900">
-            {formatRemaining(timer.remaining)}
-          </p>
-          {recipeName && <p className="text-xs text-gray-400 truncate mt-0.5">{recipeName}</p>}
-        </button>
-      ) : (
-        <button
-          className="w-full text-left px-4 pt-2.5 pb-3 active:opacity-70"
-          onClick={() => onReset(timer.id)}
-          aria-label={`Restart ${timer.label} timer`}
-        >
-          <p className="text-base sm:text-sm font-medium text-gray-700 truncate pb-0.5">{timer.label}</p>
-          <p className="text-3xl sm:text-2xl font-mono font-bold tabular-nums text-gray-400">
-            {formatRemaining(timer.remaining)}
-          </p>
-          <p className="text-xs text-gray-400 mt-0.5">Tap to restart</p>
-          {recipeName && <p className="text-xs text-gray-400 truncate mt-0.5">{recipeName}</p>}
-        </button>
-      )}
+  const outerBorder = isDone ? "border-gray-300" : "border-gray-200";
+  const dividerBg = isDone ? "bg-gray-200" : "bg-gray-100";
 
-      {/* Bottom row — edit | reset | delete */}
-      <div className={`flex border-t ${isDone ? "border-gray-200" : "border-gray-100"}`}>
+  return (
+    <div className={`flex items-stretch rounded-xl border overflow-hidden ${outerBorder} ${isDone ? "bg-gray-50" : "bg-white"}`}>
+      {/* Left col: play/pause (top) + reset (bottom) */}
+      <div className={`w-12 shrink-0 flex flex-col border-r ${dividerBg}`}>
         <button
-          onClick={() => onEdit(timer.id)}
-          className="flex-1 py-2.5 flex items-center justify-center text-gray-500 active:bg-gray-50"
-          aria-label={`Edit ${timer.label} timer`}
+          onClick={() => (isRunning || isPaused) ? onTogglePause(timer.id) : onReset(timer.id)}
+          className="flex-1 flex items-center justify-center active:opacity-60"
+          aria-hidden="true"
+          tabIndex={-1}
         >
-          <EditIcon />
+          {isRunning ? <PauseIcon /> : <PlayIcon dimmed={isDone} />}
         </button>
-        <div className={`w-px ${isDone ? "bg-gray-200" : "bg-gray-100"}`} />
+        <div className={`h-px ml-2 ${dividerBg}`} />
         <button
           onClick={() => onReset(timer.id)}
-          className="flex-1 py-2.5 flex items-center justify-center text-gray-500 active:bg-gray-50"
+          className="flex-1 flex items-center justify-center text-gray-500 active:opacity-60"
           aria-label="Reset timer"
         >
           <ResetIcon />
         </button>
-        <div className={`w-px ${isDone ? "bg-gray-200" : "bg-gray-100"}`} />
+      </div>
+
+      {/* Middle col: name + time — tap to play/pause (or restart when finished) */}
+      <button
+        className="flex-1 min-w-0 px-4 py-3 text-left active:opacity-70"
+        onClick={() => (isRunning || isPaused) ? onTogglePause(timer.id) : onReset(timer.id)}
+        aria-label={isRunning ? `Pause ${timer.label}` : isPaused ? `Resume ${timer.label}` : `Restart ${timer.label}`}
+      >
+        <p className="text-base sm:text-sm font-medium text-gray-700 truncate">{timer.label}</p>
+        <p className={`text-3xl sm:text-2xl font-mono font-bold tabular-nums ${isDone ? "text-gray-400" : "text-gray-900"}`}>
+          {formatRemaining(timer.remaining)}
+        </p>
+        {recipeName && <p className="text-xs text-gray-400 truncate mt-0.5">{recipeName}</p>}
+      </button>
+
+      {/* Right col: edit (top) + delete (bottom) */}
+      <div className={`w-12 shrink-0 flex flex-col border-l ${dividerBg}`}>
+        <button
+          onClick={() => onEdit(timer.id)}
+          className="flex-1 flex items-center justify-center text-gray-500 active:opacity-60"
+          aria-label={`Edit ${timer.label} timer`}
+        >
+          <EditIcon />
+        </button>
+        <div className={`h-px mr-2 ${dividerBg}`} />
         <button
           onClick={() => setConfirming(true)}
-          className="flex-1 py-2.5 flex items-center justify-center text-gray-500 active:bg-gray-50"
+          className="flex-1 flex items-center justify-center text-gray-500 active:opacity-60"
           aria-label="Delete timer"
         >
           <TrashIcon />
         </button>
       </div>
     </div>
+  );
+}
+
+function PlayIcon({ dimmed }: { dimmed?: boolean }) {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" className={`shrink-0 ${dimmed ? "text-gray-300" : "text-orange-500"}`} aria-hidden="true">
+      <polygon points="5,3 19,12 5,21" />
+    </svg>
   );
 }
 

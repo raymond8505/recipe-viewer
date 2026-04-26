@@ -27,6 +27,21 @@ The helpers that implement this live in `src/lib/format.ts`:
 - `getIngredientText(ingredient)` — extracts the display string from either format
 - `groupIngredients(ingredients)` — returns `{ heading: string | null; items: [...] }[]` in insertion order
 
+## TimerCard Layout
+
+`src/components/cooking/TimerCard.tsx` uses a **three-column layout** for running/paused/finished states:
+- **Left col (`w-12`, fixed):** play/pause icon (top) + reset (bottom). The icon button is `aria-hidden="true" tabIndex={-1}` — it is a visual/touch affordance only. Do not add an aria-label to it.
+- **Middle col (`flex-1`):** name + time, rendered as a `<button>` that calls `onTogglePause` (running/paused) or `onReset` (finished). This is the primary accessible tap target and carries the aria-label.
+- **Right col (`w-12`, fixed):** edit (top) + delete (bottom).
+
+**Alarm state is intentionally 2-column** (dismiss left, reset+delete right) — there is no play/pause concept. Do not normalize it to 3-column.
+
+**`isDone` inside the running/paused/finished branch always means `finished`** — the alarm branch returns early, so `isDone` is never `alarm` here. The variable is slightly misleading.
+
+**TimerCard tests (`src/__tests__/TimerCard.test.tsx`) use aria-label regexes.** Before renaming any button label, grep the test file for the old string — broken labels cause hard `getByLabelText` failures, not soft mismatches.
+
+**Duplicate aria-label = hard `getByLabelText` failure.** If two buttons share the same aria-label, Testing Library throws rather than returning the first match. Guard against this when adding redundant visual affordances alongside accessible tap targets.
+
 ## Timer Container — Two Views
 
 The phrase "timer container" refers to the timer UI in **both** orientations:
