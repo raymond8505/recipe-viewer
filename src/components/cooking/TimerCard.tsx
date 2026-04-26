@@ -36,7 +36,6 @@ export default function TimerCard({
   const [confirming, setConfirming] = useState(false);
   const state = timerState(timer);
   const isAlarm = state === "alarm";
-  const isDone = state === "alarm" || state === "finished";
 
   // Delete confirmation overlay — replaces card content
   if (confirming) {
@@ -104,12 +103,13 @@ export default function TimerCard({
   // Running / paused / finished states
   const isRunning = state === "running";
   const isPaused = state === "paused";
+  const isFinished = state === "finished";
 
-  const outerBorder = isDone ? "border-gray-300" : "border-gray-200";
-  const dividerBg = isDone ? "bg-gray-200" : "bg-gray-100";
+  const outerBorder = isFinished ? "border-gray-300" : "border-gray-200";
+  const dividerBg = isFinished ? "bg-gray-200" : "bg-gray-100";
 
   return (
-    <div className={`flex items-stretch rounded-xl border overflow-hidden ${outerBorder} ${isDone ? "bg-gray-50" : "bg-white"}`}>
+    <div className={`flex items-stretch rounded-xl border overflow-hidden ${outerBorder} ${isFinished ? "bg-gray-50" : "bg-white"}`}>
       {/* Left col: play/pause (top) + reset (bottom) */}
       <div className={`w-12 shrink-0 flex flex-col border-r ${dividerBg}`}>
         <button
@@ -118,7 +118,7 @@ export default function TimerCard({
           aria-hidden="true"
           tabIndex={-1}
         >
-          {isRunning ? <PauseIcon /> : <PlayIcon dimmed={isDone} />}
+          {isRunning ? <PauseIcon /> : <PlayIcon dimmed={isFinished} />}
         </button>
         <div className={`h-px ml-2 ${dividerBg}`} />
         <button
@@ -137,7 +137,7 @@ export default function TimerCard({
         aria-label={isRunning ? `Pause ${timer.label}` : isPaused ? `Resume ${timer.label}` : `Restart ${timer.label}`}
       >
         <p className="text-base sm:text-sm font-medium text-gray-700 truncate">{timer.label}</p>
-        <p className={`text-3xl sm:text-2xl font-mono font-bold tabular-nums ${isDone ? "text-gray-400" : "text-gray-900"}`}>
+        <p className={`text-3xl sm:text-2xl font-mono font-bold tabular-nums ${isFinished ? "text-gray-400" : "text-gray-900"}`}>
           {formatRemaining(timer.remaining)}
         </p>
         {recipeName && <p className="text-xs text-gray-400 truncate mt-0.5">{recipeName}</p>}
