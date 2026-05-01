@@ -74,10 +74,10 @@ export default function TimerCard({
           onClick={() => onDismiss(timer.id)}
           aria-label={`${timer.label} timer done — tap to dismiss`}
         >
-          <p className="text-base sm:text-sm font-medium text-red-700 truncate">{timer.label}</p>
-          <p className="text-3xl sm:text-2xl font-mono font-bold tabular-nums text-red-600">Done!</p>
-          <p className="text-xs text-red-400 mt-0.5">Tap to dismiss</p>
-          {recipeName && <p className="text-xs text-red-300 truncate mt-0.5">{recipeName}</p>}
+          <span className="block text-base sm:text-sm font-medium text-red-700 truncate">{timer.label}</span>
+          <span className="block text-3xl sm:text-2xl font-mono font-bold tabular-nums text-red-600">Done!</span>
+          <span className="block text-xs text-red-400 mt-0.5">Tap to dismiss</span>
+          {recipeName && <span className="block text-xs text-red-300 truncate mt-0.5">{recipeName}</span>}
         </button>
         <div className="w-12 shrink-0 flex flex-col border-l border-red-200">
           <button
@@ -136,11 +136,11 @@ export default function TimerCard({
         onClick={() => (isRunning || isPaused) ? onTogglePause(timer.id) : onReset(timer.id)}
         aria-label={isRunning ? `Pause ${timer.label}` : isPaused ? `Resume ${timer.label}` : `Restart ${timer.label}`}
       >
-        <p className="text-base sm:text-sm font-medium text-gray-700 truncate">{timer.label}</p>
-        <p className={`text-3xl sm:text-2xl font-mono font-bold tabular-nums ${isFinished ? "text-gray-400" : "text-gray-900"}`}>
+        <span className="block text-base sm:text-sm font-medium text-gray-700 truncate">{timer.label}</span>
+        <span className={`block text-3xl sm:text-2xl font-mono font-bold tabular-nums ${isFinished ? "text-gray-400" : "text-gray-900"}`}>
           {formatRemaining(timer.remaining)}
-        </p>
-        {recipeName && <p className="text-xs text-gray-400 truncate mt-0.5">{recipeName}</p>}
+        </span>
+        {recipeName && <span className="block text-xs text-gray-400 truncate mt-0.5">{recipeName}</span>}
       </button>
 
       {/* Right col: edit (top) + delete (bottom) */}
