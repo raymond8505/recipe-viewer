@@ -115,8 +115,7 @@ export default function TimerCard({
         <button
           onClick={() => (isRunning || isPaused) ? onTogglePause(timer.id) : onReset(timer.id)}
           className="flex-1 flex items-center justify-center active:opacity-60"
-          aria-hidden="true"
-          tabIndex={-1}
+          aria-label={isRunning ? "Pause" : isPaused ? "Resume" : "Restart"}
         >
           {isRunning ? <PauseIcon /> : <PlayIcon dimmed={isFinished} />}
         </button>
