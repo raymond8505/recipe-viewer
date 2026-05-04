@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useState } from "react";
 import type { RecipeRow } from "@/types/recipe";
 import { getFirstImage, extractRecipeStats } from "@/lib/format";
-import { StatIcon } from "./HeadsUpFighterCard";
+import { StatIcon } from "@/components/icons";
 
 interface HeadsUpWinnerProps {
   recipe: RecipeRow;

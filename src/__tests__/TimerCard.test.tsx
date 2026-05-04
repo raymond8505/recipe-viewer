@@ -69,7 +69,7 @@ describe("TimerCard (running)", () => {
   it("calls onTogglePause when time area is tapped", () => {
     const onTogglePause = vi.fn();
     render(<TimerCard timer={makeTimer()} {...defaultProps} onTogglePause={onTogglePause} />);
-    fireEvent.click(screen.getByLabelText(/pause pasta timer/i));
+    fireEvent.click(screen.getByLabelText(/pause pasta/i));
     expect(onTogglePause).toHaveBeenCalledWith("timer-1");
   });
 
@@ -78,6 +78,18 @@ describe("TimerCard (running)", () => {
     render(<TimerCard timer={makeTimer()} {...defaultProps} onReset={onReset} />);
     fireEvent.click(screen.getByLabelText(/reset timer/i));
     expect(onReset).toHaveBeenCalledWith("timer-1");
+  });
+
+  it("left-col button shows pause label when running", () => {
+    render(<TimerCard timer={makeTimer()} {...defaultProps} />);
+    expect(screen.getByLabelText(/^pause$/i)).toBeTruthy();
+  });
+
+  it("left-col pause button calls onTogglePause", () => {
+    const onTogglePause = vi.fn();
+    render(<TimerCard timer={makeTimer()} {...defaultProps} onTogglePause={onTogglePause} />);
+    fireEvent.click(screen.getByLabelText(/^pause$/i));
+    expect(onTogglePause).toHaveBeenCalledWith("timer-1");
   });
 
   it("does not apply done styling when timer is running", () => {
@@ -89,18 +101,30 @@ describe("TimerCard (running)", () => {
 describe("TimerCard (paused)", () => {
   it("time area shows resume label when paused", () => {
     render(<TimerCard timer={makeTimer({ paused: true })} {...defaultProps} />);
-    expect(screen.getByLabelText(/resume pasta timer/i)).toBeTruthy();
+    expect(screen.getByLabelText(/resume pasta/i)).toBeTruthy();
   });
 
   it("time button has resume aria-label when paused", () => {
     render(<TimerCard timer={makeTimer({ paused: true })} {...defaultProps} />);
-    expect(screen.getByLabelText(/resume pasta timer/i)).toBeTruthy();
+    expect(screen.getByLabelText(/resume pasta/i)).toBeTruthy();
   });
 
   it("calls onTogglePause when time area tapped while paused", () => {
     const onTogglePause = vi.fn();
     render(<TimerCard timer={makeTimer({ paused: true })} {...defaultProps} onTogglePause={onTogglePause} />);
-    fireEvent.click(screen.getByLabelText(/resume pasta timer/i));
+    fireEvent.click(screen.getByLabelText(/resume pasta/i));
+    expect(onTogglePause).toHaveBeenCalledWith("timer-1");
+  });
+
+  it("left-col button shows resume label when paused", () => {
+    render(<TimerCard timer={makeTimer({ paused: true })} {...defaultProps} />);
+    expect(screen.getByLabelText(/^resume$/i)).toBeTruthy();
+  });
+
+  it("left-col resume button calls onTogglePause", () => {
+    const onTogglePause = vi.fn();
+    render(<TimerCard timer={makeTimer({ paused: true })} {...defaultProps} onTogglePause={onTogglePause} />);
+    fireEvent.click(screen.getByLabelText(/^resume$/i));
     expect(onTogglePause).toHaveBeenCalledWith("timer-1");
   });
 });
@@ -137,15 +161,15 @@ describe("TimerCard (alarm)", () => {
 });
 
 describe("TimerCard (finished)", () => {
-  it("shows tap to restart hint for finished timer", () => {
+  it("shows restart button for finished timer", () => {
     render(<TimerCard timer={makeTimer({ remaining: 0, finished: true })} {...defaultProps} />);
-    expect(screen.getByText(/tap to restart/i)).toBeTruthy();
+    expect(screen.getByLabelText(/restart pasta/i)).toBeTruthy();
   });
 
   it("calls onReset when finished card body is tapped", () => {
     const onReset = vi.fn();
     render(<TimerCard timer={makeTimer({ remaining: 0, finished: true })} {...defaultProps} onReset={onReset} />);
-    fireEvent.click(screen.getByLabelText(/restart pasta timer/i));
+    fireEvent.click(screen.getByLabelText(/restart pasta/i));
     expect(onReset).toHaveBeenCalledWith("timer-1");
   });
 
@@ -154,6 +178,18 @@ describe("TimerCard (finished)", () => {
     render(<TimerCard timer={makeTimer({ remaining: 0, finished: true })} {...defaultProps} onEdit={onEdit} />);
     fireEvent.click(screen.getByLabelText(/edit pasta timer/i));
     expect(onEdit).toHaveBeenCalledWith("timer-1");
+  });
+
+  it("left-col button shows restart label when finished", () => {
+    render(<TimerCard timer={makeTimer({ remaining: 0, finished: true })} {...defaultProps} />);
+    expect(screen.getByLabelText(/^restart$/i)).toBeTruthy();
+  });
+
+  it("left-col restart button calls onReset when finished", () => {
+    const onReset = vi.fn();
+    render(<TimerCard timer={makeTimer({ remaining: 0, finished: true })} {...defaultProps} onReset={onReset} />);
+    fireEvent.click(screen.getByLabelText(/^restart$/i));
+    expect(onReset).toHaveBeenCalledWith("timer-1");
   });
 });
 

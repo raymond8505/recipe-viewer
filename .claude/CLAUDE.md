@@ -27,6 +27,19 @@ The helpers that implement this live in `src/lib/format.ts`:
 - `getIngredientText(ingredient)` — extracts the display string from either format
 - `groupIngredients(ingredients)` — returns `{ heading: string | null; items: [...] }[]` in insertion order
 
+## TimerCard Layout
+
+`src/components/cooking/TimerCard.tsx` uses a **three-column layout** for running/paused/finished states:
+- **Left col (`w-12`, fixed):** play/pause icon (top) + reset (bottom). The icon button has `aria-label` of just the action ("Pause", "Resume", or "Restart") — shorter than the middle-col label ("Pause {name}" etc.) to avoid duplicate-label test failures. The **SVG icons inside** (`PauseIcon`, `PlayIcon`) carry `aria-hidden="true"`. Do NOT put `aria-hidden` on the button itself — the button must be in the tab order.
+- **Middle col (`flex-1`):** name + time, rendered as a `<button>` that calls `onTogglePause` (running/paused) or `onReset` (finished). This is the primary accessible tap target and carries the full aria-label.
+- **Right col (`w-12`, fixed):** edit (top) + delete (bottom).
+
+**Alarm state is intentionally 2-column** (dismiss left, reset+delete right) — there is no play/pause concept. Do not normalize it to 3-column.
+
+**TimerCard tests (`src/__tests__/TimerCard.test.tsx`) use aria-label regexes.** Before renaming any button label, grep the test file for the old string — broken labels cause hard `getByLabelText` failures, not soft mismatches.
+
+**Duplicate aria-label = hard `getByLabelText` failure.** If two buttons share the same aria-label, Testing Library throws rather than returning the first match. Guard against this when adding redundant visual affordances alongside accessible tap targets.
+
 ## Timer Container — Two Views
 
 The phrase "timer container" refers to the timer UI in **both** orientations:
@@ -63,7 +76,7 @@ Ingredients in both `CookingMode` and `RecipeDetail` are tappable checkboxes tha
 
 **Primary recipe copy reads from `schema` (live state), not `mealRecipes[0].metadata.schema`** — preserves window API overrides. Don't flatten this.
 
-**`CheckIcon` and `CopyIcon` are duplicated** as private functions in `CookingMode.tsx` and `RecipeDetail.tsx`. If a third component needs them, extract to `src/components/icons.tsx`.
+**All icon components live in `src/components/icons/`** — one file per icon, barrel at `src/components/icons/index.ts`. Import from `@/components/icons`. Do not define icon components inline in feature files.
 
 **`invisible` not conditional render** — the copy button is always in the DOM (using Tailwind `invisible` when disabled) so it never shifts the heading layout. Apply this pattern to any button that appears next to a heading.
 

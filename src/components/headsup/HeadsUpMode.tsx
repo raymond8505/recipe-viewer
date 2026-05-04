@@ -7,7 +7,7 @@ import { useHeadsUp } from "@/hooks/useHeadsUp";
 import { useOrientationLock } from "@/hooks/useOrientationLock";
 import { getFirstImage, extractRecipeStats } from "@/lib/format";
 import type { RecipeRow } from "@/types/recipe";
-import { StatIcon } from "./HeadsUpFighterCard";
+import { StatIcon } from "@/components/icons";
 import HeadsUpPrompt from "./HeadsUpPrompt";
 import HeadsUpArena from "./HeadsUpArena";
 import HeadsUpVsSplash from "./HeadsUpVsSplash";

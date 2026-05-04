@@ -102,7 +102,7 @@ export function getFirstImage(
   image: string | string[] | undefined | null,
 ): string | null {
   if (!image) return null;
-  if (Array.isArray(image)) return image[0].trimEnd() ?? null;
+  if (Array.isArray(image)) return image[0]?.trimEnd() ?? null;
   return image.trimEnd();
 }
 
