@@ -2,6 +2,7 @@
 
 import { useRef, useState, useEffect } from "react";
 import type { RecipeRow } from "@/types/recipe";
+import { SearchIcon, SpinnerIcon } from "@/components/icons";
 
 interface MealSearchProps {
   excludeIds: Set<string>;
@@ -159,50 +160,5 @@ export default function MealSearch({ excludeIds, onAdd }: MealSearchProps) {
         </div>
       )}
     </div>
-  );
-}
-
-function SearchIcon() {
-  return (
-    <svg
-      width="16"
-      height="16"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      className="text-gray-400 shrink-0"
-      aria-hidden="true"
-    >
-      <circle cx="11" cy="11" r="8" />
-      <path d="m21 21-4.35-4.35" />
-    </svg>
-  );
-}
-
-function SpinnerIcon() {
-  return (
-    <svg
-      width="16"
-      height="16"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2.5"
-      strokeLinecap="round"
-      className="text-orange-400 shrink-0 animate-spin"
-      aria-hidden="true"
-    >
-      <path d="M12 2v4" />
-      <path d="m16.24 7.76 2.83-2.83" opacity=".3" />
-      <path d="M18 12h4" opacity=".3" />
-      <path d="m16.24 16.24 2.83 2.83" opacity=".3" />
-      <path d="M12 18v4" opacity=".3" />
-      <path d="m7.76 16.24-2.83 2.83" opacity=".3" />
-      <path d="M6 12H2" opacity=".3" />
-      <path d="m7.76 7.76-2.83-2.83" opacity=".3" />
-    </svg>
   );
 }

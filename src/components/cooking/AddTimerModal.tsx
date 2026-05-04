@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import DraggableRibbon from "./DraggableRibbon";
+import { CloseIcon } from "@/components/icons";
 
 interface AddTimerModalProps {
   /** Pre-fill for edit mode. If provided, modal shows "Edit Timer" / "Save". */
@@ -262,24 +263,5 @@ export default function AddTimerModal({
         </div>
       </div>
     </div>
-  );
-}
-
-function CloseIcon() {
-  return (
-    <svg
-      width="18"
-      height="18"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-    >
-      <path d="M18 6 6 18" />
-      <path d="m6 6 12 12" />
-    </svg>
   );
 }
