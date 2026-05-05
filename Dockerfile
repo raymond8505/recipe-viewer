@@ -16,6 +16,7 @@ ARG NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY
 ENV NEXT_PUBLIC_SUPABASE_URL=$NEXT_PUBLIC_SUPABASE_URL
 ENV NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY=$NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY
 
+RUN yarn build-storybook --output-dir public/storybook
 RUN yarn build
 
 # Stage 3: Production runner
@@ -31,6 +32,7 @@ ENV HOSTNAME=0.0.0.0
 # Next.js standalone output includes its own minimal node_modules
 COPY --from=builder /app/.next/standalone ./
 COPY --from=builder /app/.next/static ./.next/static
+COPY --from=builder /app/public ./public
 
 EXPOSE 3001
 
