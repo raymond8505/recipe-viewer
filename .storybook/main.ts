@@ -1,5 +1,6 @@
 import path from "path";
 import fs from "fs";
+import { fileURLToPath } from "url";
 import type { StorybookConfig } from "@storybook/nextjs-vite";
 
 const config: StorybookConfig = {
@@ -10,7 +11,7 @@ const config: StorybookConfig = {
     options: {},
   },
   viteFinal(config) {
-    const certsDir = path.join(__dirname, "certs");
+    const certsDir = path.join(path.dirname(fileURLToPath(import.meta.url)), "certs");
     config.server ??= {};
     config.server.https = {
       key: fs.readFileSync(path.join(certsDir, "localhost-key.pem")),
