@@ -101,6 +101,22 @@ When a handler calls a state setter with data from `fetch` or a webhook response
 2. **Guard before the state setter**: check that the expected key is present (e.g. `if (!result.schema) throw new Error()`) so a malformed 200 response falls into the existing error state rather than setting state to `undefined`.
 3. **A state setter that receives `undefined` will not throw at the call site** — the crash happens on the next render when code accesses a property on the undefined value. Always validate at the boundary.
 
+## Storybook Configuration
+
+**`main.ts` is loaded as ESM by Storybook 10** — `__dirname` is undefined. Use `path.dirname(fileURLToPath(import.meta.url))` instead (import `fileURLToPath` from `"url"`).
+
+**`viteFinal` runs during both `storybook dev` and `storybook build`.** Always use the `configType` parameter to guard dev-only config:
+```ts
+viteFinal(config, { configType }) {
+  if (configType === "DEVELOPMENT") { /* dev-only */ }
+  return config;
+}
+```
+
+**`config.server.https` set via `viteFinal` is silently ignored.** Storybook runs Express with Vite in middleware mode — `server.*` options have no effect. To enable HTTPS in dev, use CLI flags on the `storybook` script: `--https --ssl-key .storybook/certs/localhost-key.pem --ssl-cert .storybook/certs/localhost.pem`. Cert files live in `.storybook/certs/` (gitignored via `*.pem`); generate with `mkcert localhost 127.0.0.1 ::1` and run `mkcert -install` as Administrator once to trust the local CA.
+
+**Storybook static build is served at `/storybook/` in production.** The Dockerfile builds to `public/storybook/` (`yarn build-storybook --output-dir public/storybook`) and copies `public/` into the runner stage. Next.js standalone serves `public/` at matching URL paths. If the runner-stage `COPY --from=builder /app/public ./public` is ever removed, `/storybook/` will silently 404.
+
 ## Deploy Workflow — Env Var Checklist
 
 Whenever a new server-side env var is introduced (webhook URL, API token, feature flag, etc.), the deploy workflow **must** be updated in the same PR. The `appleboy/ssh-action` pattern in `.github/workflows/deploy.yml` requires the var in **three places** — missing any one silently drops it:
