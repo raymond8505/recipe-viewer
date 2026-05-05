@@ -10,13 +10,15 @@ const config: StorybookConfig = {
     name: "@storybook/nextjs-vite",
     options: {},
   },
-  viteFinal(config) {
-    const certsDir = path.join(path.dirname(fileURLToPath(import.meta.url)), "certs");
-    config.server ??= {};
-    config.server.https = {
-      key: fs.readFileSync(path.join(certsDir, "localhost-key.pem")),
-      cert: fs.readFileSync(path.join(certsDir, "localhost.pem")),
-    };
+  viteFinal(config, { configType }) {
+    if (configType === "DEVELOPMENT") {
+      const certsDir = path.join(path.dirname(fileURLToPath(import.meta.url)), "certs");
+      config.server ??= {};
+      config.server.https = {
+        key: fs.readFileSync(path.join(certsDir, "localhost-key.pem")),
+        cert: fs.readFileSync(path.join(certsDir, "localhost.pem")),
+      };
+    }
     return config;
   },
 };
