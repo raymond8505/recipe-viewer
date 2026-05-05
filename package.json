@@ -19,6 +19,7 @@
     "react-dom": "^18"
   },
   "devDependencies": {
+    "@storybook/addon-mcp": "^0.6.0",
     "@storybook/addon-themes": "^10.3.3",
     "@storybook/nextjs-vite": "^10.3.3",
     "@testing-library/dom": "^10.4.1",
