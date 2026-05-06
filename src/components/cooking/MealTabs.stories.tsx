@@ -1,15 +1,7 @@
 import type { Meta, StoryObj } from "@storybook/nextjs-vite";
 import { expect, userEvent, fn } from "storybook/test";
 import MealTabs from "./MealTabs";
-import type { RecipeRow } from "@/types/recipe";
-
-const makeRecipe = (id: string, name: string): RecipeRow => ({
-  id,
-  url: `https://example.com/${id}`,
-  source: "example.com",
-  status: "published",
-  metadata: { schema: { name } },
-});
+import { makeRecipe } from "@/fixtures";
 
 const recipes = [
   makeRecipe("r1", "Pasta Carbonara"),

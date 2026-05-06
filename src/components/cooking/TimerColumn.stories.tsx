@@ -1,17 +1,7 @@
 import type { Meta, StoryObj } from "@storybook/nextjs-vite";
 import { fn } from "storybook/test";
 import TimerColumn from "./TimerColumn";
-import type { Timer } from "@/hooks/useTimers";
-
-const makeTimer = (id: string, label: string, overrides: Partial<Timer> = {}): Timer => ({
-  id,
-  label,
-  duration: 600,
-  remaining: 300,
-  paused: false,
-  finished: false,
-  ...overrides,
-});
+import { makeTimer } from "@/fixtures";
 
 const meta: Meta<typeof TimerColumn> = {
   component: TimerColumn,

@@ -2,17 +2,7 @@ import type { Meta, StoryObj } from "@storybook/nextjs-vite";
 import { fn } from "storybook/test";
 import DraggableRibbon from "./DraggableRibbon";
 import TimerCard from "./TimerCard";
-import type { Timer } from "@/hooks/useTimers";
-
-const makeTimer = (id: string, label: string, overrides: Partial<Timer> = {}): Timer => ({
-  id,
-  label,
-  duration: 600,
-  remaining: 300,
-  paused: false,
-  finished: false,
-  ...overrides,
-});
+import { makeTimer } from "@/fixtures";
 
 const timerProps = {
   onTogglePause: fn(),

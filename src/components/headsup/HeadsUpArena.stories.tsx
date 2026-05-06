@@ -1,32 +1,11 @@
 import type { Meta, StoryObj } from "@storybook/nextjs-vite";
 import { expect, userEvent, fn } from "storybook/test";
 import HeadsUpArena from "./HeadsUpArena";
-import type { RecipeRow } from "@/types/recipe";
 import type { Matchup } from "@/types/headsup";
+import { recipeFixtures } from "@/fixtures";
 
-const makeRecipe = (id: string, name: string, image?: string): RecipeRow => ({
-  id,
-  url: `https://example.com/${id}`,
-  source: "example.com",
-  status: "published",
-  metadata: {
-    schema: {
-      name,
-      description: `A delicious ${name.toLowerCase()} recipe.`,
-      image,
-      totalTime: "PT30M",
-      recipeYield: "4 servings",
-      recipeCuisine: "International",
-    },
-  },
-});
-
-const recipeA = makeRecipe(
-  "r1",
-  "Pasta Carbonara",
-  "https://images.unsplash.com/photo-1612874742237-6526221588e3?w=400",
-);
-const recipeB = makeRecipe("r2", "Chicken Tikka Masala");
+const recipeA = recipeFixtures[2]; // Thai Curry Chicken Meatballs
+const recipeB = recipeFixtures[1]; // Black Bean & Mushroom Enchiladas
 
 const matchup: Matchup = { id1: recipeA.id, id2: recipeB.id };
 const pool = [recipeA, recipeB];
