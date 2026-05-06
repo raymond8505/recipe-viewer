@@ -10,7 +10,8 @@
     "test:run": "vitest run",
     "deploy:quick": "yarn build && deploy",
     "storybook": "storybook dev -p 6006",
-    "build-storybook": "storybook build --output-dir public/storybook"
+    "build-storybook": "storybook build --output-dir public/storybook",
+    "build:prod": "yarn build-storybook && yarn build"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.49.4",
