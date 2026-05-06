@@ -20,10 +20,19 @@ const nextConfig: NextConfig = {
       },
     ],
   },
+  async redirects() {
+    return [
+      {
+        source: "/storybook",
+        destination: "/storybook/index.html",
+        permanent: false,
+      },
+    ];
+  },
   async headers() {
     return [
       {
-        source: "/(.*)",
+        source: "/((?!storybook).*)",
         headers: securityHeaders,
       },
     ];
