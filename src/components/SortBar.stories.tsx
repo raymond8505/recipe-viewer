@@ -3,7 +3,7 @@ import SortBar from "./SortBar";
 
 const meta: Meta<typeof SortBar> = {
   component: SortBar,
-  title: "Components/SortBar",
+  title: "Components/Recipes/SortBar",
   parameters: {
     layout: "centered",
     nextjs: { appDirectory: true },

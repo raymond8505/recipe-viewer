@@ -19,7 +19,7 @@ const recipes = [
 
 const meta: Meta<typeof MealTabs> = {
   component: MealTabs,
-  title: "Components/Cooking/MealTabs",
+  title: "Components/Cooking Mode/MealTabs",
   parameters: { layout: "centered" },
   decorators: [
     (Story) => (

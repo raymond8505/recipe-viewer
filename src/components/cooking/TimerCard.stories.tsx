@@ -15,7 +15,7 @@ const makeTimer = (overrides: Partial<Timer> = {}): Timer => ({
 
 const meta: Meta<typeof TimerCard> = {
   component: TimerCard,
-  title: "Components/Cooking/TimerCard",
+  title: "Components/Cooking Mode/TimerCard",
   parameters: { layout: "centered" },
   decorators: [
     (Story) => (

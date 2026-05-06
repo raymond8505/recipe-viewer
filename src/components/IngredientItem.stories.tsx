@@ -4,7 +4,7 @@ import IngredientItem from "./IngredientItem";
 
 const meta: Meta<typeof IngredientItem> = {
   component: IngredientItem,
-  title: "Components/IngredientItem",
+  title: "Components/Recipes/IngredientItem",
   parameters: { layout: "centered" },
   decorators: [
     (Story) => (

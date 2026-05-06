@@ -4,7 +4,7 @@ import AuthButton from "./AuthButton";
 
 const meta: Meta<typeof AuthButton> = {
   component: AuthButton,
-  title: "Components/AuthButton",
+  title: "Components/Recipes/AuthButton",
   parameters: {
     layout: "centered",
     nextjs: { appDirectory: true },

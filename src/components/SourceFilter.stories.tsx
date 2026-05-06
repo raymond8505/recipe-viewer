@@ -1,11 +1,10 @@
 import type { Meta, StoryObj } from "@storybook/nextjs-vite";
 import SourceFilter from "./SourceFilter";
-
-const sources = ["seriouseats.com", "nytcooking.com", "bonappetit.com"];
+import { sources } from "@/fixtures";
 
 const meta: Meta<typeof SourceFilter> = {
   component: SourceFilter,
-  title: "Components/SourceFilter",
+  title: "Components/Recipes/SourceFilter",
   parameters: {
     layout: "centered",
     nextjs: { appDirectory: true },
@@ -21,5 +20,5 @@ export const AllSelected: Story = {
 };
 
 export const SpecificSourceSelected: Story = {
-  args: { current: "seriouseats.com" },
+  args: { current: sources[0] },
 };

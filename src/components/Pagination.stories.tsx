@@ -3,7 +3,7 @@ import Pagination from "./Pagination";
 
 const meta: Meta<typeof Pagination> = {
   component: Pagination,
-  title: "Components/Pagination",
+  title: "Components/Recipes/Pagination",
   parameters: {
     nextjs: { appDirectory: true },
   },

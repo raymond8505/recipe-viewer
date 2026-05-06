@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { POST } from "@/app/api/recipes/[id]/update/route";
-import { rescrapeFixture } from "./fixtures/rescrape";
+import { rescrapeFixture } from "@/fixtures/rescrape";
 
 vi.mock("@/lib/supabase", () => ({
   getSupabaseClient: vi.fn(),

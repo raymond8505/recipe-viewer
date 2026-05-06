@@ -15,7 +15,7 @@ const makeTimer = (id: string, label: string, overrides: Partial<Timer> = {}): T
 
 const meta: Meta<typeof TimerColumn> = {
   component: TimerColumn,
-  title: "Components/Cooking/TimerColumn",
+  title: "Components/Cooking Mode/TimerColumn",
   parameters: { layout: "centered" },
   decorators: [
     (Story) => (

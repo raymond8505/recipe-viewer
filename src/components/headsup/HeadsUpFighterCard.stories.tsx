@@ -1,25 +1,9 @@
 import type { Meta, StoryObj } from "@storybook/nextjs-vite";
 import { expect, userEvent, fn } from "storybook/test";
 import HeadsUpFighterCard from "./HeadsUpFighterCard";
-import type { RecipeRow } from "@/types/recipe";
+import { recipeFixtures } from "@/fixtures";
 
-const recipe: RecipeRow = {
-  id: "r1",
-  url: "https://example.com/pasta-carbonara",
-  source: "seriouseats.com",
-  status: "published",
-  metadata: {
-    schema: {
-      name: "Pasta Carbonara",
-      description: "A classic Italian pasta dish made with eggs, guanciale, and Pecorino Romano.",
-      image: "https://images.unsplash.com/photo-1612874742237-6526221588e3?w=400",
-      totalTime: "PT30M",
-      recipeYield: "4 servings",
-      nutrition: { calories: "520 kcal" },
-      recipeCuisine: "Italian",
-    },
-  },
-};
+const recipe = recipeFixtures[2]; // Thai Curry Chicken Meatballs
 
 const meta: Meta<typeof HeadsUpFighterCard> = {
   component: HeadsUpFighterCard,

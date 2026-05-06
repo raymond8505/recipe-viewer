@@ -5,7 +5,7 @@ const counts = { published: 42, draft: 7, archived: 3 };
 
 const meta: Meta<typeof StatusFilter> = {
   component: StatusFilter,
-  title: "Components/StatusFilter",
+  title: "Components/Recipes/StatusFilter",
   parameters: {
     layout: "centered",
     nextjs: { appDirectory: true },

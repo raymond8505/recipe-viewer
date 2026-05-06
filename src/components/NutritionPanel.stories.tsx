@@ -13,7 +13,7 @@ const fullNutrition = {
 
 const meta: Meta<typeof NutritionPanel> = {
   component: NutritionPanel,
-  title: "Components/NutritionPanel",
+  title: "Components/Recipes/NutritionPanel",
   parameters: { layout: "centered" },
   decorators: [
     (Story) => (
@@ -42,9 +42,4 @@ export const PartialData: Story = {
     nutrition: { calories: "350 kcal", proteinContent: "22 g" },
     totalServings: 2,
   },
-};
-
-// Component returns null when no nutrition fields are present — empty canvas is the expected state.
-export const NoData: Story = {
-  args: { nutrition: {}, totalServings: null },
 };
