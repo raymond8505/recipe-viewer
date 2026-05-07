@@ -10,7 +10,11 @@
       "Bash(npx create-next-app@14 . --typescript --tailwind --app --src-dir --no-eslint --import-alias \"@/*\" --no-turbopack)",
       "Bash(yarn install:*)",
       "Bash(yarn test:run)",
-      "Bash(yarn add:*)"
+      "Bash(yarn add:*)",
+      "Bash(gh pr *)",
+      "WebSearch",
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)"
     ]
   }
 }

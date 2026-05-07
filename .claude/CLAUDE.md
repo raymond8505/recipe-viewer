@@ -120,6 +120,8 @@ All shared `RecipeRow` fixtures — used by both stories and tests — live in `
 - Never mock `global.fetch` in a story to simulate API responses — that's a vitest test
 - `play()` is appropriate for demonstrating visual state transitions (e.g. NutritionPanel's portion stepper)
 
+**Controlled-component play() trap:** If a component's visual state is fully driven by props/args (e.g. TimerCard, MealTabs), clicking in `play()` fires a callback but won't change what you see — the arg doesn't update. These play() blocks are always tests. Only keep `play()` when the component has *internal* state the interaction mutates (modal opening, confirm overlay, edit input revealing).
+
 **`useSearchParams` in `@storybook/nextjs-vite`:** Pass `parameters.nextjs.navigation.searchParams: { q: "..." }` — the adapter wraps it in `ReadonlyURLSearchParams` internally, so `.get("q")` returns the expected value. No `play()` workaround needed.
 
 ## Storybook Nav Structure
