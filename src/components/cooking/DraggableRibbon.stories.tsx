@@ -1,10 +1,11 @@
+import type { ComponentProps } from "react";
 import type { Meta, StoryObj } from "@storybook/nextjs-vite";
 import { fn } from "storybook/test";
 import DraggableRibbon from "./DraggableRibbon";
 import TimerCard from "./TimerCard";
 import { makeTimer } from "@/fixtures";
 
-const timerProps = {
+const timerProps: Omit<ComponentProps<typeof TimerCard>, "timer"> = {
   onTogglePause: fn(),
   onReset: fn(),
   onRemove: fn(),
