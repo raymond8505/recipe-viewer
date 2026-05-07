@@ -6,7 +6,15 @@ import { makeTimer } from "@/fixtures";
 const meta: Meta<typeof TimerColumn> = {
   component: TimerColumn,
   title: "Components/Cooking Mode/TimerColumn",
-  parameters: { layout: "centered" },
+  parameters: {
+    layout: "centered",
+    docs: {
+      description: {
+        component:
+          "Vertical timer sidebar shown in landscape/desktop (`lg:flex`). For the portrait/mobile horizontal ribbon, see **DraggableRibbon** stories.",
+      },
+    },
+  },
   decorators: [
     (Story) => (
       <div style={{ width: 340, height: 600, border: "1px solid #e5e7eb", borderRadius: 12, overflow: "hidden" }}>
