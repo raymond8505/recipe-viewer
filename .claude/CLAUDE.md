@@ -120,7 +120,7 @@ All shared `RecipeRow` fixtures — used by both stories and tests — live in `
 - Never mock `global.fetch` in a story to simulate API responses — that's a vitest test
 - `play()` is appropriate for demonstrating visual state transitions (e.g. NutritionPanel's portion stepper)
 
-**`useSearchParams` mock limitation:** `parameters.nextjs.navigation.searchParams: { q: "..." }` injects a plain object, not `URLSearchParams`. Any component calling `.get("q")` gets `undefined`. Use a `play()` + `userEvent.type` to pre-fill the input instead.
+**`useSearchParams` in `@storybook/nextjs-vite`:** Pass `parameters.nextjs.navigation.searchParams: { q: "..." }` — the adapter wraps it in `ReadonlyURLSearchParams` internally, so `.get("q")` returns the expected value. No `play()` workaround needed.
 
 ## Storybook Nav Structure
 

@@ -1,5 +1,4 @@
 import type { Meta, StoryObj } from "@storybook/nextjs-vite";
-import { userEvent } from "storybook/test";
 import SearchBar from "./SearchBar";
 
 const meta: Meta<typeof SearchBar> = {
@@ -9,6 +8,7 @@ const meta: Meta<typeof SearchBar> = {
     nextjs: { appDirectory: true },
   },
   decorators: [
+    // SearchBar uses w-full; constrain to a realistic viewport width
     (Story) => (
       <div style={{ width: 400 }}>
         <Story />
@@ -23,8 +23,7 @@ type Story = StoryObj<typeof SearchBar>;
 export const Empty: Story = {};
 
 export const WithQuery: Story = {
-  play: async ({ canvas }) => {
-    const input = canvas.getByRole("searchbox");
-    await userEvent.type(input, "tomatillo enchiladas");
+  parameters: {
+    nextjs: { navigation: { searchParams: { q: "tomatillo enchiladas" } } },
   },
 };
