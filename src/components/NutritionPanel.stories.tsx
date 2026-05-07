@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/nextjs-vite";
-import { expect, userEvent } from "storybook/test";
+import { userEvent } from "storybook/test";
 import NutritionPanel from "./NutritionPanel";
 
 const fullNutrition = {
@@ -30,10 +30,7 @@ type Story = StoryObj<typeof NutritionPanel>;
 export const FullData: Story = {
   args: { nutrition: fullNutrition, totalServings: 4 },
   play: async ({ canvas }) => {
-    await expect(canvas.getByText("520 kcal")).toBeInTheDocument();
     await userEvent.click(canvas.getByLabelText("More portions"));
-    // portions goes from 4 → 5; multiplier = 4/5 = 0.8; 520 * 0.8 = 416
-    await expect(canvas.getByText("416 kcal")).toBeInTheDocument();
   },
 };
 

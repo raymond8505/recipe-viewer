@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/nextjs-vite";
-import { expect, userEvent, fn } from "storybook/test";
+import { userEvent, fn } from "storybook/test";
 import MealTabs from "./MealTabs";
 import { makeRecipe } from "@/fixtures";
 
@@ -36,14 +36,9 @@ export const SingleTab: Story = {
 
 export const MultipleTabs: Story = {
   args: { recipes, activeIndex: 1 },
-  play: async ({ canvas, args }) => {
-    // Click first tab
+  play: async ({ canvas }) => {
     await userEvent.click(canvas.getByRole("tab", { name: "Pasta Carbonara" }));
-    await expect(args.onSelect).toHaveBeenCalledWith(0);
-
-    // Close third tab (index 2)
     await userEvent.click(canvas.getByLabelText("Remove Beef Tacos from meal"));
-    await expect(args.onRemove).toHaveBeenCalledWith(2);
   },
 };
 

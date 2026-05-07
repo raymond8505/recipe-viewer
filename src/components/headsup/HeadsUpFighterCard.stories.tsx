@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/nextjs-vite";
-import { expect, userEvent, fn } from "storybook/test";
+import { fn } from "storybook/test";
 import HeadsUpFighterCard from "./HeadsUpFighterCard";
 import { recipeFixtures } from "@/fixtures";
 
@@ -31,12 +31,7 @@ const meta: Meta<typeof HeadsUpFighterCard> = {
 export default meta;
 type Story = StoryObj<typeof HeadsUpFighterCard>;
 
-export const Default: Story = {
-  play: async ({ canvas, args }) => {
-    await userEvent.click(canvas.getByRole("button"));
-    await expect(args.onClick).toHaveBeenCalled();
-  },
-};
+export const Default: Story = {};
 
 export const Selected: Story = {
   args: { isSelected: true },

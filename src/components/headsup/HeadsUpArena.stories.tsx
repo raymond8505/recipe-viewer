@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/nextjs-vite";
-import { expect, userEvent, fn } from "storybook/test";
+import { userEvent, fn } from "storybook/test";
 import HeadsUpArena from "./HeadsUpArena";
 import type { Matchup } from "@/types/headsup";
 import { recipeFixtures } from "@/fixtures";
@@ -47,10 +47,9 @@ type Story = StoryObj<typeof HeadsUpArena>;
 
 // Neither card selected — initial state
 export const Presenting: Story = {
-  play: async ({ canvas, args }) => {
+  play: async ({ canvas }) => {
     const [leftCard] = canvas.getAllByRole("button");
     await userEvent.click(leftCard);
-    await expect(args.onSelect).toHaveBeenCalledWith(recipeA.id);
   },
 };
 

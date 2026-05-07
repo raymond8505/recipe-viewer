@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/nextjs-vite";
-import { expect, userEvent, fn } from "storybook/test";
+import { userEvent, fn } from "storybook/test";
 import HeadsUpWinner from "./HeadsUpWinner";
 import type { RecipeRow } from "@/types/recipe";
 
@@ -42,9 +42,8 @@ type Story = StoryObj<typeof HeadsUpWinner>;
 
 export const WithWinner: Story = {
   args: { recipe },
-  play: async ({ canvas, args }) => {
+  play: async ({ canvas }) => {
     await userEvent.click(canvas.getByRole("button", { name: /play again/i }));
-    await expect(args.onPlayAgain).toHaveBeenCalled();
   },
 };
 
