@@ -101,6 +101,36 @@ When a handler calls a state setter with data from `fetch` or a webhook response
 2. **Guard before the state setter**: check that the expected key is present (e.g. `if (!result.schema) throw new Error()`) so a malformed 200 response falls into the existing error state rather than setting state to `undefined`.
 3. **A state setter that receives `undefined` will not throw at the call site** — the crash happens on the next render when code accesses a property on the undefined value. Always validate at the boundary.
 
+## Story Fixtures
+
+All shared `RecipeRow` fixtures — used by both stories and tests — live in `src/fixtures/` and import via `@/fixtures`. Never define inline `RecipeRow` objects in story files.
+
+- `recipeFixtures: RecipeRow[]` — 5 real production recipes with Supabase image URLs
+- `makeRecipe(id, name, overrides?)` — minimal factory for one-off fixture needs
+- `sources: string[]` — real source values from the fixture recipes
+- `rescrapeFixture: SchemaRecipe` — moved from `src/__tests__/fixtures/`; used by rescrape and update tests
+
+**Real fixture images** are at `https://xonkmdhnjpjkapnsmltu.supabase.co/storage/v1/object/recipes/...` (production Supabase). If a story shows broken images, check `next.config.js` `images.domains`.
+
+## Story Discipline
+
+**Storybook = visual documentation. vitest = behavioral assertions.** The line: if removing a `play()` block makes the story _less visually informative_, keep it. If it only makes it less tested, delete it.
+
+- Never use `play()` to assert that a mock callback was called — that's a vitest test
+- Never mock `global.fetch` in a story to simulate API responses — that's a vitest test
+- `play()` is appropriate for demonstrating visual state transitions (e.g. NutritionPanel's portion stepper)
+
+**`useSearchParams` in `@storybook/nextjs-vite`:** Pass `parameters.nextjs.navigation.searchParams: { q: "..." }` — the adapter wraps it in `ReadonlyURLSearchParams` internally, so `.get("q")` returns the expected value. No `play()` workaround needed.
+
+## Storybook Nav Structure
+
+- `Components/Cooking Mode/*` — all cooking session components
+- `Components/Recipes/*` — recipe display, filters, search, pagination, card, grid
+- `Components/HeadsUp/*` — heads-up game components
+- `Components/Icons` — icon library (stays at root)
+
+New stories must follow this structure. A story landing at root `Components/X` will look wrong in the sidebar.
+
 ## Storybook Configuration
 
 **`main.ts` is loaded as ESM by Storybook 10** — `__dirname` is undefined. Use `path.dirname(fileURLToPath(import.meta.url))` instead (import `fileURLToPath` from `"url"`).

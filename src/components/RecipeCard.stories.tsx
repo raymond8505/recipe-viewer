@@ -1,27 +1,12 @@
-import type { Meta, StoryObj } from "@storybook/react";
+import type { Meta, StoryObj } from "@storybook/nextjs-vite";
 import RecipeCard from "./RecipeCard";
-import type { RecipeRow } from "@/types/recipe";
+import { recipeFixtures, makeRecipe } from "@/fixtures";
 
-const baseRecipe: RecipeRow = {
-  id: "1",
-  url: "https://example.com/pasta-carbonara",
-  source: "example.com",
-  status: "published",
-  metadata: {
-    schema: {
-      name: "Pasta Carbonara",
-      description:
-        "A classic Italian pasta dish made with eggs, Pecorino Romano, guanciale, and black pepper.",
-      image: "https://images.unsplash.com/photo-1612874742237-6526221588e3?w=400",
-      totalTime: "PT30M",
-      recipeCategory: "Italian",
-    },
-  },
-};
+const baseRecipe = recipeFixtures[2]; // Thai Curry Chicken Meatballs
 
 const meta: Meta<typeof RecipeCard> = {
   component: RecipeCard,
-  title: "Components/RecipeCard",
+  title: "Components/Recipes/RecipeCard",
   parameters: {
     nextjs: { appDirectory: true },
     layout: "centered",
@@ -70,14 +55,10 @@ export const NoDescription: Story = {
 
 export const NoTimeOrCategory: Story = {
   args: {
-    recipe: {
-      ...baseRecipe,
-      metadata: {
-        schema: {
-          name: "Simple Salad",
-          image: undefined,
-        },
-      },
-    },
+    recipe: makeRecipe("simple-salad", "Simple Salad"),
   },
+};
+
+export const WithStatusBadge: Story = {
+  args: { recipe: { ...baseRecipe, status: "draft" }, showStatusBadge: true },
 };

@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, fireEvent, waitFor, act } from "@testing-library/react";
 import RecipeDetail from "@/components/RecipeDetail";
 import type { RecipeRow, HowToStep, HowToSection, SchemaRecipe } from "@/types/recipe";
-import { rescrapeFixture } from "./fixtures/rescrape";
+import { rescrapeFixture } from "@/fixtures/rescrape";
 
 function makeRecipe(schema: Partial<SchemaRecipe> = {}): RecipeRow {
   return {
