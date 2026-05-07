@@ -29,8 +29,10 @@ const meta: Meta<typeof MealTabs> = {
 export default meta;
 type Story = StoryObj<typeof MealTabs>;
 
-// First tab is always the primary — no close button
 export const SingleTab: Story = {
+  parameters: {
+    docs: { description: { story: "First tab is always the primary — no close button." } },
+  },
   args: { recipes: [recipes[0]], activeIndex: 0 },
 };
 

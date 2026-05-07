@@ -46,8 +46,10 @@ export const Unparseable: Story = {
   args: { ingredient: "a handful of fresh herbs", scale: 1 },
 };
 
-// Clicking the amount button reveals an <input type="number">
 export const EditingAmount: Story = {
+  parameters: {
+    docs: { description: { story: "Clicking the amount button reveals an editable number input." } },
+  },
   args: { ingredient: "2 cups flour", scale: 1 },
   play: async ({ canvas }) => {
     await userEvent.click(canvas.getByRole("button", { name: /edit amount/i }));
