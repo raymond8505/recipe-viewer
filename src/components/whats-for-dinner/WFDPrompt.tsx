@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { SpinnerIcon } from "@/components/icons";
 
 interface WFDPromptProps {
   onSubmit: (prompt: string) => void;
@@ -64,25 +65,7 @@ export default function WFDPrompt({ onSubmit, isLoading, error }: WFDPromptProps
           >
             {isLoading ? (
               <>
-                <svg
-                  width="20"
-                  height="20"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2.5"
-                  strokeLinecap="round"
-                  className="animate-spin"
-                >
-                  <path d="M12 2v4" />
-                  <path d="m16.24 7.76 2.83-2.83" opacity=".3" />
-                  <path d="M18 12h4" opacity=".3" />
-                  <path d="m16.24 16.24 2.83 2.83" opacity=".3" />
-                  <path d="M12 18v4" opacity=".3" />
-                  <path d="m7.76 16.24-2.83 2.83" opacity=".3" />
-                  <path d="M6 12H2" opacity=".3" />
-                  <path d="m7.76 7.76-2.83-2.83" opacity=".3" />
-                </svg>
+                <SpinnerIcon size={20} className="animate-spin" />
                 Finding options&hellip;
               </>
             ) : (
