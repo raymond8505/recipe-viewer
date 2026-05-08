@@ -13,7 +13,8 @@
     "deploy:quick": "yarn build && deploy",
     "storybook": "storybook dev -p 6006",
     "build-storybook": "storybook build --output-dir public/storybook",
-    "build:prod": "yarn build-storybook && yarn build"
+    "build:prod": "yarn build-storybook && yarn build",
+    "typecheck": "tsc --noEmit"
   },
   "lint-staged": {
     "*.{ts,tsx,js,jsx,mjs,cjs}": "eslint --max-warnings 0"

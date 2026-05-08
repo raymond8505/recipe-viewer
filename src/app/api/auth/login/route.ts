@@ -10,7 +10,7 @@ export async function POST(request: Request) {
   }
 
   const jar = await cookies();
-  jar.set(SESSION_COOKIE, expected, {
+  jar.set(SESSION_COOKIE, getExpectedToken(), {
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",
     sameSite: "lax",
