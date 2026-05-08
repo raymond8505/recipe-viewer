@@ -10,7 +10,7 @@ const meta: Meta<typeof MealSearch> = {
     docs: {
       description: {
         component:
-          "Search your saved recipes to add to the current meal session. Try searching for "tomatillo", "meatball", or "oat" to see results.",
+          'Search your saved recipes to add to the current meal session. Try searching for "tomatillo", "meatball", or "oat" to see results.',
       },
     },
   },
