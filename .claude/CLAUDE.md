@@ -170,7 +170,7 @@ Decision tool at `/whats-for-dinner`. Winner-stays matchup; backend drives conte
 
 **Response shape:** `{ recipes: FlatRecipeRow[] }` — the API route also tolerates `[{ recipes }]` array wrapping. Validate on `r.schema?.name` (not `r.metadata?.schema?.name`).
 
-**Merge algorithm (CONTENDERS_LOADED reducer):** On initial load (`winnerIndex === null`) place the response directly. After a pick: winner = `state.choices[last]`, `pool = response.filter(r => r.id !== winner.id)`, fill non-winner slots left-to-right from pool. Fallback: if pool exhausted, old recipe stays. `winnerIndex` is set on PICK and must be cleared after merge.
+**Merge algorithm (CONTENDERS_LOADED reducer):** On initial load (`winnerIndex === null`) place the response directly. After a pick: winner = `state.choices[last]`, `pool = response.filter(r => r.id !== winner.id)`, fill non-winner slots left-to-right from pool. `winnerIndex` is set on PICK and must be cleared after merge.
 
 **Animation:** React key-based remounting — no imperative timers. Each slot wrapper is keyed by `recipe.id`. Key change → remount → `animate-wfd-slide-in` fires on mount. Outgoing card gets `animate-wfd-slide-out` via class change during loading (same id, no remount). `losingIndices` (all indices except winner's) is computed eagerly in the PICK reducer case before the fetch starts.
 
