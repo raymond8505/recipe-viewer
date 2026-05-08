@@ -152,15 +152,15 @@ viteFinal(config, { configType }) {
 
 **`yarn build:prod` order is load-bearing.** Storybook writes to `public/storybook/` first; `next build` then picks up `public/` into the standalone output. Reversing the order would produce a container where `/storybook/` silently 404s.
 
-## Deploy Workflow — Env Var Checklist
+## Deploy Workflow — Env Var Enforcement
 
-Whenever a new server-side env var is introduced (webhook URL, API token, feature flag, etc.), the deploy workflow **must** be updated in the same PR. The `appleboy/ssh-action` pattern in `.github/workflows/deploy.yml` requires the var in **three places** — missing any one silently drops it:
+`scripts/validate-deploy-env.sh` runs in CI (before the Docker build step) and fails the build if any env var used in `src/` is missing from `deploy.yml`, or if the three `appleboy/ssh-action` locations are out of sync. No manual checklist needed — the script enforces it.
 
-1. `env:` block — binds the GitHub Secret to the job
-2. `envs:` comma-separated list — passes it through the SSH boundary
-3. The `.env` heredoc — writes it to disk on the VPS so Docker Compose picks it up
+`docker-compose.yml` uses `env_file: .env` so it never needs updating when adding a new var.
 
-**Before shipping any feature that reads `process.env.X`:** grep `deploy.yml` for `X` and confirm all three entries exist. If they don't, the var will be absent at runtime and the feature will silently 503.
+When adding a new server-side env var, the only required steps are:
+1. Add the GitHub Secret in repo Settings → Secrets
+2. Wire it through `deploy.yml` in the three required places (`env:` block, `envs:` list, `.env` heredoc) — CI will fail if any are missing
 
 ## What's for Dinner? Feature
 
