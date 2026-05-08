@@ -1,14 +1,17 @@
-export function SpinnerIcon() {
+export function SpinnerIcon({
+  size = 16,
+  className = "text-orange-400 shrink-0 animate-spin",
+}: { size?: number; className?: string } = {}) {
   return (
     <svg
-      width="16"
-      height="16"
+      width={size}
+      height={size}
       viewBox="0 0 24 24"
       fill="none"
       stroke="currentColor"
       strokeWidth="2.5"
       strokeLinecap="round"
-      className="text-orange-400 shrink-0 animate-spin"
+      className={className}
       aria-hidden="true"
     >
       <path d="M12 2v4" />

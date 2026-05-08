@@ -2,6 +2,8 @@
 @tailwind components;
 @tailwind utilities;
 
+@import "../components/whats-for-dinner/wfd.css";
+
 /* Hide scrollbar on ribbon containers while preserving scroll behaviour */
 .ribbon-scroll {
   scrollbar-width: none;
