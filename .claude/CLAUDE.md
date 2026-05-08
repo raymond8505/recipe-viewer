@@ -129,6 +129,7 @@ All shared `RecipeRow` fixtures — used by both stories and tests — live in `
 - `Components/Cooking Mode/*` — all cooking session components
 - `Components/Recipes/*` — recipe display, filters, search, pagination, card, grid
 - `Components/HeadsUp/*` — heads-up game components
+- `Components/WhatsForDinner/*` — what's for dinner decision tool components
 - `Components/Icons` — icon library (stays at root)
 
 New stories must follow this structure. A story landing at root `Components/X` will look wrong in the sidebar.
@@ -160,3 +161,17 @@ Whenever a new server-side env var is introduced (webhook URL, API token, featur
 3. The `.env` heredoc — writes it to disk on the VPS so Docker Compose picks it up
 
 **Before shipping any feature that reads `process.env.X`:** grep `deploy.yml` for `X` and confirm all three entries exist. If they don't, the var will be absent at runtime and the feature will silently 503.
+
+## What's for Dinner? Feature
+
+Decision tool at `/whats-for-dinner`. Winner-stays matchup; backend drives contender selection. Code lives in `src/components/whats-for-dinner/`, `src/hooks/useWFD.ts`, `src/types/whats-for-dinner.ts`, `src/app/api/whats-for-dinner/route.ts`.
+
+**Wire format boundary:** The webhook speaks `FlatRecipeRow` (flat `schema` field) in both directions. The hook flattens `state.choices` (RecipeRow[]) before the fetch; the API route promotes the response back to RecipeRow[] before returning. Everything inside the app is RecipeRow. Do not collapse this boundary.
+
+**Response shape:** `{ recipes: FlatRecipeRow[] }` — the API route also tolerates `[{ recipes }]` array wrapping. Validate on `r.schema?.name` (not `r.metadata?.schema?.name`).
+
+**Merge algorithm (CONTENDERS_LOADED reducer):** On initial load (`winnerIndex === null`) place the response directly. After a pick: winner = `state.choices[last]`, `pool = response.filter(r => r.id !== winner.id)`, fill non-winner slots left-to-right from pool. Fallback: if pool exhausted, old recipe stays. `winnerIndex` is set on PICK and must be cleared after merge.
+
+**Animation:** React key-based remounting — no imperative timers. Each slot wrapper is keyed by `recipe.id`. Key change → remount → `animate-wfd-slide-in` fires on mount. Outgoing card gets `animate-wfd-slide-out` via class change during loading (same id, no remount). `losingIndices` (all indices except winner's) is computed eagerly in the PICK reducer case before the fetch starts.
+
+**Never reuse recipe IDs across contender slots** — the animation won't fire if the key doesn't change.
