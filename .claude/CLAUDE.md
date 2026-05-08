@@ -154,13 +154,18 @@ viteFinal(config, { configType }) {
 
 ## Deploy Workflow — Env Var Enforcement
 
-`scripts/validate-deploy-env.sh` runs in CI (before the Docker build step) and fails the build if any env var used in `src/` is missing from `deploy.yml`, or if the three `appleboy/ssh-action` locations are out of sync. No manual checklist needed — the script enforces it.
+All server-side env vars are validated at app startup via `src/env.ts` (`@t3-oss/env-nextjs` + zod). A missing or malformed var crashes the container immediately — the deploy health check catches it and fails the deploy. No more silent 503s.
 
-`docker-compose.yml` uses `env_file: .env` so it never needs updating when adding a new var.
+`docker-compose.yml` uses `env_file: .env` — never add vars to the `environment:` block. Adding a new var requires:
+1. Add to `src/env.ts` `server:` and `runtimeEnv:` (this is the single source of truth)
+2. Add the GitHub Secret in repo Settings → Secrets
+3. Wire through `deploy.yml` in 3 places (`env:` block, `envs:` list, `.env` heredoc)
 
-When adding a new server-side env var, the only required steps are:
-1. Add the GitHub Secret in repo Settings → Secrets
-2. Wire it through `deploy.yml` in the three required places (`env:` block, `envs:` list, `.env` heredoc) — CI will fail if any are missing
+**`SKIP_ENV_VALIDATION=1` is set in two places — both load-bearing:**
+- `Dockerfile` builder stage: server vars aren't available during `next build`
+- `vitest.config.ts` `env:` block: must use `env:` not `setupFiles` (module-level code runs before setup files)
+
+**`vi.stubEnv` doesn't work in tests for vars from `@/env`** — `createEnv` is a module-level singleton; `runtimeEnv` is captured once at import time. Use `vi.mock("@/env", () => ({ env: { VAR: "value" } }))` instead.
 
 ## What's for Dinner? Feature
 

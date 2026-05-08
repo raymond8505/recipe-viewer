@@ -1,15 +1,11 @@
 import { cookies } from "next/headers";
 import { SESSION_COOKIE, getExpectedToken } from "@/lib/auth";
+import { env } from "@/env";
 
 export async function POST(request: Request) {
   const { password } = await request.json();
 
-  const expected = getExpectedToken();
-  if (!expected) {
-    return new Response("AUTH_PASSWORD is not configured", { status: 503 });
-  }
-
-  if (password !== process.env.AUTH_PASSWORD) {
+  if (password !== env.AUTH_PASSWORD) {
     return new Response("Incorrect password", { status: 401 });
   }
 

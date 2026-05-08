@@ -1,5 +1,6 @@
 import { API_TOOLS } from "@/lib/windowApi";
 import type { McpTool } from "@/lib/windowApi";
+import { env } from "@/env";
 
 const PROTOCOL_VERSION = "2024-11-05";
 
@@ -29,12 +30,8 @@ function methodNotFound(id: unknown) {
 }
 
 export async function POST(request: Request) {
-  const token = process.env.MCP_API_TOKEN;
-  if (!token) {
-    return new Response("MCP_API_TOKEN is not configured", { status: 503 });
-  }
   const auth = request.headers.get("authorization");
-  if (auth !== `Bearer ${token}`) return unauthorized();
+  if (auth !== `Bearer ${env.MCP_API_TOKEN}`) return unauthorized();
 
   const body = await request.json();
 

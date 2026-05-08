@@ -6,6 +6,10 @@ vi.mock("@/lib/supabase", () => ({
   getSupabaseClient: vi.fn(),
 }));
 
+vi.mock("@/env", () => ({
+  env: { RESCRAPE_WEBHOOK_URL: "https://webhook.test/scrape" },
+}));
+
 function makeParams(id = "recipe-1") {
   return { params: Promise.resolve({ id }) };
 }
@@ -38,24 +42,11 @@ function makeWebhookResponse(ok: boolean, body: object = { schema: rescrapeFixtu
 }
 
 describe("POST /api/recipes/[id]/rescrape", () => {
-  const { getSupabaseClient } = vi.hoisted(() => ({
-    getSupabaseClient: vi.fn(),
-  }));
-
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.unstubAllEnvs();
-  });
-
-  it("returns 503 when RESCRAPE_WEBHOOK_URL is not set", async () => {
-    const res = await POST(new Request("http://localhost/api/recipes/recipe-1/rescrape", { method: "POST" }), makeParams());
-    expect(res.status).toBe(503);
-    const body = await res.json();
-    expect(body.error).toMatch(/not configured/i);
   });
 
   it("returns 404 when recipe is not found", async () => {
-    vi.stubEnv("RESCRAPE_WEBHOOK_URL", "https://webhook.test/scrape");
     const { getSupabaseClient } = await import("@/lib/supabase");
     vi.mocked(getSupabaseClient).mockReturnValue(
       makeSupabaseClient({ recipe: null, fetchError: { message: "Not found" } }) as never
@@ -66,7 +57,6 @@ describe("POST /api/recipes/[id]/rescrape", () => {
   });
 
   it("returns 502 when webhook call fails", async () => {
-    vi.stubEnv("RESCRAPE_WEBHOOK_URL", "https://webhook.test/scrape");
     const { getSupabaseClient } = await import("@/lib/supabase");
     vi.mocked(getSupabaseClient).mockReturnValue(makeSupabaseClient() as never);
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(null, { status: 500 })));
@@ -76,7 +66,6 @@ describe("POST /api/recipes/[id]/rescrape", () => {
   });
 
   it("returns 502 when webhook is unreachable", async () => {
-    vi.stubEnv("RESCRAPE_WEBHOOK_URL", "https://webhook.test/scrape");
     const { getSupabaseClient } = await import("@/lib/supabase");
     vi.mocked(getSupabaseClient).mockReturnValue(makeSupabaseClient() as never);
     vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("Network error")));
@@ -86,7 +75,6 @@ describe("POST /api/recipes/[id]/rescrape", () => {
   });
 
   it("returns 502 when webhook response has no schema key", async () => {
-    vi.stubEnv("RESCRAPE_WEBHOOK_URL", "https://webhook.test/scrape");
     const { getSupabaseClient } = await import("@/lib/supabase");
     vi.mocked(getSupabaseClient).mockReturnValue(makeSupabaseClient() as never);
     vi.stubGlobal("fetch", vi.fn(() => makeWebhookResponse(true, { name: "Missing wrapper" })));
@@ -96,7 +84,6 @@ describe("POST /api/recipes/[id]/rescrape", () => {
   });
 
   it("returns 200 with updated schema on success", async () => {
-    vi.stubEnv("RESCRAPE_WEBHOOK_URL", "https://webhook.test/scrape");
     const { getSupabaseClient } = await import("@/lib/supabase");
     vi.mocked(getSupabaseClient).mockReturnValue(makeSupabaseClient() as never);
     vi.stubGlobal("fetch", vi.fn(() => makeWebhookResponse(true)));
@@ -108,7 +95,6 @@ describe("POST /api/recipes/[id]/rescrape", () => {
   });
 
   it("posts the recipe URL to the webhook", async () => {
-    vi.stubEnv("RESCRAPE_WEBHOOK_URL", "https://webhook.test/scrape");
     const { getSupabaseClient } = await import("@/lib/supabase");
     vi.mocked(getSupabaseClient).mockReturnValue(makeSupabaseClient() as never);
     const mockFetch = vi.fn(() => makeWebhookResponse(true));

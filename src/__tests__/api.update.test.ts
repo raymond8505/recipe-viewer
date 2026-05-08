@@ -6,6 +6,10 @@ vi.mock("@/lib/supabase", () => ({
   getSupabaseClient: vi.fn(),
 }));
 
+vi.mock("@/env", () => ({
+  env: { EDIT_WEBHOOK_URL: "https://webhook.test/edit" },
+}));
+
 function makeParams(id = "recipe-1") {
   return { params: Promise.resolve({ id }) };
 }
@@ -59,24 +63,11 @@ function makeWebhookResponse(ok: boolean, body: object = webhookResponse) {
 }
 
 describe("POST /api/recipes/[id]/update", () => {
-  const { getSupabaseClient } = vi.hoisted(() => ({
-    getSupabaseClient: vi.fn(),
-  }));
-
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.unstubAllEnvs();
-  });
-
-  it("returns 503 when EDIT_WEBHOOK_URL is not set", async () => {
-    const res = await POST(makeRequest({ schema: { name: "Test" }, status: "draft" }), makeParams());
-    expect(res.status).toBe(503);
-    const body = await res.json();
-    expect(body.error).toMatch(/not configured/i);
   });
 
   it("returns 404 when recipe is not found", async () => {
-    vi.stubEnv("EDIT_WEBHOOK_URL", "https://webhook.test/edit");
     const { getSupabaseClient } = await import("@/lib/supabase");
     vi.mocked(getSupabaseClient).mockReturnValue(
       makeSupabaseClient({ recipe: null, fetchError: { message: "Not found" } }) as never
@@ -87,7 +78,6 @@ describe("POST /api/recipes/[id]/update", () => {
   });
 
   it("returns 502 when webhook is unreachable", async () => {
-    vi.stubEnv("EDIT_WEBHOOK_URL", "https://webhook.test/edit");
     const { getSupabaseClient } = await import("@/lib/supabase");
     vi.mocked(getSupabaseClient).mockReturnValue(makeSupabaseClient() as never);
     vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("Network error")));
@@ -97,7 +87,6 @@ describe("POST /api/recipes/[id]/update", () => {
   });
 
   it("returns 502 when webhook returns non-ok status", async () => {
-    vi.stubEnv("EDIT_WEBHOOK_URL", "https://webhook.test/edit");
     const { getSupabaseClient } = await import("@/lib/supabase");
     vi.mocked(getSupabaseClient).mockReturnValue(makeSupabaseClient() as never);
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(null, { status: 500 })));
@@ -107,7 +96,6 @@ describe("POST /api/recipes/[id]/update", () => {
   });
 
   it("returns 500 when Supabase update fails", async () => {
-    vi.stubEnv("EDIT_WEBHOOK_URL", "https://webhook.test/edit");
     const { getSupabaseClient } = await import("@/lib/supabase");
     vi.mocked(getSupabaseClient).mockReturnValue(
       makeSupabaseClient({ updateError: { message: "RLS violation" } }) as never
@@ -119,7 +107,6 @@ describe("POST /api/recipes/[id]/update", () => {
   });
 
   it("returns 200 with updated schema and status on success", async () => {
-    vi.stubEnv("EDIT_WEBHOOK_URL", "https://webhook.test/edit");
     const { getSupabaseClient } = await import("@/lib/supabase");
     vi.mocked(getSupabaseClient).mockReturnValue(makeSupabaseClient() as never);
     vi.stubGlobal("fetch", vi.fn(() => makeWebhookResponse(true)));
@@ -132,7 +119,6 @@ describe("POST /api/recipes/[id]/update", () => {
   });
 
   it("sends stored recipe.url to webhook when no url in request body", async () => {
-    vi.stubEnv("EDIT_WEBHOOK_URL", "https://webhook.test/edit");
     const { getSupabaseClient } = await import("@/lib/supabase");
     vi.mocked(getSupabaseClient).mockReturnValue(makeSupabaseClient() as never);
     const mockFetch = vi.fn(() => makeWebhookResponse(true));
@@ -148,7 +134,6 @@ describe("POST /api/recipes/[id]/update", () => {
   });
 
   it("sends body.url to webhook when provided, overriding stored url", async () => {
-    vi.stubEnv("EDIT_WEBHOOK_URL", "https://webhook.test/edit");
     const { getSupabaseClient } = await import("@/lib/supabase");
     vi.mocked(getSupabaseClient).mockReturnValue(makeSupabaseClient() as never);
     const mockFetch = vi.fn(() => makeWebhookResponse(true));
@@ -165,7 +150,6 @@ describe("POST /api/recipes/[id]/update", () => {
   });
 
   it("saves the effective url to Supabase on success", async () => {
-    vi.stubEnv("EDIT_WEBHOOK_URL", "https://webhook.test/edit");
     const { getSupabaseClient } = await import("@/lib/supabase");
     const client = makeSupabaseClient();
     vi.mocked(getSupabaseClient).mockReturnValue(client as never);

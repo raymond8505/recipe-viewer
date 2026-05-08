@@ -1,16 +1,12 @@
 import { NextResponse } from "next/server";
 import { getSupabaseClient } from "@/lib/supabase";
 import type { SchemaRecipe } from "@/types/recipe";
+import { env } from "@/env";
 
 export async function POST(
   req: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const webhookUrl = process.env.EDIT_WEBHOOK_URL;
-  if (!webhookUrl) {
-    return NextResponse.json({ error: "Webhook not configured" }, { status: 503 });
-  }
-
   const { id } = await params;
   const supabase = getSupabaseClient();
 
@@ -29,7 +25,7 @@ export async function POST(
 
   let webhookRes: Response;
   try {
-    webhookRes = await fetch(webhookUrl, {
+    webhookRes = await fetch(env.EDIT_WEBHOOK_URL, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ url: effectiveUrl, schema: body.schema, status: body.status }),

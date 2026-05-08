@@ -7,6 +7,7 @@ export default defineConfig({
   test: {
     globals: true,
     environment: "jsdom",
+    env: { SKIP_ENV_VALIDATION: "1" },
     setupFiles: ["./src/__tests__/setup.ts"],
     include: ["src/**/*.test.{ts,tsx}"],
     alias: {
