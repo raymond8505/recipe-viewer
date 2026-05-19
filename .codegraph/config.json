@@ -1,0 +1,42 @@
+{
+  "version": 1,
+  "include": [
+    "**/*.ts",
+    "**/*.tsx",
+    "**/*.js",
+    "**/*.jsx",
+    "**/*.mjs",
+    "**/*.cjs"
+  ],
+  "exclude": [
+    "**/.git/**",
+    "**/node_modules/**",
+    "**/dist/**",
+    "**/build/**",
+    "**/out/**",
+    "**/.next/**",
+    "**/.turbo/**",
+    "**/.cache/**",
+    "**/.vite/**",
+    "**/.yarn/cache/**",
+    "**/storybook-static/**",
+    "**/coverage/**",
+    "**/.nyc_output/**",
+    "**/test-results/**",
+    "**/.idea/**",
+    "**/.vs/**",
+    "**/logs/**",
+    "**/tmp/**",
+    "**/temp/**",
+    "**/*.min.js",
+    "**/*.bundle.js",
+    "**/public/storybook/**",
+    "**/.vercel/**",
+    "next-env.d.ts"
+  ],
+  "languages": ["typescript", "javascript"],
+  "frameworks": [],
+  "maxFileSize": 1048576,
+  "extractDocstrings": true,
+  "trackCallSites": true
+}
