@@ -1,9 +1,9 @@
 import type { SchemaRecipe, RecipeIngredient } from "@/types/recipe";
 import {
-  parseIngredientRanged,
+  parseIngredient,
   parseServings,
   type ParsedAmount,
-  type ParsedIngredientRanged,
+  type ParsedIngredient,
 } from "./units";
 
 export interface ScalableRecipeState {
@@ -22,7 +22,7 @@ export interface ScaledIngredient {
   /** Raw schema string (or .name when the source was a RecipeIngredient object). */
   original: string;
   /** Pre-scale parse, or null for unparseable strings like "salt to taste". */
-  parsed: ParsedIngredientRanged | null;
+  parsed: ParsedIngredient | null;
   /** Post-scale amount, or null when parsed is null. */
   scaledAmount: ParsedAmount | null;
   unit: string | null;
@@ -94,7 +94,7 @@ interface InternalEntry {
   index: number;
   group?: string;
   text: string;
-  parsed: ParsedIngredientRanged | null;
+  parsed: ParsedIngredient | null;
 }
 
 function parseEntry(
@@ -103,7 +103,7 @@ function parseEntry(
 ): InternalEntry {
   const text = typeof entry === "string" ? entry : entry.name;
   const group = typeof entry === "string" ? undefined : entry.group;
-  return { index, group, text, parsed: parseIngredientRanged(text) };
+  return { index, group, text, parsed: parseIngredient(text) };
 }
 
 /**
@@ -263,4 +263,4 @@ export class ScalableRecipe {
   }
 }
 
-export type { ParsedAmount, ParsedIngredientRanged };
+export type { ParsedAmount, ParsedIngredient };

@@ -36,56 +36,8 @@ const ALIAS_ENTRIES: [string, string][] = Object.entries(UNIT_DEFS)
   )
   .sort(([a], [b]) => b.length - a.length);
 
-export interface ParsedIngredient {
-  amount: number;
-  unit: string | null;
-  rest: string;
-  original: string;
-}
-
 function escapeRe(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
-
-function parseAmount(s: string): number {
-  s = s.trim();
-  const mixed = s.match(/^(\d+)\s+(\d+)\/(\d+)$/);
-  if (mixed) return parseInt(mixed[1]) + parseInt(mixed[2]) / parseInt(mixed[3]);
-  const frac = s.match(/^(\d+)\/(\d+)$/);
-  if (frac) return parseInt(frac[1]) / parseInt(frac[2]);
-  return parseFloat(s);
-}
-
-// Matches: mixed "1 1/2", fraction "1/2", decimal/integer "2.5" or "2"
-const AMOUNT_RE = /^(\d+\s+\d+\/\d+|\d+\/\d+|\d+(?:\.\d+)?)\s*/;
-
-export function parseIngredient(str: string): ParsedIngredient | null {
-  const amountMatch = str.match(AMOUNT_RE);
-  if (!amountMatch) return null;
-
-  const amountStr = amountMatch[1];
-  const afterAmount = str.slice(amountMatch[0].length);
-
-  for (const [alias, unitKey] of ALIAS_ENTRIES) {
-    const pattern = new RegExp(`^(${escapeRe(alias)})(?=\\s|$)`, "i");
-    const m = afterAmount.match(pattern);
-    if (m) {
-      return {
-        amount: parseAmount(amountStr),
-        unit: unitKey,
-        rest: afterAmount.slice(m[0].length).trim(),
-        original: str,
-      };
-    }
-  }
-
-  // Number found but no recognized unit — rest is everything after the amount
-  return {
-    amount: parseAmount(amountStr),
-    unit: null,
-    rest: afterAmount.trim(),
-    original: str,
-  };
 }
 
 export function convert(amount: number, fromUnit: string | null, toUnit: string | null): number {
@@ -132,9 +84,8 @@ export function formatAmount(n: number): string {
   return String(parseFloat((Math.round(n * 100) / 100).toFixed(2)));
 }
 
-// Range- and unicode-aware amount parsing. Coexists with parseAmount/parseIngredient
-// above; ScalableRecipe consumes these. The legacy parsers will be removed once all
-// callsites migrate.
+// Amount parsing: integers, decimals, ASCII and unicode fractions, mixed numbers,
+// and ranges. Consumed by ScalableRecipe and IngredientItem.
 
 export type ParsedAmount =
   | { kind: "single"; value: number }
@@ -214,14 +165,14 @@ export function roundParsedAmount(a: ParsedAmount): ParsedAmount {
     : { kind: "range", min: roundToQuarter(a.min), max: roundToQuarter(a.max) };
 }
 
-export interface ParsedIngredientRanged {
+export interface ParsedIngredient {
   amount: ParsedAmount;
   unit: string | null;
   rest: string;
   original: string;
 }
 
-export function parseIngredientRanged(str: string): ParsedIngredientRanged | null {
+export function parseIngredient(str: string): ParsedIngredient | null {
   const m = str.match(AMOUNT_RANGE_RE);
   if (!m) return null;
   const amount = parseAmountToken(m[1]);

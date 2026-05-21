@@ -1,7 +1,6 @@
 import { describe, it, expect } from "vitest";
 import {
   parseIngredient,
-  parseIngredientRanged,
   parseAmountToken,
   formatParsedAmount,
   convert,
@@ -10,98 +9,6 @@ import {
   parseServings,
   roundToQuarter,
 } from "@/lib/units";
-
-describe("parseIngredient", () => {
-  it("parses integer amount with unit", () => {
-    const r = parseIngredient("2 cups flour");
-    expect(r).not.toBeNull();
-    expect(r!.amount).toBe(2);
-    expect(r!.unit).toBe("cup");
-    expect(r!.rest).toBe("flour");
-  });
-
-  it("parses fractional amount", () => {
-    const r = parseIngredient("1/2 tsp salt");
-    expect(r).not.toBeNull();
-    expect(r!.amount).toBeCloseTo(0.5);
-    expect(r!.unit).toBe("tsp");
-  });
-
-  it("parses mixed number amount", () => {
-    const r = parseIngredient("1 1/2 cups butter");
-    expect(r).not.toBeNull();
-    expect(r!.amount).toBeCloseTo(1.5);
-    expect(r!.unit).toBe("cup");
-  });
-
-  it("parses decimal amount", () => {
-    const r = parseIngredient("2.5 lbs chicken");
-    expect(r).not.toBeNull();
-    expect(r!.amount).toBeCloseTo(2.5);
-    expect(r!.unit).toBe("lb");
-  });
-
-  it("parses full unit name", () => {
-    const r = parseIngredient("1 tablespoon olive oil");
-    expect(r).not.toBeNull();
-    expect(r!.unit).toBe("tbsp");
-  });
-
-  it("parses plural unit name", () => {
-    const r = parseIngredient("2 tablespoons olive oil");
-    expect(r).not.toBeNull();
-    expect(r!.unit).toBe("tbsp");
-  });
-
-  it("returns amount with null unit for no known unit", () => {
-    const r = parseIngredient("3 large eggs");
-    expect(r).not.toBeNull();
-    expect(r!.amount).toBe(3);
-    expect(r!.unit).toBeNull();
-    expect(r!.rest).toBe("large eggs");
-  });
-
-  it("returns null for no amount", () => {
-    expect(parseIngredient("salt to taste")).toBeNull();
-  });
-
-  it("parses fl oz (not as oz)", () => {
-    const r = parseIngredient("2 fl oz water");
-    expect(r).not.toBeNull();
-    expect(r!.unit).toBe("fl oz");
-  });
-
-  it("parses oz by itself", () => {
-    const r = parseIngredient("14 oz canned tomatoes");
-    expect(r).not.toBeNull();
-    expect(r!.unit).toBe("oz");
-  });
-
-  it("parses grams", () => {
-    const r = parseIngredient("100 g butter");
-    expect(r).not.toBeNull();
-    expect(r!.unit).toBe("g");
-  });
-
-  it("parses kg", () => {
-    const r = parseIngredient("1 kg flour");
-    expect(r).not.toBeNull();
-    expect(r!.unit).toBe("kg");
-  });
-
-  it("does not match unit mid-word (large != liter)", () => {
-    const r = parseIngredient("1 large egg");
-    expect(r).not.toBeNull();
-    expect(r!.unit).toBeNull();
-    expect(r!.rest).toBe("large egg");
-  });
-
-  it("preserves rest text correctly", () => {
-    const r = parseIngredient("2 tbsp olive oil, divided");
-    expect(r).not.toBeNull();
-    expect(r!.rest).toBe("olive oil, divided");
-  });
-});
 
 describe("convert", () => {
   it("converts tbsp to tsp (1 tbsp = 3 tsp)", () => {
@@ -347,9 +254,9 @@ describe("formatParsedAmount", () => {
   });
 });
 
-describe("parseIngredientRanged", () => {
+describe("parseIngredient", () => {
   it("parses single-amount ingredient with unit", () => {
-    const r = parseIngredientRanged("2 cups flour");
+    const r = parseIngredient("2 cups flour");
     expect(r).not.toBeNull();
     expect(r!.amount).toEqual({ kind: "single", value: 2 });
     expect(r!.unit).toBe("cup");
@@ -357,7 +264,7 @@ describe("parseIngredientRanged", () => {
   });
 
   it("parses range ingredient and strips the range from rest", () => {
-    const r = parseIngredientRanged("3-5 cloves garlic");
+    const r = parseIngredient("3-5 cloves garlic");
     expect(r).not.toBeNull();
     expect(r!.amount).toEqual({ kind: "range", min: 3, max: 5 });
     expect(r!.unit).toBeNull();
@@ -365,7 +272,7 @@ describe("parseIngredientRanged", () => {
   });
 
   it("parses 'to' range with unit", () => {
-    const r = parseIngredientRanged("2 to 3 tablespoons olive oil");
+    const r = parseIngredient("2 to 3 tablespoons olive oil");
     expect(r).not.toBeNull();
     expect(r!.amount).toEqual({ kind: "range", min: 2, max: 3 });
     expect(r!.unit).toBe("tbsp");
@@ -373,7 +280,7 @@ describe("parseIngredientRanged", () => {
   });
 
   it("parses unicode-fraction ingredient", () => {
-    const r = parseIngredientRanged("½ cup sugar");
+    const r = parseIngredient("½ cup sugar");
     expect(r).not.toBeNull();
     expect(r!.amount).toEqual({ kind: "single", value: 0.5 });
     expect(r!.unit).toBe("cup");
@@ -381,21 +288,46 @@ describe("parseIngredientRanged", () => {
   });
 
   it("parses unicode-mixed ingredient", () => {
-    const r = parseIngredientRanged("1½ cups milk");
+    const r = parseIngredient("1½ cups milk");
     expect(r).not.toBeNull();
     expect(r!.amount).toEqual({ kind: "single", value: 1.5 });
     expect(r!.unit).toBe("cup");
     expect(r!.rest).toBe("milk");
   });
 
+  it("parses full unit name", () => {
+    const r = parseIngredient("1 tablespoon olive oil");
+    expect(r).not.toBeNull();
+    expect(r!.unit).toBe("tbsp");
+  });
+
+  it("parses fl oz as a multi-word unit, not as oz", () => {
+    const r = parseIngredient("2 fl oz water");
+    expect(r).not.toBeNull();
+    expect(r!.unit).toBe("fl oz");
+  });
+
+  it("does not match a unit alias mid-word (large vs liter)", () => {
+    const r = parseIngredient("1 large egg");
+    expect(r).not.toBeNull();
+    expect(r!.unit).toBeNull();
+    expect(r!.rest).toBe("large egg");
+  });
+
+  it("preserves rest text containing punctuation", () => {
+    const r = parseIngredient("2 tbsp olive oil, divided");
+    expect(r).not.toBeNull();
+    expect(r!.rest).toBe("olive oil, divided");
+  });
+
   it("does not match 'to' inside word (1 tomato)", () => {
-    const r = parseIngredientRanged("1 tomato");
+    const r = parseIngredient("1 tomato");
     expect(r).not.toBeNull();
     expect(r!.amount).toEqual({ kind: "single", value: 1 });
     expect(r!.rest).toBe("tomato");
   });
 
   it("returns null for non-numeric ingredient", () => {
-    expect(parseIngredientRanged("salt to taste")).toBeNull();
+    expect(parseIngredient("salt to taste")).toBeNull();
   });
 });
