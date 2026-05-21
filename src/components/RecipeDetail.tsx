@@ -37,7 +37,7 @@ export default function RecipeDetail({ recipe, isLoggedIn = false }: RecipeDetai
   const cookTime = formatDuration(schema.cookTime);
   const totalTime = formatDuration(schema.totalTime);
   const categories = toArray(schema.recipeCategory);
-  const { recipe: scalable, scalePortionsTo, anchorIngredientAmount } = useScalableRecipe(schema);
+  const { recipe: scalable, scalePortionsTo, splitPortions, anchorIngredientAmount } = useScalableRecipe(schema);
 
   const [selectedIngredients, setSelectedIngredients] = useState<Set<string>>(new Set());
   const [copyFeedback, setCopyFeedback] = useState(false);
@@ -494,8 +494,8 @@ export default function RecipeDetail({ recipe, isLoggedIn = false }: RecipeDetai
         </div>
       )}
 
-      {/* Nutrition — always read-only */}
-      {schema.nutrition && <NutritionPanel nutrition={schema.nutrition} totalServings={scalable.baseServings} />}
+      {/* Nutrition */}
+      <NutritionPanel recipe={scalable} onSplitPortions={splitPortions} />
 
       {/* JSON-LD — Schema.org-compliant only; escape </script> sequences to prevent tag injection */}
       <script

@@ -61,7 +61,13 @@ const NUTRIENT_KEYS = [
 
 type NutrientKey = (typeof NUTRIENT_KEYS)[number];
 
-function scaleNutrientValue(raw: string, multiplier: number): string {
+/**
+ * Multiply the numeric prefix of a Schema.org nutrition string by `multiplier`,
+ * preserving any trailing unit text ("350 kcal", "20g", "0.5 mg"). The output
+ * keeps one decimal place when the result is fractional, integer otherwise.
+ * Returns the input unchanged for strings without a leading number.
+ */
+export function scaleNutrientValue(raw: string, multiplier: number): string {
   const match = raw.match(/^([\d.]+)(\s*.*)$/);
   if (!match) return raw;
   const scaled = parseFloat(match[1]) * multiplier;

@@ -626,7 +626,10 @@ export default function CookingMode({ recipe, onClose, isLoggedIn = false }: Coo
             )}
 
             {/* Nutrition */}
-            {schema.nutrition && <NutritionPanel nutrition={schema.nutrition} totalServings={primaryScalable.baseServings} />}
+            <NutritionPanel
+              recipe={primaryScalable}
+              onSplitPortions={(n) => updateScalable(recipe.id, (r) => r.splitPortions(n))}
+            />
           </div>
         </div>
 
