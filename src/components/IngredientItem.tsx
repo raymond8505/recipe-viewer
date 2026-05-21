@@ -1,51 +1,61 @@
 "use client";
 
 import { useState } from "react";
+import type { ScaledIngredient } from "@/lib/ScalableRecipe";
 import {
-  parseIngredient,
   convert,
   getUnitGroup,
   getUnitDisplay,
-  formatAmount,
-  roundToQuarter,
+  formatParsedAmount,
+  parseAmountToken,
+  convertParsedAmount,
+  roundParsedAmount,
 } from "@/lib/units";
 
 interface IngredientItemProps {
-  ingredient: string;
-  scale?: number;
-  onScaleChange?: (newScale: number) => void;
+  ingredient: ScaledIngredient;
+  /**
+   * Called when the user commits a new amount. The value is in the
+   * ingredient's BASE unit — the unit on the schema, not the user's currently
+   * selected display unit. ScalableRecipe.anchorIngredientAmount then derives
+   * the recipe's new ingredient scale from this number.
+   */
+  onAnchor?: (amountInBaseUnit: number) => void;
 }
 
-export default function IngredientItem({
-  ingredient,
-  scale = 1,
-  onScaleChange,
-}: IngredientItemProps) {
-  const parsed = parseIngredient(ingredient);
-  const [selectedUnit, setSelectedUnit] = useState(() => parsed?.unit ?? null);
+export default function IngredientItem({ ingredient, onAnchor }: IngredientItemProps) {
+  const { parsed, scaledAmount, unit, rest, original } = ingredient;
+  const [selectedUnit, setSelectedUnit] = useState<string | null>(unit);
   const [editing, setEditing] = useState(false);
   const [editValue, setEditValue] = useState("");
 
-  if (!parsed) {
-    return <>{ingredient}</>;
+  if (!parsed || !scaledAmount) {
+    return <>{original}</>;
   }
 
-  const convertedAmount = roundToQuarter(convert(parsed.amount * scale, parsed.unit, selectedUnit));
-  const displayAmount = formatAmount(convertedAmount);
-  const unitGroup = getUnitGroup(parsed.unit);
+  const displayedAmount = roundParsedAmount(
+    convertParsedAmount(scaledAmount, unit, selectedUnit),
+  );
+  const displayString = formatParsedAmount(displayedAmount);
+  const unitGroup = getUnitGroup(unit);
 
   function startEdit() {
-    setEditValue(String(convertedAmount));
+    setEditValue(displayString);
     setEditing(true);
   }
 
   function commitEdit() {
-    const newVal = parseFloat(editValue);
-    if (!isNaN(newVal) && newVal > 0 && onScaleChange) {
-      const baseAmount = convert(parsed!.amount, parsed!.unit, selectedUnit!);
-      if (baseAmount > 0) {
-        onScaleChange(newVal / baseAmount);
-      }
+    const typed = parseAmountToken(editValue);
+    // Reject ranges and invalid input — single-value anchor only.
+    if (
+      typed &&
+      typed.kind === "single" &&
+      Number.isFinite(typed.value) &&
+      typed.value > 0 &&
+      onAnchor
+    ) {
+      const inBaseUnit = convert(typed.value, selectedUnit, unit);
+      onAnchor(inBaseUnit);
     }
     setEditing(false);
   }
@@ -59,28 +69,31 @@ export default function IngredientItem({
     <>
       {editing ? (
         <input
-          type="number"
-          min="0"
-          step="any"
+          type="text"
+          inputMode="decimal"
           value={editValue}
           onChange={(e) => setEditValue(e.target.value)}
+          onFocus={(e) => e.target.select()}
           onBlur={commitEdit}
           onKeyDown={handleKeyDown}
-          className="w-16 text-center border-b-2 border-orange-400 bg-transparent focus:outline-none"
+          className="w-24 text-center border-b-2 border-orange-400 bg-transparent focus:outline-none"
           autoFocus
           tabIndex={0}
         />
-      ) : onScaleChange ? (
+      ) : onAnchor ? (
         <button
           type="button"
-          onClick={(e) => { e.stopPropagation(); startEdit(); }}
+          onClick={(e) => {
+            e.stopPropagation();
+            startEdit();
+          }}
           className="cursor-pointer underline underline-offset-2 decoration-orange-300 hover:decoration-orange-500"
-          aria-label={parsed.rest ? `Edit amount for ${parsed.rest}` : `Edit amount: ${displayAmount}`}
+          aria-label={rest ? `Edit amount for ${rest}` : `Edit amount: ${displayString}`}
         >
-          {displayAmount}
+          {displayString}
         </button>
       ) : (
-        <span>{displayAmount}</span>
+        <span>{displayString}</span>
       )}
       {unitGroup.length > 0 && selectedUnit && (
         <>
@@ -99,7 +112,7 @@ export default function IngredientItem({
           </select>
         </>
       )}
-      {parsed.rest ? ` ${parsed.rest}` : ""}
+      {rest ? ` ${rest}` : ""}
     </>
   );
 }

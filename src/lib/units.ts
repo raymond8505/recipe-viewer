@@ -193,6 +193,27 @@ export function formatParsedAmount(a: ParsedAmount): string {
   return `${formatAmount(a.min)}-${formatAmount(a.max)}`;
 }
 
+/** Apply a unit conversion to both ends of a range, or the value of a single. */
+export function convertParsedAmount(
+  a: ParsedAmount,
+  from: string | null,
+  to: string | null,
+): ParsedAmount {
+  if (a.kind === "single") return { kind: "single", value: convert(a.value, from, to) };
+  return {
+    kind: "range",
+    min: convert(a.min, from, to),
+    max: convert(a.max, from, to),
+  };
+}
+
+/** Apply roundToQuarter to both ends of a range, or the value of a single. */
+export function roundParsedAmount(a: ParsedAmount): ParsedAmount {
+  return a.kind === "single"
+    ? { kind: "single", value: roundToQuarter(a.value) }
+    : { kind: "range", min: roundToQuarter(a.min), max: roundToQuarter(a.max) };
+}
+
 export interface ParsedIngredientRanged {
   amount: ParsedAmount;
   unit: string | null;

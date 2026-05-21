@@ -186,6 +186,28 @@ export class ScalableRecipe {
     }));
   }
 
+  /**
+   * Same partitioning rule as format.ts/groupIngredients: returns one
+   * unlabeled group when no ingredient has `group`; otherwise partitions by
+   * group in insertion order, with ungrouped items collected under a null heading.
+   */
+  get groupedIngredients(): Array<{ heading: string | null; items: ScaledIngredient[] }> {
+    const items = this.ingredients;
+    const hasGroups = items.some((i) => i.group != null);
+    if (!hasGroups) return [{ heading: null, items }];
+    const order: Array<string | null> = [];
+    const map = new Map<string | null, ScaledIngredient[]>();
+    for (const ing of items) {
+      const g = ing.group ?? null;
+      if (!map.has(g)) {
+        order.push(g);
+        map.set(g, []);
+      }
+      map.get(g)!.push(ing);
+    }
+    return order.map((heading) => ({ heading, items: map.get(heading)! }));
+  }
+
   get currentServings(): number | null {
     if (this.baseServings == null) return null;
     return Math.max(1, Math.round(this.baseServings * this.state.ingredientScale));
