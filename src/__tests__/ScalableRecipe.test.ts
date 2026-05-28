@@ -1,25 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { ScalableRecipe } from "@/lib/ScalableRecipe";
-import type { SchemaRecipe } from "@/types/recipe";
-
-const baseSchema: SchemaRecipe = {
-  name: "Test Recipe",
-  recipeYield: "4 servings",
-  recipeIngredient: [
-    "2 cups flour",
-    "1/2 tsp salt",
-    "3-5 cloves garlic",
-    "salt to taste",
-    { name: "1 cup butter", group: "Wet" },
-    { name: "1/4 cup sugar", group: "Wet" },
-  ],
-  nutrition: {
-    "@type": "NutritionInformation",
-    calories: "200 kcal",
-    proteinContent: "10 g",
-    fatContent: "5 g",
-  },
-};
+import { scalableBaseSchema as baseSchema } from "@/fixtures";
 
 describe("ScalableRecipe — construction", () => {
   it("parses base servings from recipeYield", () => {

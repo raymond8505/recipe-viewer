@@ -78,6 +78,43 @@ export const recipeFixtures: RecipeRow[] = [
         recipeCuisine: "Thai",
         recipeCategory: "Main Course",
         datePublished: "2026-01-09",
+        recipeIngredient: [
+          { name: "1 lb ground chicken", group: "Meatballs" },
+          { name: "3 cloves garlic, minced", group: "Meatballs" },
+          { name: "1 tbsp fish sauce", group: "Meatballs" },
+          { name: "1/4 cup panko breadcrumbs", group: "Meatballs" },
+          { name: "1 egg", group: "Meatballs" },
+          { name: "300 ml full-fat coconut milk", group: "Curry sauce" },
+          { name: "2 tbsp red curry paste", group: "Curry sauce" },
+          { name: "1 tbsp brown sugar", group: "Curry sauce" },
+          { name: "1 tbsp lime juice", group: "Curry sauce" },
+          { name: "3-5 thai basil leaves, torn", group: "Curry sauce" },
+          { name: "1/4 cup crushed peanuts, for garnish", group: "Garnish" },
+          { name: "cilantro, to taste", group: "Garnish" },
+        ],
+        recipeInstructions: [
+          {
+            "@type": "HowToSection",
+            name: "Make the meatballs",
+            itemListElement: [
+              { "@type": "HowToStep", text: "Combine chicken, garlic, fish sauce, panko, and egg in a bowl. Mix until just combined — overworking makes them tough." },
+              { "@type": "HowToStep", text: "Form into 16 meatballs, roughly 1 inch across. Refrigerate for 10 minutes to firm up." },
+              { "@type": "HowToStep", text: "Heat a tablespoon of oil in a heavy skillet over medium-high. Brown the meatballs on all sides, about 6 minutes total. Remove and set aside." },
+            ],
+          },
+          {
+            "@type": "HowToSection",
+            name: "Build the curry",
+            itemListElement: [
+              { "@type": "HowToStep", text: "In the same skillet, fry the red curry paste in any residual fat for 30 seconds until fragrant." },
+              { "@type": "HowToStep", text: "Pour in the coconut milk and whisk until smooth. Add brown sugar and lime juice." },
+              { "@type": "HowToStep", text: "Return the meatballs to the pan. Simmer for 15 minutes, turning halfway, until the sauce coats the back of a spoon and the meatballs are cooked through." },
+              { "@type": "HowToStep", text: "Tear in the basil at the end. Serve over jasmine rice topped with crushed peanuts and cilantro." },
+            ],
+          },
+        ],
+        notes:
+          "Coconut milk brand matters: Aroy-D and Chaokoh emulsify cleanly. Lighter supermarket brands break the sauce. If your basil is wilting, save it for garnish instead of stirring in.",
         nutrition: {
           calories: "828",
           proteinContent: "37.8g",

@@ -28,17 +28,17 @@ export default function NutritionPanel({ recipe, onSplitPortions }: NutritionPan
               onClick={() => onSplitPortions(Math.max(1, portions - 1))}
               disabled={portions <= 1}
               className="w-11 h-11 flex items-center justify-center rounded-lg text-gray-500 hover:bg-orange-100 hover:text-orange-600 active:bg-orange-200 transition-colors text-xl disabled:opacity-30 disabled:pointer-events-none"
-              aria-label="Fewer portions"
+              aria-label="Larger portion size"
             >
               −
             </button>
-            <span className="font-semibold text-gray-900 min-w-[2.5rem] text-center tabular-nums text-sm">
-              {portions}
+            <span className="font-semibold text-gray-900 min-w-[3rem] text-center tabular-nums text-sm">
+              1/{portions}
             </span>
             <button
               onClick={() => onSplitPortions(portions + 1)}
               className="w-11 h-11 flex items-center justify-center rounded-lg text-gray-500 hover:bg-orange-100 hover:text-orange-600 active:bg-orange-200 transition-colors text-xl"
-              aria-label="More portions"
+              aria-label="Smaller portion size"
             >
               +
             </button>

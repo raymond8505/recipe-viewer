@@ -1,4 +1,11 @@
 #!/usr/bin/env node
+/**
+ * Utility script to analyze token usage in Claude project logs, comparing sessions before and after a specific cutoff date (CodeGraph integration).
+ * It discovers main and subagent log files, collects assistant turn records, and computes statistics on output tokens per turn and per session.
+ * The script also performs an equal-token-budget comparison to assess changes in token efficiency post-switch.
+ *
+ * Usage: Run this script in an environment with access to the specified project logs. Adjust the PROJECT_DIR constant if needed.
+ */
 const fs = require("fs");
 const path = require("path");
 const os = require("os");
@@ -10,7 +17,7 @@ const PROJECT_DIR = path.join(
   os.homedir(),
   ".claude",
   "projects",
-  "c--Users-crazy-OneDrive-Desktop-projects-recipe-viewer"
+  "c--Users-crazy-OneDrive-Desktop-projects-recipe-viewer",
 );
 
 function sessionIdFromMain(file) {
@@ -65,7 +72,9 @@ async function collectRecords(file, isSubagent) {
     records.push({
       messageId: id,
       sessionFile: file,
-      sessionId: isSubagent ? sessionIdFromSubagent(file) : sessionIdFromMain(file),
+      sessionId: isSubagent
+        ? sessionIdFromSubagent(file)
+        : sessionIdFromMain(file),
       outputTokens: usage.output_tokens,
       inputTokens: usage.input_tokens ?? 0,
       cacheReadTokens: usage.cache_read_input_tokens ?? 0,
@@ -88,13 +97,21 @@ function stats(values) {
   };
   const variance =
     sorted.reduce((a, b) => a + (b - mean) ** 2, 0) / sorted.length;
-  return { mean, median: pick(0.5), p90: pick(0.9), stdev: Math.sqrt(variance) };
+  return {
+    mean,
+    median: pick(0.5),
+    p90: pick(0.9),
+    stdev: Math.sqrt(variance),
+  };
 }
 
 function sessionTotals(records) {
   const byFile = new Map();
   for (const r of records) {
-    byFile.set(r.sessionFile, (byFile.get(r.sessionFile) ?? 0) + r.outputTokens);
+    byFile.set(
+      r.sessionFile,
+      (byFile.get(r.sessionFile) ?? 0) + r.outputTokens,
+    );
   }
   return [...byFile.values()];
 }
@@ -128,20 +145,20 @@ function deltaStr(base, other) {
   const N = postMain.length;
   const matchedPreMain = preMain.slice(-N);
   const matchedPreSessionIds = new Set(
-    matchedPreMain.map((m) => sessionIdFromMain(m.file))
+    matchedPreMain.map((m) => sessionIdFromMain(m.file)),
   );
   const postSessionIds = new Set(
-    postMain.map((m) => sessionIdFromMain(m.file))
+    postMain.map((m) => sessionIdFromMain(m.file)),
   );
 
   console.log(`CodeGraph cutoff: ${CODEGRAPH_CUTOFF_UTC} (commit 1b00b5a)`);
   console.log(`Project dir:      ${PROJECT_DIR}`);
   console.log(
-    `Logs scanned:     ${main.length} main + ${sub.length} subagent files`
+    `Logs scanned:     ${main.length} main + ${sub.length} subagent files`,
   );
   console.log(
     `Matched-pre window: ${N} most-recent pre-cutoff main session(s) ` +
-      `(+ their subagents)`
+      `(+ their subagents)`,
   );
   console.log();
 
@@ -155,7 +172,7 @@ function deltaStr(base, other) {
     return !isPost;
   });
   const matchedPre = allRecords.filter((r) =>
-    matchedPreSessionIds.has(r.sessionId)
+    matchedPreSessionIds.has(r.sessionId),
   );
   const post = allRecords.filter((r) => postSessionIds.has(r.sessionId));
 
@@ -171,30 +188,37 @@ function deltaStr(base, other) {
   console.log(
     "".padEnd(LABEL_W) +
       cohorts.map((c) => c.name.padStart(COL_W)).join("") +
-      "Δ POST vs MP".padStart(DELTA_W)
+      "Δ POST vs MP".padStart(DELTA_W),
   );
   console.log("-".repeat(TOTAL_W));
 
   const padNum = (n) => String(n).padStart(COL_W);
 
   // Sessions row
-  const sessionsRow = cohorts.map((c) => new Set(c.records.map((r) => r.sessionId)).size);
+  const sessionsRow = cohorts.map(
+    (c) => new Set(c.records.map((r) => r.sessionId)).size,
+  );
   console.log("Sessions".padEnd(LABEL_W) + sessionsRow.map(padNum).join(""));
 
   // Files row
   const filesRow = cohorts.map(
-    (c) => new Set(c.records.map((r) => r.sessionFile)).size
+    (c) => new Set(c.records.map((r) => r.sessionFile)).size,
   );
-  console.log("Files (main+sub)".padEnd(LABEL_W) + filesRow.map(padNum).join(""));
+  console.log(
+    "Files (main+sub)".padEnd(LABEL_W) + filesRow.map(padNum).join(""),
+  );
 
   // Turns row
   const turnsRow = cohorts.map((c) => c.records.length);
-  console.log("Turns (deduped)".padEnd(LABEL_W) + turnsRow.map(padNum).join(""));
+  console.log(
+    "Turns (deduped)".padEnd(LABEL_W) + turnsRow.map(padNum).join(""),
+  );
 
   console.log();
   console.log("Output tokens / turn");
 
-  const tokenView = (filter) => cohorts.map((c) => c.records.filter(filter).map((r) => r.outputTokens));
+  const tokenView = (filter) =>
+    cohorts.map((c) => c.records.filter(filter).map((r) => r.outputTokens));
   const allTok = tokenView(() => true);
   const mainTok = tokenView((r) => !r.isSubagent);
   const subTok = tokenView((r) => r.isSubagent);
@@ -226,11 +250,11 @@ function deltaStr(base, other) {
 
   console.log();
   console.log(
-    `Δ POST vs MP = POST vs MATCHED PRE (the equal-N fair baseline that grows with POST).`
+    `Δ POST vs MP = POST vs MATCHED PRE (the equal-N fair baseline that grows with POST).`,
   );
   if (postMain.length < 5) {
     console.log(
-      `Note: post-cutoff n=${postMain.length} main session(s). Sample is still small — re-run after more branches.`
+      `Note: post-cutoff n=${postMain.length} main session(s). Sample is still small — re-run after more branches.`,
     );
   }
 
@@ -269,7 +293,7 @@ function deltaStr(base, other) {
         acc.cacheCreate += r.cacheCreationTokens;
         return acc;
       },
-      { output: 0, input: 0, cacheRead: 0, cacheCreate: 0 }
+      { output: 0, input: 0, cacheRead: 0, cacheCreate: 0 },
     );
   const preSum = sumCat(preRecs);
   const postSum = sumCat(postRecs);
@@ -282,7 +306,9 @@ function deltaStr(base, other) {
     return `${(h / 24).toFixed(1)}d`;
   };
 
-  const preStartTs = preRecs.length ? preRecs[preRecs.length - 1].timestampMs : CUTOFF_MS;
+  const preStartTs = preRecs.length
+    ? preRecs[preRecs.length - 1].timestampMs
+    : CUTOFF_MS;
   const postEndTs = postRecs.length
     ? Math.max(...postRecs.map((r) => r.timestampMs))
     : CUTOFF_MS;
@@ -292,18 +318,18 @@ function deltaStr(base, other) {
   console.log();
   console.log("=".repeat(TOTAL_W));
   console.log(
-    `Equal-token-budget comparison (POST total = ${postTotal.toLocaleString("en-US")} tokens)`
+    `Equal-token-budget comparison (POST total = ${postTotal.toLocaleString("en-US")} tokens)`,
   );
   console.log(
-    `  POST: ${isoShort(CUTOFF_MS)} → ${isoShort(postEndTs)}   (${fmtDuration(postSpanMs)})`
+    `  POST: ${isoShort(CUTOFF_MS)} → ${isoShort(postEndTs)}   (${fmtDuration(postSpanMs)})`,
   );
   console.log(
-    `  PRE:  ${isoShort(preStartTs)} → ${isoShort(CUTOFF_MS)}   (${fmtDuration(preSpanMs)}, walked back ${preRecs.length} turns)`
+    `  PRE:  ${isoShort(preStartTs)} → ${isoShort(CUTOFF_MS)}   (${fmtDuration(preSpanMs)}, walked back ${preRecs.length} turns)`,
   );
   if (preExhausted) {
     console.log(
       `  ⚠ Pre data exhausted before matching POST total ` +
-        `(only ${preTotal.toLocaleString("en-US")} tokens of pre history available).`
+        `(only ${preTotal.toLocaleString("en-US")} tokens of pre history available).`,
     );
   }
   console.log("-".repeat(TOTAL_W));
@@ -313,7 +339,9 @@ function deltaStr(base, other) {
   const numW = 16;
   const padLabel = (s) => s.padEnd(labelW);
   const padNum2 = (n) =>
-    (typeof n === "number" ? n.toLocaleString("en-US") : String(n)).padStart(numW);
+    (typeof n === "number" ? n.toLocaleString("en-US") : String(n)).padStart(
+      numW,
+    );
   const deltaCol = (base, other) => {
     if (!base || !other) return "—".padStart(DELTA_W);
     const pct = ((other - base) / base) * 100;
@@ -324,19 +352,19 @@ function deltaStr(base, other) {
     padLabel("") +
       "PRE (equal $)".padStart(numW) +
       "POST".padStart(numW) +
-      "Δ POST vs PRE".padStart(DELTA_W)
+      "Δ POST vs PRE".padStart(DELTA_W),
   );
   console.log(
     padLabel("TOTAL all-in tokens") +
       padNum2(preTotal) +
       padNum2(postTotal) +
-      "~equal".padStart(DELTA_W)
+      "~equal".padStart(DELTA_W),
   );
   console.log(
     padLabel("Assistant turns") +
       padNum2(preRecs.length) +
       padNum2(postRecs.length) +
-      deltaCol(preRecs.length, postRecs.length)
+      deltaCol(preRecs.length, postRecs.length),
   );
   console.log(
     padLabel("Tokens / turn (mean)") +
@@ -344,37 +372,37 @@ function deltaStr(base, other) {
       padNum2(Math.round(postTotal / Math.max(1, postRecs.length))) +
       deltaCol(
         preTotal / Math.max(1, preRecs.length),
-        postTotal / Math.max(1, postRecs.length)
-      )
+        postTotal / Math.max(1, postRecs.length),
+      ),
   );
   console.log(
     padLabel("  output tokens") +
       padNum2(preSum.output) +
       padNum2(postSum.output) +
-      deltaCol(preSum.output, postSum.output)
+      deltaCol(preSum.output, postSum.output),
   );
   console.log(
     padLabel("  input tokens (uncached)") +
       padNum2(preSum.input) +
       padNum2(postSum.input) +
-      deltaCol(preSum.input, postSum.input)
+      deltaCol(preSum.input, postSum.input),
   );
   console.log(
     padLabel("  cache read tokens") +
       padNum2(preSum.cacheRead) +
       padNum2(postSum.cacheRead) +
-      deltaCol(preSum.cacheRead, postSum.cacheRead)
+      deltaCol(preSum.cacheRead, postSum.cacheRead),
   );
   console.log(
     padLabel("  cache creation tokens") +
       padNum2(preSum.cacheCreate) +
       padNum2(postSum.cacheCreate) +
-      deltaCol(preSum.cacheCreate, postSum.cacheCreate)
+      deltaCol(preSum.cacheCreate, postSum.cacheCreate),
   );
 
   console.log();
   console.log(
     `Headline metric: turns to spend ~${postTotal.toLocaleString("en-US")} tokens. ` +
-      `Fewer turns post-switch ⇒ each turn produced more value per token.`
+      `Fewer turns post-switch ⇒ each turn produced more value per token.`,
   );
 })();

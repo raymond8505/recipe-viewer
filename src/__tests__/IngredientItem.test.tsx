@@ -1,19 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
 import IngredientItem from "@/components/IngredientItem";
-import { ScalableRecipe, type ScaledIngredient } from "@/lib/ScalableRecipe";
-import type { SchemaRecipe } from "@/types/recipe";
-
-/** Build a ScaledIngredient at scale=1 from a single ingredient string. */
-function makeIngredient(text: string, scale = 1): ScaledIngredient {
-  const schema: SchemaRecipe = {
-    name: "test",
-    recipeYield: "1 serving",
-    recipeIngredient: [text],
-  };
-  const r = new ScalableRecipe(schema, { ingredientScale: scale });
-  return r.ingredients[0];
-}
+import { makeScaledIngredient as makeIngredient } from "@/fixtures";
 
 describe("IngredientItem — rendering", () => {
   it("renders amount and rest for unit-less ingredients", () => {
@@ -161,7 +149,10 @@ describe("IngredientItem — anchor (editing)", () => {
     expect(onAnchor).toHaveBeenCalledWith(1.5);
   });
 
-  it("rejects range input on a single-source ingredient", () => {
+  // The anchor commits a single scale multiplier, so range input ("1-3") is
+  // never a valid edit — regardless of whether the source ingredient parses
+  // as a single value or a range.
+  it("rejects range input (anchor accepts a single value only)", () => {
     const onAnchor = vi.fn();
     render(<IngredientItem ingredient={makeIngredient("2 cups flour")} onAnchor={onAnchor} />);
     fireEvent.click(screen.getByRole("button", { name: /edit amount/i }));

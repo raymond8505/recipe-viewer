@@ -46,21 +46,6 @@ export interface ScaledNutrition {
   cholesterolContent?: string;
 }
 
-const NUTRIENT_KEYS = [
-  "calories",
-  "proteinContent",
-  "carbohydrateContent",
-  "fatContent",
-  "fiberContent",
-  "sodiumContent",
-  "sugarContent",
-  "saturatedFatContent",
-  "unsaturatedFatContent",
-  "cholesterolContent",
-] as const;
-
-type NutrientKey = (typeof NUTRIENT_KEYS)[number];
-
 /**
  * Multiply the numeric prefix of a Schema.org nutrition string by `multiplier`,
  * preserving any trailing unit text ("350 kcal", "20g", "0.5 mg"). The output
@@ -75,6 +60,23 @@ export function scaleNutrientValue(raw: string, multiplier: number): string {
   const formatted = rounded % 1 === 0 ? rounded.toString() : rounded.toFixed(1);
   return formatted + match[2];
 }
+
+// ─── Private helpers (used by ScalableRecipe below) ───────────────────────
+
+const NUTRIENT_KEYS = [
+  "calories",
+  "proteinContent",
+  "carbohydrateContent",
+  "fatContent",
+  "fiberContent",
+  "sodiumContent",
+  "sugarContent",
+  "saturatedFatContent",
+  "unsaturatedFatContent",
+  "cholesterolContent",
+] as const;
+
+type NutrientKey = (typeof NUTRIENT_KEYS)[number];
 
 function scaleParsedAmount(a: ParsedAmount, scale: number): ParsedAmount {
   return a.kind === "single"

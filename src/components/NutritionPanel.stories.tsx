@@ -3,6 +3,7 @@ import { useState } from "react";
 import { userEvent, fn } from "storybook/test";
 import NutritionPanel from "./NutritionPanel";
 import { ScalableRecipe } from "@/lib/ScalableRecipe";
+import { makeScalableRecipe } from "@/fixtures";
 import type { SchemaRecipe } from "@/types/recipe";
 
 type Nutrition = NonNullable<SchemaRecipe["nutrition"]>;
@@ -15,11 +16,6 @@ const fullNutrition: Nutrition = {
   fiberContent: "6 g",
   sodiumContent: "820 mg",
 };
-
-function makeRecipe(nutrition: Nutrition, servings: number) {
-  const schema: SchemaRecipe = { name: "story", recipeYield: `${servings} servings`, nutrition };
-  return new ScalableRecipe(schema);
-}
 
 /** Stateful wrapper so the ± stepper visibly updates inside the story. */
 function StatefulNutritionPanel({
@@ -59,13 +55,25 @@ export default meta;
 type Story = StoryObj<typeof StatefulNutritionPanel>;
 
 export const FullData: Story = {
-  args: { initial: makeRecipe(fullNutrition, 4) },
+  args: {
+    initial: makeScalableRecipe({
+      recipeIngredient: undefined,
+      recipeYield: "4 servings",
+      nutrition: fullNutrition,
+    }),
+  },
   play: async ({ canvas }) => {
     // Demonstrates the per-serving → per-portion transition.
-    await userEvent.click(canvas.getByLabelText("More portions"));
+    await userEvent.click(canvas.getByLabelText("Smaller portion size"));
   },
 };
 
 export const PartialData: Story = {
-  args: { initial: makeRecipe({ calories: "350 kcal", proteinContent: "22 g" }, 2) },
+  args: {
+    initial: makeScalableRecipe({
+      recipeIngredient: undefined,
+      recipeYield: "2 servings",
+      nutrition: { calories: "350 kcal", proteinContent: "22 g" },
+    }),
+  },
 };
