@@ -1,6 +1,20 @@
 import { describe, it, expect } from "vitest";
+import { useState } from "react";
 import { render, screen, fireEvent } from "@testing-library/react";
 import NutritionPanel, { scaleNutrientValue } from "@/components/NutritionPanel";
+import { ScalableRecipe } from "@/lib/ScalableRecipe";
+import { makeScalableRecipe } from "@/fixtures";
+
+/** Stateful wrapper so the stepper can actually update via onSplitPortions. */
+function Harness({ initial }: { initial: ScalableRecipe }) {
+  const [recipe, setRecipe] = useState(initial);
+  return (
+    <NutritionPanel
+      recipe={recipe}
+      onSplitPortions={(n) => setRecipe((r) => r.splitPortions(n))}
+    />
+  );
+}
 
 describe("scaleNutrientValue", () => {
   it("scales a value with a spaced unit", () => {
@@ -30,84 +44,102 @@ describe("scaleNutrientValue", () => {
 
 describe("NutritionPanel", () => {
   it("renders nutrition section with fields", () => {
-    render(
-      <NutritionPanel
-        nutrition={{ calories: "350 kcal", proteinContent: "20g" }}
-        totalServings={4}
-      />
-    );
+    const r = makeScalableRecipe({
+      recipeIngredient: undefined,
+      recipeYield: "4 servings",
+      nutrition: { calories: "350 kcal", proteinContent: "20g" },
+    });
+    render(<Harness initial={r} />);
     expect(screen.getByText("Nutrition")).toBeTruthy();
     expect(screen.getByText("350 kcal")).toBeTruthy();
     expect(screen.getByText("20g")).toBeTruthy();
   });
 
   it("returns null when no countable nutrition data is present", () => {
-    const { container } = render(
-      <NutritionPanel nutrition={{ servingSize: "1 cup" }} totalServings={4} />
-    );
+    const r = makeScalableRecipe({
+      recipeIngredient: undefined,
+      recipeYield: "4 servings",
+      nutrition: { servingSize: "1 cup" },
+    });
+    const { container } = render(<Harness initial={r} />);
     expect(container.firstChild).toBeNull();
   });
 
   it("shows 'per serving' at the default portion count", () => {
-    render(
-      <NutritionPanel nutrition={{ calories: "350 kcal" }} totalServings={4} />
-    );
+    const r = makeScalableRecipe({
+      recipeIngredient: undefined,
+      recipeYield: "4 servings",
+      nutrition: { calories: "350 kcal" },
+    });
+    render(<Harness initial={r} />);
     expect(screen.getByText("per serving")).toBeTruthy();
-    // stepper defaults to totalServings
-    expect(screen.getByText("4")).toBeTruthy();
+    expect(screen.getByText("1/4")).toBeTruthy();
   });
 
-  it("shows unscaled values when portions equals totalServings", () => {
-    render(
-      <NutritionPanel nutrition={{ calories: "350 kcal" }} totalServings={4} />
-    );
+  it("shows unscaled values at the default portion count", () => {
+    const r = makeScalableRecipe({
+      recipeIngredient: undefined,
+      recipeYield: "4 servings",
+      nutrition: { calories: "350 kcal" },
+    });
+    render(<Harness initial={r} />);
     expect(screen.getByText("350 kcal")).toBeTruthy();
   });
 
-  it("scales values and shows 'per portion' when portions differs from totalServings", () => {
-    // 4 servings at 350 kcal = 1400 kcal total → divided into 2 portions = 700 kcal each
-    render(
-      <NutritionPanel nutrition={{ calories: "350 kcal" }} totalServings={4} />
-    );
-    fireEvent.click(screen.getByRole("button", { name: /fewer portions/i }));
-    fireEvent.click(screen.getByRole("button", { name: /fewer portions/i }));
-    // now at 2 portions
+  it("scales values and flips to 'per portion' when portions differ from servings", () => {
+    // 4 servings, 350 kcal per serving; split into 2 portions → each portion is 2 servings → 700 kcal.
+    const r = makeScalableRecipe({
+      recipeIngredient: undefined,
+      recipeYield: "4 servings",
+      nutrition: { calories: "350 kcal" },
+    });
+    render(<Harness initial={r} />);
+    fireEvent.click(screen.getByRole("button", { name: /larger portion size/i }));
+    fireEvent.click(screen.getByRole("button", { name: /larger portion size/i }));
     expect(screen.getByText("per portion")).toBeTruthy();
     expect(screen.getByText("700 kcal")).toBeTruthy();
   });
 
   it("increases portions and scales down per-portion values", () => {
-    // 4 servings at 400 kcal = 1600 kcal total → divided into 8 portions = 200 kcal each
-    render(
-      <NutritionPanel nutrition={{ calories: "400 kcal" }} totalServings={4} />
-    );
-    fireEvent.click(screen.getByRole("button", { name: /more portions/i }));
-    fireEvent.click(screen.getByRole("button", { name: /more portions/i }));
-    fireEvent.click(screen.getByRole("button", { name: /more portions/i }));
-    fireEvent.click(screen.getByRole("button", { name: /more portions/i }));
-    // now at 8 portions
+    // 4 servings, 400 kcal each; split into 8 portions → each is half a serving → 200 kcal.
+    const r = makeScalableRecipe({
+      recipeIngredient: undefined,
+      recipeYield: "4 servings",
+      nutrition: { calories: "400 kcal" },
+    });
+    render(<Harness initial={r} />);
+    const more = screen.getByRole("button", { name: /smaller portion size/i });
+    fireEvent.click(more);
+    fireEvent.click(more);
+    fireEvent.click(more);
+    fireEvent.click(more);
     expect(screen.getByText("per portion")).toBeTruthy();
     expect(screen.getByText("200 kcal")).toBeTruthy();
   });
 
   it("disables decrease button at minimum of 1 portion", () => {
-    render(
-      <NutritionPanel nutrition={{ calories: "300 kcal" }} totalServings={4} />
-    );
-    const decreaseBtn = screen.getByRole("button", { name: /fewer portions/i });
-    // click down from 4 to 1
+    const r = makeScalableRecipe({
+      recipeIngredient: undefined,
+      recipeYield: "4 servings",
+      nutrition: { calories: "300 kcal" },
+    });
+    render(<Harness initial={r} />);
+    const decreaseBtn = screen.getByRole("button", { name: /larger portion size/i });
     fireEvent.click(decreaseBtn);
     fireEvent.click(decreaseBtn);
     fireEvent.click(decreaseBtn);
     expect(decreaseBtn).toBeDisabled();
   });
 
-  it("hides stepper when totalServings is null", () => {
-    render(
-      <NutritionPanel nutrition={{ calories: "350 kcal" }} totalServings={null} />
-    );
-    expect(screen.queryByRole("button", { name: /fewer portions/i })).toBeNull();
-    expect(screen.queryByRole("button", { name: /more portions/i })).toBeNull();
+  it("hides stepper when recipe has no parsed yield", () => {
+    const r = makeScalableRecipe({
+      recipeIngredient: undefined,
+      recipeYield: undefined,
+      nutrition: { calories: "350 kcal" },
+    });
+    render(<Harness initial={r} />);
+    expect(screen.queryByRole("button", { name: /larger portion size/i })).toBeNull();
+    expect(screen.queryByRole("button", { name: /smaller portion size/i })).toBeNull();
     expect(screen.getByText("per serving")).toBeTruthy();
   });
 });

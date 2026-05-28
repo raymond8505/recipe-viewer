@@ -1,77 +1,44 @@
 "use client";
 
-import { useState } from "react";
-import type { RecipeRow } from "@/types/recipe";
+import type { ScalableRecipe } from "@/lib/ScalableRecipe";
 
-type NutritionData = NonNullable<RecipeRow["metadata"]["schema"]["nutrition"]>;
+export { scaleNutrientValue } from "@/lib/ScalableRecipe";
 
 interface NutritionPanelProps {
-  nutrition: NutritionData;
-  /** Parsed recipe yield (e.g. 4 for "4 servings"). Required to enable the portions scaler. */
-  totalServings: number | null;
+  recipe: ScalableRecipe;
+  onSplitPortions: (n: number) => void;
 }
 
-export function scaleNutrientValue(raw: string, multiplier: number): string {
-  const match = raw.match(/^([\d.]+)(\s*.*)$/);
-  if (!match) return raw;
-  const scaled = parseFloat(match[1]) * multiplier;
-  const unit = match[2];
-  const rounded = Math.round(scaled * 10) / 10;
-  const formatted = rounded % 1 === 0 ? rounded.toString() : rounded.toFixed(1);
-  return formatted + unit;
-}
-
-function hasNutritionData(n: NutritionData): boolean {
-  return !!(
-    n.calories ||
-    n.proteinContent ||
-    n.carbohydrateContent ||
-    n.fatContent ||
-    n.fiberContent ||
-    n.sodiumContent
-  );
-}
-
-export default function NutritionPanel({ nutrition, totalServings }: NutritionPanelProps) {
-  const [portions, setPortions] = useState<number>(() => totalServings ?? 1);
-
-  if (!hasNutritionData(nutrition)) return null;
-
-  // scale = total recipe nutrition / portions
-  // total recipe nutrition = per-serving × totalServings
-  // → per-portion = per-serving × (totalServings / portions)
-  const multiplier = totalServings != null ? totalServings / portions : 1;
-  const isDefault = totalServings == null || portions === totalServings;
-
-  const scale = (raw: string) =>
-    isDefault ? raw : scaleNutrientValue(raw, multiplier);
-
-  const portionLabel = isDefault ? "per serving" : "per portion";
+export default function NutritionPanel({ recipe, onSplitPortions }: NutritionPanelProps) {
+  if (!recipe.hasNutrition) return null;
+  const nutrition = recipe.nutrition!;
+  const portions = recipe.displayPortions;
+  const canStep = recipe.baseServings != null;
 
   return (
     <div className="mt-8 p-4 border border-gray-200 rounded-2xl">
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-baseline gap-2">
           <h2 className="text-xl font-semibold text-gray-900">Nutrition</h2>
-          <span className="text-sm text-gray-500">{portionLabel}</span>
+          <span className="text-sm text-gray-500">{recipe.nutritionLabel}</span>
         </div>
-        {totalServings != null && (
+        {canStep && (
           <div className="flex items-center gap-1">
             <button
-              onClick={() => setPortions((p) => Math.max(1, p - 1))}
+              onClick={() => onSplitPortions(Math.max(1, portions - 1))}
               disabled={portions <= 1}
               className="w-11 h-11 flex items-center justify-center rounded-lg text-gray-500 hover:bg-orange-100 hover:text-orange-600 active:bg-orange-200 transition-colors text-xl disabled:opacity-30 disabled:pointer-events-none"
-              aria-label="Fewer portions"
+              aria-label="Larger portion size"
             >
               −
             </button>
-            <span className="font-semibold text-gray-900 min-w-[2.5rem] text-center tabular-nums text-sm">
-              {portions}
+            <span className="font-semibold text-gray-900 min-w-[3rem] text-center tabular-nums text-sm">
+              1/{portions}
             </span>
             <button
-              onClick={() => setPortions((p) => p + 1)}
+              onClick={() => onSplitPortions(portions + 1)}
               className="w-11 h-11 flex items-center justify-center rounded-lg text-gray-500 hover:bg-orange-100 hover:text-orange-600 active:bg-orange-200 transition-colors text-xl"
-              aria-label="More portions"
+              aria-label="Smaller portion size"
             >
               +
             </button>
@@ -79,24 +46,12 @@ export default function NutritionPanel({ nutrition, totalServings }: NutritionPa
         )}
       </div>
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm">
-        {nutrition.calories && (
-          <NutritionStat label="Calories" value={scale(nutrition.calories)} />
-        )}
-        {nutrition.proteinContent && (
-          <NutritionStat label="Protein" value={scale(nutrition.proteinContent)} />
-        )}
-        {nutrition.carbohydrateContent && (
-          <NutritionStat label="Carbs" value={scale(nutrition.carbohydrateContent)} />
-        )}
-        {nutrition.fatContent && (
-          <NutritionStat label="Fat" value={scale(nutrition.fatContent)} />
-        )}
-        {nutrition.fiberContent && (
-          <NutritionStat label="Fiber" value={scale(nutrition.fiberContent)} />
-        )}
-        {nutrition.sodiumContent && (
-          <NutritionStat label="Sodium" value={scale(nutrition.sodiumContent)} />
-        )}
+        {nutrition.calories && <NutritionStat label="Calories" value={nutrition.calories} />}
+        {nutrition.proteinContent && <NutritionStat label="Protein" value={nutrition.proteinContent} />}
+        {nutrition.carbohydrateContent && <NutritionStat label="Carbs" value={nutrition.carbohydrateContent} />}
+        {nutrition.fatContent && <NutritionStat label="Fat" value={nutrition.fatContent} />}
+        {nutrition.fiberContent && <NutritionStat label="Fiber" value={nutrition.fiberContent} />}
+        {nutrition.sodiumContent && <NutritionStat label="Sodium" value={nutrition.sodiumContent} />}
       </div>
     </div>
   );

@@ -1,8 +1,14 @@
 import type { Meta, StoryObj } from "@storybook/nextjs-vite";
-import { userEvent } from "storybook/test";
+import { useState } from "react";
+import { userEvent, fn } from "storybook/test";
 import NutritionPanel from "./NutritionPanel";
+import { ScalableRecipe } from "@/lib/ScalableRecipe";
+import { makeScalableRecipe } from "@/fixtures";
+import type { SchemaRecipe } from "@/types/recipe";
 
-const fullNutrition = {
+type Nutrition = NonNullable<SchemaRecipe["nutrition"]>;
+
+const fullNutrition: Nutrition = {
   calories: "520 kcal",
   proteinContent: "32 g",
   carbohydrateContent: "48 g",
@@ -11,8 +17,28 @@ const fullNutrition = {
   sodiumContent: "820 mg",
 };
 
-const meta: Meta<typeof NutritionPanel> = {
-  component: NutritionPanel,
+/** Stateful wrapper so the ± stepper visibly updates inside the story. */
+function StatefulNutritionPanel({
+  initial,
+  onSplitPortions,
+}: {
+  initial: ScalableRecipe;
+  onSplitPortions?: (n: number) => void;
+}) {
+  const [recipe, setRecipe] = useState(initial);
+  return (
+    <NutritionPanel
+      recipe={recipe}
+      onSplitPortions={(n) => {
+        onSplitPortions?.(n);
+        setRecipe((r) => r.splitPortions(n));
+      }}
+    />
+  );
+}
+
+const meta: Meta<typeof StatefulNutritionPanel> = {
+  component: StatefulNutritionPanel,
   title: "Components/Recipes/NutritionPanel",
   parameters: { layout: "centered" },
   decorators: [
@@ -22,21 +48,32 @@ const meta: Meta<typeof NutritionPanel> = {
       </div>
     ),
   ],
+  args: { onSplitPortions: fn() },
 };
 
 export default meta;
-type Story = StoryObj<typeof NutritionPanel>;
+type Story = StoryObj<typeof StatefulNutritionPanel>;
 
 export const FullData: Story = {
-  args: { nutrition: fullNutrition, totalServings: 4 },
+  args: {
+    initial: makeScalableRecipe({
+      recipeIngredient: undefined,
+      recipeYield: "4 servings",
+      nutrition: fullNutrition,
+    }),
+  },
   play: async ({ canvas }) => {
-    await userEvent.click(canvas.getByLabelText("More portions"));
+    // Demonstrates the per-serving → per-portion transition.
+    await userEvent.click(canvas.getByLabelText("Smaller portion size"));
   },
 };
 
 export const PartialData: Story = {
   args: {
-    nutrition: { calories: "350 kcal", proteinContent: "22 g" },
-    totalServings: 2,
+    initial: makeScalableRecipe({
+      recipeIngredient: undefined,
+      recipeYield: "2 servings",
+      nutrition: { calories: "350 kcal", proteinContent: "22 g" },
+    }),
   },
 };

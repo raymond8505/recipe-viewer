@@ -9,12 +9,11 @@ import {
   getFirstImage,
   toArray,
   parseDurationToSeconds,
-  groupIngredients,
   getIngredientText,
 } from "@/lib/format";
 import { useTimers, timerState } from "@/hooks/useTimers";
 import type { Timer } from "@/hooks/useTimers";
-import { useScaling } from "@/hooks/useScaling";
+import { ScalableRecipe } from "@/lib/ScalableRecipe";
 import { useWakeLock } from "@/hooks/useWakeLock";
 import { registerCookingModeRecipe, unregisterCookingModeRecipe } from "@/lib/windowApi";
 import TimerColumn from "@/components/cooking/TimerColumn";
@@ -56,7 +55,6 @@ export default function CookingMode({ recipe, onClose, isLoggedIn = false }: Coo
   const [cookingNotes, setCookingNotes] = useState(() => recipe.metadata.schema.cookingNotes ?? "");
   const [notesSaveState, setNotesSaveState] = useState<"idle" | "saving" | "saved" | "error">("idle");
   const notesFirstRender = useRef(true);
-  const { scale, servings, originalServings, setScale, setServings } = useScaling(schema.recipeYield);
 
   // Meal state — primary recipe is always at index 0 and cannot be removed
   const [mealRecipes, setMealRecipes] = useState<RecipeRow[]>([recipe]);
@@ -64,7 +62,39 @@ export default function CookingMode({ recipe, onClose, isLoggedIn = false }: Coo
   // Maps recipe.id → timer IDs that were seeded when that recipe was added to the meal
   const [mealTimerIds, setMealTimerIds] = useState<Map<string, string[]>>(() => new Map());
 
-  const activeSchema = activeIndex === 0 ? schema : mealRecipes[activeIndex].metadata.schema;
+  // Per-recipe ScalableRecipe instances. Primary is seeded immediately; secondaries
+  // are seeded inside handleAddToMeal so the lookup never misses. The primary's
+  // ingredient scale drives the UI; secondary recipes' scale is intentionally
+  // pinned at 1 by suppressing the controls (see below).
+  const [scalables, setScalables] = useState<Map<string, ScalableRecipe>>(
+    () => new Map([[recipe.id, new ScalableRecipe(recipe.metadata.schema)]]),
+  );
+
+  // When the primary schema is swapped (e.g. window API setRecipeViewerRecipe),
+  // rebuild its ScalableRecipe at default state — the previous scale was anchored
+  // to a now-stale yield and would silently produce wrong numbers.
+  useEffect(() => {
+    setScalables((prev) => {
+      const next = new Map(prev);
+      next.set(recipe.id, new ScalableRecipe(schema));
+      return next;
+    });
+  }, [schema, recipe.id]);
+
+  const primaryScalable = scalables.get(recipe.id)!;
+  const activeScalable = scalables.get(mealRecipes[activeIndex].id)!;
+  const activeSchema = activeScalable.schema;
+
+  const updateScalable = (id: string, fn: (r: ScalableRecipe) => ScalableRecipe) =>
+    setScalables((prev) => {
+      const existing = prev.get(id);
+      if (!existing) return prev;
+      const next = fn(existing);
+      if (next === existing) return prev;
+      const updated = new Map(prev);
+      updated.set(id, next);
+      return updated;
+    });
 
   // Maps timer ID → recipe name; only populated in meal mode (2+ recipes).
   // Added-recipe timers are tracked in mealTimerIds; any timer not found there
@@ -179,6 +209,9 @@ export default function CookingMode({ recipe, onClose, isLoggedIn = false }: Coo
   const handleAddToMeal = (newRecipe: RecipeRow) => {
     setMealRecipes((prev) => [...prev, newRecipe]);
     setCompletedStepsMap((prev) => new Map(prev).set(newRecipe.id, new Set()));
+    setScalables((prev) =>
+      new Map(prev).set(newRecipe.id, new ScalableRecipe(newRecipe.metadata.schema)),
+    );
     // Seed this recipe's timers unconditionally (bypass the "skip if timers > 0" guard on mount)
     const seededIds: string[] = [];
     for (const item of newRecipe.metadata.schema.recipeInstructions ?? []) {
@@ -213,6 +246,11 @@ export default function CookingMode({ recipe, onClose, isLoggedIn = false }: Coo
       for (const key of next) {
         if (key.startsWith(`${removed.id}::`)) next.delete(key);
       }
+      return next;
+    });
+    setScalables((prev) => {
+      const next = new Map(prev);
+      next.delete(removed.id);
       return next;
     });
     setMealRecipes((prev) => prev.filter((_, i) => i !== index));
@@ -419,8 +457,11 @@ export default function CookingMode({ recipe, onClose, isLoggedIn = false }: Coo
                 {cookTime && <Stat label="Cook time" value={cookTime} />}
                 {totalTime && <Stat label="Total time" value={totalTime} />}
                 {schema.recipeYield && (
-                  servings != null
-                    ? <ServingsControl servings={servings} onChange={setServings} />
+                  primaryScalable.currentServings != null
+                    ? <ServingsControl
+                        servings={primaryScalable.currentServings}
+                        onChange={(n) => updateScalable(recipe.id, (r) => r.scalePortionsTo(n))}
+                      />
                     : <Stat label="Servings" value={Array.isArray(schema.recipeYield) ? schema.recipeYield[0] : schema.recipeYield} />
                 )}
               </div>
@@ -467,7 +508,7 @@ export default function CookingMode({ recipe, onClose, isLoggedIn = false }: Coo
                       {copyFeedback ? <CheckIcon size={14} /> : <CopyIcon />}
                     </button>
                   </div>
-                  {groupIngredients(activeSchema.recipeIngredient).map(({ heading, items }, gi) => (
+                  {activeScalable.groupedIngredients.map(({ heading, items }, gi) => (
                     <div key={gi} className={gi > 0 ? "mt-4" : ""}>
                       {heading && (
                         <h3 className="text-sm sm:text-xs font-semibold uppercase tracking-widest text-orange-500 mb-2">
@@ -475,8 +516,8 @@ export default function CookingMode({ recipe, onClose, isLoggedIn = false }: Coo
                         </h3>
                       )}
                       <ul className="space-y-2">
-                        {items.map((ingredient, i) => {
-                          const text = getIngredientText(ingredient);
+                        {items.map((ing, i) => {
+                          const text = ing.original;
                           const selected = selectedIngredients.has(`${mealRecipes[activeIndex].id}::${text}`);
                           return (
                             <li
@@ -488,7 +529,17 @@ export default function CookingMode({ recipe, onClose, isLoggedIn = false }: Coo
                               aria-label={text}
                             >
                               <span className={`mt-1.5 w-1.5 h-1.5 rounded-full shrink-0 transition-colors ${selected ? "bg-green-500" : "bg-orange-400"}`} />
-                              <IngredientItem ingredient={text} scale={activeIndex === 0 ? scale : 1} onScaleChange={activeIndex === 0 ? setScale : undefined} />
+                              <IngredientItem
+                                ingredient={ing}
+                                onAnchor={
+                                  activeIndex === 0
+                                    ? (amount) =>
+                                        updateScalable(recipe.id, (r) =>
+                                          r.anchorIngredientAmount(ing.index, amount),
+                                        )
+                                    : undefined
+                                }
+                              />
                             </li>
                           );
                         })}
@@ -575,7 +626,10 @@ export default function CookingMode({ recipe, onClose, isLoggedIn = false }: Coo
             )}
 
             {/* Nutrition */}
-            {schema.nutrition && <NutritionPanel nutrition={schema.nutrition} totalServings={originalServings} />}
+            <NutritionPanel
+              recipe={primaryScalable}
+              onSplitPortions={(n) => updateScalable(recipe.id, (r) => r.splitPortions(n))}
+            />
           </div>
         </div>
 

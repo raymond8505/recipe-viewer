@@ -8,7 +8,6 @@ import {
   formatDate,
   getFirstImage,
   toArray,
-  groupIngredients,
   getIngredientText,
   toSchemaOrgJsonLd,
   instructionsToMarkdown,
@@ -16,7 +15,7 @@ import {
   ingredientsToText,
   textToIngredients,
 } from "@/lib/format";
-import { useScaling } from "@/hooks/useScaling";
+import { useScalableRecipe } from "@/hooks/useScalableRecipe";
 import CookingModeButton from "./CookingModeButton";
 import { CheckIcon, CopyIcon } from "@/components/icons";
 import IngredientItem from "./IngredientItem";
@@ -38,7 +37,7 @@ export default function RecipeDetail({ recipe, isLoggedIn = false }: RecipeDetai
   const cookTime = formatDuration(schema.cookTime);
   const totalTime = formatDuration(schema.totalTime);
   const categories = toArray(schema.recipeCategory);
-  const { scale, servings, originalServings, setScale, setServings } = useScaling(schema.recipeYield);
+  const { recipe: scalable, scalePortionsTo, splitPortions, anchorIngredientAmount } = useScalableRecipe(schema);
 
   const [selectedIngredients, setSelectedIngredients] = useState<Set<string>>(new Set());
   const [copyFeedback, setCopyFeedback] = useState(false);
@@ -353,8 +352,8 @@ export default function RecipeDetail({ recipe, isLoggedIn = false }: RecipeDetai
           {cookTime && <Stat label="Cook time" value={cookTime} />}
           {totalTime && <Stat label="Total time" value={totalTime} />}
           {schema.recipeYield && (
-            servings != null
-              ? <ServingsControl servings={servings} onChange={setServings} />
+            scalable.currentServings != null
+              ? <ServingsControl servings={scalable.currentServings} onChange={scalePortionsTo} />
               : <Stat label="Servings" value={Array.isArray(schema.recipeYield) ? schema.recipeYield[0] : schema.recipeYield} />
           )}
         </div>
@@ -388,7 +387,7 @@ export default function RecipeDetail({ recipe, isLoggedIn = false }: RecipeDetai
                 className="w-full rounded-lg border border-gray-200 p-3 font-mono text-sm text-gray-700 min-h-[200px] focus:outline-none focus:ring-2 focus:ring-orange-300 disabled:opacity-60 resize-y"
               />
             ) : (
-              groupIngredients(schema.recipeIngredient!).map(({ heading, items }, gi) => (
+              scalable.groupedIngredients.map(({ heading, items }, gi) => (
                 <div key={gi} className={gi > 0 ? "mt-4" : ""}>
                   {heading && (
                     <h3 className="text-xs font-semibold uppercase tracking-widest text-orange-500 mb-2">
@@ -396,8 +395,8 @@ export default function RecipeDetail({ recipe, isLoggedIn = false }: RecipeDetai
                     </h3>
                   )}
                   <ul className="space-y-2">
-                    {items.map((ingredient, i) => {
-                      const text = getIngredientText(ingredient);
+                    {items.map((ing, i) => {
+                      const text = ing.original;
                       const selected = selectedIngredients.has(text);
                       return (
                         <li
@@ -409,7 +408,10 @@ export default function RecipeDetail({ recipe, isLoggedIn = false }: RecipeDetai
                           aria-label={text}
                         >
                           <span className={`mt-1.5 w-1.5 h-1.5 rounded-full shrink-0 transition-colors ${selected ? "bg-green-500" : "bg-orange-400"}`} />
-                          <IngredientItem ingredient={text} scale={scale} onScaleChange={setScale} />
+                          <IngredientItem
+                            ingredient={ing}
+                            onAnchor={(amount) => anchorIngredientAmount(ing.index, amount)}
+                          />
                         </li>
                       );
                     })}
@@ -492,8 +494,8 @@ export default function RecipeDetail({ recipe, isLoggedIn = false }: RecipeDetai
         </div>
       )}
 
-      {/* Nutrition — always read-only */}
-      {schema.nutrition && <NutritionPanel nutrition={schema.nutrition} totalServings={originalServings} />}
+      {/* Nutrition */}
+      <NutritionPanel recipe={scalable} onSplitPortions={splitPortions} />
 
       {/* JSON-LD — Schema.org-compliant only; escape </script> sequences to prevent tag injection */}
       <script
