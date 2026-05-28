@@ -38,7 +38,3 @@ export const Draft: Story = {
     isLoggedIn: true,
   },
 };
-
-export const Minimal: Story = {
-  args: { recipe: makeRecipe("simple-bowl", "Simple Bowl") },
-};
