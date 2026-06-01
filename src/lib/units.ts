@@ -59,29 +59,85 @@ export function getUnitDisplay(unit: string): string {
   return UNIT_DEFS[unit]?.display ?? unit;
 }
 
-export function roundToQuarter(n: number): number {
-  return Math.round(n * 4) / 4;
+export function isVolumeUnit(unit: string | null): boolean {
+  if (!unit) return false;
+  return UNIT_DEFS[unit]?.group === "volume";
 }
 
-const FRACTIONS: [number, string][] = [
-  [1 / 8, "⅛"], [1 / 4, "¼"], [1 / 3, "⅓"], [3 / 8, "⅜"],
-  [1 / 2, "½"], [5 / 8, "⅝"], [2 / 3, "⅔"], [3 / 4, "¾"], [7 / 8, "⅞"],
-];
+export function roundDecimal(value: number, places = 1): number {
+  const factor = 10 ** places;
+  return Math.round(value * factor) / factor;
+}
 
 export function formatAmount(n: number): string {
-  const whole = Math.floor(n);
-  const frac = n - whole;
+  const rounded = roundDecimal(n, 1);
+  const asInt = Math.round(rounded);
+  if (Math.abs(rounded - asInt) < 1e-9) return String(asInt);
+  return rounded.toFixed(1);
+}
 
-  for (const [val, str] of FRACTIONS) {
-    if (Math.abs(frac - val) < 0.02) {
-      return whole > 0 ? `${whole}${str}` : str;
+// Volume threshold rule: a single value's ml-equivalent picks the default unit.
+// Ranges in ScalableRecipe pass through their midpoint; see callers in IngredientItem.
+export function getDefaultVolumeUnit(amountInMl: number): "tsp" | "tbsp" | "cup" {
+  if (amountInMl < 7) return "tsp";
+  if (amountInMl <= 60) return "tbsp";
+  return "cup";
+}
+
+// Per-unit "common cooking fractions" used for hint snapping.
+// Mass/ml/fl-oz/pt/qt/gal/L/oz/lb/g/kg deliberately omitted — no hint for those.
+const COMMON_FRACTIONS_PER_UNIT: Record<string, [number, string][]> = {
+  cup:  [[1 / 4, "¼"], [1 / 3, "⅓"], [1 / 2, "½"], [2 / 3, "⅔"], [3 / 4, "¾"]],
+  tbsp: [[1 / 2, "½"]],
+  tsp:  [[1 / 4, "¼"], [1 / 2, "½"], [3 / 4, "¾"]],
+};
+
+export interface FractionHint {
+  /** Snapped value in the hint unit (used by caller for redundancy suppression). */
+  value: number;
+  /** Human-readable label, including the unit display name. */
+  label: string;
+}
+
+/**
+ * Find the closest common-fraction snap for `value` expressed in `unit`.
+ * Returns null when the unit has no defined fraction set (mass, ml, etc.).
+ * Callers handle redundancy suppression (hide when label and displayed value agree).
+ */
+export function closestCommonFraction(value: number, unit: string): FractionHint | null {
+  const fractions = COMMON_FRACTIONS_PER_UNIT[unit];
+  if (!fractions) return null;
+
+  const display = getUnitDisplay(unit);
+  const wholePart = Math.floor(value);
+  const candidates: FractionHint[] = [];
+
+  // Consider the floor and floor+1 wholes; snap targets are W, W+frac, (W+1), (W+1)+frac.
+  for (const w of [wholePart, wholePart + 1]) {
+    if (w < 0) continue;
+    if (w > 0) {
+      candidates.push({ value: w, label: `${w} ${display}` });
+    }
+    for (const [fracVal, fracStr] of fractions) {
+      candidates.push({
+        value: w + fracVal,
+        label: w === 0 ? `${fracStr} ${display}` : `${w}${fracStr} ${display}`,
+      });
     }
   }
 
-  if (frac < 0.01) return String(whole);
+  if (candidates.length === 0) return null;
 
-  // Round to at most 2 decimal places, trim trailing zeros
-  return String(parseFloat((Math.round(n * 100) / 100).toFixed(2)));
+  let best = candidates[0];
+  let bestDelta = Math.abs(best.value - value);
+  for (const c of candidates) {
+    const d = Math.abs(c.value - value);
+    if (d < bestDelta) {
+      best = c;
+      bestDelta = d;
+    }
+  }
+  return best;
 }
 
 // Amount parsing: integers, decimals, ASCII and unicode fractions, mixed numbers,
@@ -158,11 +214,11 @@ export function convertParsedAmount(
   };
 }
 
-/** Apply roundToQuarter to both ends of a range, or the value of a single. */
+/** Apply roundDecimal to both ends of a range, or the value of a single. */
 export function roundParsedAmount(a: ParsedAmount): ParsedAmount {
   return a.kind === "single"
-    ? { kind: "single", value: roundToQuarter(a.value) }
-    : { kind: "range", min: roundToQuarter(a.min), max: roundToQuarter(a.max) };
+    ? { kind: "single", value: roundDecimal(a.value) }
+    : { kind: "range", min: roundDecimal(a.min), max: roundDecimal(a.max) };
 }
 
 export interface ParsedIngredient {

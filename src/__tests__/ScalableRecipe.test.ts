@@ -21,12 +21,18 @@ describe("ScalableRecipe — construction", () => {
     const r = new ScalableRecipe(baseSchema);
     expect(r.state.ingredientScale).toBe(1);
     expect(r.state.nutritionPortions).toBeNull();
+    expect(r.state.rangeAnchors).toEqual({});
   });
 
   it("accepts initial state via constructor", () => {
-    const r = new ScalableRecipe(baseSchema, { ingredientScale: 2, nutritionPortions: 6 });
+    const r = new ScalableRecipe(baseSchema, {
+      ingredientScale: 2,
+      nutritionPortions: 6,
+      rangeAnchors: { 2: 4 },
+    });
     expect(r.state.ingredientScale).toBe(2);
     expect(r.state.nutritionPortions).toBe(6);
+    expect(r.state.rangeAnchors).toEqual({ 2: 4 });
   });
 
   it("preserves group on object-form ingredients", () => {
@@ -129,6 +135,13 @@ describe("ScalableRecipe — splitPortions", () => {
     expect(r.state.ingredientScale).toBe(2);
   });
 
+  it("preserves rangeAnchors", () => {
+    const r = new ScalableRecipe(baseSchema)
+      .anchorIngredientAmount(2, 6)
+      .splitPortions(2);
+    expect(r.state.rangeAnchors).toEqual({ 2: 4 });
+  });
+
   it("clamps portions to minimum 1", () => {
     expect(new ScalableRecipe(baseSchema).splitPortions(0).state.nutritionPortions).toBe(1);
   });
@@ -163,10 +176,71 @@ describe("ScalableRecipe — anchorIngredientAmount", () => {
     expect(b.state.ingredientScale).toBe(2);
   });
 
-  it("anchors range source using midpoint", () => {
+  it("anchoring a range source converts it to single (collapses to the typed amount)", () => {
     const r = new ScalableRecipe(baseSchema).anchorIngredientAmount(2, 6);
     expect(r.state.ingredientScale).toBe(1.5);
-    expect(r.ingredients[2].scaledAmount).toEqual({ kind: "range", min: 4.5, max: 7.5 });
+    expect(r.state.rangeAnchors).toEqual({ 2: 4 });
+    expect(r.ingredients[2].scaledAmount).toEqual({ kind: "single", value: 6 });
+  });
+
+  it("does not record a range anchor when source is single", () => {
+    const r = new ScalableRecipe(baseSchema).anchorIngredientAmount(0, 4);
+    expect(r.state.rangeAnchors).toEqual({});
+  });
+
+  it("after anchoring a range, scaling portions still scales that ingredient (as single)", () => {
+    // base "3-5 cloves" (midpoint 4) → anchored to 6 (scale=1.5)
+    // then portions 4→8 (scale=2.0) → display = 4 × 2 = 8 (single)
+    const r = new ScalableRecipe(baseSchema)
+      .anchorIngredientAmount(2, 6)
+      .scalePortionsTo(8);
+    expect(r.state.ingredientScale).toBe(2);
+    expect(r.ingredients[2].scaledAmount).toEqual({ kind: "single", value: 8 });
+  });
+
+  it("range override persists when a different ingredient is later anchored", () => {
+    // anchor range idx 2 to 6 (scale=1.5, override 2:4)
+    // then anchor single idx 0 ("2 cups flour") to 4 (scale=2.0)
+    // → idx 2 should still display as single, now 4 × 2 = 8
+    const r = new ScalableRecipe(baseSchema)
+      .anchorIngredientAmount(2, 6)
+      .anchorIngredientAmount(0, 4);
+    expect(r.state.ingredientScale).toBe(2);
+    expect(r.state.rangeAnchors).toEqual({ 2: 4 });
+    expect(r.ingredients[2].scaledAmount).toEqual({ kind: "single", value: 8 });
+    expect(r.ingredients[0].scaledAmount).toEqual({ kind: "single", value: 4 });
+  });
+
+  it("other range ingredients remain ranges when an unrelated range is anchored", () => {
+    // schema with two ranges; anchoring one should leave the other as a range.
+    const twoRanges = new ScalableRecipe({
+      name: "two-ranges",
+      recipeYield: "4 servings",
+      recipeIngredient: ["3-5 cloves garlic", "1-2 tsp cumin"],
+    }).anchorIngredientAmount(0, 8); // midpoint 4 → scale=2
+    expect(twoRanges.state.rangeAnchors).toEqual({ 0: 4 });
+    expect(twoRanges.ingredients[0].scaledAmount).toEqual({ kind: "single", value: 8 });
+    expect(twoRanges.ingredients[1].scaledAmount).toEqual({ kind: "range", min: 2, max: 4 });
+  });
+
+  it("re-editing an already-anchored range recomputes from the original midpoint", () => {
+    // First edit to 6 (scale=1.5), then to 12 (scale=3.0).
+    // Override stays at the original midpoint (4), so display = 4 × 3 = 12.
+    const r = new ScalableRecipe(baseSchema)
+      .anchorIngredientAmount(2, 6)
+      .anchorIngredientAmount(2, 12);
+    expect(r.state.ingredientScale).toBe(3);
+    expect(r.state.rangeAnchors).toEqual({ 2: 4 });
+    expect(r.ingredients[2].scaledAmount).toEqual({ kind: "single", value: 12 });
+  });
+
+  it("anchoring a range to its midpoint records the override even when scale doesn't change", () => {
+    // baseSchema scale=1, range "3-5" midpoint 4 → anchor to 4 keeps scale=1
+    // but the ingredient must still collapse to single.
+    const r = new ScalableRecipe(baseSchema).anchorIngredientAmount(2, 4);
+    expect(r.state.ingredientScale).toBe(1);
+    expect(r.state.rangeAnchors).toEqual({ 2: 4 });
+    expect(r.ingredients[2].scaledAmount).toEqual({ kind: "single", value: 4 });
   });
 
   it("noop when target ingredient has no parsed amount", () => {
@@ -224,6 +298,14 @@ describe("ScalableRecipe — reset", () => {
       .reset();
     expect(r.state.ingredientScale).toBe(1);
     expect(r.state.nutritionPortions).toBeNull();
+  });
+
+  it("clears rangeAnchors", () => {
+    const r = new ScalableRecipe(baseSchema)
+      .anchorIngredientAmount(2, 6)
+      .reset();
+    expect(r.state.rangeAnchors).toEqual({});
+    expect(r.ingredients[2].scaledAmount).toEqual({ kind: "range", min: 3, max: 5 });
   });
 
   it("returns same instance when already at default", () => {

@@ -30,9 +30,10 @@ describe("IngredientItem — rendering", () => {
     expect(screen.getByText("3")).toBeTruthy();
   });
 
-  it("shows unicode fraction for fractional amounts", () => {
+  it("shows fractional amounts as 1-decimal values", () => {
+    // 1/2 cup = 118.3 ml > 60 → threshold default is cups; renders as "0.5"
     const { container } = render(<IngredientItem ingredient={makeIngredient("1/2 cup milk")} />);
-    expect(container.textContent).toContain("½");
+    expect(container.textContent).toContain("0.5");
   });
 
   it("includes all volume units as options", () => {
@@ -75,6 +76,65 @@ describe("IngredientItem — rendering", () => {
   });
 });
 
+describe("IngredientItem — threshold-default unit and hint", () => {
+  it("promotes 90 ml to tbsp by default (7 < 90 ≤ 60 fails; 90 > 60 → cup; cup → 0.4)", () => {
+    // 90 ml > 60 ml → threshold default is cup. 90 ml = 0.38 cup → "0.4".
+    // The closest common cup fraction is ⅓ → hint shows.
+    const { container } = render(
+      <IngredientItem ingredient={makeIngredient("90 ml distilled white vinegar")} />,
+    );
+    expect(container.textContent).toContain("0.4");
+    const select = screen.getByRole("combobox", { name: "unit" }) as HTMLSelectElement;
+    expect(select.value).toBe("cup");
+    expect(container.textContent).toContain("⅓");
+  });
+
+  it("promotes 30 ml to tbsp by default (7 ≤ 30 ≤ 60 → tbsp)", () => {
+    const { container } = render(<IngredientItem ingredient={makeIngredient("30 ml vinegar")} />);
+    const select = screen.getByRole("combobox", { name: "unit" }) as HTMLSelectElement;
+    expect(select.value).toBe("tbsp");
+    // 30 ml = 2.03 tbsp → "2"; hint "2 tbsp" → suppressed (redundant)
+    expect(container.textContent).toContain("2");
+  });
+
+  it("uses tsp for small volumes (< 7 ml)", () => {
+    const { container } = render(<IngredientItem ingredient={makeIngredient("5 ml extract")} />);
+    const select = screen.getByRole("combobox", { name: "unit" }) as HTMLSelectElement;
+    expect(select.value).toBe("tsp");
+    // 5 ml = 1.01 tsp → "1"
+    expect(container.textContent).toContain("1");
+  });
+
+  it("suppresses hint when displayed decimal already matches the common fraction", () => {
+    // 120 ml = 0.5 cup; threshold = cup; hint "½ cup" matches display "0.5" → no hint.
+    const { container } = render(<IngredientItem ingredient={makeIngredient("120 ml water")} />);
+    expect(container.textContent).toContain("0.5");
+    expect(container.textContent).not.toContain("≈");
+  });
+
+  it("shows hint in threshold unit when user picks a different display unit", () => {
+    // Default for 90 ml is cup. User picks ml → display "90 ml" but hint stays "⅓ cup".
+    const { container } = render(<IngredientItem ingredient={makeIngredient("90 ml vinegar")} />);
+    const select = screen.getByRole("combobox", { name: "unit" }) as HTMLSelectElement;
+    fireEvent.change(select, { target: { value: "ml" } });
+    expect(container.textContent).toContain("90");
+    expect(container.textContent).toContain("⅓");
+    expect(container.textContent).toContain("cup");
+  });
+
+  it("does not show a hint for non-volume ingredients", () => {
+    const { container } = render(<IngredientItem ingredient={makeIngredient("200 g butter")} />);
+    expect(container.textContent).toContain("200");
+    expect(container.textContent).not.toContain("≈");
+  });
+
+  it("does not show a hint for ranges", () => {
+    const { container } = render(<IngredientItem ingredient={makeIngredient("1-2 tsp salt")} />);
+    expect(container.textContent).toContain("1-2");
+    expect(container.textContent).not.toContain("≈");
+  });
+});
+
 describe("IngredientItem — scaling", () => {
   it("doubles the displayed amount when scaled 2x", () => {
     const { container } = render(<IngredientItem ingredient={makeIngredient("1 cup flour", 2)} />);
@@ -86,9 +146,10 @@ describe("IngredientItem — scaling", () => {
     expect(container.textContent).toContain("1");
   });
 
-  it("shows unicode fraction for scaled fractional amount", () => {
+  it("shows scaled fractional amount as 1-decimal value", () => {
+    // 1 cup × 0.5 = 0.5 cup = 118.3 ml → threshold cups → "0.5"
     const { container } = render(<IngredientItem ingredient={makeIngredient("1 cup milk", 0.5)} />);
-    expect(container.textContent).toContain("½");
+    expect(container.textContent).toContain("0.5");
   });
 
   it("scales both ends of a range", () => {
@@ -173,6 +234,33 @@ describe("IngredientItem — anchor (editing)", () => {
     fireEvent.change(input, { target: { value: "96" } });
     fireEvent.keyDown(input, { key: "Enter" });
     expect(onAnchor).toHaveBeenCalledWith(expect.closeTo(2, 0));
+  });
+
+  it("pre-fills the edit input with the midpoint when source is a range", () => {
+    // "3-5 cloves" displays as range; clicking edit opens the input with "4"
+    // (midpoint) — not "3-5", which commitEdit would silently reject.
+    render(
+      <IngredientItem
+        ingredient={makeIngredient("3-5 cloves garlic")}
+        onAnchor={vi.fn()}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: /edit amount/i }));
+    const input = screen.getByRole("textbox") as HTMLInputElement;
+    expect(input.value).toBe("4");
+  });
+
+  it("pre-fills the edit input with the midpoint of the SCALED range", () => {
+    // "3-5" at 2× → displayed "6-10"; pre-fill midpoint = 8.
+    render(
+      <IngredientItem
+        ingredient={makeIngredient("3-5 cloves garlic", 2)}
+        onAnchor={vi.fn()}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: /edit amount/i }));
+    const input = screen.getByRole("textbox") as HTMLInputElement;
+    expect(input.value).toBe("8");
   });
 
   it("cancels edit on Escape without calling onAnchor", () => {

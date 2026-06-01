@@ -14,6 +14,15 @@ export interface ScalableRecipeState {
    * null = nutrition shows as "per serving" at the current scale.
    */
   nutritionPortions: number | null;
+  /**
+   * Per-ingredient overrides for range sources that have been directly edited.
+   * Key = ingredient index. Value = the original midpoint, used as the new
+   * single-value base. Editing a range collapses it to single; subsequent
+   * portion changes or other anchors still scale this base normally.
+   * Invariant: a key exists iff the source ingredient is a range AND it has
+   * been anchored by the user.
+   */
+  rangeAnchors: Record<number, number>;
 }
 
 export interface ScaledIngredient {
@@ -129,6 +138,7 @@ export class ScalableRecipe {
     this.state = Object.freeze({
       ingredientScale: state?.ingredientScale ?? 1,
       nutritionPortions: state?.nutritionPortions ?? null,
+      rangeAnchors: state?.rangeAnchors ?? {},
     });
     this._entries = Object.freeze(
       (schema.recipeIngredient ?? []).map(parseEntry),
@@ -162,18 +172,34 @@ export class ScalableRecipe {
     const idx = refIndex(ref);
     const entry = this._entries[idx];
     if (!entry || !entry.parsed) return this;
-    const base = midpoint(entry.parsed.amount);
+    const sourceAmount = entry.parsed.amount;
+    const base = midpoint(sourceAmount);
     if (base <= 0) return this;
     const newScale = amount / base;
-    if (newScale === this.state.ingredientScale) return this;
+    const wasRange = sourceAmount.kind === "range";
+    const alreadyAnchored = this.state.rangeAnchors[idx] != null;
+    if (
+      newScale === this.state.ingredientScale &&
+      (!wasRange || alreadyAnchored)
+    ) {
+      return this;
+    }
+    const rangeAnchors = wasRange
+      ? { ...this.state.rangeAnchors, [idx]: base }
+      : this.state.rangeAnchors;
     return new ScalableRecipe(this.schema, {
       ...this.state,
       ingredientScale: newScale,
+      rangeAnchors,
     });
   }
 
   reset(): ScalableRecipe {
-    if (this.state.ingredientScale === 1 && this.state.nutritionPortions == null) {
+    if (
+      this.state.ingredientScale === 1 &&
+      this.state.nutritionPortions == null &&
+      Object.keys(this.state.rangeAnchors).length === 0
+    ) {
       return this;
     }
     return new ScalableRecipe(this.schema);
@@ -181,17 +207,25 @@ export class ScalableRecipe {
 
   get ingredients(): ScaledIngredient[] {
     const scale = this.state.ingredientScale;
-    return this._entries.map((entry) => ({
-      index: entry.index,
-      group: entry.group,
-      original: entry.text,
-      parsed: entry.parsed,
-      scaledAmount: entry.parsed
-        ? scaleParsedAmount(entry.parsed.amount, scale)
-        : null,
-      unit: entry.parsed?.unit ?? null,
-      rest: entry.parsed?.rest ?? entry.text,
-    }));
+    const anchors = this.state.rangeAnchors;
+    return this._entries.map((entry) => {
+      const overrideBase = anchors[entry.index];
+      const baseAmount: ParsedAmount | null =
+        entry.parsed == null
+          ? null
+          : overrideBase != null && entry.parsed.amount.kind === "range"
+            ? { kind: "single", value: overrideBase }
+            : entry.parsed.amount;
+      return {
+        index: entry.index,
+        group: entry.group,
+        original: entry.text,
+        parsed: entry.parsed,
+        scaledAmount: baseAmount ? scaleParsedAmount(baseAmount, scale) : null,
+        unit: entry.parsed?.unit ?? null,
+        rest: entry.parsed?.rest ?? entry.text,
+      };
+    });
   }
 
   /**

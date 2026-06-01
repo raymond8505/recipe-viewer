@@ -7,7 +7,9 @@ import {
   getUnitGroup,
   formatAmount,
   parseServings,
-  roundToQuarter,
+  roundDecimal,
+  getDefaultVolumeUnit,
+  closestCommonFraction,
 } from "@/lib/units";
 
 describe("convert", () => {
@@ -66,57 +68,123 @@ describe("getUnitGroup", () => {
 });
 
 describe("formatAmount", () => {
-  it("formats integer", () => {
+  it("formats integer with no decimal", () => {
     expect(formatAmount(2)).toBe("2");
   });
 
-  it("formats ½", () => {
-    expect(formatAmount(0.5)).toBe("½");
+  it("strips trailing .0 for near-integer values", () => {
+    expect(formatAmount(6.04)).toBe("6");
+    expect(formatAmount(1.0)).toBe("1");
   });
 
-  it("formats ¼", () => {
-    expect(formatAmount(0.25)).toBe("¼");
+  it("rounds to one decimal place", () => {
+    expect(formatAmount(0.375)).toBe("0.4");
+    expect(formatAmount(0.333)).toBe("0.3");
+    expect(formatAmount(2.57)).toBe("2.6");
+    expect(formatAmount(6.087)).toBe("6.1");
   });
 
-  it("formats ¾", () => {
-    expect(formatAmount(0.75)).toBe("¾");
+  it("renders exact halves and tenths cleanly", () => {
+    expect(formatAmount(0.5)).toBe("0.5");
+    expect(formatAmount(1.5)).toBe("1.5");
+    expect(formatAmount(0.1)).toBe("0.1");
   });
 
-  it("formats mixed number 1½", () => {
-    expect(formatAmount(1.5)).toBe("1½");
-  });
-
-  it("formats mixed number 2¼", () => {
-    expect(formatAmount(2.25)).toBe("2¼");
-  });
-
-  it("formats decimal for non-fraction values", () => {
-    expect(formatAmount(2.57)).toBe("2.57");
-  });
-
-  it("formats decimal for value not close to a fraction", () => {
-    expect(formatAmount(1.57)).toBe("1.57");
+  it("rounds half-up away from zero", () => {
+    // Math.round(0.25 * 10) = Math.round(2.5) = 3 in JS
+    expect(formatAmount(0.25)).toBe("0.3");
+    expect(formatAmount(0.75)).toBe("0.8");
   });
 });
 
-describe("roundToQuarter", () => {
-  it("rounds down to nearest 0.25", () => {
-    expect(roundToQuarter(1.1)).toBe(1);
+describe("roundDecimal", () => {
+  it("rounds to 1 decimal place by default", () => {
+    expect(roundDecimal(0.375)).toBe(0.4);
+    expect(roundDecimal(1.04)).toBe(1);
+    expect(roundDecimal(6.087)).toBe(6.1);
   });
 
-  it("rounds up to nearest 0.25", () => {
-    expect(roundToQuarter(1.4)).toBe(1.5);
+  it("supports custom precision", () => {
+    expect(roundDecimal(0.375, 2)).toBe(0.38);
+    expect(roundDecimal(1.555, 2)).toBe(1.56);
   });
 
-  it("leaves exact quarters unchanged", () => {
-    expect(roundToQuarter(1.25)).toBe(1.25);
-    expect(roundToQuarter(1.5)).toBe(1.5);
-    expect(roundToQuarter(1.75)).toBe(1.75);
-    expect(roundToQuarter(2)).toBe(2);
+  it("leaves exact decimals unchanged", () => {
+    expect(roundDecimal(0.5)).toBe(0.5);
+    expect(roundDecimal(2.0)).toBe(2);
+  });
+});
+
+describe("getDefaultVolumeUnit", () => {
+  it("returns tsp below 7 ml", () => {
+    expect(getDefaultVolumeUnit(0.1)).toBe("tsp");
+    expect(getDefaultVolumeUnit(5)).toBe("tsp");
+    expect(getDefaultVolumeUnit(6.99)).toBe("tsp");
   });
 
-  it("rounds 1/3 cup (0.333) to 0.25", () => {
-    expect(roundToQuarter(1 / 3)).toBe(0.25);
+  it("returns tbsp at the 7 ml boundary", () => {
+    expect(getDefaultVolumeUnit(7)).toBe("tbsp");
+    expect(getDefaultVolumeUnit(7.01)).toBe("tbsp");
+  });
+
+  it("returns tbsp through the 60 ml boundary", () => {
+    expect(getDefaultVolumeUnit(30)).toBe("tbsp");
+    expect(getDefaultVolumeUnit(59.99)).toBe("tbsp");
+    expect(getDefaultVolumeUnit(60)).toBe("tbsp");
+  });
+
+  it("returns cup above 60 ml", () => {
+    expect(getDefaultVolumeUnit(60.01)).toBe("cup");
+    expect(getDefaultVolumeUnit(90)).toBe("cup");
+    expect(getDefaultVolumeUnit(240)).toBe("cup");
+    expect(getDefaultVolumeUnit(1000)).toBe("cup");
+  });
+});
+
+describe("closestCommonFraction", () => {
+  it("snaps 0.4 cup to ⅓ cup", () => {
+    const hint = closestCommonFraction(0.4, "cup");
+    expect(hint?.label).toBe("⅓ cup");
+    expect(hint?.value).toBeCloseTo(1 / 3, 4);
+  });
+
+  it("snaps 0.7 cup to ⅔ cup", () => {
+    const hint = closestCommonFraction(0.7, "cup");
+    expect(hint?.label).toBe("⅔ cup");
+  });
+
+  it("snaps 0.5 cup to ½ cup", () => {
+    const hint = closestCommonFraction(0.5, "cup");
+    expect(hint?.label).toBe("½ cup");
+    expect(hint?.value).toBe(0.5);
+  });
+
+  it("snaps 1.4 cup to 1⅓ cup (mixed)", () => {
+    const hint = closestCommonFraction(1.4, "cup");
+    expect(hint?.label).toBe("1⅓ cup");
+  });
+
+  it("snaps 2.029 tbsp to 2 tbsp (integer)", () => {
+    const hint = closestCommonFraction(2.029, "tbsp");
+    expect(hint?.label).toBe("2 tbsp");
+    expect(hint?.value).toBe(2);
+  });
+
+  it("snaps 1.7 tbsp to 1½ tbsp", () => {
+    const hint = closestCommonFraction(1.7, "tbsp");
+    expect(hint?.label).toBe("1½ tbsp");
+  });
+
+  it("snaps 1.2 tsp to 1¼ tsp", () => {
+    const hint = closestCommonFraction(1.2, "tsp");
+    expect(hint?.label).toBe("1¼ tsp");
+  });
+
+  it("returns null for units without a defined fraction set (ml, oz, g)", () => {
+    expect(closestCommonFraction(90, "ml")).toBeNull();
+    expect(closestCommonFraction(2, "oz")).toBeNull();
+    expect(closestCommonFraction(200, "g")).toBeNull();
+    expect(closestCommonFraction(3, "fl oz")).toBeNull();
   });
 });
 
@@ -237,20 +305,20 @@ describe("formatParsedAmount", () => {
     expect(formatParsedAmount({ kind: "single", value: 2 })).toBe("2");
   });
 
-  it("formats single fraction with unicode", () => {
-    expect(formatParsedAmount({ kind: "single", value: 0.5 })).toBe("½");
+  it("formats single fractional value as decimal", () => {
+    expect(formatParsedAmount({ kind: "single", value: 0.5 })).toBe("0.5");
   });
 
-  it("formats single mixed with unicode", () => {
-    expect(formatParsedAmount({ kind: "single", value: 1.5 })).toBe("1½");
+  it("formats single mixed value as decimal", () => {
+    expect(formatParsedAmount({ kind: "single", value: 1.5 })).toBe("1.5");
   });
 
   it("formats integer range with ASCII hyphen", () => {
     expect(formatParsedAmount({ kind: "range", min: 3, max: 5 })).toBe("3-5");
   });
 
-  it("formats fractional range with unicode", () => {
-    expect(formatParsedAmount({ kind: "range", min: 4.5, max: 7.5 })).toBe("4½-7½");
+  it("formats fractional range as decimals", () => {
+    expect(formatParsedAmount({ kind: "range", min: 4.5, max: 7.5 })).toBe("4.5-7.5");
   });
 });
 

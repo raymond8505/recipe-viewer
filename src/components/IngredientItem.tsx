@@ -10,6 +10,10 @@ import {
   parseAmountToken,
   convertParsedAmount,
   roundParsedAmount,
+  isVolumeUnit,
+  getDefaultVolumeUnit,
+  closestCommonFraction,
+  roundDecimal,
 } from "@/lib/units";
 
 interface IngredientItemProps {
@@ -25,7 +29,8 @@ interface IngredientItemProps {
 
 export default function IngredientItem({ ingredient, onAnchor }: IngredientItemProps) {
   const { parsed, scaledAmount, unit, rest, original } = ingredient;
-  const [selectedUnit, setSelectedUnit] = useState<string | null>(unit);
+  // null = use the threshold-default unit. Non-null = user explicitly picked, sticky.
+  const [selectedUnit, setSelectedUnit] = useState<string | null>(null);
   const [editing, setEditing] = useState(false);
   const [editValue, setEditValue] = useState("");
 
@@ -33,14 +38,50 @@ export default function IngredientItem({ ingredient, onAnchor }: IngredientItemP
     return <>{original}</>;
   }
 
+  // Threshold-default unit for volumes is driven by the scaled ml value, but
+  // only for single amounts. A range like "1-2 tsp" has a midpoint that can
+  // straddle a threshold boundary (1.5 tsp ≈ 7.4 ml falls in the tbsp bucket),
+  // promoting it to "0.3-0.7 tbsp" — worse UX than keeping "1-2 tsp". Ranges
+  // therefore keep their source unit and the user can still override via the
+  // dropdown.
+  const thresholdUnit =
+    isVolumeUnit(unit) && scaledAmount.kind === "single"
+      ? getDefaultVolumeUnit(convert(scaledAmount.value, unit, "ml"))
+      : unit;
+
+  const displayUnit = selectedUnit ?? thresholdUnit;
+
   const displayedAmount = roundParsedAmount(
-    convertParsedAmount(scaledAmount, unit, selectedUnit),
+    convertParsedAmount(scaledAmount, unit, displayUnit),
   );
   const displayString = formatParsedAmount(displayedAmount);
   const unitGroup = getUnitGroup(unit);
 
+  // Hint = closest common fraction in the threshold unit. Single-amount, volume only.
+  // Suppressed when display unit == threshold unit and the rounded values agree.
+  let hintLabel: string | null = null;
+  if (scaledAmount.kind === "single" && isVolumeUnit(unit) && thresholdUnit) {
+    const valueInHintUnit = convert(scaledAmount.value, unit, thresholdUnit);
+    const hint = closestCommonFraction(valueInHintUnit, thresholdUnit);
+    if (hint) {
+      const redundant =
+        displayUnit === thresholdUnit &&
+        roundDecimal(valueInHintUnit) === roundDecimal(hint.value);
+      if (!redundant) hintLabel = hint.label;
+    }
+  }
+
   function startEdit() {
-    setEditValue(displayString);
+    // For ranges, pre-fill with the midpoint as a single value — commitEdit
+    // rejects range input, so showing "6-10" would silently no-op on Enter.
+    const initial =
+      displayedAmount.kind === "range"
+        ? formatParsedAmount({
+            kind: "single",
+            value: (displayedAmount.min + displayedAmount.max) / 2,
+          })
+        : displayString;
+    setEditValue(initial);
     setEditing(true);
   }
 
@@ -54,7 +95,7 @@ export default function IngredientItem({ ingredient, onAnchor }: IngredientItemP
       typed.value > 0 &&
       onAnchor
     ) {
-      const inBaseUnit = convert(typed.value, selectedUnit, unit);
+      const inBaseUnit = convert(typed.value, displayUnit, unit);
       onAnchor(inBaseUnit);
     }
     setEditing(false);
@@ -95,11 +136,11 @@ export default function IngredientItem({ ingredient, onAnchor }: IngredientItemP
       ) : (
         <span>{displayString}</span>
       )}
-      {unitGroup.length > 0 && selectedUnit && (
+      {unitGroup.length > 0 && displayUnit && (
         <>
           {" "}
           <select
-            value={selectedUnit}
+            value={displayUnit}
             onChange={(e) => setSelectedUnit(e.target.value)}
             className="bg-transparent appearance-none border-0 p-0 cursor-pointer underline underline-offset-2 decoration-orange-400 focus:outline-none focus-visible:ring-2 focus-visible:ring-orange-400 rounded"
             aria-label="unit"
@@ -111,6 +152,11 @@ export default function IngredientItem({ ingredient, onAnchor }: IngredientItemP
             ))}
           </select>
         </>
+      )}
+      {hintLabel && (
+        <span className="ml-1 text-sm text-gray-400" aria-label={`approximately ${hintLabel}`}>
+          (≈ {hintLabel})
+        </span>
       )}
       {rest ? ` ${rest}` : ""}
     </>
