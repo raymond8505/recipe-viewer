@@ -2,7 +2,12 @@
 
 import { useState, useEffect } from "react";
 import Image from "next/image";
-import type { RecipeRow, HowToStep, HowToSection, SchemaRecipe } from "@/types/recipe";
+import type {
+  RecipeRow,
+  HowToStep,
+  HowToSection,
+  SchemaRecipe,
+} from "@/types/recipe";
 import {
   formatDuration,
   formatDate,
@@ -29,7 +34,10 @@ interface RecipeDetailProps {
 
 type EditState = "idle" | "editing" | "saving" | "error";
 
-export default function RecipeDetail({ recipe, isLoggedIn = false }: RecipeDetailProps) {
+export default function RecipeDetail({
+  recipe,
+  isLoggedIn = false,
+}: RecipeDetailProps) {
   const [schema, setSchema] = useState(recipe.metadata.schema);
   const [status, setStatus] = useState(recipe.status ?? "draft");
   const image = getFirstImage(schema.image);
@@ -37,11 +45,20 @@ export default function RecipeDetail({ recipe, isLoggedIn = false }: RecipeDetai
   const cookTime = formatDuration(schema.cookTime);
   const totalTime = formatDuration(schema.totalTime);
   const categories = toArray(schema.recipeCategory);
-  const { recipe: scalable, scalePortionsTo, splitPortions, anchorIngredientAmount } = useScalableRecipe(schema);
+  const {
+    recipe: scalable,
+    scalePortionsTo,
+    splitPortions,
+    anchorIngredientAmount,
+  } = useScalableRecipe(schema);
 
-  const [selectedIngredients, setSelectedIngredients] = useState<Set<string>>(new Set());
+  const [selectedIngredients, setSelectedIngredients] = useState<Set<string>>(
+    new Set(),
+  );
   const [copyFeedback, setCopyFeedback] = useState(false);
-  const [rescrapeState, setRescrapeState] = useState<"idle" | "loading" | "success" | "error">("idle");
+  const [rescrapeState, setRescrapeState] = useState<
+    "idle" | "loading" | "success" | "error"
+  >("idle");
 
   // Edit mode state
   const [editState, setEditState] = useState<EditState>("idle");
@@ -51,9 +68,13 @@ export default function RecipeDetail({ recipe, isLoggedIn = false }: RecipeDetai
   const [editInstructions, setEditInstructions] = useState("");
   const [editNotes, setEditNotes] = useState("");
   const [editStatus, setEditStatus] = useState("");
-  const [preRescrapeSchema, setPreRescrapeSchema] = useState<SchemaRecipe | null>(null);
-  const [regenImageState, setRegenImageState] = useState<"idle" | "loading" | "success" | "error">("idle");
-  const [preRegenImageSchema, setPreRegenImageSchema] = useState<SchemaRecipe | null>(null);
+  const [preRescrapeSchema, setPreRescrapeSchema] =
+    useState<SchemaRecipe | null>(null);
+  const [regenImageState, setRegenImageState] = useState<
+    "idle" | "loading" | "success" | "error"
+  >("idle");
+  const [preRegenImageSchema, setPreRegenImageSchema] =
+    useState<SchemaRecipe | null>(null);
   const [isMounted, setIsMounted] = useState(false);
   useEffect(() => setIsMounted(true), []);
 
@@ -64,7 +85,9 @@ export default function RecipeDetail({ recipe, isLoggedIn = false }: RecipeDetai
   const handleRescrape = async () => {
     setRescrapeState("loading");
     try {
-      const res = await fetch(`/api/recipes/${recipe.id}/rescrape`, { method: "POST" });
+      const res = await fetch(`/api/recipes/${recipe.id}/rescrape`, {
+        method: "POST",
+      });
       if (!res.ok) throw new Error();
       const { schema: updated } = await res.json();
       if (!updated) throw new Error();
@@ -73,7 +96,9 @@ export default function RecipeDetail({ recipe, isLoggedIn = false }: RecipeDetai
       setEditUrl(recipe.url ?? "");
       setEditDesc(updated.description ?? "");
       setEditIngredients(ingredientsToText(updated.recipeIngredient ?? []));
-      setEditInstructions(instructionsToMarkdown(updated.recipeInstructions ?? []));
+      setEditInstructions(
+        instructionsToMarkdown(updated.recipeInstructions ?? []),
+      );
       setEditNotes(updated.notes ?? "");
       setEditStatus(status);
       setEditState("editing");
@@ -86,7 +111,9 @@ export default function RecipeDetail({ recipe, isLoggedIn = false }: RecipeDetai
   const handleRegenImage = async () => {
     setRegenImageState("loading");
     try {
-      const res = await fetch(`/api/recipes/${recipe.id}/regenerate-image`, { method: "POST" });
+      const res = await fetch(`/api/recipes/${recipe.id}/regenerate-image`, {
+        method: "POST",
+      });
       if (!res.ok) throw new Error();
       const result = await res.json();
       if (!result.image || typeof result.image !== "string") throw new Error();
@@ -97,7 +124,9 @@ export default function RecipeDetail({ recipe, isLoggedIn = false }: RecipeDetai
       setEditUrl(recipe.url ?? "");
       setEditDesc(schema.description ?? "");
       setEditIngredients(ingredientsToText(schema.recipeIngredient ?? []));
-      setEditInstructions(instructionsToMarkdown(schema.recipeInstructions ?? []));
+      setEditInstructions(
+        instructionsToMarkdown(schema.recipeInstructions ?? []),
+      );
       setEditNotes(schema.notes ?? "");
       setEditStatus(status);
       setEditState("editing");
@@ -111,7 +140,9 @@ export default function RecipeDetail({ recipe, isLoggedIn = false }: RecipeDetai
     setEditUrl(recipe.url ?? "");
     setEditDesc(schema.description ?? "");
     setEditIngredients(ingredientsToText(schema.recipeIngredient ?? []));
-    setEditInstructions(instructionsToMarkdown(schema.recipeInstructions ?? []));
+    setEditInstructions(
+      instructionsToMarkdown(schema.recipeInstructions ?? []),
+    );
     setEditNotes(schema.notes ?? "");
     setEditStatus(status);
     setEditState("editing");
@@ -143,7 +174,11 @@ export default function RecipeDetail({ recipe, isLoggedIn = false }: RecipeDetai
       const res = await fetch(`/api/recipes/${recipe.id}/update`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ schema: updatedSchema, status: editStatus, url: editUrl }),
+        body: JSON.stringify({
+          schema: updatedSchema,
+          status: editStatus,
+          url: editUrl,
+        }),
       });
       if (!res.ok) throw new Error();
       const result = await res.json();
@@ -163,7 +198,8 @@ export default function RecipeDetail({ recipe, isLoggedIn = false }: RecipeDetai
   const toggleIngredient = (text: string) => {
     setSelectedIngredients((prev) => {
       const next = new Set(prev);
-      if (next.has(text)) next.delete(text); else next.add(text);
+      if (next.has(text)) next.delete(text);
+      else next.add(text);
       return next;
     });
   };
@@ -176,7 +212,9 @@ export default function RecipeDetail({ recipe, isLoggedIn = false }: RecipeDetai
       await navigator.clipboard.writeText(lines.join("\n"));
       setCopyFeedback(true);
       setTimeout(() => setCopyFeedback(false), 2000);
-    } catch { /* silent fail */ }
+    } catch {
+      /* silent fail */
+    }
   };
 
   return (
@@ -223,7 +261,6 @@ export default function RecipeDetail({ recipe, isLoggedIn = false }: RecipeDetai
         )}
 
         <div className="flex flex-wrap items-center gap-x-6 gap-y-2 mt-4 text-sm text-gray-500">
-          {schema.author?.name && <span>By {schema.author.name}</span>}
           {schema.datePublished && (
             <span>{formatDate(schema.datePublished)}</span>
           )}
@@ -232,7 +269,10 @@ export default function RecipeDetail({ recipe, isLoggedIn = false }: RecipeDetai
 
       {/* Recipe Controls — logged-in only */}
       {isLoggedIn && (
-        <section aria-label="Recipe management" className="mt-12 pt-6 border-t border-gray-100">
+        <section
+          aria-label="Recipe management"
+          className="mt-12 pt-6 border-t border-gray-100"
+        >
           <h2 className="text-xs font-semibold uppercase tracking-widest text-gray-400 mb-4">
             Manage
           </h2>
@@ -241,7 +281,8 @@ export default function RecipeDetail({ recipe, isLoggedIn = false }: RecipeDetai
               <>
                 {isRescrapeReview && (
                   <p className="w-full text-sm text-blue-700 bg-blue-50 rounded-lg px-3 py-2 mb-1">
-                    Reviewing re-scraped data. Edit if needed, then confirm or cancel.
+                    Reviewing re-scraped data. Edit if needed, then confirm or
+                    cancel.
                   </p>
                 )}
                 {isRegenImageReview && (
@@ -278,7 +319,11 @@ export default function RecipeDetail({ recipe, isLoggedIn = false }: RecipeDetai
                   disabled={editState === "saving"}
                   className="px-4 py-2 text-sm font-medium rounded-lg bg-orange-500 text-white hover:bg-orange-600 disabled:opacity-50 transition-colors"
                 >
-                  {editState === "saving" ? "Saving\u2026" : (isRescrapeReview || isRegenImageReview) ? "Confirm" : "Save"}
+                  {editState === "saving"
+                    ? "Saving\u2026"
+                    : isRescrapeReview || isRegenImageReview
+                      ? "Confirm"
+                      : "Save"}
                 </button>
                 <button
                   onClick={handleEditCancel}
@@ -288,7 +333,9 @@ export default function RecipeDetail({ recipe, isLoggedIn = false }: RecipeDetai
                   Cancel
                 </button>
                 {editState === "error" && (
-                  <span className="text-sm text-red-600">Save failed. Try again.</span>
+                  <span className="text-sm text-red-600">
+                    Save failed. Try again.
+                  </span>
                 )}
               </>
             ) : (
@@ -305,24 +352,34 @@ export default function RecipeDetail({ recipe, isLoggedIn = false }: RecipeDetai
                     disabled={rescrapeState === "loading"}
                     className="px-4 py-2 text-sm font-medium rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 disabled:opacity-50 transition-colors"
                   >
-                    {rescrapeState === "loading" ? "Re-scraping\u2026" : "Re-scrape"}
+                    {rescrapeState === "loading"
+                      ? "Re-scraping\u2026"
+                      : "Re-scrape"}
                   </button>
                 )}
                 {rescrapeState === "success" && (
-                  <span className="text-sm text-green-600">Recipe updated.</span>
+                  <span className="text-sm text-green-600">
+                    Recipe updated.
+                  </span>
                 )}
                 {rescrapeState === "error" && (
-                  <span className="text-sm text-red-600">Re-scrape failed. Try again.</span>
+                  <span className="text-sm text-red-600">
+                    Re-scrape failed. Try again.
+                  </span>
                 )}
                 <button
                   onClick={handleRegenImage}
                   disabled={regenImageState === "loading"}
                   className="px-4 py-2 text-sm font-medium rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 disabled:opacity-50 transition-colors"
                 >
-                  {regenImageState === "loading" ? "Generating\u2026" : "Regen Image"}
+                  {regenImageState === "loading"
+                    ? "Generating\u2026"
+                    : "Regen Image"}
                 </button>
                 {regenImageState === "error" && (
-                  <span className="text-sm text-red-600">Image generation failed. Try again.</span>
+                  <span className="text-sm text-red-600">
+                    Image generation failed. Try again.
+                  </span>
                 )}
               </>
             )}
@@ -351,17 +408,29 @@ export default function RecipeDetail({ recipe, isLoggedIn = false }: RecipeDetai
           {prepTime && <Stat label="Prep time" value={prepTime} />}
           {cookTime && <Stat label="Cook time" value={cookTime} />}
           {totalTime && <Stat label="Total time" value={totalTime} />}
-          {schema.recipeYield && (
-            scalable.currentServings != null
-              ? <ServingsControl servings={scalable.currentServings} onChange={scalePortionsTo} />
-              : <Stat label="Servings" value={Array.isArray(schema.recipeYield) ? schema.recipeYield[0] : schema.recipeYield} />
-          )}
+          {schema.recipeYield &&
+            (scalable.currentServings != null ? (
+              <ServingsControl
+                servings={scalable.currentServings}
+                onChange={scalePortionsTo}
+              />
+            ) : (
+              <Stat
+                label="Servings"
+                value={
+                  Array.isArray(schema.recipeYield)
+                    ? schema.recipeYield[0]
+                    : schema.recipeYield
+                }
+              />
+            ))}
         </div>
       )}
 
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-8">
         {/* Ingredients */}
-        {(isEditing || (schema.recipeIngredient && schema.recipeIngredient.length > 0)) && (
+        {(isEditing ||
+          (schema.recipeIngredient && schema.recipeIngredient.length > 0)) && (
           <div className="sm:col-span-1">
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-xl font-semibold text-gray-900">
@@ -383,7 +452,9 @@ export default function RecipeDetail({ recipe, isLoggedIn = false }: RecipeDetai
                 value={editIngredients}
                 onChange={(e) => setEditIngredients(e.target.value)}
                 disabled={editState === "saving"}
-                placeholder={"One ingredient per line.\nUse ## Group Name for sections."}
+                placeholder={
+                  "One ingredient per line.\nUse ## Group Name for sections."
+                }
                 className="w-full rounded-lg border border-gray-200 p-3 font-mono text-sm text-gray-700 min-h-[200px] focus:outline-none focus:ring-2 focus:ring-orange-300 disabled:opacity-60 resize-y"
               />
             ) : (
@@ -407,10 +478,14 @@ export default function RecipeDetail({ recipe, isLoggedIn = false }: RecipeDetai
                           aria-checked={selected}
                           aria-label={text}
                         >
-                          <span className={`mt-1.5 w-1.5 h-1.5 rounded-full shrink-0 transition-colors ${selected ? "bg-green-500" : "bg-orange-400"}`} />
+                          <span
+                            className={`mt-1.5 w-1.5 h-1.5 rounded-full shrink-0 transition-colors ${selected ? "bg-green-500" : "bg-orange-400"}`}
+                          />
                           <IngredientItem
                             ingredient={ing}
-                            onAnchor={(amount) => anchorIngredientAmount(ing.index, amount)}
+                            onAnchor={(amount) =>
+                              anchorIngredientAmount(ing.index, amount)
+                            }
                           />
                         </li>
                       );
@@ -423,7 +498,9 @@ export default function RecipeDetail({ recipe, isLoggedIn = false }: RecipeDetai
         )}
 
         {/* Instructions */}
-        {(isEditing || (schema.recipeInstructions && schema.recipeInstructions.length > 0)) && (
+        {(isEditing ||
+          (schema.recipeInstructions &&
+            schema.recipeInstructions.length > 0)) && (
           <div className="sm:col-span-2">
             <h2 className="text-xl font-semibold text-gray-900 mb-4">
               Instructions
@@ -433,30 +510,34 @@ export default function RecipeDetail({ recipe, isLoggedIn = false }: RecipeDetai
                 value={editInstructions}
                 onChange={(e) => setEditInstructions(e.target.value)}
                 disabled={editState === "saving"}
-                placeholder={"- Step one\n- Step two\n\n## Section Name\n- Step in section"}
+                placeholder={
+                  "- Step one\n- Step two\n\n## Section Name\n- Step in section"
+                }
                 className="w-full rounded-lg border border-gray-200 p-3 font-mono text-sm text-gray-700 min-h-[300px] focus:outline-none focus:ring-2 focus:ring-orange-300 disabled:opacity-60 resize-y"
               />
             ) : schema.recipeInstructions![0]["@type"] === "HowToSection" ? (
               <div className="space-y-6">
-                {(schema.recipeInstructions as HowToSection[]).map((section, i) => (
-                  <div key={i}>
-                    <h3 className="text-xs font-semibold uppercase tracking-widest text-orange-500 mb-3">
-                      {section.name}
-                    </h3>
-                    <ol className="space-y-3">
-                      {section.itemListElement.map((step, j) => (
-                        <li key={j} className="flex gap-4">
-                          <span className="shrink-0 w-7 h-7 rounded-full bg-orange-500 text-white text-sm font-bold flex items-center justify-center">
-                            {j + 1}
-                          </span>
-                          <p className="text-gray-700 leading-relaxed pt-0.5">
-                            {step.text}
-                          </p>
-                        </li>
-                      ))}
-                    </ol>
-                  </div>
-                ))}
+                {(schema.recipeInstructions as HowToSection[]).map(
+                  (section, i) => (
+                    <div key={i}>
+                      <h3 className="text-xs font-semibold uppercase tracking-widest text-orange-500 mb-3">
+                        {section.name}
+                      </h3>
+                      <ol className="space-y-3">
+                        {section.itemListElement.map((step, j) => (
+                          <li key={j} className="flex gap-4">
+                            <span className="shrink-0 w-7 h-7 rounded-full bg-orange-500 text-white text-sm font-bold flex items-center justify-center">
+                              {j + 1}
+                            </span>
+                            <p className="text-gray-700 leading-relaxed pt-0.5">
+                              {step.text}
+                            </p>
+                          </li>
+                        ))}
+                      </ol>
+                    </div>
+                  ),
+                )}
               </div>
             ) : (
               <ol className="space-y-4">
@@ -489,7 +570,9 @@ export default function RecipeDetail({ recipe, isLoggedIn = false }: RecipeDetai
               className="w-full rounded-lg border border-gray-200 p-3 text-gray-700 leading-relaxed min-h-[120px] focus:outline-none focus:ring-2 focus:ring-orange-300 disabled:opacity-60 resize-y"
             />
           ) : (
-            <p className="text-gray-700 leading-relaxed whitespace-pre-line">{schema.notes}</p>
+            <p className="text-gray-700 leading-relaxed whitespace-pre-line">
+              {schema.notes}
+            </p>
           )}
         </div>
       )}
@@ -500,7 +583,12 @@ export default function RecipeDetail({ recipe, isLoggedIn = false }: RecipeDetai
       {/* JSON-LD — Schema.org-compliant only; escape </script> sequences to prevent tag injection */}
       <script
         type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(toSchemaOrgJsonLd(schema), null, 2).replace(/</g, "\\u003c") }}
+        dangerouslySetInnerHTML={{
+          __html: JSON.stringify(toSchemaOrgJsonLd(schema), null, 2).replace(
+            /</g,
+            "\\u003c",
+          ),
+        }}
       />
     </article>
   );
@@ -509,7 +597,9 @@ export default function RecipeDetail({ recipe, isLoggedIn = false }: RecipeDetai
 function Stat({ label, value }: { label: string; value: string }) {
   return (
     <div className="text-center">
-      <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">{label}</p>
+      <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">
+        {label}
+      </p>
       <p className="font-semibold text-gray-900">{value}</p>
     </div>
   );
