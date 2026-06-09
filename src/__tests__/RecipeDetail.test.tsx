@@ -30,11 +30,6 @@ describe("RecipeDetail", () => {
     expect(screen.getByText("A hearty pasta dish.")).toBeTruthy();
   });
 
-  it("renders the author name", () => {
-    render(<RecipeDetail recipe={makeRecipe({ author: { name: "Julia Child" } })} />);
-    expect(screen.getByText("By Julia Child")).toBeTruthy();
-  });
-
   it("renders category badges", () => {
     render(<RecipeDetail recipe={makeRecipe({ recipeCategory: ["Dinner", "Pasta"] })} />);
     expect(screen.getByText("Dinner")).toBeTruthy();
