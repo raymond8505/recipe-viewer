@@ -1,11 +1,11 @@
 # Stage 1: Install dependencies
-FROM node:22-slim AS deps
+FROM node:24.16.0-slim AS deps
 WORKDIR /app
 COPY package.json yarn.lock ./
 RUN yarn install --frozen-lockfile --production=false
 
 # Stage 2: Build
-FROM node:22-slim AS builder
+FROM node:24.16.0-slim AS builder
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
@@ -22,7 +22,7 @@ ENV SKIP_ENV_VALIDATION=1
 RUN yarn build:prod
 
 # Stage 3: Production runner
-FROM node:22-slim AS runner
+FROM node:24.16.0-slim AS runner
 WORKDIR /app
 
 RUN apt-get update && apt-get install -y --no-install-recommends curl && rm -rf /var/lib/apt/lists/*
