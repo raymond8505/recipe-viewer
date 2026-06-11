@@ -1,58 +1,14 @@
-// MCP-specific schemas: argument validators for the five CRUD tools, plus a
-// hand-written JSON Schema mirror used in the `tools/list` response.
+// MCP-specific schemas: a hand-written JSON Schema mirror of the recipe input
+// validators, used in the `tools/list` response so MCP clients can do client-
+// side argument validation.
 //
-// The recipe domain schema (`schemaRecipeSchema`) lives in `@/lib/schemas/recipe`
-// so non-MCP callers can reuse it. Tool-arg shapes stay here because they are
-// only meaningful to the MCP server.
+// The actual zod validators (recipeSearchInputSchema, recipeCreateInputSchema,
+// etc.) live in `@/lib/schemas/recipe` so they're reusable by non-MCP callers
+// (API route handlers, form validators). The JSON Schema map below is the
+// only thing here that is genuinely MCP-protocol-specific — it describes the
+// wire format that MCP `tools/list` emits.
 
-import { z } from "zod";
-import {
-  recipeStatusSchema,
-  RECIPE_STATUSES,
-  schemaRecipeSchema,
-} from "@/lib/schemas/recipe";
-
-export { schemaRecipeSchema, recipeStatusSchema } from "@/lib/schemas/recipe";
-
-export const searchRecipesArgs = z.object({
-  query: z.string().optional(),
-  source: z.string().optional(),
-  status: recipeStatusSchema.optional(),
-  limit: z.number().int().min(1).max(100).optional(),
-  page: z.number().int().min(1).optional(),
-});
-
-export const getRecipeArgs = z.object({
-  id: z.string().min(1),
-});
-
-export const createRecipeArgs = z.object({
-  url: z.string().url(),
-  source: z.string().min(1),
-  status: recipeStatusSchema.optional(),
-  schema: schemaRecipeSchema,
-});
-
-export const updateRecipeArgs = z.object({
-  id: z.string().min(1),
-  url: z.string().url().optional(),
-  source: z.string().min(1).optional(),
-  status: recipeStatusSchema.optional(),
-  schema: schemaRecipeSchema.partial().optional(),
-});
-
-export const deleteRecipeArgs = z.object({
-  id: z.string().min(1),
-});
-
-export type SearchRecipesArgs = z.infer<typeof searchRecipesArgs>;
-export type GetRecipeArgs = z.infer<typeof getRecipeArgs>;
-export type CreateRecipeArgs = z.infer<typeof createRecipeArgs>;
-export type UpdateRecipeArgs = z.infer<typeof updateRecipeArgs>;
-export type DeleteRecipeArgs = z.infer<typeof deleteRecipeArgs>;
-
-// Hand-written JSON Schema mirrors for the MCP tools/list response.
-// Kept inline (not zod-converted) to avoid an extra dependency.
+import { RECIPE_STATUSES } from "@/lib/schemas/recipe";
 
 const schemaRecipeJsonSchema = {
   type: "object",

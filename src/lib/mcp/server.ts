@@ -1,11 +1,10 @@
+import { TOOL_SCHEMAS } from "./schemas";
 import {
-  createRecipeArgs,
-  deleteRecipeArgs,
-  getRecipeArgs,
-  searchRecipesArgs,
-  TOOL_SCHEMAS,
-  updateRecipeArgs,
-} from "./schemas";
+  recipeCreateInputSchema,
+  recipeIdInputSchema,
+  recipeSearchInputSchema,
+  recipeUpdateInputSchema,
+} from "@/lib/schemas/recipe";
 import {
   createRecipe,
   deleteRecipe,
@@ -41,33 +40,33 @@ export const TOOLS: ToolDefinition[] = [
     description:
       "Search recipes by name, source, or status. Returns a paginated list with total count. Use this before get_recipe when you only have a name.",
     inputSchema: TOOL_SCHEMAS.search_recipes,
-    call: (args) => searchRecipes(searchRecipesArgs.parse(args)),
+    call: (args) => searchRecipes(recipeSearchInputSchema.parse(args)),
   },
   {
     name: "get_recipe",
     description: "Fetch the full recipe row (including metadata.schema) for a given recipe UUID.",
     inputSchema: TOOL_SCHEMAS.get_recipe,
-    call: (args) => getRecipe(getRecipeArgs.parse(args)),
+    call: (args) => getRecipe(recipeIdInputSchema.parse(args)),
   },
   {
     name: "create_recipe",
     description:
       "Insert a new recipe row. Requires url, source, and a SchemaRecipe object. Defaults status to 'draft'.",
     inputSchema: TOOL_SCHEMAS.create_recipe,
-    call: (args) => createRecipe(createRecipeArgs.parse(args)),
+    call: (args) => createRecipe(recipeCreateInputSchema.parse(args)),
   },
   {
     name: "update_recipe",
     description:
       "Patch fields on an existing recipe. The schema field is merged into existing metadata.schema (not replaced).",
     inputSchema: TOOL_SCHEMAS.update_recipe,
-    call: (args) => updateRecipe(updateRecipeArgs.parse(args)),
+    call: (args) => updateRecipe(recipeUpdateInputSchema.parse(args)),
   },
   {
     name: "delete_recipe",
     description: "Soft-delete a recipe by setting its status to 'archived'. Reversible via update_recipe.",
     inputSchema: TOOL_SCHEMAS.delete_recipe,
-    call: (args) => deleteRecipe(deleteRecipeArgs.parse(args)),
+    call: (args) => deleteRecipe(recipeIdInputSchema.parse(args)),
   },
 ];
 

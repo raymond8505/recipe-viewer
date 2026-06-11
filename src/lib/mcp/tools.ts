@@ -8,19 +8,18 @@ import {
 } from "@/lib/recipes";
 import type { RecipeRow } from "@/types/recipe";
 import type {
-  CreateRecipeArgs,
-  DeleteRecipeArgs,
-  GetRecipeArgs,
-  SearchRecipesArgs,
-  UpdateRecipeArgs,
-} from "./schemas";
+  RecipeCreateInput,
+  RecipeIdInput,
+  RecipeSearchInput,
+  RecipeUpdateInput,
+} from "@/lib/schemas/recipe";
 
 // All five tools are thin wrappers over `@/lib/recipes` helpers. They handle
 // argument typing + translate RecipeRepoError into ToolError so the MCP
 // dispatcher can render a uniform isError content envelope. Supabase calls
 // live in the recipes module — see CR feedback on PR #13.
 
-export async function searchRecipes(args: SearchRecipesArgs) {
+export async function searchRecipes(args: RecipeSearchInput) {
   const { data, count } = await getRecipes({
     query: args.query,
     source: args.source,
@@ -34,13 +33,13 @@ export async function searchRecipes(args: SearchRecipesArgs) {
   return { data, count };
 }
 
-export async function getRecipe(args: GetRecipeArgs): Promise<RecipeRow> {
+export async function getRecipe(args: RecipeIdInput): Promise<RecipeRow> {
   const row = await getRecipeById(args.id);
   if (!row) throw new ToolError("not_found", `Recipe ${args.id} not found`);
   return row;
 }
 
-export async function createRecipe(args: CreateRecipeArgs): Promise<RecipeRow> {
+export async function createRecipe(args: RecipeCreateInput): Promise<RecipeRow> {
   try {
     return await createRecipeRow({
       url: args.url,
@@ -53,7 +52,7 @@ export async function createRecipe(args: CreateRecipeArgs): Promise<RecipeRow> {
   }
 }
 
-export async function updateRecipe(args: UpdateRecipeArgs): Promise<RecipeRow> {
+export async function updateRecipe(args: RecipeUpdateInput): Promise<RecipeRow> {
   try {
     return await updateRecipeRow(args.id, {
       url: args.url,
@@ -67,7 +66,7 @@ export async function updateRecipe(args: UpdateRecipeArgs): Promise<RecipeRow> {
 }
 
 export async function deleteRecipe(
-  args: DeleteRecipeArgs,
+  args: RecipeIdInput,
 ): Promise<{ id: string; status: "archived" }> {
   try {
     await archiveRecipe(args.id);

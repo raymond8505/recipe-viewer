@@ -75,3 +75,41 @@ export const schemaRecipeSchema = z
 // JSON-Schema export for MCP tool descriptors.
 export const recipeStatusSchema = z.enum(["published", "archived", "draft"]);
 export const RECIPE_STATUSES = recipeStatusSchema.options;
+
+// Input shapes for the recipe CRUD operations. Defined here (not in
+// `lib/mcp/schemas.ts`) so non-MCP callers — API route handlers, form
+// validators, future migrations — can reuse the same validators rather than
+// hand-rolling parallel ones. The MCP server consumes these via parse() at
+// the tool boundary; nothing else has to know they exist on that path.
+
+export const recipeSearchInputSchema = z.object({
+  query: z.string().optional(),
+  source: z.string().optional(),
+  status: recipeStatusSchema.optional(),
+  limit: z.number().int().min(1).max(100).optional(),
+  page: z.number().int().min(1).optional(),
+});
+
+export const recipeIdInputSchema = z.object({
+  id: z.string().min(1),
+});
+
+export const recipeCreateInputSchema = z.object({
+  url: z.string().url(),
+  source: z.string().min(1),
+  status: recipeStatusSchema.optional(),
+  schema: schemaRecipeSchema,
+});
+
+export const recipeUpdateInputSchema = z.object({
+  id: z.string().min(1),
+  url: z.string().url().optional(),
+  source: z.string().min(1).optional(),
+  status: recipeStatusSchema.optional(),
+  schema: schemaRecipeSchema.partial().optional(),
+});
+
+export type RecipeSearchInput = z.infer<typeof recipeSearchInputSchema>;
+export type RecipeIdInput = z.infer<typeof recipeIdInputSchema>;
+export type RecipeCreateInput = z.infer<typeof recipeCreateInputSchema>;
+export type RecipeUpdateInput = z.infer<typeof recipeUpdateInputSchema>;
