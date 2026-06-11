@@ -1,7 +1,13 @@
 import { NextResponse } from "next/server";
 import { getIsLoggedIn } from "@/lib/auth";
 import { getSupabaseClient } from "@/lib/supabase";
-import { AUTH_CODE_TTL_SECONDS, DEFAULT_SCOPE, generateCode } from "@/lib/mcp/oauth";
+import {
+  AUTH_CODE_TTL_MS,
+  CodeChallengeMethod,
+  DEFAULT_SCOPE,
+  ResponseType,
+  generateCode,
+} from "@/lib/mcp/oauth";
 
 function redirectWith(redirectUri: string, params: Record<string, string>): Response {
   const url = new URL(redirectUri);
@@ -26,7 +32,13 @@ export async function POST(request: Request) {
   const state = String(form.get("state") ?? "");
   const scope = String(form.get("scope") ?? "") || DEFAULT_SCOPE;
 
-  if (!clientId || !redirectUri || responseType !== "code" || codeChallengeMethod !== "S256" || !codeChallenge) {
+  if (
+    !clientId ||
+    !redirectUri ||
+    responseType !== ResponseType.CODE ||
+    codeChallengeMethod !== CodeChallengeMethod.S256 ||
+    !codeChallenge
+  ) {
     return new Response("Bad authorization request", { status: 400 });
   }
 
@@ -57,7 +69,7 @@ export async function POST(request: Request) {
     code_challenge: codeChallenge,
     code_challenge_method: codeChallengeMethod,
     scope,
-    expires_at: new Date(Date.now() + AUTH_CODE_TTL_SECONDS * 1000).toISOString(),
+    expires_at: new Date(Date.now() + AUTH_CODE_TTL_MS).toISOString(),
   });
 
   if (error) {

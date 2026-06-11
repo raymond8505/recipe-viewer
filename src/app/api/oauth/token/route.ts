@@ -1,9 +1,9 @@
 import { NextResponse } from "next/server";
 import { getSupabaseClient } from "@/lib/supabase";
 import {
-  ACCESS_TOKEN_TTL_SECONDS,
+  ACCESS_TOKEN_TTL_MS,
   DEFAULT_SCOPE,
-  REFRESH_TOKEN_TTL_SECONDS,
+  REFRESH_TOKEN_TTL_MS,
   generateRefreshToken,
   signAccessToken,
   hashSecret,
@@ -36,12 +36,13 @@ async function issueTokens(clientId: string, scope: string) {
     token_hash: hashSecret(refreshToken),
     client_id: clientId,
     scope,
-    expires_at: new Date(Date.now() + REFRESH_TOKEN_TTL_SECONDS * 1000).toISOString(),
+    expires_at: new Date(Date.now() + REFRESH_TOKEN_TTL_MS).toISOString(),
   });
   return {
     access_token: accessToken,
     token_type: "Bearer",
-    expires_in: ACCESS_TOKEN_TTL_SECONDS,
+    // OAuth spec: `expires_in` is seconds (we store ms natively).
+    expires_in: Math.floor(ACCESS_TOKEN_TTL_MS / 1000),
     refresh_token: refreshToken,
     scope,
   };

@@ -1,8 +1,8 @@
 import { API_TOOLS } from "@/lib/windowApi";
 import type { McpTool } from "@/lib/windowApi";
+import { JsonRpcErrorCode, JsonRpcMethod } from "@/lib/mcp/types";
+import { PROTOCOL_VERSION } from "@/lib/mcp/server";
 import { env } from "@/env";
-
-const PROTOCOL_VERSION = "2024-11-05";
 
 // Browser-side tools require window execution — annotate descriptions so MCP
 // clients know they can't be executed server-side.
@@ -16,7 +16,11 @@ const MCP_TOOLS: McpTool[] = API_TOOLS.map((t) => ({
 
 function unauthorized() {
   return Response.json(
-    { jsonrpc: "2.0", id: null, error: { code: -32000, message: "Unauthorized" } },
+    {
+      jsonrpc: "2.0",
+      id: null,
+      error: { code: JsonRpcErrorCode.UNAUTHORIZED, message: "Unauthorized" },
+    },
     { status: 401 }
   );
 }
@@ -25,7 +29,7 @@ function methodNotFound(id: unknown) {
   return Response.json({
     jsonrpc: "2.0",
     id,
-    error: { code: -32601, message: "Method not found" },
+    error: { code: JsonRpcErrorCode.METHOD_NOT_FOUND, message: "Method not found" },
   });
 }
 
@@ -42,7 +46,7 @@ export async function POST(request: Request) {
 
   const { id, method } = body;
 
-  if (method === "initialize") {
+  if (method === JsonRpcMethod.INITIALIZE) {
     return Response.json({
       jsonrpc: "2.0",
       id,
@@ -56,7 +60,7 @@ export async function POST(request: Request) {
     });
   }
 
-  if (method === "tools/list") {
+  if (method === JsonRpcMethod.TOOLS_LIST) {
     return Response.json({
       jsonrpc: "2.0",
       id,

@@ -3,11 +3,30 @@ import { SignJWT, jwtVerify } from "jose";
 import { nanoid } from "nanoid";
 import { env } from "@/env";
 
-export const ACCESS_TOKEN_TTL_SECONDS = 60 * 60; // 1 hour
-export const REFRESH_TOKEN_TTL_SECONDS = 60 * 60 * 24 * 30; // 30 days
-export const AUTH_CODE_TTL_SECONDS = 60 * 10; // 10 minutes
+// TTLs are stored in milliseconds (the native JS unit). Convert to seconds at
+// the boundaries that need it: jose's `setExpirationTime` accepts a duration
+// string like "3600s", and the OAuth `expires_in` response field is in seconds.
+export const ACCESS_TOKEN_TTL_MS = 60 * 60 * 1000; // 1 hour
+export const REFRESH_TOKEN_TTL_MS = 60 * 60 * 24 * 30 * 1000; // 30 days
+export const AUTH_CODE_TTL_MS = 60 * 10 * 1000; // 10 minutes
+
 export const JWT_AUDIENCE = "mcp";
 export const DEFAULT_SCOPE = "mcp";
+
+// OAuth 2.1 `response_type` values we accept. We only support the
+// authorization-code flow; `token` (implicit) was removed in OAuth 2.1.
+export const ResponseType = {
+  CODE: "code",
+} as const;
+export type ResponseType = (typeof ResponseType)[keyof typeof ResponseType];
+
+// PKCE code challenge methods (RFC 7636). `plain` is allowed by the spec but
+// strongly discouraged; we only accept `S256`.
+export const CodeChallengeMethod = {
+  S256: "S256",
+} as const;
+export type CodeChallengeMethod =
+  (typeof CodeChallengeMethod)[keyof typeof CodeChallengeMethod];
 
 let cachedSecret: Uint8Array | null = null;
 function getSecret(): Uint8Array {
@@ -27,7 +46,7 @@ export async function signAccessToken(claims: AccessTokenClaims): Promise<string
     .setAudience(JWT_AUDIENCE)
     .setSubject(claims.clientId)
     .setIssuedAt()
-    .setExpirationTime(`${ACCESS_TOKEN_TTL_SECONDS}s`)
+    .setExpirationTime(`${Math.floor(ACCESS_TOKEN_TTL_MS / 1000)}s`)
     .sign(getSecret());
 }
 
@@ -66,7 +85,7 @@ export function verifyPKCE(
   challenge: string,
   method: string,
 ): boolean {
-  if (method !== "S256") return false;
+  if (method !== CodeChallengeMethod.S256) return false;
   if (verifier.length < 43 || verifier.length > 128) return false;
   const computed = base64UrlEncode(createHash("sha256").update(verifier).digest());
   return computed === challenge;

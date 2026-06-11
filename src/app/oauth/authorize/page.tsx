@@ -1,7 +1,11 @@
 import { getSupabaseClient } from "@/lib/supabase";
 import { getIsLoggedIn } from "@/lib/auth";
 import OAuthConsent from "@/components/OAuthConsent";
-import { DEFAULT_SCOPE } from "@/lib/mcp/oauth";
+import {
+  CodeChallengeMethod,
+  DEFAULT_SCOPE,
+  ResponseType,
+} from "@/lib/mcp/oauth";
 
 interface AuthorizeParams {
   client_id?: string;
@@ -33,7 +37,7 @@ export default async function AuthorizePage({
   const clientId = params.client_id;
   const redirectUri = params.redirect_uri;
 
-  if (!clientId || !redirectUri || params.response_type !== "code") {
+  if (!clientId || !redirectUri || params.response_type !== ResponseType.CODE) {
     return (
       <ErrorPage
         title="Invalid authorization request"
@@ -41,7 +45,7 @@ export default async function AuthorizePage({
       />
     );
   }
-  if (params.code_challenge_method !== "S256" || !params.code_challenge) {
+  if (params.code_challenge_method !== CodeChallengeMethod.S256 || !params.code_challenge) {
     return (
       <ErrorPage
         title="PKCE required"
@@ -82,7 +86,7 @@ export default async function AuthorizePage({
         params={{
           client_id: clientId,
           redirect_uri: redirectUri,
-          response_type: "code",
+          response_type: ResponseType.CODE,
           code_challenge: params.code_challenge,
           code_challenge_method: params.code_challenge_method,
           state: params.state ?? "",

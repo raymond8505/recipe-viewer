@@ -1,0 +1,77 @@
+// Centralized zod validators for the recipe domain. Anything that needs to
+// validate a SchemaRecipe shape at runtime should import from here, so the
+// MCP tools, future API routes, and form handlers all agree on the contract.
+//
+// The TypeScript type for `SchemaRecipe` still lives in `src/types/recipe.ts`
+// — the two are kept aligned by hand. If the type grows, mirror the change
+// here.
+
+import { z } from "zod";
+
+export const ingredientSchema = z.union([
+  z.string(),
+  z.object({ name: z.string(), group: z.string().optional() }),
+]);
+
+export const howToStepSchema = z.object({
+  "@type": z.string().optional(),
+  text: z.string(),
+  name: z.string().optional(),
+  timeRequired: z.string().optional(),
+});
+
+export const howToSectionSchema = z.object({
+  "@type": z.literal("HowToSection"),
+  name: z.string(),
+  itemListElement: z.array(howToStepSchema),
+});
+
+export const schemaRecipeSchema = z
+  .object({
+    "@context": z.string().optional(),
+    "@type": z.literal("Recipe").optional(),
+    name: z.string().min(1),
+    description: z.string().optional(),
+    image: z.union([z.string(), z.array(z.string())]).optional(),
+    author: z
+      .object({
+        "@type": z.literal("Person").optional(),
+        name: z.string(),
+      })
+      .optional(),
+    cookTime: z.string().optional(),
+    prepTime: z.string().optional(),
+    totalTime: z.string().optional(),
+    recipeYield: z.union([z.string(), z.array(z.string())]).optional(),
+    recipeCuisine: z.string().optional(),
+    recipeCategory: z.union([z.string(), z.array(z.string())]).optional(),
+    recipeIngredient: z.array(ingredientSchema).optional(),
+    recipeInstructions: z.array(z.union([howToStepSchema, howToSectionSchema])).optional(),
+    keywords: z.string().optional(),
+    nutrition: z
+      .object({
+        "@type": z.literal("NutritionInformation").optional(),
+        servingSize: z.string().optional(),
+        calories: z.string().optional(),
+        proteinContent: z.string().optional(),
+        carbohydrateContent: z.string().optional(),
+        fatContent: z.string().optional(),
+        fiberContent: z.string().optional(),
+        sodiumContent: z.string().optional(),
+        sugarContent: z.string().optional(),
+        saturatedFatContent: z.string().optional(),
+        unsaturatedFatContent: z.string().optional(),
+        cholesterolContent: z.string().optional(),
+      })
+      .optional(),
+    datePublished: z.string().optional(),
+    notes: z.string().optional(),
+    cookingNotes: z.string().optional(),
+  })
+  .passthrough();
+
+// Recipe row `status` column — used as a zod enum at boundaries (MCP tool
+// args, future form handlers) and as the source of valid values in the
+// JSON-Schema export for MCP tool descriptors.
+export const recipeStatusSchema = z.enum(["published", "archived", "draft"]);
+export const RECIPE_STATUSES = recipeStatusSchema.options;

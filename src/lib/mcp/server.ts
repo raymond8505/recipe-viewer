@@ -14,7 +14,17 @@ import {
   ToolError,
   updateRecipe,
 } from "./tools";
+import {
+  JsonRpcErrorCode,
+  JsonRpcMethod,
+  type JsonRpcRequest,
+  type JsonRpcResponse,
+} from "./types";
 
+// MCP protocol version — the spec uses date-stamped version strings
+// (https://modelcontextprotocol.io/specification). Bumping requires
+// reviewing the changelog for breaking changes in tools/list and
+// tools/call response shapes.
 export const PROTOCOL_VERSION = "2024-11-05";
 export const SERVER_INFO = { name: "recipe-viewer-mcp", version: "1.0.0" } as const;
 
@@ -63,26 +73,12 @@ export const TOOLS: ToolDefinition[] = [
 
 const toolByName = new Map(TOOLS.map((t) => [t.name, t]));
 
-// JSON-RPC dispatch shape — same contract as the existing /api/mcp route, but
-// extended to handle tools/call by actually invoking server-side functions.
-
-export type JsonRpcRequest = {
-  jsonrpc: "2.0";
-  id?: string | number | null;
-  method: string;
-  params?: unknown;
-};
-
-export type JsonRpcResponse =
-  | { jsonrpc: "2.0"; id: string | number | null; result: unknown }
-  | { jsonrpc: "2.0"; id: string | number | null; error: { code: number; message: string; data?: unknown } };
-
 export async function handleJsonRpc(req: JsonRpcRequest): Promise<JsonRpcResponse | null> {
   // Notifications (no id) get no response per JSON-RPC 2.0.
   if (req.id == null) return null;
   const id = req.id;
 
-  if (req.method === "initialize") {
+  if (req.method === JsonRpcMethod.INITIALIZE) {
     return {
       jsonrpc: "2.0",
       id,
@@ -94,7 +90,7 @@ export async function handleJsonRpc(req: JsonRpcRequest): Promise<JsonRpcRespons
     };
   }
 
-  if (req.method === "tools/list") {
+  if (req.method === JsonRpcMethod.TOOLS_LIST) {
     return {
       jsonrpc: "2.0",
       id,
@@ -108,14 +104,17 @@ export async function handleJsonRpc(req: JsonRpcRequest): Promise<JsonRpcRespons
     };
   }
 
-  if (req.method === "tools/call") {
+  if (req.method === JsonRpcMethod.TOOLS_CALL) {
     const params = (req.params ?? {}) as { name?: string; arguments?: unknown };
     const tool = params.name ? toolByName.get(params.name) : undefined;
     if (!tool) {
       return {
         jsonrpc: "2.0",
         id,
-        error: { code: -32602, message: `Unknown tool: ${params.name}` },
+        error: {
+          code: JsonRpcErrorCode.INVALID_PARAMS,
+          message: `Unknown tool: ${params.name}`,
+        },
       };
     }
 
@@ -154,6 +153,9 @@ export async function handleJsonRpc(req: JsonRpcRequest): Promise<JsonRpcRespons
   return {
     jsonrpc: "2.0",
     id,
-    error: { code: -32601, message: `Method not found: ${req.method}` },
+    error: {
+      code: JsonRpcErrorCode.METHOD_NOT_FOUND,
+      message: `Method not found: ${req.method}`,
+    },
   };
 }

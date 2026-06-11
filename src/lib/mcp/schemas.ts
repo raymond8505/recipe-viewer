@@ -1,76 +1,23 @@
+// MCP-specific schemas: argument validators for the five CRUD tools, plus a
+// hand-written JSON Schema mirror used in the `tools/list` response.
+//
+// The recipe domain schema (`schemaRecipeSchema`) lives in `@/lib/schemas/recipe`
+// so non-MCP callers can reuse it. Tool-arg shapes stay here because they are
+// only meaningful to the MCP server.
+
 import { z } from "zod";
+import {
+  recipeStatusSchema,
+  RECIPE_STATUSES,
+  schemaRecipeSchema,
+} from "@/lib/schemas/recipe";
 
-// Loose zod definition for SchemaRecipe — strict typing is enforced by TypeScript
-// at the boundary. We accept anything shaped like Schema.org/Recipe to keep tool
-// args flexible for Claude; the database column is jsonb anyway.
-const ingredientSchema = z.union([
-  z.string(),
-  z.object({ name: z.string(), group: z.string().optional() }),
-]);
-
-const howToStepSchema = z.object({
-  "@type": z.string().optional(),
-  text: z.string(),
-  name: z.string().optional(),
-  timeRequired: z.string().optional(),
-});
-
-const howToSectionSchema = z.object({
-  "@type": z.literal("HowToSection"),
-  name: z.string(),
-  itemListElement: z.array(howToStepSchema),
-});
-
-export const schemaRecipeSchema = z
-  .object({
-    "@context": z.string().optional(),
-    "@type": z.literal("Recipe").optional(),
-    name: z.string().min(1),
-    description: z.string().optional(),
-    image: z.union([z.string(), z.array(z.string())]).optional(),
-    author: z
-      .object({
-        "@type": z.string().optional(),
-        name: z.string(),
-      })
-      .optional(),
-    cookTime: z.string().optional(),
-    prepTime: z.string().optional(),
-    totalTime: z.string().optional(),
-    recipeYield: z.union([z.string(), z.array(z.string())]).optional(),
-    recipeCuisine: z.string().optional(),
-    recipeCategory: z.union([z.string(), z.array(z.string())]).optional(),
-    recipeIngredient: z.array(ingredientSchema).optional(),
-    recipeInstructions: z.array(z.union([howToStepSchema, howToSectionSchema])).optional(),
-    keywords: z.string().optional(),
-    nutrition: z
-      .object({
-        "@type": z.string().optional(),
-        servingSize: z.string().optional(),
-        calories: z.string().optional(),
-        proteinContent: z.string().optional(),
-        carbohydrateContent: z.string().optional(),
-        fatContent: z.string().optional(),
-        fiberContent: z.string().optional(),
-        sodiumContent: z.string().optional(),
-        sugarContent: z.string().optional(),
-        saturatedFatContent: z.string().optional(),
-        unsaturatedFatContent: z.string().optional(),
-        cholesterolContent: z.string().optional(),
-      })
-      .optional(),
-    datePublished: z.string().optional(),
-    notes: z.string().optional(),
-    cookingNotes: z.string().optional(),
-  })
-  .passthrough();
-
-const statusSchema = z.enum(["published", "archived", "draft"]);
+export { schemaRecipeSchema, recipeStatusSchema } from "@/lib/schemas/recipe";
 
 export const searchRecipesArgs = z.object({
   query: z.string().optional(),
   source: z.string().optional(),
-  status: statusSchema.optional(),
+  status: recipeStatusSchema.optional(),
   limit: z.number().int().min(1).max(100).optional(),
   page: z.number().int().min(1).optional(),
 });
@@ -82,7 +29,7 @@ export const getRecipeArgs = z.object({
 export const createRecipeArgs = z.object({
   url: z.string().url(),
   source: z.string().min(1),
-  status: statusSchema.optional(),
+  status: recipeStatusSchema.optional(),
   schema: schemaRecipeSchema,
 });
 
@@ -90,7 +37,7 @@ export const updateRecipeArgs = z.object({
   id: z.string().min(1),
   url: z.string().url().optional(),
   source: z.string().min(1).optional(),
-  status: statusSchema.optional(),
+  status: recipeStatusSchema.optional(),
   schema: schemaRecipeSchema.partial().optional(),
 });
 
@@ -148,7 +95,7 @@ const schemaRecipeJsonSchema = {
   additionalProperties: true,
 } as const;
 
-const statusEnum = { type: "string", enum: ["published", "archived", "draft"] } as const;
+const statusEnum = { type: "string", enum: RECIPE_STATUSES } as const;
 
 export const TOOL_SCHEMAS = {
   search_recipes: {

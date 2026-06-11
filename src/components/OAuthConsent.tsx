@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { loginWithPassword } from "@/lib/api/auth";
 
 interface AuthorizeParams {
   client_id: string;
@@ -35,12 +36,8 @@ export default function OAuthConsent({
     setLoading(true);
     setError("");
     try {
-      const res = await fetch("/api/auth/login", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ password }),
-      });
-      if (res.ok) {
+      const ok = await loginWithPassword(password);
+      if (ok) {
         setIsLoggedIn(true);
         setPassword("");
         router.refresh();

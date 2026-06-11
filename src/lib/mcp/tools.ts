@@ -1,6 +1,12 @@
-import { getSupabaseClient } from "@/lib/supabase";
-import { getRecipes, getRecipeById } from "@/lib/recipes";
-import type { RecipeRow, SchemaRecipe } from "@/types/recipe";
+import {
+  archiveRecipe,
+  createRecipeRow,
+  getRecipeById,
+  getRecipes,
+  RecipeRepoError,
+  updateRecipeRow,
+} from "@/lib/recipes";
+import type { RecipeRow } from "@/types/recipe";
 import type {
   CreateRecipeArgs,
   DeleteRecipeArgs,
@@ -9,7 +15,10 @@ import type {
   UpdateRecipeArgs,
 } from "./schemas";
 
-// All five tools return raw values; the server wraps them in MCP content envelopes.
+// All five tools are thin wrappers over `@/lib/recipes` helpers. They handle
+// argument typing + translate RecipeRepoError into ToolError so the MCP
+// dispatcher can render a uniform isError content envelope. Supabase calls
+// live in the recipes module — see CR feedback on PR #13.
 
 export async function searchRecipes(args: SearchRecipesArgs) {
   const { data, count } = await getRecipes({
@@ -32,90 +41,51 @@ export async function getRecipe(args: GetRecipeArgs): Promise<RecipeRow> {
 }
 
 export async function createRecipe(args: CreateRecipeArgs): Promise<RecipeRow> {
-  const supabase = getSupabaseClient();
-  const { data, error } = await supabase
-    .from("recipes")
-    .insert({
+  try {
+    return await createRecipeRow({
       url: args.url,
       source: args.source,
-      status: args.status ?? "draft",
-      metadata: { schema: args.schema },
-    })
-    .select("id, url, source, status, metadata")
-    .single();
-
-  if (error || !data) {
-    throw new ToolError("create_failed", error?.message ?? "Insert returned no row");
+      status: args.status,
+      schema: args.schema,
+    });
+  } catch (err) {
+    throw toToolError(err, "create_failed");
   }
-  return data as RecipeRow;
 }
 
 export async function updateRecipe(args: UpdateRecipeArgs): Promise<RecipeRow> {
-  const supabase = getSupabaseClient();
-
-  const { data: existing, error: fetchError } = await supabase
-    .from("recipes")
-    .select("id, url, source, status, metadata")
-    .eq("id", args.id)
-    .single();
-
-  if (fetchError || !existing) {
-    throw new ToolError("not_found", `Recipe ${args.id} not found`);
+  try {
+    return await updateRecipeRow(args.id, {
+      url: args.url,
+      source: args.source,
+      status: args.status,
+      schema: args.schema,
+    });
+  } catch (err) {
+    throw toToolError(err, "update_failed");
   }
-
-  const current = existing as RecipeRow;
-  const patch: Partial<{
-    url: string;
-    source: string;
-    status: string;
-    metadata: { schema: SchemaRecipe };
-  }> = {};
-
-  if (args.url !== undefined) patch.url = args.url;
-  if (args.source !== undefined) patch.source = args.source;
-  if (args.status !== undefined) patch.status = args.status;
-  if (args.schema !== undefined) {
-    patch.metadata = {
-      ...current.metadata,
-      schema: { ...current.metadata.schema, ...args.schema } as SchemaRecipe,
-    };
-  }
-
-  if (Object.keys(patch).length === 0) return current;
-
-  const { data, error } = await supabase
-    .from("recipes")
-    .update(patch)
-    .eq("id", args.id)
-    .select("id, url, source, status, metadata")
-    .single();
-
-  if (error || !data) {
-    throw new ToolError("update_failed", error?.message ?? "Update returned no row");
-  }
-  return data as RecipeRow;
 }
 
-export async function deleteRecipe(args: DeleteRecipeArgs): Promise<{ id: string; status: "archived" }> {
-  const supabase = getSupabaseClient();
-
-  const { data: existing, error: fetchError } = await supabase
-    .from("recipes")
-    .select("id")
-    .eq("id", args.id)
-    .single();
-
-  if (fetchError || !existing) {
-    throw new ToolError("not_found", `Recipe ${args.id} not found`);
+export async function deleteRecipe(
+  args: DeleteRecipeArgs,
+): Promise<{ id: string; status: "archived" }> {
+  try {
+    await archiveRecipe(args.id);
+    return { id: args.id, status: "archived" };
+  } catch (err) {
+    throw toToolError(err, "delete_failed");
   }
+}
 
-  const { error } = await supabase
-    .from("recipes")
-    .update({ status: "archived" })
-    .eq("id", args.id);
-
-  if (error) throw new ToolError("delete_failed", error.message);
-  return { id: args.id, status: "archived" };
+function toToolError(err: unknown, fallbackCode: string): ToolError {
+  if (err instanceof RecipeRepoError) {
+    // `not_found` from the repo always maps cleanly; insert/update_failed
+    // surface with the caller's fallback code so the MCP response makes sense.
+    const code = err.kind === "not_found" ? "not_found" : fallbackCode;
+    return new ToolError(code, err.detail);
+  }
+  if (err instanceof Error) return new ToolError(fallbackCode, err.message);
+  return new ToolError(fallbackCode, "Unknown error");
 }
 
 export class ToolError extends Error {

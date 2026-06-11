@@ -1,11 +1,16 @@
-import { handleJsonRpc, type JsonRpcRequest } from "@/lib/mcp/server";
+import { handleJsonRpc } from "@/lib/mcp/server";
+import { JsonRpcErrorCode, type JsonRpcRequest } from "@/lib/mcp/types";
 import { verifyAccessToken } from "@/lib/mcp/oauth";
 import { env } from "@/env";
 
 function unauthorized() {
   const realm = `Bearer resource_metadata="${env.MCP_PUBLIC_URL}/.well-known/oauth-protected-resource"`;
   return Response.json(
-    { jsonrpc: "2.0", id: null, error: { code: -32000, message: "Unauthorized" } },
+    {
+      jsonrpc: "2.0",
+      id: null,
+      error: { code: JsonRpcErrorCode.UNAUTHORIZED, message: "Unauthorized" },
+    },
     { status: 401, headers: { "WWW-Authenticate": realm } },
   );
 }
@@ -31,7 +36,11 @@ export async function POST(request: Request) {
     body = (await request.json()) as JsonRpcRequest;
   } catch {
     return Response.json(
-      { jsonrpc: "2.0", id: null, error: { code: -32700, message: "Parse error" } },
+      {
+        jsonrpc: "2.0",
+        id: null,
+        error: { code: JsonRpcErrorCode.PARSE_ERROR, message: "Parse error" },
+      },
       { status: 400 },
     );
   }

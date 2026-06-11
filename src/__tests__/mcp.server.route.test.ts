@@ -12,11 +12,21 @@ vi.mock("@/env", () => ({
 vi.mock("@/lib/recipes", () => ({
   getRecipes: vi.fn(),
   getRecipeById: vi.fn(),
+  createRecipeRow: vi.fn(),
+  updateRecipeRow: vi.fn(),
+  archiveRecipe: vi.fn(),
+  RecipeRepoError: class RecipeRepoError extends Error {
+    constructor(public kind: string, public detail: string) {
+      super(`${kind}: ${detail}`);
+      this.name = "RecipeRepoError";
+    }
+  },
 }));
 vi.mock("@/lib/supabase", () => ({ getSupabaseClient: vi.fn() }));
 
 import { POST, GET, DELETE } from "@/app/api/mcp/server/route";
 import { signAccessToken } from "@/lib/mcp/oauth";
+import { JsonRpcErrorCode, JsonRpcMethod } from "@/lib/mcp/types";
 
 function rpc(body: object, headers: Record<string, string> = {}) {
   return new Request("http://localhost/api/mcp/server", {
@@ -30,14 +40,14 @@ describe("/api/mcp/server", () => {
   beforeEach(() => vi.clearAllMocks());
 
   it("returns 401 + WWW-Authenticate when no bearer token", async () => {
-    const res = await POST(rpc({ jsonrpc: "2.0", id: 1, method: "tools/list" }));
+    const res = await POST(rpc({ jsonrpc: "2.0", id: 1, method: JsonRpcMethod.TOOLS_LIST }));
     expect(res.status).toBe(401);
     expect(res.headers.get("www-authenticate")).toMatch(/Bearer resource_metadata=/);
   });
 
   it("returns 401 for a malformed token", async () => {
     const res = await POST(
-      rpc({ jsonrpc: "2.0", id: 1, method: "tools/list" }, { authorization: "Bearer not-a-jwt" }),
+      rpc({ jsonrpc: "2.0", id: 1, method: JsonRpcMethod.TOOLS_LIST }, { authorization: "Bearer not-a-jwt" }),
     );
     expect(res.status).toBe(401);
   });
@@ -56,7 +66,7 @@ describe("/api/mcp/server", () => {
 
     it("returns server info on initialize", async () => {
       const res = await POST(
-        rpc({ jsonrpc: "2.0", id: 1, method: "initialize" }, { authorization: auth }),
+        rpc({ jsonrpc: "2.0", id: 1, method: JsonRpcMethod.INITIALIZE }, { authorization: auth }),
       );
       const body = await res.json();
       expect(body.result.protocolVersion).toBeTruthy();
@@ -65,7 +75,7 @@ describe("/api/mcp/server", () => {
 
     it("lists 5 tools", async () => {
       const res = await POST(
-        rpc({ jsonrpc: "2.0", id: 2, method: "tools/list" }, { authorization: auth }),
+        rpc({ jsonrpc: "2.0", id: 2, method: JsonRpcMethod.TOOLS_LIST }, { authorization: auth }),
       );
       const body = await res.json();
       const names = body.result.tools.map((t: { name: string }) => t.name).sort();
@@ -83,7 +93,7 @@ describe("/api/mcp/server", () => {
           {
             jsonrpc: "2.0",
             id: 3,
-            method: "tools/call",
+            method: JsonRpcMethod.TOOLS_CALL,
             params: { name: "search_recipes", arguments: { query: "tofu" } },
           },
           { authorization: auth },
@@ -104,7 +114,7 @@ describe("/api/mcp/server", () => {
           {
             jsonrpc: "2.0",
             id: 4,
-            method: "tools/call",
+            method: JsonRpcMethod.TOOLS_CALL,
             params: { name: "get_recipe", arguments: { id: "missing" } },
           },
           { authorization: auth },
@@ -120,12 +130,15 @@ describe("/api/mcp/server", () => {
         rpc({ jsonrpc: "2.0", id: 5, method: "garbage" }, { authorization: auth }),
       );
       const body = await res.json();
-      expect(body.error.code).toBe(-32601);
+      expect(body.error.code).toBe(JsonRpcErrorCode.METHOD_NOT_FOUND);
     });
 
     it("returns 204 No Content for notifications (no id)", async () => {
       const res = await POST(
-        rpc({ jsonrpc: "2.0", method: "notifications/initialized" }, { authorization: auth }),
+        rpc(
+          { jsonrpc: "2.0", method: JsonRpcMethod.NOTIFICATIONS_INITIALIZED },
+          { authorization: auth },
+        ),
       );
       expect(res.status).toBe(204);
     });
