@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from "@storybook/nextjs-vite";
 import OAuthConsent from "./OAuthConsent";
-import { CodeChallengeMethod, ResponseType } from "@/lib/mcp/oauth";
+import { CodeChallengeMethod, ResponseType } from "@/lib/mcp/oauth-constants";
 
 const sampleParams = {
   client_id: "client_demo_abcdef123456",

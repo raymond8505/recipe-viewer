@@ -2,31 +2,21 @@ import { createHash, randomBytes, timingSafeEqual } from "crypto";
 import { SignJWT, jwtVerify } from "jose";
 import { nanoid } from "nanoid";
 import { env } from "@/env";
+import { ACCESS_TOKEN_TTL_MS, CodeChallengeMethod, JWT_AUDIENCE } from "./oauth-constants";
 
-// TTLs are stored in milliseconds (the native JS unit). Convert to seconds at
-// the boundaries that need it: jose's `setExpirationTime` accepts a duration
-// string like "3600s", and the OAuth `expires_in` response field is in seconds.
-export const ACCESS_TOKEN_TTL_MS = 60 * 60 * 1000; // 1 hour
-export const REFRESH_TOKEN_TTL_MS = 60 * 60 * 24 * 30 * 1000; // 30 days
-export const AUTH_CODE_TTL_MS = 60 * 10 * 1000; // 10 minutes
-
-export const JWT_AUDIENCE = "mcp";
-export const DEFAULT_SCOPE = "mcp";
-
-// OAuth 2.1 `response_type` values we accept. We only support the
-// authorization-code flow; `token` (implicit) was removed in OAuth 2.1.
-export const ResponseType = {
-  CODE: "code",
-} as const;
-export type ResponseType = (typeof ResponseType)[keyof typeof ResponseType];
-
-// PKCE code challenge methods (RFC 7636). `plain` is allowed by the spec but
-// strongly discouraged; we only accept `S256`.
-export const CodeChallengeMethod = {
-  S256: "S256",
-} as const;
-export type CodeChallengeMethod =
-  (typeof CodeChallengeMethod)[keyof typeof CodeChallengeMethod];
+// Re-export the browser-safe constants so existing server-side imports keep
+// resolving against `@/lib/mcp/oauth`. New browser-side consumers (stories,
+// client utilities) should import directly from `./oauth-constants` to avoid
+// pulling in Node's `crypto` module via the rest of this file.
+export {
+  ACCESS_TOKEN_TTL_MS,
+  AUTH_CODE_TTL_MS,
+  CodeChallengeMethod,
+  DEFAULT_SCOPE,
+  JWT_AUDIENCE,
+  REFRESH_TOKEN_TTL_MS,
+  ResponseType,
+} from "./oauth-constants";
 
 let cachedSecret: Uint8Array | null = null;
 function getSecret(): Uint8Array {
