@@ -1,6 +1,7 @@
 // @vitest-environment node
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { env } from "@/env";
+import { makeSupabaseClient } from "@/fixtures/supabase";
 import { POST } from "@/app/api/recipes/[id]/upload-image/route";
 
 vi.mock("@/lib/supabase", () => ({
@@ -37,21 +38,6 @@ function makeRequest(form: FormData) {
 
 function makeFile(bytes: Uint8Array, type = "image/png", name = "x.png") {
   return new File([bytes], name, { type });
-}
-
-function makeSupabaseClient({
-  recipe = { id: "recipe-1" } as object | null,
-  fetchError = null as object | null,
-} = {}) {
-  return {
-    from: vi.fn(() => ({
-      select: vi.fn(() => ({
-        eq: vi.fn(() => ({
-          single: vi.fn().mockResolvedValue({ data: recipe, error: fetchError }),
-        })),
-      })),
-    })),
-  };
 }
 
 describe("POST /api/recipes/[id]/upload-image", () => {

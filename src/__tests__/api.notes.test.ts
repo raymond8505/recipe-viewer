@@ -1,4 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import { makeSupabaseClient as makeClient } from "@/fixtures/supabase";
+import type { MakeSupabaseClientOptions } from "@/fixtures/supabase";
 import { POST } from "@/app/api/recipes/[id]/notes/route";
 
 vi.mock("@/lib/supabase", () => ({
@@ -22,28 +24,8 @@ const storedRecipe = {
   metadata: { schema: { name: "Test Recipe" } },
 };
 
-function makeSupabaseClient({
-  recipe = storedRecipe,
-  fetchError = null,
-  updateError = null,
-}: {
-  recipe?: object | null;
-  fetchError?: object | null;
-  updateError?: object | null;
-} = {}) {
-  return {
-    from: vi.fn(() => ({
-      select: vi.fn(() => ({
-        eq: vi.fn(() => ({
-          single: vi.fn().mockResolvedValue({ data: recipe, error: fetchError }),
-        })),
-      })),
-      update: vi.fn(() => ({
-        eq: vi.fn().mockResolvedValue({ error: updateError }),
-      })),
-    })),
-  };
-}
+const makeSupabaseClient = (overrides: MakeSupabaseClientOptions = {}) =>
+  makeClient({ recipe: storedRecipe, ...overrides });
 
 describe("POST /api/recipes/[id]/notes", () => {
   beforeEach(() => {

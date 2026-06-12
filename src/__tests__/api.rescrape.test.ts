@@ -1,4 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import { makeSupabaseClient as makeClient } from "@/fixtures/supabase";
+import type { MakeSupabaseClientOptions } from "@/fixtures/supabase";
 import { POST } from "@/app/api/recipes/[id]/rescrape/route";
 import { rescrapeFixture } from "@/fixtures/rescrape";
 
@@ -14,23 +16,14 @@ function makeParams(id = "recipe-1") {
   return { params: Promise.resolve({ id }) };
 }
 
-function makeSupabaseClient({
-  recipe = { id: "recipe-1", url: "https://example.com/recipe", metadata: { schema: { name: "Old Recipe" } } },
-  fetchError = null,
-}: {
-  recipe?: object | null;
-  fetchError?: object | null;
-} = {}) {
-  return {
-    from: vi.fn(() => ({
-      select: vi.fn(() => ({
-        eq: vi.fn(() => ({
-          single: vi.fn().mockResolvedValue({ data: recipe, error: fetchError }),
-        })),
-      })),
-    })),
-  };
-}
+const storedRecipe = {
+  id: "recipe-1",
+  url: "https://example.com/recipe",
+  metadata: { schema: { name: "Old Recipe" } },
+};
+
+const makeSupabaseClient = (overrides: MakeSupabaseClientOptions = {}) =>
+  makeClient({ recipe: storedRecipe, ...overrides });
 
 function makeWebhookResponse(ok: boolean, body: object = { schema: rescrapeFixture }) {
   return Promise.resolve(

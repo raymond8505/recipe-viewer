@@ -13,17 +13,8 @@ vi.mock("@/env", () => ({
 }));
 
 import { env } from "@/env";
+import { makeResponse } from "@/fixtures/response";
 import { fetchImageBytes, StorageUploadError } from "@/lib/storage";
-
-function makeResponse(
-  body: Uint8Array,
-  contentType = "image/png",
-  init: { contentLength?: string; status?: number } = {},
-): Response {
-  const headers = new Headers({ "content-type": contentType });
-  if (init.contentLength) headers.set("content-length", init.contentLength);
-  return new Response(body, { status: init.status ?? 200, headers });
-}
 
 afterEach(() => {
   vi.restoreAllMocks();
