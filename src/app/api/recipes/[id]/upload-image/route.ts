@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getSupabaseClient } from "@/lib/supabase";
+import { env } from "@/env";
 import {
   ALLOWED_IMAGE_CONTENT_TYPES,
   StorageUploadError,
@@ -7,8 +8,6 @@ import {
 } from "@/lib/storage";
 
 export const runtime = "nodejs";
-
-const MAX_BYTES = 4_000_000;
 
 export async function POST(
   req: Request,
@@ -42,9 +41,9 @@ export async function POST(
     );
   }
 
-  if (file.size > MAX_BYTES) {
+  if (file.size > env.MAX_IMAGE_BYTES) {
     return NextResponse.json(
-      { error: `File exceeds ${MAX_BYTES} bytes` },
+      { error: `File exceeds ${env.MAX_IMAGE_BYTES} bytes` },
       { status: 413 },
     );
   }

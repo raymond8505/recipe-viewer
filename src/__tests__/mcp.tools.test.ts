@@ -1,9 +1,14 @@
 // @vitest-environment node
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { recipeFixtures } from "@/fixtures";
+import { env } from "@/env";
 
 vi.mock("@/env", () => ({
-  env: { OAUTH_JWT_SECRET: "x".repeat(32), MCP_PUBLIC_URL: "http://localhost:3000" },
+  env: {
+    OAUTH_JWT_SECRET: "x".repeat(32),
+    MCP_PUBLIC_URL: "http://localhost:3000",
+    MAX_IMAGE_BYTES: 4_000_000,
+  },
 }));
 
 vi.mock("@/lib/recipes", () => ({
@@ -23,7 +28,6 @@ vi.mock("@/lib/recipes", () => ({
 vi.mock("@/lib/storage", () => ({
   uploadRecipeImage: vi.fn(),
   fetchImageBytes: vi.fn(),
-  MAX_IMAGE_BYTES: 4_000_000,
   StorageUploadError: class StorageUploadError extends Error {
     constructor(public kind: string, public detail: string) {
       super(`${kind}: ${detail}`);
@@ -197,8 +201,8 @@ describe("uploadRecipeImage", () => {
     expect(out.metadata.schema.image).toBe("https://cdn.example.com/r1-123.png");
   });
 
-  it("throws ToolError(too_large) when decoded bytes exceed 4MB", async () => {
-    const huge = Buffer.alloc(4_000_001).toString("base64");
+  it("throws ToolError(too_large) when decoded bytes exceed the cap", async () => {
+    const huge = Buffer.alloc(env.MAX_IMAGE_BYTES + 1).toString("base64");
     await expect(
       uploadRecipeImage({ id: "r1", imageBase64: huge, contentType: "image/png" }),
     ).rejects.toMatchObject({ code: "too_large" });

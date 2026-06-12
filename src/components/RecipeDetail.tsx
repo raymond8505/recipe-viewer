@@ -21,7 +21,10 @@ import {
   textToIngredients,
 } from "@/lib/format";
 import { useScalableRecipe } from "@/hooks/useScalableRecipe";
-import { ALLOWED_IMAGE_CONTENT_TYPES } from "@/lib/imageTypes";
+import {
+  ALLOWED_IMAGE_CONTENT_TYPES,
+  DEFAULT_MAX_IMAGE_BYTES,
+} from "@/lib/imageTypes";
 import CookingModeButton from "./CookingModeButton";
 import { CheckIcon, CopyIcon } from "@/components/icons";
 import IngredientItem from "./IngredientItem";
@@ -31,6 +34,10 @@ import NutritionPanel from "./NutritionPanel";
 interface RecipeDetailProps {
   recipe: RecipeRow;
   isLoggedIn?: boolean;
+  // Upload size cap, passed down from the server page (env.MAX_IMAGE_BYTES).
+  // Client components can't import @/env — t3-env throws on server-var
+  // access in the browser — so the prop is the only wiring.
+  maxImageBytes?: number;
 }
 
 type EditState = "idle" | "editing" | "saving" | "error";
@@ -38,6 +45,7 @@ type EditState = "idle" | "editing" | "saving" | "error";
 export default function RecipeDetail({
   recipe,
   isLoggedIn = false,
+  maxImageBytes = DEFAULT_MAX_IMAGE_BYTES,
 }: RecipeDetailProps) {
   const [schema, setSchema] = useState(recipe.metadata.schema);
   const [status, setStatus] = useState(recipe.status ?? "draft");
@@ -164,7 +172,7 @@ export default function RecipeDetail({
       setUploadImageState("error");
       return;
     }
-    if (file.size > 4_000_000) {
+    if (file.size > maxImageBytes) {
       setUploadImageState("error");
       return;
     }

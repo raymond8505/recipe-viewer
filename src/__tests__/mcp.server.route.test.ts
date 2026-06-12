@@ -6,6 +6,7 @@ vi.mock("@/env", () => ({
   env: {
     OAUTH_JWT_SECRET: "test-secret-must-be-at-least-32-characters-long!",
     MCP_PUBLIC_URL: "http://localhost:3000",
+    MAX_IMAGE_BYTES: 4_000_000,
   },
 }));
 

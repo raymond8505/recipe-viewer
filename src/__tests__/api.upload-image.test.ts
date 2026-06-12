@@ -1,9 +1,17 @@
 // @vitest-environment node
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import { env } from "@/env";
 import { POST } from "@/app/api/recipes/[id]/upload-image/route";
 
 vi.mock("@/lib/supabase", () => ({
   getSupabaseClient: vi.fn(),
+}));
+
+// SKIP_ENV_VALIDATION in vitest config skips the zod parse, so env defaults
+// don't apply in tests — the cap must be mocked (factory literal: vi.mock is
+// hoisted and can't close over module consts).
+vi.mock("@/env", () => ({
+  env: { MAX_IMAGE_BYTES: 4_000_000 },
 }));
 
 vi.mock("@/lib/storage", async () => {
@@ -89,7 +97,7 @@ describe("POST /api/recipes/[id]/upload-image", () => {
     const { getSupabaseClient } = await import("@/lib/supabase");
     vi.mocked(getSupabaseClient).mockReturnValue(makeSupabaseClient() as never);
 
-    const big = new Uint8Array(4_000_001);
+    const big = new Uint8Array(env.MAX_IMAGE_BYTES + 1);
     const form = new FormData();
     form.append("file", makeFile(big));
     const res = await POST(makeRequest(form), makeParams());

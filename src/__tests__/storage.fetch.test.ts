@@ -5,6 +5,14 @@ vi.mock("@/lib/supabase", () => ({
   getSupabaseAdminClient: vi.fn(),
 }));
 
+// SKIP_ENV_VALIDATION in vitest config skips the zod parse, so env defaults
+// don't apply in tests — the cap must be mocked (factory literal: vi.mock is
+// hoisted and can't close over module consts).
+vi.mock("@/env", () => ({
+  env: { MAX_IMAGE_BYTES: 4_000_000 },
+}));
+
+import { env } from "@/env";
 import { fetchImageBytes, StorageUploadError } from "@/lib/storage";
 
 function makeResponse(
@@ -82,7 +90,7 @@ describe("fetchImageBytes — response validation", () => {
 
   it("rejects responses whose streamed body grows past the cap", async () => {
     // No content-length, but body exceeds the cap when streamed
-    const big = new Uint8Array(4_000_001);
+    const big = new Uint8Array(env.MAX_IMAGE_BYTES + 1);
     vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
       makeResponse(big, "image/png"),
     );

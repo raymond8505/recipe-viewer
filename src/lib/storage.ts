@@ -1,6 +1,7 @@
 import { BlockList, isIP } from "node:net";
 import { lookup as dnsLookup } from "node:dns/promises";
 import { getSupabaseAdminClient } from "@/lib/supabase";
+import { env } from "@/env";
 import {
   ALLOWED_IMAGE_CONTENT_TYPES,
   extensionForContentType,
@@ -15,7 +16,6 @@ export {
 } from "@/lib/imageTypes";
 
 export const RECIPE_BUCKET = "recipes";
-export const MAX_IMAGE_BYTES = 4_000_000;
 export const FETCH_TIMEOUT_MS = 10_000;
 
 export class StorageUploadError extends Error {
@@ -113,10 +113,10 @@ export async function fetchImageBytes(
     );
   }
   const declared = res.headers.get("content-length");
-  if (declared && Number(declared) > MAX_IMAGE_BYTES) {
+  if (declared && Number(declared) > env.MAX_IMAGE_BYTES) {
     throw new StorageUploadError(
       "too_large",
-      `Response declares ${declared} bytes (max ${MAX_IMAGE_BYTES})`,
+      `Response declares ${declared} bytes (max ${env.MAX_IMAGE_BYTES})`,
     );
   }
   const reader = res.body?.getReader();
@@ -129,11 +129,11 @@ export async function fetchImageBytes(
     const { done, value } = await reader.read();
     if (done) break;
     total += value.byteLength;
-    if (total > MAX_IMAGE_BYTES) {
+    if (total > env.MAX_IMAGE_BYTES) {
       await reader.cancel();
       throw new StorageUploadError(
         "too_large",
-        `Response exceeded ${MAX_IMAGE_BYTES} bytes`,
+        `Response exceeded ${env.MAX_IMAGE_BYTES} bytes`,
       );
     }
     chunks.push(value);

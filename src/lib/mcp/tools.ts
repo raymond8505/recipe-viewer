@@ -6,9 +6,9 @@ import {
   RecipeRepoError,
   updateRecipeRow,
 } from "@/lib/recipes";
+import { env } from "@/env";
 import {
   fetchImageBytes,
-  MAX_IMAGE_BYTES,
   StorageUploadError,
   uploadRecipeImage as uploadImageToStorage,
 } from "@/lib/storage";
@@ -105,10 +105,10 @@ export async function uploadRecipeImage(
     }
   } else {
     bytes = Buffer.from(args.imageBase64!, "base64");
-    if (bytes.length > MAX_IMAGE_BYTES) {
+    if (bytes.length > env.MAX_IMAGE_BYTES) {
       throw new ToolError(
         "too_large",
-        `Decoded image is ${bytes.length} bytes (max ${MAX_IMAGE_BYTES})`,
+        `Decoded image is ${bytes.length} bytes (max ${env.MAX_IMAGE_BYTES})`,
       );
     }
     contentType = args.contentType!;
