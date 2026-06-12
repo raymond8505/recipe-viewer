@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import Image from "next/image";
 import type {
   RecipeRow,
@@ -75,12 +75,25 @@ export default function RecipeDetail({
   >("idle");
   const [preRegenImageSchema, setPreRegenImageSchema] =
     useState<SchemaRecipe | null>(null);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [uploadImageState, setUploadImageState] = useState<
+    "idle" | "error"
+  >("idle");
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [isMounted, setIsMounted] = useState(false);
   useEffect(() => setIsMounted(true), []);
+
+  useEffect(() => {
+    return () => {
+      if (previewUrl) URL.revokeObjectURL(previewUrl);
+    };
+  }, [previewUrl]);
 
   const isEditing = editState !== "idle";
   const isRescrapeReview = preRescrapeSchema !== null;
   const isRegenImageReview = preRegenImageSchema !== null;
+  const isUploadImageReview = selectedFile !== null;
 
   const handleRescrape = async () => {
     setRescrapeState("loading");
@@ -136,6 +149,46 @@ export default function RecipeDetail({
     }
   };
 
+  const handleUploadImageClick = () => {
+    setUploadImageState("idle");
+    fileInputRef.current?.click();
+  };
+
+  const handleFileSelected = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+
+    const allowed = ["image/png", "image/jpeg", "image/webp"];
+    if (!allowed.includes(file.type)) {
+      setUploadImageState("error");
+      return;
+    }
+    if (file.size > 4_000_000) {
+      setUploadImageState("error");
+      return;
+    }
+
+    if (previewUrl) URL.revokeObjectURL(previewUrl);
+    setPreRescrapeSchema(null);
+    setRescrapeState("idle");
+    setPreRegenImageSchema(null);
+    setRegenImageState("idle");
+    setUploadImageState("idle");
+    setSelectedFile(file);
+    setPreviewUrl(URL.createObjectURL(file));
+
+    setEditUrl(recipe.url ?? "");
+    setEditDesc(schema.description ?? "");
+    setEditIngredients(ingredientsToText(schema.recipeIngredient ?? []));
+    setEditInstructions(
+      instructionsToMarkdown(schema.recipeInstructions ?? []),
+    );
+    setEditNotes(schema.notes ?? "");
+    setEditStatus(status);
+    setEditState("editing");
+  };
+
   const handleEditStart = () => {
     setEditUrl(recipe.url ?? "");
     setEditDesc(schema.description ?? "");
@@ -158,12 +211,17 @@ export default function RecipeDetail({
       setPreRegenImageSchema(null);
       setRegenImageState("idle");
     }
+    if (selectedFile) {
+      if (previewUrl) URL.revokeObjectURL(previewUrl);
+      setSelectedFile(null);
+      setPreviewUrl(null);
+    }
     setEditState("idle");
   };
 
   const handleEditSave = async () => {
     setEditState("saving");
-    const updatedSchema = {
+    const updatedSchema: SchemaRecipe = {
       ...schema,
       description: editDesc || undefined,
       recipeIngredient: textToIngredients(editIngredients),
@@ -171,6 +229,21 @@ export default function RecipeDetail({
       notes: editNotes || undefined,
     };
     try {
+      if (selectedFile) {
+        const form = new FormData();
+        form.append("file", selectedFile);
+        const uploadRes = await fetch(
+          `/api/recipes/${recipe.id}/upload-image`,
+          { method: "POST", body: form },
+        );
+        if (!uploadRes.ok) throw new Error();
+        const uploadBody = await uploadRes.json();
+        if (!uploadBody.image || typeof uploadBody.image !== "string") {
+          throw new Error();
+        }
+        updatedSchema.image = uploadBody.image;
+      }
+
       const res = await fetch(`/api/recipes/${recipe.id}/update`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -189,6 +262,11 @@ export default function RecipeDetail({
       setRescrapeState("idle");
       setPreRegenImageSchema(null);
       setRegenImageState("idle");
+      if (selectedFile) {
+        if (previewUrl) URL.revokeObjectURL(previewUrl);
+        setSelectedFile(null);
+        setPreviewUrl(null);
+      }
       setEditState("idle");
     } catch {
       setEditState("error");
@@ -290,6 +368,12 @@ export default function RecipeDetail({
                     New image generated. Edit if needed, then confirm or cancel.
                   </p>
                 )}
+                {isUploadImageReview && (
+                  <p className="w-full text-sm text-purple-700 bg-purple-50 rounded-lg px-3 py-2 mb-1">
+                    Reviewing uploaded image. Edit if needed, then confirm or
+                    cancel.
+                  </p>
+                )}
                 <div className="w-full mb-1">
                   <label className="block text-xs font-medium text-gray-500 mb-1">
                     Source URL
@@ -321,7 +405,7 @@ export default function RecipeDetail({
                 >
                   {editState === "saving"
                     ? "Saving\u2026"
-                    : isRescrapeReview || isRegenImageReview
+                    : isRescrapeReview || isRegenImageReview || isUploadImageReview
                       ? "Confirm"
                       : "Save"}
                 </button>
@@ -381,6 +465,25 @@ export default function RecipeDetail({
                     Image generation failed. Try again.
                   </span>
                 )}
+                <button
+                  onClick={handleUploadImageClick}
+                  className="px-4 py-2 text-sm font-medium rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 transition-colors"
+                >
+                  Upload Image
+                </button>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/png,image/jpeg,image/webp"
+                  onChange={handleFileSelected}
+                  className="hidden"
+                  aria-label="Choose image file to upload"
+                />
+                {uploadImageState === "error" && (
+                  <span className="text-sm text-red-600">
+                    File must be PNG, JPEG, or WebP and under 4MB.
+                  </span>
+                )}
               </>
             )}
           </div>
@@ -388,16 +491,17 @@ export default function RecipeDetail({
       )}
 
       {/* Image */}
-      {image && (
+      {(previewUrl || image) && (
         <div className="w-full rounded-2xl overflow-hidden mb-8 bg-gray-100">
           <Image
-            src={image}
+            src={previewUrl ?? (image as string)}
             alt={schema.name}
             width={0}
             height={0}
             sizes="(max-width: 768px) 100vw, 768px"
             className="w-full h-auto"
             priority
+            unoptimized={previewUrl !== null}
           />
         </div>
       )}

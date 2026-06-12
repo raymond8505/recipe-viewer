@@ -103,4 +103,30 @@ export const TOOL_SCHEMAS = {
       id: { type: "string", description: "Recipe UUID — soft-deleted by setting status=archived" },
     },
   },
+  upload_recipe_image: {
+    type: "object",
+    required: ["id"],
+    properties: {
+      id: { type: "string", description: "Recipe UUID" },
+      imageUrl: {
+        type: "string",
+        format: "uri",
+        description:
+          "Public http(s) URL to fetch the image from. The server downloads, validates, and uploads it. Use this whenever the user gives you an image URL — do not fetch it yourself or base64-encode it.",
+      },
+      imageBase64: {
+        type: "string",
+        description:
+          "Base64-encoded image bytes with no data: prefix. Use this only when you already have raw bytes (e.g. a file the user attached directly to the conversation). Requires contentType. Max ~4MB decoded. Do NOT base64-encode a URL — pass it as imageUrl instead.",
+      },
+      contentType: {
+        type: "string",
+        enum: ["image/png", "image/jpeg", "image/webp"],
+        description:
+          "Required with imageBase64. Ignored with imageUrl (derived from the server-side response).",
+      },
+    },
+    description:
+      "Provide exactly one of: (a) imageUrl, or (b) imageBase64 + contentType.",
+  },
 } as const;

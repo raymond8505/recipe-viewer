@@ -12,6 +12,7 @@ export const env = createEnv({
     HEADSUP_SEARCH_WEBHOOK_URL: z.string().url(),
     OAUTH_JWT_SECRET: z.string().min(32),
     MCP_PUBLIC_URL: z.string().url(),
+    SUPABASE_SERVICE_ROLE_KEY: z.string().min(1),
   },
   client: {
     NEXT_PUBLIC_SUPABASE_URL: z.string().url(),
@@ -27,6 +28,7 @@ export const env = createEnv({
     HEADSUP_SEARCH_WEBHOOK_URL: process.env.HEADSUP_SEARCH_WEBHOOK_URL,
     OAUTH_JWT_SECRET: process.env.OAUTH_JWT_SECRET,
     MCP_PUBLIC_URL: process.env.MCP_PUBLIC_URL,
+    SUPABASE_SERVICE_ROLE_KEY: process.env.SUPABASE_SERVICE_ROLE_KEY,
     NEXT_PUBLIC_SUPABASE_URL: process.env.NEXT_PUBLIC_SUPABASE_URL,
     NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY:
       process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY,

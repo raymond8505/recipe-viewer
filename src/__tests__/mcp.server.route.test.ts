@@ -73,14 +73,21 @@ describe("/api/mcp/server", () => {
       expect(body.result.serverInfo.name).toBe("recipe-viewer-mcp");
     });
 
-    it("lists 5 tools", async () => {
+    it("lists 6 tools", async () => {
       const res = await POST(
         rpc({ jsonrpc: "2.0", id: 2, method: JsonRpcMethod.TOOLS_LIST }, { authorization: auth }),
       );
       const body = await res.json();
       const names = body.result.tools.map((t: { name: string }) => t.name).sort();
       expect(names).toEqual(
-        ["create_recipe", "delete_recipe", "get_recipe", "search_recipes", "update_recipe"],
+        [
+          "create_recipe",
+          "delete_recipe",
+          "get_recipe",
+          "search_recipes",
+          "update_recipe",
+          "upload_recipe_image",
+        ],
       );
     });
 

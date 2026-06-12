@@ -109,7 +109,25 @@ export const recipeUpdateInputSchema = z.object({
   schema: schemaRecipeSchema.partial().optional(),
 });
 
+export const recipeImageUploadInputSchema = z
+  .object({
+    id: z.string().min(1),
+    imageUrl: z.string().url().optional(),
+    imageBase64: z.string().min(1).max(6_000_000).optional(),
+    contentType: z.enum(["image/png", "image/jpeg", "image/webp"]).optional(),
+  })
+  .refine(
+    (data) =>
+      (data.imageUrl && !data.imageBase64) ||
+      (!data.imageUrl && !!data.imageBase64 && !!data.contentType),
+    {
+      message:
+        "Provide either imageUrl, or both imageBase64 and contentType (not both paths).",
+    },
+  );
+
 export type RecipeSearchInput = z.infer<typeof recipeSearchInputSchema>;
 export type RecipeIdInput = z.infer<typeof recipeIdInputSchema>;
 export type RecipeCreateInput = z.infer<typeof recipeCreateInputSchema>;
 export type RecipeUpdateInput = z.infer<typeof recipeUpdateInputSchema>;
+export type RecipeImageUploadInput = z.infer<typeof recipeImageUploadInputSchema>;

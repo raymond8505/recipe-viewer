@@ -6,10 +6,17 @@ import {
   RecipeRepoError,
   updateRecipeRow,
 } from "@/lib/recipes";
+import {
+  fetchImageBytes,
+  MAX_IMAGE_BYTES,
+  StorageUploadError,
+  uploadRecipeImage as uploadImageToStorage,
+} from "@/lib/storage";
 import type { RecipeRow } from "@/types/recipe";
 import type {
   RecipeCreateInput,
   RecipeIdInput,
+  RecipeImageUploadInput,
   RecipeSearchInput,
   RecipeUpdateInput,
 } from "@/lib/schemas/recipe";
@@ -73,6 +80,53 @@ export async function deleteRecipe(
     return { id: args.id, status: "archived" };
   } catch (err) {
     throw toToolError(err, "delete_failed");
+  }
+}
+
+export async function uploadRecipeImage(
+  args: RecipeImageUploadInput,
+): Promise<RecipeRow> {
+  let bytes: Buffer;
+  let contentType: string;
+
+  if (args.imageUrl) {
+    try {
+      const fetched = await fetchImageBytes(args.imageUrl);
+      bytes = fetched.bytes;
+      contentType = fetched.contentType;
+    } catch (err) {
+      if (err instanceof StorageUploadError) {
+        throw new ToolError(err.kind, err.detail);
+      }
+      throw new ToolError(
+        "fetch_failed",
+        err instanceof Error ? err.message : "Failed to fetch image",
+      );
+    }
+  } else {
+    bytes = Buffer.from(args.imageBase64!, "base64");
+    if (bytes.length > MAX_IMAGE_BYTES) {
+      throw new ToolError(
+        "too_large",
+        `Decoded image is ${bytes.length} bytes (max ${MAX_IMAGE_BYTES})`,
+      );
+    }
+    contentType = args.contentType!;
+  }
+
+  let imageUrl: string;
+  try {
+    imageUrl = await uploadImageToStorage(args.id, bytes, contentType);
+  } catch (err) {
+    if (err instanceof StorageUploadError) {
+      throw new ToolError(err.kind, err.detail);
+    }
+    throw new ToolError("upload_failed", err instanceof Error ? err.message : "Upload failed");
+  }
+  try {
+    return await updateRecipeRow(args.id, { schema: { image: imageUrl } });
+  } catch (err) {
+    throw toToolError(err, "update_failed");
   }
 }
 
