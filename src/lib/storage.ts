@@ -1,18 +1,22 @@
 import { BlockList, isIP } from "node:net";
 import { lookup as dnsLookup } from "node:dns/promises";
 import { getSupabaseAdminClient } from "@/lib/supabase";
+import {
+  ALLOWED_IMAGE_CONTENT_TYPES,
+  extensionForContentType,
+  type AllowedImageContentType,
+} from "@/lib/imageTypes";
+
+export {
+  IMAGE_CONTENT_TYPES,
+  ALLOWED_IMAGE_CONTENT_TYPES,
+  extensionForContentType,
+  type AllowedImageContentType,
+} from "@/lib/imageTypes";
 
 export const RECIPE_BUCKET = "recipes";
 export const MAX_IMAGE_BYTES = 4_000_000;
 export const FETCH_TIMEOUT_MS = 10_000;
-
-export const ALLOWED_IMAGE_CONTENT_TYPES = [
-  "image/png",
-  "image/jpeg",
-  "image/webp",
-] as const;
-
-export type AllowedImageContentType = (typeof ALLOWED_IMAGE_CONTENT_TYPES)[number];
 
 export class StorageUploadError extends Error {
   constructor(
@@ -26,21 +30,6 @@ export class StorageUploadError extends Error {
   ) {
     super(`${kind}: ${detail}`);
     this.name = "StorageUploadError";
-  }
-}
-
-export function extensionForContentType(
-  contentType: string,
-): "png" | "jpg" | "webp" | null {
-  switch (contentType) {
-    case "image/png":
-      return "png";
-    case "image/jpeg":
-      return "jpg";
-    case "image/webp":
-      return "webp";
-    default:
-      return null;
   }
 }
 

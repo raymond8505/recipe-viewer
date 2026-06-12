@@ -21,6 +21,7 @@ import {
   textToIngredients,
 } from "@/lib/format";
 import { useScalableRecipe } from "@/hooks/useScalableRecipe";
+import { ALLOWED_IMAGE_CONTENT_TYPES } from "@/lib/imageTypes";
 import CookingModeButton from "./CookingModeButton";
 import { CheckIcon, CopyIcon } from "@/components/icons";
 import IngredientItem from "./IngredientItem";
@@ -159,8 +160,7 @@ export default function RecipeDetail({
     e.target.value = "";
     if (!file) return;
 
-    const allowed = ["image/png", "image/jpeg", "image/webp"];
-    if (!allowed.includes(file.type)) {
+    if (!ALLOWED_IMAGE_CONTENT_TYPES.includes(file.type as never)) {
       setUploadImageState("error");
       return;
     }
@@ -474,7 +474,7 @@ export default function RecipeDetail({
                 <input
                   ref={fileInputRef}
                   type="file"
-                  accept="image/png,image/jpeg,image/webp"
+                  accept={ALLOWED_IMAGE_CONTENT_TYPES.join(",")}
                   onChange={handleFileSelected}
                   className="hidden"
                   aria-label="Choose image file to upload"
