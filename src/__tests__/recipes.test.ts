@@ -11,7 +11,14 @@ const mockGetSupabaseClient = vi.hoisted(() => vi.fn());
 vi.mock("@/lib/features", () => ({ getFeatures: () => mockFeatures }));
 vi.mock("@/lib/supabase", () => ({ getSupabaseClient: mockGetSupabaseClient }));
 
-import { getRecipes, getRecipeById, getStatusCounts } from "@/lib/recipes";
+import {
+  createRecipeRow,
+  getRecipes,
+  getRecipeById,
+  getStatusCounts,
+  RecipeRepoError,
+  updateRecipeRow,
+} from "@/lib/recipes";
 
 /**
  * Builds a mock Supabase client whose query builder is fully chainable.
@@ -288,5 +295,156 @@ describe("getRecipeById", () => {
     const result = await getRecipeById("99");
     expect(Array.isArray(result!.metadata.schema.recipeInstructions)).toBe(true);
     expect((result!.metadata.schema.recipeInstructions as { text: string }[])[0].text).toBe("Boil water.");
+  });
+});
+
+/**
+ * Write-op mock — captures the row passed to insert()/update() so tests can
+ * assert what columns are being set, then short-circuits the supabase chain
+ * with the canned return payload.
+ */
+function makeWriteSupabaseMock(opts: {
+  selectSingle?: { data: object | null; error: object | null };
+  insertSingle?: { data: object | null; error: object | null };
+  updateSingle?: { data: object | null; error: object | null };
+} = {}) {
+  const inserts: Record<string, unknown>[] = [];
+  const updates: Record<string, unknown>[] = [];
+
+  const selectChain = {
+    eq: vi.fn(() => ({
+      single: vi.fn().mockResolvedValue(opts.selectSingle ?? { data: null, error: null }),
+    })),
+  };
+
+  const client = {
+    from: vi.fn(() => ({
+      select: vi.fn(() => selectChain),
+      insert: vi.fn((row: Record<string, unknown>) => {
+        inserts.push(row);
+        return {
+          select: vi.fn(() => ({
+            single: vi
+              .fn()
+              .mockResolvedValue(opts.insertSingle ?? { data: null, error: null }),
+          })),
+        };
+      }),
+      update: vi.fn((row: Record<string, unknown>) => {
+        updates.push(row);
+        return {
+          eq: vi.fn(() => ({
+            select: vi.fn(() => ({
+              single: vi
+                .fn()
+                .mockResolvedValue(opts.updateSingle ?? { data: null, error: null }),
+            })),
+          })),
+        };
+      }),
+    })),
+  };
+
+  mockGetSupabaseClient.mockReturnValue(client);
+  return { client, inserts, updates };
+}
+
+describe("createRecipeRow", () => {
+  it("populates the top-level name column from schema.name (bug fix)", async () => {
+    const inserted = {
+      id: "new",
+      url: "https://example.com",
+      source: "example.com",
+      status: "draft",
+      metadata: { schema: { name: "Soup" } },
+    };
+    const { inserts } = makeWriteSupabaseMock({ insertSingle: { data: inserted, error: null } });
+
+    await createRecipeRow({
+      url: "https://example.com",
+      source: "example.com",
+      schema: { name: "Soup", description: "Hot broth." } as never,
+    });
+
+    expect(inserts[0]).toMatchObject({
+      name: "Soup",
+      content: "Hot broth.",
+      url: "https://example.com",
+      source: "example.com",
+      status: "draft",
+    });
+  });
+
+  it("falls back to schema.name for content when description is absent", async () => {
+    const { inserts } = makeWriteSupabaseMock({
+      insertSingle: { data: { id: "x" }, error: null },
+    });
+
+    await createRecipeRow({
+      url: "https://example.com",
+      source: "example.com",
+      schema: { name: "Bare" } as never,
+    });
+
+    expect(inserts[0]).toMatchObject({ name: "Bare", content: "Bare" });
+  });
+
+  it("throws RecipeRepoError(insert_failed) on Supabase error", async () => {
+    makeWriteSupabaseMock({ insertSingle: { data: null, error: { message: "RLS" } } });
+
+    await expect(
+      createRecipeRow({
+        url: "https://example.com",
+        source: "example.com",
+        schema: { name: "X" } as never,
+      }),
+    ).rejects.toBeInstanceOf(RecipeRepoError);
+  });
+});
+
+describe("updateRecipeRow", () => {
+  const existing = {
+    id: "r1",
+    url: "https://example.com",
+    source: "example.com",
+    status: "published",
+    metadata: { schema: { name: "Original", description: "Old blurb" } },
+  };
+
+  it("syncs the top-level name column when schema.name changes (bug fix)", async () => {
+    const { updates } = makeWriteSupabaseMock({
+      selectSingle: { data: existing, error: null },
+      updateSingle: { data: existing, error: null },
+    });
+
+    await updateRecipeRow("r1", { schema: { name: "Renamed" } } as never);
+
+    expect(updates[0]).toMatchObject({ name: "Renamed" });
+    // metadata.schema should still be merged
+    expect((updates[0].metadata as { schema: { name: string } }).schema.name).toBe("Renamed");
+  });
+
+  it("syncs the top-level content column when schema.description changes", async () => {
+    const { updates } = makeWriteSupabaseMock({
+      selectSingle: { data: existing, error: null },
+      updateSingle: { data: existing, error: null },
+    });
+
+    await updateRecipeRow("r1", { schema: { description: "Fresh blurb" } } as never);
+
+    expect(updates[0]).toMatchObject({ content: "Fresh blurb" });
+  });
+
+  it("does not touch top-level name/content when schema patch omits them", async () => {
+    const { updates } = makeWriteSupabaseMock({
+      selectSingle: { data: existing, error: null },
+      updateSingle: { data: existing, error: null },
+    });
+
+    await updateRecipeRow("r1", { status: "archived" });
+
+    expect(updates[0]).not.toHaveProperty("name");
+    expect(updates[0]).not.toHaveProperty("content");
+    expect(updates[0]).toMatchObject({ status: "archived" });
   });
 });

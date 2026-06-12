@@ -178,11 +178,21 @@ export async function getRecipeById(id: string): Promise<RecipeRow | null> {
 
 // Insert a new recipe row. Defaults status to "draft" if not provided.
 // Throws RecipeRepoError("insert_failed") on Supabase failure.
+//
+// The `recipes` table has top-level NOT NULL `name` and `content` columns that
+// mirror `schema.name` and `schema.description` (the latter is what powers
+// vector search). The MCP path is the canonical creator now, so we derive both
+// from the SchemaRecipe instead of leaving them for an upstream pipeline.
+// `content` falls back to `schema.name` when no description is provided —
+// satisfies the NOT NULL constraint and keeps search functioning, even if not
+// optimally, for stub rows.
 export async function createRecipeRow(input: CreateRecipeInput): Promise<RecipeRow> {
   const supabase = getSupabaseClient();
   const { data, error } = await supabase
     .from("recipes")
     .insert({
+      name: input.schema.name,
+      content: input.schema.description ?? input.schema.name,
       url: input.url,
       source: input.source,
       status: input.status ?? "draft",
@@ -221,6 +231,8 @@ export async function updateRecipeRow(
 
   const current = existing as RecipeRow;
   const writePatch: Partial<{
+    name: string;
+    content: string;
     url: string;
     source: string;
     status: RecipeStatus;
@@ -235,6 +247,11 @@ export async function updateRecipeRow(
       ...current.metadata,
       schema: { ...current.metadata.schema, ...patch.schema } as SchemaRecipe,
     };
+    // Keep the top-level name/content columns in sync when the schema patch
+    // touches them — otherwise list/search views keep showing the old values
+    // until the next full re-scrape.
+    if (patch.schema.name !== undefined) writePatch.name = patch.schema.name;
+    if (patch.schema.description !== undefined) writePatch.content = patch.schema.description;
   }
 
   if (Object.keys(writePatch).length === 0) return current;
