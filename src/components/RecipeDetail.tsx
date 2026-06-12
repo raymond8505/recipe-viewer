@@ -25,6 +25,7 @@ import {
   ALLOWED_IMAGE_CONTENT_TYPES,
   DEFAULT_MAX_IMAGE_BYTES,
 } from "@/lib/imageTypes";
+import { uploadRecipeImageFile } from "@/lib/api/recipes";
 import CookingModeButton from "./CookingModeButton";
 import { CheckIcon, CopyIcon } from "@/components/icons";
 import IngredientItem from "./IngredientItem";
@@ -238,18 +239,10 @@ export default function RecipeDetail({
     };
     try {
       if (selectedFile) {
-        const form = new FormData();
-        form.append("file", selectedFile);
-        const uploadRes = await fetch(
-          `/api/recipes/${recipe.id}/upload-image`,
-          { method: "POST", body: form },
+        updatedSchema.image = await uploadRecipeImageFile(
+          recipe.id,
+          selectedFile,
         );
-        if (!uploadRes.ok) throw new Error();
-        const uploadBody = await uploadRes.json();
-        if (!uploadBody.image || typeof uploadBody.image !== "string") {
-          throw new Error();
-        }
-        updatedSchema.image = uploadBody.image;
       }
 
       const res = await fetch(`/api/recipes/${recipe.id}/update`, {
