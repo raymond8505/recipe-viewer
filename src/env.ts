@@ -10,6 +10,8 @@ export const env = createEnv({
     REGEN_IMAGE_WEBHOOK_URL: z.string().url(),
     WHATS_FOR_DINNER_WEBHOOK_URL: z.string().url(),
     HEADSUP_SEARCH_WEBHOOK_URL: z.string().url(),
+    OAUTH_JWT_SECRET: z.string().min(32),
+    MCP_PUBLIC_URL: z.string().url(),
   },
   client: {
     NEXT_PUBLIC_SUPABASE_URL: z.string().url(),
@@ -23,6 +25,8 @@ export const env = createEnv({
     REGEN_IMAGE_WEBHOOK_URL: process.env.REGEN_IMAGE_WEBHOOK_URL,
     WHATS_FOR_DINNER_WEBHOOK_URL: process.env.WHATS_FOR_DINNER_WEBHOOK_URL,
     HEADSUP_SEARCH_WEBHOOK_URL: process.env.HEADSUP_SEARCH_WEBHOOK_URL,
+    OAUTH_JWT_SECRET: process.env.OAUTH_JWT_SECRET,
+    MCP_PUBLIC_URL: process.env.MCP_PUBLIC_URL,
     NEXT_PUBLIC_SUPABASE_URL: process.env.NEXT_PUBLIC_SUPABASE_URL,
     NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY:
       process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY,

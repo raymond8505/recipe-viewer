@@ -1,7 +1,37 @@
 import { getSupabaseClient } from "./supabase";
 import { getFeatures } from "./features";
 import { normalizeRecipeInstructions } from "./format";
-import type { RecipeRow, RecipesResult } from "@/types/recipe";
+import type { RecipeRow, RecipesResult, SchemaRecipe } from "@/types/recipe";
+
+export type RecipeStatus = "published" | "archived" | "draft";
+
+// Discriminated error type for the write helpers. Lets callers (routes, MCP
+// tools) branch on `kind` instead of inspecting error messages.
+export class RecipeRepoError extends Error {
+  constructor(
+    public kind: "not_found" | "insert_failed" | "update_failed",
+    public detail: string,
+  ) {
+    super(`${kind}: ${detail}`);
+    this.name = "RecipeRepoError";
+  }
+}
+
+const RECIPE_COLUMNS = "id, url, source, status, metadata";
+
+export interface CreateRecipeInput {
+  url: string;
+  source: string;
+  status?: RecipeStatus;
+  schema: SchemaRecipe;
+}
+
+export interface UpdateRecipePatch {
+  url?: string;
+  source?: string;
+  status?: RecipeStatus;
+  schema?: Partial<SchemaRecipe>;
+}
 
 const PAGE_SIZE = 24;
 
@@ -132,7 +162,7 @@ export async function getRecipeById(id: string): Promise<RecipeRow | null> {
 
   const { data, error } = await supabase
     .from("recipes")
-    .select("id, url, source, status, metadata")
+    .select(RECIPE_COLUMNS)
     .eq("id", id)
     .single();
 
@@ -144,4 +174,106 @@ export async function getRecipeById(id: string): Promise<RecipeRow | null> {
     row.metadata.schema.recipeInstructions = normalizeRecipeInstructions(raw as unknown);
   }
   return row;
+}
+
+// Insert a new recipe row. Defaults status to "draft" if not provided.
+// Throws RecipeRepoError("insert_failed") on Supabase failure.
+export async function createRecipeRow(input: CreateRecipeInput): Promise<RecipeRow> {
+  const supabase = getSupabaseClient();
+  const { data, error } = await supabase
+    .from("recipes")
+    .insert({
+      url: input.url,
+      source: input.source,
+      status: input.status ?? "draft",
+      metadata: { schema: input.schema },
+    })
+    .select(RECIPE_COLUMNS)
+    .single();
+
+  if (error || !data) {
+    throw new RecipeRepoError("insert_failed", error?.message ?? "Insert returned no row");
+  }
+  return data as RecipeRow;
+}
+
+// Patch fields on an existing recipe. The `schema` field is merged into the
+// existing metadata.schema (not replaced). Throws RecipeRepoError("not_found")
+// if the row doesn't exist, or ("update_failed") on Supabase failure.
+//
+// When `patch` has no defined fields, the existing row is returned unchanged
+// without writing to Supabase.
+export async function updateRecipeRow(
+  id: string,
+  patch: UpdateRecipePatch,
+): Promise<RecipeRow> {
+  const supabase = getSupabaseClient();
+
+  const { data: existing, error: fetchError } = await supabase
+    .from("recipes")
+    .select(RECIPE_COLUMNS)
+    .eq("id", id)
+    .single();
+
+  if (fetchError || !existing) {
+    throw new RecipeRepoError("not_found", `Recipe ${id} not found`);
+  }
+
+  const current = existing as RecipeRow;
+  const writePatch: Partial<{
+    url: string;
+    source: string;
+    status: RecipeStatus;
+    metadata: { schema: SchemaRecipe };
+  }> = {};
+
+  if (patch.url !== undefined) writePatch.url = patch.url;
+  if (patch.source !== undefined) writePatch.source = patch.source;
+  if (patch.status !== undefined) writePatch.status = patch.status;
+  if (patch.schema !== undefined) {
+    writePatch.metadata = {
+      ...current.metadata,
+      schema: { ...current.metadata.schema, ...patch.schema } as SchemaRecipe,
+    };
+  }
+
+  if (Object.keys(writePatch).length === 0) return current;
+
+  const { data, error } = await supabase
+    .from("recipes")
+    .update(writePatch)
+    .eq("id", id)
+    .select(RECIPE_COLUMNS)
+    .single();
+
+  if (error || !data) {
+    throw new RecipeRepoError("update_failed", error?.message ?? "Update returned no row");
+  }
+  return data as RecipeRow;
+}
+
+// Soft-delete by setting status="archived". Verifies the row exists first so
+// callers can return 404 vs 500. Throws RecipeRepoError("not_found") or
+// ("update_failed") accordingly.
+export async function archiveRecipe(id: string): Promise<void> {
+  const supabase = getSupabaseClient();
+
+  const { data: existing, error: fetchError } = await supabase
+    .from("recipes")
+    .select("id")
+    .eq("id", id)
+    .single();
+
+  if (fetchError || !existing) {
+    throw new RecipeRepoError("not_found", `Recipe ${id} not found`);
+  }
+
+  const { error } = await supabase
+    .from("recipes")
+    .update({ status: "archived" })
+    .eq("id", id);
+
+  if (error) {
+    throw new RecipeRepoError("update_failed", error.message);
+  }
 }
