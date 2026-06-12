@@ -5,7 +5,7 @@ import { env } from "@/env";
 
 export async function POST(
   req: Request,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: RouteContext<"/api/recipes/[id]/update">
 ) {
   const { id } = await params;
   const supabase = getSupabaseClient();
