@@ -8,14 +8,26 @@ interface RegistrationRequest {
   token_endpoint_auth_method?: "none" | "client_secret_post" | "client_secret_basic";
 }
 
-function isLoopback(uri: string): boolean {
+// OAuth 2.1 best practice (RFC 8252 §7.3, §8.4): public clients use either
+// HTTPS callbacks (web-hosted clients like Claude.ai) or HTTP loopback (desktop
+// apps). Other schemes — http://example.com, file://, custom URL schemes —
+// are rejected to avoid both insecure transport and open-redirector abuse.
+function isAllowedRedirectUri(uri: string): boolean {
+  let url: URL;
   try {
-    const url = new URL(uri);
-    if (url.protocol !== "http:") return false;
-    return url.hostname === "127.0.0.1" || url.hostname === "localhost" || url.hostname === "[::1]";
+    url = new URL(uri);
   } catch {
     return false;
   }
+  if (url.protocol === "https:") return true;
+  if (url.protocol === "http:") {
+    return (
+      url.hostname === "127.0.0.1" ||
+      url.hostname === "localhost" ||
+      url.hostname === "[::1]"
+    );
+  }
+  return false;
 }
 
 export async function POST(request: Request) {
@@ -35,11 +47,11 @@ export async function POST(request: Request) {
   }
 
   for (const uri of redirectUris) {
-    if (!isLoopback(uri)) {
+    if (!isAllowedRedirectUri(uri)) {
       return NextResponse.json(
         {
           error: "invalid_redirect_uri",
-          error_description: `Only loopback http://127.0.0.1 or http://localhost URIs are allowed (got ${uri})`,
+          error_description: `redirect_uri must be HTTPS or HTTP loopback (got ${uri})`,
         },
         { status: 400 },
       );
