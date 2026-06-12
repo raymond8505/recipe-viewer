@@ -33,17 +33,22 @@ export class StorageUploadError extends Error {
   }
 }
 
+// SSRF guard: image URLs come from MCP callers, so a malicious or confused
+// client could point us at internal infrastructure. Any URL whose host
+// resolves to one of these ranges is rejected before we fetch it.
 const blockedIPs = (() => {
   const list = new BlockList();
-  list.addSubnet("10.0.0.0", 8);
-  list.addSubnet("172.16.0.0", 12);
-  list.addSubnet("192.168.0.0", 16);
-  list.addSubnet("127.0.0.0", 8);
+  list.addSubnet("10.0.0.0", 8); // RFC 1918 private
+  list.addSubnet("172.16.0.0", 12); // RFC 1918 private
+  list.addSubnet("192.168.0.0", 16); // RFC 1918 private
+  list.addSubnet("127.0.0.0", 8); // loopback — the app/VPS itself
+  // Link-local, including 169.254.169.254 — the cloud metadata endpoint
+  // (AWS/GCP/Azure credentials live here; the classic SSRF target)
   list.addSubnet("169.254.0.0", 16);
-  list.addSubnet("0.0.0.0", 8);
-  list.addAddress("::1", "ipv6");
-  list.addSubnet("fc00::", 7, "ipv6");
-  list.addSubnet("fe80::", 10, "ipv6");
+  list.addSubnet("0.0.0.0", 8); // "this network"; 0.0.0.0 aliases localhost
+  list.addAddress("::1", "ipv6"); // IPv6 loopback
+  list.addSubnet("fc00::", 7, "ipv6"); // IPv6 unique-local (private)
+  list.addSubnet("fe80::", 10, "ipv6"); // IPv6 link-local
   return list;
 })();
 
@@ -119,24 +124,23 @@ export async function fetchImageBytes(
       `Response declares ${declared} bytes (max ${env.MAX_IMAGE_BYTES})`,
     );
   }
-  const reader = res.body?.getReader();
-  if (!reader) {
+  if (!res.body) {
     throw new StorageUploadError("fetch_failed", "Response had no body");
   }
+  // Stream the body so an oversized (or content-length-less) response is
+  // aborted mid-download instead of buffered whole. Throwing exits the async
+  // iterator, which cancels the underlying stream.
   const chunks: Uint8Array[] = [];
   let total = 0;
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    total += value.byteLength;
+  for await (const chunk of res.body) {
+    total += chunk.byteLength;
     if (total > env.MAX_IMAGE_BYTES) {
-      await reader.cancel();
       throw new StorageUploadError(
         "too_large",
         `Response exceeded ${env.MAX_IMAGE_BYTES} bytes`,
       );
     }
-    chunks.push(value);
+    chunks.push(chunk);
   }
   return {
     bytes: Buffer.concat(chunks),
