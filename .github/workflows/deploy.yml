@@ -24,6 +24,8 @@ jobs:
     needs: test
     steps:
       - uses: actions/checkout@v4
+      - name: Validate env var deploy sync
+        run: bash scripts/validate-deploy-env.sh
       - name: Validate Docker build
         run: docker build --build-arg NEXT_PUBLIC_SUPABASE_URL=placeholder --build-arg NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY=placeholder .
 
