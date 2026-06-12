@@ -80,8 +80,6 @@ Ingredients in both `CookingMode` and `RecipeDetail` are tappable checkboxes tha
 
 **`invisible` not conditional render** — the copy button is always in the DOM (using Tailwind `invisible` when disabled) so it never shifts the heading layout. Apply this pattern to any button that appears next to a heading.
 
-**`AgentChatWidget` tests are pre-broken** (not related to shopping list). Widget toggle changed from `<button>` to `<div>` without updating tests — 5 tests fail looking for `role="button" name=/agent api/i`.
-
 ## Schema.org JSON-LD Sanitization
 
 Custom fields (`notes`, ingredient `group` objects) must never appear in the JSON-LD `<script>` output — external tools only understand the standard Schema.org/Recipe spec.
@@ -92,6 +90,16 @@ Custom fields (`notes`, ingredient `group` objects) must never appear in the JSO
 - Any new standard Schema.org/Recipe property added to `SchemaRecipe` must also be added to the `optionalFields` array in `toSchemaOrgJsonLd`, or it won't appear in JSON-LD output
 - Any new custom/app-level field on `SchemaRecipe` must be intentionally left out of `toSchemaOrgJsonLd`
 - `recipeIngredient` objects (`{ name, group }`) are internal-only — always flatten to strings before external serialization
+
+## Image Upload / Storage
+
+**`src/lib/imageTypes.ts` is the client-safe image config module.** `IMAGE_CONTENT_TYPES` (config object) is the single source for allowed types + extensions; the allowlist, union type, and `extensionForContentType` are all derived from it. `src/lib/storage.ts` re-exports them but **client components must import from `@/lib/imageTypes`** — storage.ts pulls in `node:net` and breaks the client bundle.
+
+**`MAX_IMAGE_BYTES` is an env var** (`src/env.ts`, zod default `DEFAULT_MAX_IMAGE_BYTES` = 4MB from imageTypes.ts). Server code reads `env.MAX_IMAGE_BYTES`. Client components get it as a `maxImageBytes` prop from the server page (`recipes/[id]/page.tsx`) — **never import `@/env` in a client component**; t3-env throws on server-var access in the browser.
+
+**UI fetches to `/api/recipes/*` go through `src/lib/api/recipes.ts`** (pattern: `src/lib/api/auth.ts`). No naked fetch in components. Known follow-up: RecipeDetail's `/update`, `/rescrape`, `/regenerate-image` fetches are pre-existing naked fetches not yet wrapped.
+
+**Route handler params use Next 16's generated global `RouteContext<'/api/recipes/[id]/...'>`** — no import needed; types come from `.next/types` (in tsconfig include). Don't hand-write `{ params: Promise<{ id: string }> }`.
 
 ## Webhook / API Response Handling
 
@@ -111,6 +119,8 @@ All shared `RecipeRow` fixtures — used by both stories and tests — live in `
 - `rescrapeFixture: SchemaRecipe` — moved from `src/__tests__/fixtures/`; used by rescrape and update tests
 
 **Real fixture images** are at `https://xonkmdhnjpjkapnsmltu.supabase.co/storage/v1/object/recipes/...` (production Supabase). If a story shows broken images, check `next.config.js` `images.domains`.
+
+**Test-only fixtures are direct-import, not in the barrel:** `src/fixtures/supabase.ts` (`makeSupabaseClient` — shared Supabase client mock for API route tests) imports vitest, and stories import `@/fixtures` — vitest must never reach the Storybook bundle. Import `@/fixtures/supabase` / `@/fixtures/response` directly in test files. Also: `src/fixtures` IS type-checked by tsc (only `src/__tests__` is excluded) — e.g. `BodyInit` requires `Uint8Array<ArrayBuffer>`, not bare `Uint8Array`.
 
 ## Story Discipline
 
@@ -161,11 +171,15 @@ All server-side env vars are validated at app startup via `src/env.ts` (`@t3-oss
 2. Add the GitHub Secret in repo Settings → Secrets
 3. Wire through `deploy.yml` in 3 places (`env:` block, `envs:` list, `.env` heredoc)
 
+`scripts/validate-deploy-env.sh` enforces step 3 in the CI build job (wired June 2026 — it had been dormant: the `*.sh` gitignore rule kept it out of the repo, so it's committed via `git add -f`; future edits to it need `-f` only if it's ever re-deleted). `SKIP_ENV_VALIDATION` and `NODE_ENV` are excluded from its Rule 1.
+
 **`SKIP_ENV_VALIDATION=1` is set in two places — both load-bearing:**
 - `Dockerfile` builder stage: server vars aren't available during `next build`
 - `vitest.config.ts` `env:` block: must use `env:` not `setupFiles` (module-level code runs before setup files)
 
 **`vi.stubEnv` doesn't work in tests for vars from `@/env`** — `createEnv` is a module-level singleton; `runtimeEnv` is captured once at import time. Use `vi.mock("@/env", () => ({ env: { VAR: "value" } }))` instead.
+
+**zod `.default()`s in env.ts do NOT apply under vitest** — `skipValidation` returns `runtimeEnv` unparsed, so `env.X` is `undefined` in tests even when the schema has a default. Any test whose import chain reaches the real `@/env` must mock it (with inline literals — `vi.mock` factories are hoisted and can't close over module consts).
 
 ## What's for Dinner? Feature
 
