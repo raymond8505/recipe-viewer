@@ -2,12 +2,16 @@ import { NextResponse } from "next/server";
 import { getSupabaseClient } from "@/lib/supabase";
 import type { SchemaRecipe } from "@/types/recipe";
 import { env } from "@/env";
+import { requireApiAuth } from "@/lib/apiAuth";
 
 export async function POST(
   req: Request,
   { params }: RouteContext<"/api/recipes/[id]/update">
 ) {
   const { id } = await params;
+  const unauthorized = await requireApiAuth(req, id);
+  if (unauthorized) return unauthorized;
+
   const supabase = getSupabaseClient();
 
   const { data: recipe, error: fetchError } = await supabase

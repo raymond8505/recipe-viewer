@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getSupabaseClient } from "@/lib/supabase";
 import { env } from "@/env";
+import { requireApiAuth } from "@/lib/apiAuth";
 import {
   ALLOWED_IMAGE_CONTENT_TYPES,
   StorageUploadError,
@@ -15,6 +16,9 @@ export async function POST(
   { params }: RouteContext<"/api/recipes/[id]/upload-image">,
 ) {
   const { id } = await params;
+  const unauthorized = await requireApiAuth(req, id);
+  if (unauthorized) return unauthorized;
+
   const supabase = getSupabaseClient();
 
   const { data: recipe, error } = await supabase

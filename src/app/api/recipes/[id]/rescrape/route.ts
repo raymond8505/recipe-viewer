@@ -1,12 +1,16 @@
 import { NextResponse } from "next/server";
 import { getSupabaseClient } from "@/lib/supabase";
 import { env } from "@/env";
+import { requireApiAuth } from "@/lib/apiAuth";
 
 export async function POST(
-  _req: Request,
+  req: Request,
   { params }: RouteContext<"/api/recipes/[id]/rescrape">
 ) {
   const { id } = await params;
+  const unauthorized = await requireApiAuth(req, id);
+  if (unauthorized) return unauthorized;
+
   const supabase = getSupabaseClient();
 
   const { data: recipe, error: fetchError } = await supabase

@@ -40,11 +40,13 @@ import {
   createRecipe,
   deleteRecipe,
   getRecipe,
+  getToken,
   searchRecipes,
   ToolError,
   updateRecipe,
   uploadRecipeImage,
 } from "@/lib/mcp/tools";
+import { verifyRecipeToken } from "@/lib/mcp/recipeToken";
 import { RecipeRepoError } from "@/lib/recipes";
 import { StorageUploadError } from "@/lib/storage";
 
@@ -75,6 +77,29 @@ describe("getRecipe", () => {
     const { getRecipeById } = await import("@/lib/recipes");
     vi.mocked(getRecipeById).mockResolvedValueOnce(null);
     await expect(getRecipe({ id: "missing" })).rejects.toBeInstanceOf(ToolError);
+  });
+});
+
+describe("getToken", () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it("mints a 5-minute token scoped to an existing recipe", async () => {
+    const { getRecipeById } = await import("@/lib/recipes");
+    vi.mocked(getRecipeById).mockResolvedValueOnce(recipeFixtures[0]);
+
+    const out = await getToken({ id: recipeFixtures[0].id });
+
+    expect(out.recipeId).toBe(recipeFixtures[0].id);
+    expect(out.expiresInSeconds).toBe(300);
+    // The token is a real, verifiable recipe token bound to this id.
+    expect(await verifyRecipeToken(out.token, recipeFixtures[0].id)).toBe(true);
+    expect(await verifyRecipeToken(out.token, "some-other-id")).toBe(false);
+  });
+
+  it("throws ToolError(not_found) for a missing recipe", async () => {
+    const { getRecipeById } = await import("@/lib/recipes");
+    vi.mocked(getRecipeById).mockResolvedValueOnce(null);
+    await expect(getToken({ id: "missing" })).rejects.toBeInstanceOf(ToolError);
   });
 });
 

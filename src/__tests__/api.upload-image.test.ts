@@ -8,6 +8,11 @@ vi.mock("@/lib/supabase", () => ({
   getSupabaseClient: vi.fn(),
 }));
 
+// Authorized by default; the dedicated 401 test overrides this per-call.
+vi.mock("@/lib/apiAuth", () => ({
+  requireApiAuth: vi.fn().mockResolvedValue(null),
+}));
+
 // SKIP_ENV_VALIDATION in vitest config skips the zod parse, so env defaults
 // don't apply in tests — the cap must be mocked (factory literal: vi.mock is
 // hoisted and can't close over module consts).
@@ -49,6 +54,19 @@ function makeFile(bytes: Uint8Array, type = "image/png", name = "x.png") {
 describe("POST /api/recipes/[id]/upload-image", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+  });
+
+  it("returns 401 when the request is unauthorized", async () => {
+    const { requireApiAuth } = await import("@/lib/apiAuth");
+    vi.mocked(requireApiAuth).mockResolvedValueOnce(
+      new Response(null, { status: 401 }),
+    );
+
+    const form = new FormData();
+    form.append("file", makeFile(new Uint8Array([1, 2, 3])));
+    const res = await POST(makeRequest(form), makeParams());
+
+    expect(res.status).toBe(401);
   });
 
   it("returns 404 when recipe is not found", async () => {
