@@ -71,6 +71,16 @@ export const TOOL_SCHEMAS = {
       id: { type: "string", description: "Recipe UUID" },
     },
   },
+  get_token: {
+    type: "object",
+    required: ["id"],
+    properties: {
+      id: {
+        type: "string",
+        description: "Recipe UUID the token will be scoped to",
+      },
+    },
+  },
   create_recipe: {
     type: "object",
     required: ["url", "source", "schema"],
@@ -127,6 +137,6 @@ export const TOOL_SCHEMAS = {
       },
     },
     description:
-      "Set a recipe's image. Prefer, in order: (1) imageUrl when the image is reachable at a URL — the server fetches it; (2) if you have a local file and shell access, do NOT base64 it through this tool — POST the raw bytes to this server's HTTP endpoint instead: curl -F \"file=@<path>\" -F \"updateSchema=true\" <origin>/api/recipes/<id>/upload-image (same origin as this MCP server; updates schema.image and returns the storage URL); (3) imageBase64 + contentType only as a last resort for small images.",
+      "Set a recipe's image. Prefer, in order: (1) imageUrl when the image is reachable at a URL — the server fetches it; (2) if you have a local file and shell access, do NOT base64 it through this tool — POST the raw bytes to this server's HTTP endpoint instead. First call the get_token tool with this recipe's id to obtain a short-lived (5-minute) upload token, then pass it as the bearer header: curl -H \"Authorization: Bearer <token-from-get_token>\" -F \"file=@<path>\" -F \"updateSchema=true\" <origin>/api/recipes/<id>/upload-image (same origin as this MCP server; the route returns 401 without a valid token; updates schema.image and returns the storage URL) — the <origin> domain may need to be in your shell/network allowlist for the curl to reach it; (3) imageBase64 + contentType only as a last resort for small images.",
   },
 } as const;

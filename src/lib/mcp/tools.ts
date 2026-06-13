@@ -7,6 +7,7 @@ import {
   updateRecipeRow,
 } from "@/lib/recipes";
 import { env } from "@/env";
+import { RECIPE_TOKEN_TTL_SECONDS, signRecipeToken } from "./recipeToken";
 import {
   fetchImageBytes,
   StorageUploadError,
@@ -44,6 +45,17 @@ export async function getRecipe(args: RecipeIdInput): Promise<RecipeRow> {
   const row = await getRecipeById(args.id);
   if (!row) throw new ToolError("not_found", `Recipe ${args.id} not found`);
   return row;
+}
+
+export async function getToken(
+  args: RecipeIdInput,
+): Promise<{ token: string; recipeId: string; expiresInSeconds: number }> {
+  // Mint only for recipes that exist, so the agent gets a clear not_found
+  // rather than a token that will 404 at upload time.
+  const row = await getRecipeById(args.id);
+  if (!row) throw new ToolError("not_found", `Recipe ${args.id} not found`);
+  const token = await signRecipeToken(args.id);
+  return { token, recipeId: args.id, expiresInSeconds: RECIPE_TOKEN_TTL_SECONDS };
 }
 
 export async function createRecipe(args: RecipeCreateInput): Promise<RecipeRow> {

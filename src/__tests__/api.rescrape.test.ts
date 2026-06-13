@@ -8,6 +8,11 @@ vi.mock("@/lib/supabase", () => ({
   getSupabaseClient: vi.fn(),
 }));
 
+// Authorized by default; the dedicated 401 test overrides this per-call.
+vi.mock("@/lib/apiAuth", () => ({
+  requireApiAuth: vi.fn().mockResolvedValue(null),
+}));
+
 vi.mock("@/env", () => ({
   env: { RESCRAPE_WEBHOOK_URL: "https://webhook.test/scrape" },
 }));
@@ -37,6 +42,16 @@ function makeWebhookResponse(ok: boolean, body: object = { schema: rescrapeFixtu
 describe("POST /api/recipes/[id]/rescrape", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+  });
+
+  it("returns 401 when the request is unauthorized", async () => {
+    const { requireApiAuth } = await import("@/lib/apiAuth");
+    vi.mocked(requireApiAuth).mockResolvedValueOnce(
+      new Response(null, { status: 401 })
+    );
+
+    const res = await POST(new Request("http://localhost/", { method: "POST" }), makeParams());
+    expect(res.status).toBe(401);
   });
 
   it("returns 404 when recipe is not found", async () => {

@@ -7,6 +7,11 @@ vi.mock("@/lib/supabase", () => ({
   getSupabaseClient: vi.fn(),
 }));
 
+// Authorized by default; the dedicated 401 test overrides this per-call.
+vi.mock("@/lib/apiAuth", () => ({
+  requireApiAuth: vi.fn().mockResolvedValue(null),
+}));
+
 function makeParams(id = "recipe-1") {
   return { params: Promise.resolve({ id }) };
 }
@@ -30,6 +35,16 @@ const makeSupabaseClient = (overrides: MakeSupabaseClientOptions = {}) =>
 describe("POST /api/recipes/[id]/notes", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+  });
+
+  it("returns 401 when the request is unauthorized", async () => {
+    const { requireApiAuth } = await import("@/lib/apiAuth");
+    vi.mocked(requireApiAuth).mockResolvedValueOnce(
+      new Response(null, { status: 401 })
+    );
+
+    const res = await POST(makeRequest({ cookingNotes: "more garlic" }), makeParams());
+    expect(res.status).toBe(401);
   });
 
   it("returns 404 when recipe is not found", async () => {
