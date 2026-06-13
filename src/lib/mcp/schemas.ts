@@ -117,7 +117,7 @@ export const TOOL_SCHEMAS = {
       imageBase64: {
         type: "string",
         description:
-          "Base64-encoded image bytes with no data: prefix. Use this only when you already have raw bytes (e.g. a file the user attached directly to the conversation). Requires contentType. Max ~4MB decoded. Do NOT base64-encode a URL — pass it as imageUrl instead.",
+          "Base64-encoded image bytes with no data: prefix. LAST RESORT for small images only (max ~1MB decoded): base64 in tool arguments is emitted as model output tokens, so large images take minutes to send and bloat the conversation. If you have a local file and shell access, POST it as multipart instead (see tool description). Do NOT base64-encode a URL — pass it as imageUrl. Requires contentType.",
       },
       contentType: {
         type: "string",
@@ -127,6 +127,6 @@ export const TOOL_SCHEMAS = {
       },
     },
     description:
-      "Provide exactly one of: (a) imageUrl, or (b) imageBase64 + contentType.",
+      "Set a recipe's image. Prefer, in order: (1) imageUrl when the image is reachable at a URL — the server fetches it; (2) if you have a local file and shell access, do NOT base64 it through this tool — POST the raw bytes to this server's HTTP endpoint instead: curl -F \"file=@<path>\" -F \"updateSchema=true\" <origin>/api/recipes/<id>/upload-image (same origin as this MCP server; updates schema.image and returns the storage URL); (3) imageBase64 + contentType only as a last resort for small images.",
   },
 } as const;

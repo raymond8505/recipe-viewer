@@ -73,7 +73,7 @@ export const TOOLS: ToolDefinition[] = [
   {
     name: "upload_recipe_image",
     description:
-      "Upload a new image for a recipe to Supabase Storage and set it as schema.image. Two input shapes: (a) pass imageUrl when the user gives you a link to an image — the server fetches it; or (b) pass imageBase64 + contentType when you already have raw bytes (e.g. a user-attached file). Do NOT fetch URLs yourself or base64-encode a URL — use imageUrl. Accepts PNG, JPEG, or WebP up to ~4MB.",
+      "Upload a new image for a recipe to Supabase Storage and set it as schema.image. Prefer, in order: (1) imageUrl when the image is reachable at a URL — the server fetches it (do NOT fetch it yourself or base64-encode a URL); (2) if you have a local file and shell access, do NOT base64 it through this tool — base64 tool arguments are emitted as model output tokens and multi-MB images take minutes; POST the raw bytes instead: curl -F \"file=@<path>\" -F \"updateSchema=true\" <origin>/api/recipes/<id>/upload-image (same origin as this MCP server); (3) imageBase64 + contentType only as a last resort for small images (max ~1MB decoded). Accepts PNG, JPEG, or WebP.",
     inputSchema: TOOL_SCHEMAS.upload_recipe_image,
     call: (args) => uploadRecipeImage(recipeImageUploadInputSchema.parse(args)),
   },

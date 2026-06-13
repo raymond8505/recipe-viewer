@@ -25,6 +25,12 @@ vi.mock("@/lib/storage", async () => {
   };
 });
 
+// updateRecipeRow's select/update/select chain doesn't match the shared
+// makeSupabaseClient mock, so it's mocked at the module boundary instead.
+vi.mock("@/lib/recipes", () => ({
+  updateRecipeRow: vi.fn(),
+}));
+
 function makeParams(id = "recipe-1") {
   return { params: Promise.resolve({ id }) };
 }
@@ -111,6 +117,69 @@ describe("POST /api/recipes/[id]/upload-image", () => {
       expect.any(Uint8Array),
       "image/png",
     );
+  });
+
+  it("does not touch the recipe row by default", async () => {
+    const { getSupabaseClient } = await import("@/lib/supabase");
+    const storage = await import("@/lib/storage");
+    const recipes = await import("@/lib/recipes");
+    vi.mocked(getSupabaseClient).mockReturnValue(makeSupabaseClient() as never);
+    vi.mocked(storage.uploadRecipeImage).mockResolvedValueOnce(
+      "https://cdn.example.com/recipe-1-123.png",
+    );
+
+    const form = new FormData();
+    form.append("file", makeFile(new Uint8Array([1, 2, 3])));
+    const res = await POST(makeRequest(form), makeParams());
+
+    expect(res.status).toBe(200);
+    expect(recipes.updateRecipeRow).not.toHaveBeenCalled();
+  });
+
+  it("updates schema.image when updateSchema=true", async () => {
+    const { getSupabaseClient } = await import("@/lib/supabase");
+    const storage = await import("@/lib/storage");
+    const recipes = await import("@/lib/recipes");
+    vi.mocked(getSupabaseClient).mockReturnValue(makeSupabaseClient() as never);
+    vi.mocked(storage.uploadRecipeImage).mockResolvedValueOnce(
+      "https://cdn.example.com/recipe-1-123.png",
+    );
+    vi.mocked(recipes.updateRecipeRow).mockResolvedValueOnce({} as never);
+
+    const form = new FormData();
+    form.append("file", makeFile(new Uint8Array([1, 2, 3])));
+    form.append("updateSchema", "true");
+    const res = await POST(makeRequest(form), makeParams());
+
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.image).toBe("https://cdn.example.com/recipe-1-123.png");
+    expect(recipes.updateRecipeRow).toHaveBeenCalledWith("recipe-1", {
+      schema: { image: "https://cdn.example.com/recipe-1-123.png" },
+    });
+  });
+
+  it("returns 502 with the image URL when the upload succeeds but the row update fails", async () => {
+    const { getSupabaseClient } = await import("@/lib/supabase");
+    const storage = await import("@/lib/storage");
+    const recipes = await import("@/lib/recipes");
+    vi.mocked(getSupabaseClient).mockReturnValue(makeSupabaseClient() as never);
+    vi.mocked(storage.uploadRecipeImage).mockResolvedValueOnce(
+      "https://cdn.example.com/recipe-1-123.png",
+    );
+    vi.mocked(recipes.updateRecipeRow).mockRejectedValueOnce(
+      new Error("update failed"),
+    );
+
+    const form = new FormData();
+    form.append("file", makeFile(new Uint8Array([1, 2, 3])));
+    form.append("updateSchema", "true");
+    const res = await POST(makeRequest(form), makeParams());
+
+    expect(res.status).toBe(502);
+    const body = await res.json();
+    expect(body.error).toMatch(/updating the recipe failed/);
+    expect(body.image).toBe("https://cdn.example.com/recipe-1-123.png");
   });
 
   it("returns 502 when storage upload fails", async () => {
