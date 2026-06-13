@@ -2,6 +2,7 @@ import { TOOL_SCHEMAS } from "./schemas";
 import {
   recipeCreateInputSchema,
   recipeIdInputSchema,
+  recipeImageUploadInputSchema,
   recipeSearchInputSchema,
   recipeUpdateInputSchema,
 } from "@/lib/schemas/recipe";
@@ -12,6 +13,7 @@ import {
   searchRecipes,
   ToolError,
   updateRecipe,
+  uploadRecipeImage,
 } from "./tools";
 import {
   JsonRpcErrorCode,
@@ -67,6 +69,13 @@ export const TOOLS: ToolDefinition[] = [
     description: "Soft-delete a recipe by setting its status to 'archived'. Reversible via update_recipe.",
     inputSchema: TOOL_SCHEMAS.delete_recipe,
     call: (args) => deleteRecipe(recipeIdInputSchema.parse(args)),
+  },
+  {
+    name: "upload_recipe_image",
+    description:
+      "Upload a new image for a recipe to Supabase Storage and set it as schema.image. Two input shapes: (a) pass imageUrl when the user gives you a link to an image — the server fetches it; or (b) pass imageBase64 + contentType when you already have raw bytes (e.g. a user-attached file). Do NOT fetch URLs yourself or base64-encode a URL — use imageUrl. Accepts PNG, JPEG, or WebP up to ~4MB.",
+    inputSchema: TOOL_SCHEMAS.upload_recipe_image,
+    call: (args) => uploadRecipeImage(recipeImageUploadInputSchema.parse(args)),
   },
 ];
 

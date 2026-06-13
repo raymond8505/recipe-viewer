@@ -1,5 +1,6 @@
 import { createEnv } from "@t3-oss/env-nextjs";
 import { z } from "zod";
+import { DEFAULT_MAX_IMAGE_BYTES } from "@/lib/imageTypes";
 
 export const env = createEnv({
   server: {
@@ -12,6 +13,12 @@ export const env = createEnv({
     HEADSUP_SEARCH_WEBHOOK_URL: z.string().url(),
     OAUTH_JWT_SECRET: z.string().min(32),
     MCP_PUBLIC_URL: z.string().url(),
+    SUPABASE_SERVICE_ROLE_KEY: z.string().min(1),
+    MAX_IMAGE_BYTES: z.coerce
+      .number()
+      .int()
+      .positive()
+      .default(DEFAULT_MAX_IMAGE_BYTES),
   },
   client: {
     NEXT_PUBLIC_SUPABASE_URL: z.string().url(),
@@ -27,6 +34,8 @@ export const env = createEnv({
     HEADSUP_SEARCH_WEBHOOK_URL: process.env.HEADSUP_SEARCH_WEBHOOK_URL,
     OAUTH_JWT_SECRET: process.env.OAUTH_JWT_SECRET,
     MCP_PUBLIC_URL: process.env.MCP_PUBLIC_URL,
+    SUPABASE_SERVICE_ROLE_KEY: process.env.SUPABASE_SERVICE_ROLE_KEY,
+    MAX_IMAGE_BYTES: process.env.MAX_IMAGE_BYTES,
     NEXT_PUBLIC_SUPABASE_URL: process.env.NEXT_PUBLIC_SUPABASE_URL,
     NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY:
       process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY,

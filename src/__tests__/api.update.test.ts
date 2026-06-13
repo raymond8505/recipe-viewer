@@ -1,4 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import { makeSupabaseClient as makeClient } from "@/fixtures/supabase";
+import type { MakeSupabaseClientOptions } from "@/fixtures/supabase";
 import { POST } from "@/app/api/recipes/[id]/update/route";
 import { rescrapeFixture } from "@/fixtures/rescrape";
 
@@ -30,28 +32,8 @@ const storedRecipe = {
 
 const webhookResponse = { schema: rescrapeFixture, status: "published" };
 
-function makeSupabaseClient({
-  recipe = storedRecipe,
-  fetchError = null,
-  updateError = null,
-}: {
-  recipe?: object | null;
-  fetchError?: object | null;
-  updateError?: object | null;
-} = {}) {
-  return {
-    from: vi.fn(() => ({
-      select: vi.fn(() => ({
-        eq: vi.fn(() => ({
-          single: vi.fn().mockResolvedValue({ data: recipe, error: fetchError }),
-        })),
-      })),
-      update: vi.fn(() => ({
-        eq: vi.fn().mockResolvedValue({ error: updateError }),
-      })),
-    })),
-  };
-}
+const makeSupabaseClient = (overrides: MakeSupabaseClientOptions = {}) =>
+  makeClient({ recipe: storedRecipe, ...overrides });
 
 function makeWebhookResponse(ok: boolean, body: object = webhookResponse) {
   return Promise.resolve(

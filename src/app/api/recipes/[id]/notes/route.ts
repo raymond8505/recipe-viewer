@@ -3,7 +3,7 @@ import { getSupabaseClient } from "@/lib/supabase";
 
 export async function POST(
   req: Request,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: RouteContext<"/api/recipes/[id]/notes">
 ) {
   const { id } = await params;
   const { cookingNotes } = await req.json() as { cookingNotes: string };

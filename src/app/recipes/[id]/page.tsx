@@ -3,6 +3,7 @@ import type { Metadata } from "next";
 import { getRecipeById } from "@/lib/recipes";
 import { getFirstImage } from "@/lib/format";
 import { getIsLoggedIn } from "@/lib/auth";
+import { env } from "@/env";
 import RecipeDetail from "@/components/RecipeDetail";
 
 interface RecipePageProps {
@@ -48,5 +49,11 @@ export default async function RecipePage({ params }: RecipePageProps) {
     notFound();
   }
 
-  return <RecipeDetail recipe={recipe} isLoggedIn={isLoggedIn} />;
+  return (
+    <RecipeDetail
+      recipe={recipe}
+      isLoggedIn={isLoggedIn}
+      maxImageBytes={env.MAX_IMAGE_BYTES}
+    />
+  );
 }

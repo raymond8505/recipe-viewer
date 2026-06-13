@@ -1,4 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import { makeSupabaseClient as makeClient } from "@/fixtures/supabase";
+import type { MakeSupabaseClientOptions } from "@/fixtures/supabase";
 import { POST } from "@/app/api/recipes/[id]/archive/route";
 
 vi.mock("@/lib/supabase", () => ({
@@ -9,28 +11,14 @@ function makeParams(id = "recipe-1") {
   return { params: Promise.resolve({ id }) };
 }
 
-function makeSupabaseClient({
-  recipe = { id: "recipe-1", status: "published", metadata: { schema: { name: "Test Recipe" } } },
-  fetchError = null,
-  updateError = null,
-}: {
-  recipe?: object | null;
-  fetchError?: object | null;
-  updateError?: object | null;
-} = {}) {
-  return {
-    from: vi.fn(() => ({
-      select: vi.fn(() => ({
-        eq: vi.fn(() => ({
-          single: vi.fn().mockResolvedValue({ data: recipe, error: fetchError }),
-        })),
-      })),
-      update: vi.fn(() => ({
-        eq: vi.fn().mockResolvedValue({ error: updateError }),
-      })),
-    })),
-  };
-}
+const storedRecipe = {
+  id: "recipe-1",
+  status: "published",
+  metadata: { schema: { name: "Test Recipe" } },
+};
+
+const makeSupabaseClient = (overrides: MakeSupabaseClientOptions = {}) =>
+  makeClient({ recipe: storedRecipe, ...overrides });
 
 describe("POST /api/recipes/[id]/archive", () => {
   beforeEach(() => {
