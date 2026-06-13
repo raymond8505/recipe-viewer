@@ -2,11 +2,14 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
 vi.mock("@/lib/auth", () => ({ getIsLoggedIn: vi.fn() }));
-vi.mock("@/lib/mcp/recipeToken", () => ({ verifyRecipeToken: vi.fn() }));
+vi.mock("@/lib/mcp/recipeToken", () => ({
+  verifyRecipeToken: vi.fn(),
+  consumeRecipeToken: vi.fn(),
+}));
 
-import { requireApiAuth } from "@/lib/apiAuth";
+import { consumeRequestToken, requireApiAuth } from "@/lib/apiAuth";
 import { getIsLoggedIn } from "@/lib/auth";
-import { verifyRecipeToken } from "@/lib/mcp/recipeToken";
+import { consumeRecipeToken, verifyRecipeToken } from "@/lib/mcp/recipeToken";
 
 const RECIPE_ID = "recipe-1";
 
@@ -66,5 +69,21 @@ describe("requireApiAuth", () => {
     );
     expect(res?.status).toBe(401);
     expect(verifyRecipeToken).not.toHaveBeenCalled();
+  });
+});
+
+describe("consumeRequestToken", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("spends the bearer token when one is present", async () => {
+    await consumeRequestToken(makeRequest({ authorization: "Bearer tok" }));
+    expect(consumeRecipeToken).toHaveBeenCalledWith("tok");
+  });
+
+  it("is a no-op for the cookie path (no bearer token)", async () => {
+    await consumeRequestToken(makeRequest());
+    expect(consumeRecipeToken).not.toHaveBeenCalled();
   });
 });

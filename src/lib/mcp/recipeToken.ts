@@ -1,3 +1,4 @@
+import { randomUUID } from "crypto";
 import { SignJWT, jwtVerify } from "jose";
 import { env } from "@/env";
 
@@ -22,12 +23,27 @@ function getSecret(): Uint8Array {
   return cachedSecret;
 }
 
+// Single-use enforcement. Tokens carry a unique `jti`; once a token is spent
+// (a successful upload), its jti lands here and `verifyRecipeToken` rejects it.
+// Entries are pruned once past their own expiry, so the map never holds more
+// than the tokens minted within one ~5-minute window. This is per-process: a
+// container restart clears it, reopening at most a token's remaining TTL as a
+// replay window — acceptable for a single-instance, single-user deployment.
+const consumed = new Map<string, number>(); // jti -> expiry epoch ms
+
+function purgeExpired(now = Date.now()): void {
+  for (const [jti, expiresAt] of consumed) {
+    if (expiresAt <= now) consumed.delete(jti);
+  }
+}
+
 export async function signRecipeToken(recipeId: string): Promise<string> {
   return new SignJWT({})
     .setProtectedHeader({ alg: "HS256" })
     .setIssuer(env.MCP_PUBLIC_URL)
     .setAudience(RECIPE_TOKEN_AUDIENCE)
     .setSubject(recipeId)
+    .setJti(randomUUID())
     .setIssuedAt()
     .setExpirationTime(`${RECIPE_TOKEN_TTL_SECONDS}s`)
     .sign(getSecret());
@@ -35,8 +51,9 @@ export async function signRecipeToken(recipeId: string): Promise<string> {
 
 /**
  * True iff `token` is a valid, unexpired recipe token whose subject matches
- * `recipeId`. Swallows verification errors (bad signature, expiry, wrong
- * audience, malformed) and returns false — callers only care about the boolean.
+ * `recipeId` AND has not already been consumed. Swallows verification errors
+ * (bad signature, expiry, wrong audience, malformed) and returns false —
+ * callers only care about the boolean.
  */
 export async function verifyRecipeToken(
   token: string,
@@ -47,8 +64,34 @@ export async function verifyRecipeToken(
       issuer: env.MCP_PUBLIC_URL,
       audience: RECIPE_TOKEN_AUDIENCE,
     });
-    return payload.sub === recipeId;
+    if (payload.sub !== recipeId) return false;
+    if (typeof payload.jti === "string" && consumed.has(payload.jti)) return false;
+    return true;
   } catch {
     return false;
+  }
+}
+
+/**
+ * Mark a token as spent so it can no longer be verified. Re-verifies first
+ * (cheap HMAC) to read the `jti`/`exp`; a missing, invalid, or expired token
+ * is a no-op, so callers can pass any candidate string blindly.
+ */
+export async function consumeRecipeToken(token: string): Promise<void> {
+  if (!token) return;
+  try {
+    const { payload } = await jwtVerify(token, getSecret(), {
+      issuer: env.MCP_PUBLIC_URL,
+      audience: RECIPE_TOKEN_AUDIENCE,
+    });
+    if (typeof payload.jti !== "string") return;
+    const expiresAt =
+      typeof payload.exp === "number"
+        ? payload.exp * 1000
+        : Date.now() + RECIPE_TOKEN_TTL_SECONDS * 1000;
+    purgeExpired();
+    consumed.set(payload.jti, expiresAt);
+  } catch {
+    // Nothing to consume — invalid or already-expired tokens are inert.
   }
 }

@@ -1,14 +1,19 @@
 import { NextResponse } from "next/server";
 import { getIsLoggedIn } from "@/lib/auth";
-import { verifyRecipeToken } from "@/lib/mcp/recipeToken";
+import { consumeRecipeToken, verifyRecipeToken } from "@/lib/mcp/recipeToken";
+
+function getBearerToken(request: Request): string | null {
+  const header = request.headers.get("authorization");
+  if (!header?.startsWith("Bearer ")) return null;
+  const token = header.slice("Bearer ".length).trim();
+  return token || null;
+}
 
 async function hasValidRecipeToken(
   request: Request,
   recipeId: string,
 ): Promise<boolean> {
-  const header = request.headers.get("authorization");
-  if (!header?.startsWith("Bearer ")) return false;
-  const token = header.slice("Bearer ".length).trim();
+  const token = getBearerToken(request);
   if (!token) return false;
   return verifyRecipeToken(token, recipeId);
 }
@@ -45,4 +50,14 @@ export async function requireApiAuth(
   if (await getIsLoggedIn()) return null;
   if (await hasValidRecipeToken(request, recipeId)) return null;
   return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+}
+
+/**
+ * Spend the recipe-scoped token on a request, if it carries one — call this
+ * after an operation the token authorized has succeeded, so the token can't be
+ * replayed. No-op for the cookie (browser) path, which carries no bearer token.
+ */
+export async function consumeRequestToken(request: Request): Promise<void> {
+  const token = getBearerToken(request);
+  if (token) await consumeRecipeToken(token);
 }

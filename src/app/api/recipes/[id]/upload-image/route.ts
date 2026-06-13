@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getSupabaseClient } from "@/lib/supabase";
 import { env } from "@/env";
-import { requireApiAuth } from "@/lib/apiAuth";
+import { consumeRequestToken, requireApiAuth } from "@/lib/apiAuth";
 import {
   ALLOWED_IMAGE_CONTENT_TYPES,
   StorageUploadError,
@@ -82,6 +82,10 @@ export async function POST(
         );
       }
     }
+    // Spend the one-shot upload token now that the upload has fully succeeded.
+    // Left out of the 502 partial-failure path above so a failed row update
+    // keeps the token usable for a retry.
+    await consumeRequestToken(req);
     return NextResponse.json({ image });
   } catch (err) {
     if (err instanceof StorageUploadError) {

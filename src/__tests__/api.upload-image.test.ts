@@ -11,6 +11,7 @@ vi.mock("@/lib/supabase", () => ({
 // Authorized by default; the dedicated 401 test overrides this per-call.
 vi.mock("@/lib/apiAuth", () => ({
   requireApiAuth: vi.fn().mockResolvedValue(null),
+  consumeRequestToken: vi.fn().mockResolvedValue(undefined),
 }));
 
 // SKIP_ENV_VALIDATION in vitest config skips the zod parse, so env defaults
@@ -198,6 +199,45 @@ describe("POST /api/recipes/[id]/upload-image", () => {
     const body = await res.json();
     expect(body.error).toMatch(/updating the recipe failed/);
     expect(body.image).toBe("https://cdn.example.com/recipe-1-123.png");
+  });
+
+  it("consumes the upload token on a successful upload", async () => {
+    const { getSupabaseClient } = await import("@/lib/supabase");
+    const storage = await import("@/lib/storage");
+    const { consumeRequestToken } = await import("@/lib/apiAuth");
+    vi.mocked(getSupabaseClient).mockReturnValue(makeSupabaseClient() as never);
+    vi.mocked(storage.uploadRecipeImage).mockResolvedValueOnce(
+      "https://cdn.example.com/recipe-1-123.png",
+    );
+
+    const form = new FormData();
+    form.append("file", makeFile(new Uint8Array([1, 2, 3])));
+    const res = await POST(makeRequest(form), makeParams());
+
+    expect(res.status).toBe(200);
+    expect(consumeRequestToken).toHaveBeenCalledTimes(1);
+  });
+
+  it("does NOT consume the token when the row update fails (502)", async () => {
+    const { getSupabaseClient } = await import("@/lib/supabase");
+    const storage = await import("@/lib/storage");
+    const recipes = await import("@/lib/recipes");
+    const { consumeRequestToken } = await import("@/lib/apiAuth");
+    vi.mocked(getSupabaseClient).mockReturnValue(makeSupabaseClient() as never);
+    vi.mocked(storage.uploadRecipeImage).mockResolvedValueOnce(
+      "https://cdn.example.com/recipe-1-123.png",
+    );
+    vi.mocked(recipes.updateRecipeRow).mockRejectedValueOnce(
+      new Error("update failed"),
+    );
+
+    const form = new FormData();
+    form.append("file", makeFile(new Uint8Array([1, 2, 3])));
+    form.append("updateSchema", "true");
+    const res = await POST(makeRequest(form), makeParams());
+
+    expect(res.status).toBe(502);
+    expect(consumeRequestToken).not.toHaveBeenCalled();
   });
 
   it("returns 502 when storage upload fails", async () => {

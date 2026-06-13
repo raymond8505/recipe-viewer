@@ -9,10 +9,18 @@ vi.mock("@/env", () => ({
 }));
 
 import {
+  consumeRecipeToken,
   RECIPE_TOKEN_TTL_SECONDS,
   signRecipeToken,
   verifyRecipeToken,
 } from "@/lib/mcp/recipeToken";
+
+function decodeJti(token: string): string {
+  const payload = JSON.parse(
+    Buffer.from(token.split(".")[1], "base64url").toString(),
+  );
+  return payload.jti;
+}
 
 describe("recipe tokens", () => {
   it("uses a 5-minute TTL", () => {
@@ -43,5 +51,34 @@ describe("recipe tokens", () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  it("gives every token a distinct jti", async () => {
+    const a = await signRecipeToken("recipe-1");
+    const b = await signRecipeToken("recipe-1");
+    expect(decodeJti(a)).not.toBe(decodeJti(b));
+  });
+
+  it("rejects a token after it has been consumed (single-use)", async () => {
+    const token = await signRecipeToken("recipe-1");
+    expect(await verifyRecipeToken(token, "recipe-1")).toBe(true);
+
+    await consumeRecipeToken(token);
+
+    expect(await verifyRecipeToken(token, "recipe-1")).toBe(false);
+  });
+
+  it("consuming one token does not affect a different fresh token", async () => {
+    const spent = await signRecipeToken("recipe-1");
+    const fresh = await signRecipeToken("recipe-1");
+    await consumeRecipeToken(spent);
+
+    expect(await verifyRecipeToken(spent, "recipe-1")).toBe(false);
+    expect(await verifyRecipeToken(fresh, "recipe-1")).toBe(true);
+  });
+
+  it("consuming a garbage or empty token is a safe no-op", async () => {
+    await expect(consumeRecipeToken("not-a-jwt")).resolves.toBeUndefined();
+    await expect(consumeRecipeToken("")).resolves.toBeUndefined();
   });
 });
