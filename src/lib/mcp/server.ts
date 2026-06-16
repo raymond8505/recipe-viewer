@@ -1,4 +1,5 @@
 import { TOOL_SCHEMAS } from "./schemas";
+import { RECIPE_TOKEN_TTL_LABEL } from "./recipeToken";
 import {
   recipeCreateInputSchema,
   recipeIdInputSchema,
@@ -54,7 +55,7 @@ export const TOOLS: ToolDefinition[] = [
   {
     name: "get_token",
     description:
-      "Mint a short-lived (5-minute) bearer token scoped to a single recipe UUID. Required to authenticate agent-facing HTTP endpoints such as the multipart image upload (POST /api/recipes/<id>/upload-image) — call this first, then pass the returned token as `Authorization: Bearer <token>`. The token only works for the recipe id you pass here. Returns { token, recipeId, expiresInSeconds }.",
+      `Mint a short-lived (${RECIPE_TOKEN_TTL_LABEL}) bearer token scoped to a single recipe UUID. Required to authenticate agent-facing HTTP endpoints such as the multipart image upload (POST /api/recipes/<id>/upload-image) — call this first, then pass the returned token as \`Authorization: Bearer <token>\`. The token only works for the recipe id you pass here. Returns { token, recipeId, expiresInSeconds }.`,
     inputSchema: TOOL_SCHEMAS.get_token,
     call: (args) => getToken(recipeIdInputSchema.parse(args)),
   },
@@ -81,7 +82,7 @@ export const TOOLS: ToolDefinition[] = [
   {
     name: "upload_recipe_image",
     description:
-      "Upload a new image for a recipe to Supabase Storage and set it as schema.image. Prefer, in order: (1) imageUrl when the image is reachable at a URL — the server fetches it (do NOT fetch it yourself or base64-encode a URL); (2) if you have a local file and shell access, do NOT base64 it through this tool — base64 tool arguments are emitted as model output tokens and multi-MB images take minutes; POST the raw bytes instead. First call the get_token tool with this recipe's id to obtain a short-lived (5-minute) upload token, then: curl -H \"Authorization: Bearer <token-from-get_token>\" -F \"file=@<path>\" <origin>/api/recipes/<id>/upload-image (same origin as this MCP server; the route returns 401 without a valid token; it sets schema.image by default — add -F \"updateSchema=false\" only if you want to upload the bytes without repointing the recipe) — the <origin> domain may need to be in your shell/network allowlist for the curl to reach it; (3) imageBase64 + contentType only as a last resort for small images (max ~1MB decoded). Accepts PNG, JPEG, or WebP.",
+      `Set a recipe's image (Supabase Storage + schema.image). Two ways to provide the image: (1) imageUrl when it is reachable at a public http(s) URL — pass it as the imageUrl argument and the server fetches, validates, and uploads it (do NOT fetch it yourself or base64-encode a URL); (2) a local file when you have shell access — this tool does NOT take file bytes; instead first call the get_token tool with this recipe's id to obtain a short-lived (${RECIPE_TOKEN_TTL_LABEL}) upload token, then: curl -H \"Authorization: Bearer <token-from-get_token>\" -F \"file=@<path>\" <origin>/api/recipes/<id>/upload-image (same origin as this MCP server; the route returns 401 without a valid token; it sets schema.image by default — add -F \"updateSchema=false\" only to upload the bytes without repointing the recipe) — the <origin> domain may need to be in your shell/network allowlist for the curl to reach it. Accepts PNG, JPEG, or WebP.`,
     inputSchema: TOOL_SCHEMAS.upload_recipe_image,
     call: (args) => uploadRecipeImage(recipeImageUploadInputSchema.parse(args)),
   },

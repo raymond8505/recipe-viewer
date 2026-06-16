@@ -1,7 +1,6 @@
 // @vitest-environment node
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { recipeFixtures } from "@/fixtures";
-import { env } from "@/env";
 
 vi.mock("@/env", () => ({
   env: {
@@ -188,76 +187,7 @@ describe("deleteRecipe", () => {
 describe("uploadRecipeImage", () => {
   beforeEach(() => vi.clearAllMocks());
 
-  const tinyPng = Buffer.from([0x89, 0x50, 0x4e, 0x47]).toString("base64");
-
-  it("uploads base64 bytes and writes the new URL into schema.image", async () => {
-    const storage = await import("@/lib/storage");
-    const { updateRecipeRow } = await import("@/lib/recipes");
-    vi.mocked(storage.uploadRecipeImage).mockResolvedValueOnce(
-      "https://cdn.example.com/r1-123.png",
-    );
-    const updated = {
-      ...recipeFixtures[0],
-      metadata: {
-        ...recipeFixtures[0].metadata,
-        schema: {
-          ...recipeFixtures[0].metadata.schema,
-          image: "https://cdn.example.com/r1-123.png",
-        },
-      },
-    };
-    vi.mocked(updateRecipeRow).mockResolvedValueOnce(updated);
-
-    const out = await uploadRecipeImage({
-      id: "r1",
-      imageBase64: tinyPng,
-      contentType: "image/png",
-    });
-
-    expect(storage.fetchImageBytes).not.toHaveBeenCalled();
-    expect(storage.uploadRecipeImage).toHaveBeenCalledWith(
-      "r1",
-      expect.any(Buffer),
-      "image/png",
-    );
-    expect(updateRecipeRow).toHaveBeenCalledWith("r1", {
-      schema: { image: "https://cdn.example.com/r1-123.png" },
-    });
-    expect(out.metadata.schema.image).toBe("https://cdn.example.com/r1-123.png");
-  });
-
-  it("throws ToolError(too_large) when decoded bytes exceed the cap", async () => {
-    const huge = Buffer.alloc(env.MAX_IMAGE_BYTES + 1).toString("base64");
-    await expect(
-      uploadRecipeImage({ id: "r1", imageBase64: huge, contentType: "image/png" }),
-    ).rejects.toMatchObject({ code: "too_large" });
-  });
-
-  it("translates StorageUploadError(unsupported_type) to ToolError(unsupported_type)", async () => {
-    const storage = await import("@/lib/storage");
-    vi.mocked(storage.uploadRecipeImage).mockRejectedValueOnce(
-      new StorageUploadError("unsupported_type", "bad ct"),
-    );
-    await expect(
-      uploadRecipeImage({ id: "r1", imageBase64: tinyPng, contentType: "image/png" }),
-    ).rejects.toMatchObject({ code: "unsupported_type" });
-  });
-
-  it("translates RecipeRepoError(not_found) to ToolError(not_found)", async () => {
-    const storage = await import("@/lib/storage");
-    const { updateRecipeRow } = await import("@/lib/recipes");
-    vi.mocked(storage.uploadRecipeImage).mockResolvedValueOnce(
-      "https://cdn.example.com/x.png",
-    );
-    vi.mocked(updateRecipeRow).mockRejectedValueOnce(
-      new RecipeRepoError("not_found", "missing"),
-    );
-    await expect(
-      uploadRecipeImage({ id: "missing", imageBase64: tinyPng, contentType: "image/png" }),
-    ).rejects.toMatchObject({ code: "not_found" });
-  });
-
-  it("fetches via imageUrl then uploads with the resolved content type", async () => {
+  it("fetches via imageUrl, uploads, and writes the new URL into schema.image", async () => {
     const storage = await import("@/lib/storage");
     const { updateRecipeRow } = await import("@/lib/recipes");
     vi.mocked(storage.fetchImageBytes).mockResolvedValueOnce({
@@ -267,9 +197,22 @@ describe("uploadRecipeImage", () => {
     vi.mocked(storage.uploadRecipeImage).mockResolvedValueOnce(
       "https://cdn.example.com/r1-from-url.jpg",
     );
-    vi.mocked(updateRecipeRow).mockResolvedValueOnce(recipeFixtures[0]);
+    const updated = {
+      ...recipeFixtures[0],
+      metadata: {
+        ...recipeFixtures[0].metadata,
+        schema: {
+          ...recipeFixtures[0].metadata.schema,
+          image: "https://cdn.example.com/r1-from-url.jpg",
+        },
+      },
+    };
+    vi.mocked(updateRecipeRow).mockResolvedValueOnce(updated);
 
-    await uploadRecipeImage({ id: "r1", imageUrl: "https://example.com/foo.jpg" });
+    const out = await uploadRecipeImage({
+      id: "r1",
+      imageUrl: "https://example.com/foo.jpg",
+    });
 
     expect(storage.fetchImageBytes).toHaveBeenCalledWith("https://example.com/foo.jpg");
     expect(storage.uploadRecipeImage).toHaveBeenCalledWith(
@@ -277,6 +220,44 @@ describe("uploadRecipeImage", () => {
       expect.any(Buffer),
       "image/jpeg",
     );
+    expect(updateRecipeRow).toHaveBeenCalledWith("r1", {
+      schema: { image: "https://cdn.example.com/r1-from-url.jpg" },
+    });
+    expect(out.metadata.schema.image).toBe(
+      "https://cdn.example.com/r1-from-url.jpg",
+    );
+  });
+
+  it("translates StorageUploadError(unsupported_type) to ToolError(unsupported_type)", async () => {
+    const storage = await import("@/lib/storage");
+    vi.mocked(storage.fetchImageBytes).mockResolvedValueOnce({
+      bytes: Buffer.from([1, 2, 3, 4]),
+      contentType: "image/png",
+    });
+    vi.mocked(storage.uploadRecipeImage).mockRejectedValueOnce(
+      new StorageUploadError("unsupported_type", "bad ct"),
+    );
+    await expect(
+      uploadRecipeImage({ id: "r1", imageUrl: "https://example.com/foo.png" }),
+    ).rejects.toMatchObject({ code: "unsupported_type" });
+  });
+
+  it("translates RecipeRepoError(not_found) to ToolError(not_found)", async () => {
+    const storage = await import("@/lib/storage");
+    const { updateRecipeRow } = await import("@/lib/recipes");
+    vi.mocked(storage.fetchImageBytes).mockResolvedValueOnce({
+      bytes: Buffer.from([1, 2, 3, 4]),
+      contentType: "image/png",
+    });
+    vi.mocked(storage.uploadRecipeImage).mockResolvedValueOnce(
+      "https://cdn.example.com/x.png",
+    );
+    vi.mocked(updateRecipeRow).mockRejectedValueOnce(
+      new RecipeRepoError("not_found", "missing"),
+    );
+    await expect(
+      uploadRecipeImage({ id: "missing", imageUrl: "https://example.com/foo.png" }),
+    ).rejects.toMatchObject({ code: "not_found" });
   });
 
   it("translates StorageUploadError(bad_url) from the URL fetch into ToolError(bad_url)", async () => {
