@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getSupabaseClient } from "@/lib/supabase";
+import { getRecipeById, updateRecipeRow, RecipeRepoError, type RecipeStatus } from "@/lib/recipes";
 import type { SchemaRecipe } from "@/types/recipe";
 import { env } from "@/env";
 import { requireSessionOrRecipeToken } from "@/lib/api/guard";
@@ -8,15 +8,8 @@ export const POST = requireSessionOrRecipeToken(
   async (req: Request, { params }: RouteContext<"/api/recipes/[id]/update">) => {
     const { id } = await params;
 
-    const supabase = getSupabaseClient();
-
-    const { data: recipe, error: fetchError } = await supabase
-      .from("recipes")
-      .select("id, url, metadata")
-      .eq("id", id)
-      .single();
-
-    if (fetchError || !recipe) {
+    const recipe = await getRecipeById(id);
+    if (!recipe) {
       return NextResponse.json({ error: "Recipe not found" }, { status: 404 });
     }
 
@@ -38,15 +31,21 @@ export const POST = requireSessionOrRecipeToken(
       return NextResponse.json({ error: "Webhook failed" }, { status: 502 });
     }
 
-    const result = (await webhookRes.json()) as { schema: SchemaRecipe; status: string };
+    const result = (await webhookRes.json()) as { schema: SchemaRecipe; status: RecipeStatus };
 
-    const { error: updateError } = await supabase
-      .from("recipes")
-      .update({ url: effectiveUrl, metadata: { ...recipe.metadata, schema: result.schema }, status: result.status })
-      .eq("id", id);
-
-    if (updateError) {
-      return NextResponse.json({ error: "Failed to save" }, { status: 500 });
+    try {
+      await updateRecipeRow(id, {
+        url: effectiveUrl,
+        schema: result.schema,
+        status: result.status,
+      });
+    } catch (err) {
+      if (err instanceof RecipeRepoError) {
+        return err.kind === "not_found"
+          ? NextResponse.json({ error: "Recipe not found" }, { status: 404 })
+          : NextResponse.json({ error: "Failed to save" }, { status: 500 });
+      }
+      throw err;
     }
 
     return NextResponse.json({ schema: result.schema, status: result.status });

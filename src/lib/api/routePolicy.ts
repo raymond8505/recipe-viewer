@@ -1,16 +1,14 @@
 // Single source of truth for the intended exposure level of EVERY HTTP route
 // under `src/app/api/**`.
 //
-// Why this exists: the auth pipeline regressed once because nothing structurally
-// forced a new route to make an auth decision — an unauthenticated endpoint
-// shipped silently. This registry plus `src/__tests__/route-auth-policy.test.ts`
-// turn that into a hard, deterministic gate:
+// Paired with `src/__tests__/route-auth-policy.test.ts`, this registry is a
+// hard, deterministic gate:
 //   1. The test fails the build if a route file exists without an entry here
 //      (or an entry exists without a route file).
 //   2. The test invokes every route classified as *protected* with no
 //      credentials and asserts it rejects (401/403).
-// So adding an anonymous route is an explicit, reviewed decision (a new entry in
-// the anonymous allowlist with a written rationale), never an omission.
+// So every anonymous route is an explicit allowlist entry with a written
+// rationale, never an omission.
 //
 // The guards in `./guard.ts` are how routes enforce the `session` /
 // `session-or-recipe-token` policies; `mcp-*`, `oauth-public`, and `public-auth`

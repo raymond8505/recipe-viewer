@@ -1,12 +1,8 @@
 // @vitest-environment node
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { env } from "@/env";
-import { makeSupabaseClient } from "@/fixtures/supabase";
+import { makeRecipe } from "@/fixtures";
 import { POST } from "@/app/api/recipes/[id]/upload-image/route";
-
-vi.mock("@/lib/supabase", () => ({
-  getSupabaseClient: vi.fn(),
-}));
 
 // Authorized by default; the dedicated 401 test overrides this per-call.
 vi.mock("@/lib/apiAuth", () => ({
@@ -31,11 +27,14 @@ vi.mock("@/lib/storage", async () => {
   };
 });
 
-// updateRecipeRow's select/update/select chain doesn't match the shared
-// makeSupabaseClient mock, so it's mocked at the module boundary instead.
-vi.mock("@/lib/recipes", () => ({
-  updateRecipeRow: vi.fn(),
-}));
+// The route reads the recipe (existence) and optionally writes schema.image
+// through the repo layer; mock both helpers, keep the real RecipeRepoError.
+vi.mock("@/lib/recipes", async (orig) => {
+  const actual = await orig<typeof import("@/lib/recipes")>();
+  return { ...actual, getRecipeById: vi.fn(), updateRecipeRow: vi.fn() };
+});
+
+const storedRecipe = makeRecipe("recipe-1", "Test Recipe");
 
 function makeParams(id = "recipe-1") {
   return { params: Promise.resolve({ id }) };
@@ -53,8 +52,10 @@ function makeFile(bytes: Uint8Array, type = "image/png", name = "x.png") {
 }
 
 describe("POST /api/recipes/[id]/upload-image", () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     vi.clearAllMocks();
+    const { getRecipeById } = await import("@/lib/recipes");
+    vi.mocked(getRecipeById).mockResolvedValue(storedRecipe);
   });
 
   it("returns 401 when the request is unauthorized", async () => {
@@ -71,10 +72,8 @@ describe("POST /api/recipes/[id]/upload-image", () => {
   });
 
   it("returns 404 when recipe is not found", async () => {
-    const { getSupabaseClient } = await import("@/lib/supabase");
-    vi.mocked(getSupabaseClient).mockReturnValue(
-      makeSupabaseClient({ recipe: null, fetchError: { message: "Not found" } }) as never,
-    );
+    const { getRecipeById } = await import("@/lib/recipes");
+    vi.mocked(getRecipeById).mockResolvedValueOnce(null);
 
     const form = new FormData();
     form.append("file", makeFile(new Uint8Array([1, 2, 3])));
@@ -84,9 +83,6 @@ describe("POST /api/recipes/[id]/upload-image", () => {
   });
 
   it("returns 400 when file field is missing", async () => {
-    const { getSupabaseClient } = await import("@/lib/supabase");
-    vi.mocked(getSupabaseClient).mockReturnValue(makeSupabaseClient() as never);
-
     const form = new FormData();
     const res = await POST(makeRequest(form), makeParams());
 
@@ -94,9 +90,6 @@ describe("POST /api/recipes/[id]/upload-image", () => {
   });
 
   it("returns 415 for unsupported content types", async () => {
-    const { getSupabaseClient } = await import("@/lib/supabase");
-    vi.mocked(getSupabaseClient).mockReturnValue(makeSupabaseClient() as never);
-
     const form = new FormData();
     form.append("file", makeFile(new Uint8Array([1, 2, 3]), "image/gif", "x.gif"));
     const res = await POST(makeRequest(form), makeParams());
@@ -105,9 +98,6 @@ describe("POST /api/recipes/[id]/upload-image", () => {
   });
 
   it("returns 413 when file exceeds the size cap", async () => {
-    const { getSupabaseClient } = await import("@/lib/supabase");
-    vi.mocked(getSupabaseClient).mockReturnValue(makeSupabaseClient() as never);
-
     const big = new Uint8Array(env.MAX_IMAGE_BYTES + 1);
     const form = new FormData();
     form.append("file", makeFile(big));
@@ -117,9 +107,7 @@ describe("POST /api/recipes/[id]/upload-image", () => {
   });
 
   it("returns 200 with the public URL on success", async () => {
-    const { getSupabaseClient } = await import("@/lib/supabase");
     const storage = await import("@/lib/storage");
-    vi.mocked(getSupabaseClient).mockReturnValue(makeSupabaseClient() as never);
     vi.mocked(storage.uploadRecipeImage).mockResolvedValueOnce(
       "https://cdn.example.com/recipe-1-123.png",
     );
@@ -139,10 +127,8 @@ describe("POST /api/recipes/[id]/upload-image", () => {
   });
 
   it("does not touch the recipe row by default", async () => {
-    const { getSupabaseClient } = await import("@/lib/supabase");
     const storage = await import("@/lib/storage");
     const recipes = await import("@/lib/recipes");
-    vi.mocked(getSupabaseClient).mockReturnValue(makeSupabaseClient() as never);
     vi.mocked(storage.uploadRecipeImage).mockResolvedValueOnce(
       "https://cdn.example.com/recipe-1-123.png",
     );
@@ -156,10 +142,8 @@ describe("POST /api/recipes/[id]/upload-image", () => {
   });
 
   it("updates schema.image when updateSchema=true", async () => {
-    const { getSupabaseClient } = await import("@/lib/supabase");
     const storage = await import("@/lib/storage");
     const recipes = await import("@/lib/recipes");
-    vi.mocked(getSupabaseClient).mockReturnValue(makeSupabaseClient() as never);
     vi.mocked(storage.uploadRecipeImage).mockResolvedValueOnce(
       "https://cdn.example.com/recipe-1-123.png",
     );
@@ -179,10 +163,8 @@ describe("POST /api/recipes/[id]/upload-image", () => {
   });
 
   it("returns 502 with the image URL when the upload succeeds but the row update fails", async () => {
-    const { getSupabaseClient } = await import("@/lib/supabase");
     const storage = await import("@/lib/storage");
     const recipes = await import("@/lib/recipes");
-    vi.mocked(getSupabaseClient).mockReturnValue(makeSupabaseClient() as never);
     vi.mocked(storage.uploadRecipeImage).mockResolvedValueOnce(
       "https://cdn.example.com/recipe-1-123.png",
     );
@@ -202,10 +184,8 @@ describe("POST /api/recipes/[id]/upload-image", () => {
   });
 
   it("consumes the upload token on a successful upload", async () => {
-    const { getSupabaseClient } = await import("@/lib/supabase");
     const storage = await import("@/lib/storage");
     const { consumeRequestToken } = await import("@/lib/apiAuth");
-    vi.mocked(getSupabaseClient).mockReturnValue(makeSupabaseClient() as never);
     vi.mocked(storage.uploadRecipeImage).mockResolvedValueOnce(
       "https://cdn.example.com/recipe-1-123.png",
     );
@@ -219,11 +199,9 @@ describe("POST /api/recipes/[id]/upload-image", () => {
   });
 
   it("does NOT consume the token when the row update fails (502)", async () => {
-    const { getSupabaseClient } = await import("@/lib/supabase");
     const storage = await import("@/lib/storage");
     const recipes = await import("@/lib/recipes");
     const { consumeRequestToken } = await import("@/lib/apiAuth");
-    vi.mocked(getSupabaseClient).mockReturnValue(makeSupabaseClient() as never);
     vi.mocked(storage.uploadRecipeImage).mockResolvedValueOnce(
       "https://cdn.example.com/recipe-1-123.png",
     );
@@ -241,9 +219,7 @@ describe("POST /api/recipes/[id]/upload-image", () => {
   });
 
   it("returns 502 when storage upload fails", async () => {
-    const { getSupabaseClient } = await import("@/lib/supabase");
     const storage = await import("@/lib/storage");
-    vi.mocked(getSupabaseClient).mockReturnValue(makeSupabaseClient() as never);
     vi.mocked(storage.uploadRecipeImage).mockRejectedValueOnce(
       new storage.StorageUploadError("upload_failed", "boom"),
     );

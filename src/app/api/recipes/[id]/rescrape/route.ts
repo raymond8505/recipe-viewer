@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getSupabaseClient } from "@/lib/supabase";
+import { getRecipeById } from "@/lib/recipes";
 import { env } from "@/env";
 import { requireSessionOrRecipeToken } from "@/lib/api/guard";
 
@@ -7,15 +7,8 @@ export const POST = requireSessionOrRecipeToken(
   async (req: Request, { params }: RouteContext<"/api/recipes/[id]/rescrape">) => {
     const { id } = await params;
 
-    const supabase = getSupabaseClient();
-
-    const { data: recipe, error: fetchError } = await supabase
-      .from("recipes")
-      .select("id, url, metadata")
-      .eq("id", id)
-      .single();
-
-    if (fetchError || !recipe) {
+    const recipe = await getRecipeById(id);
+    if (!recipe) {
       return NextResponse.json({ error: "Recipe not found" }, { status: 404 });
     }
 

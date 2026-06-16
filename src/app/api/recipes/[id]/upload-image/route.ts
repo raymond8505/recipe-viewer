@@ -1,5 +1,4 @@
 import { NextResponse } from "next/server";
-import { getSupabaseClient } from "@/lib/supabase";
 import { env } from "@/env";
 import { consumeRequestToken } from "@/lib/apiAuth";
 import { requireSessionOrRecipeToken } from "@/lib/api/guard";
@@ -8,7 +7,7 @@ import {
   StorageUploadError,
   uploadRecipeImage,
 } from "@/lib/storage";
-import { updateRecipeRow } from "@/lib/recipes";
+import { getRecipeById, updateRecipeRow } from "@/lib/recipes";
 
 export const runtime = "nodejs";
 
@@ -16,15 +15,8 @@ export const POST = requireSessionOrRecipeToken(
   async (req: Request, { params }: RouteContext<"/api/recipes/[id]/upload-image">) => {
     const { id } = await params;
 
-    const supabase = getSupabaseClient();
-
-    const { data: recipe, error } = await supabase
-      .from("recipes")
-      .select("id")
-      .eq("id", id)
-      .single();
-
-    if (error || !recipe) {
+    const recipe = await getRecipeById(id);
+    if (!recipe) {
       return NextResponse.json({ error: "Recipe not found" }, { status: 404 });
     }
 
