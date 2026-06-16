@@ -115,28 +115,15 @@ export const TOOL_SCHEMAS = {
   },
   upload_recipe_image: {
     type: "object",
-    required: ["id"],
+    required: ["id", "imageUrl"],
     properties: {
       id: { type: "string", description: "Recipe UUID" },
       imageUrl: {
         type: "string",
         format: "uri",
         description:
-          "Public http(s) URL to fetch the image from. The server downloads, validates, and uploads it. Use this whenever the user gives you an image URL — do not fetch it yourself or base64-encode it.",
-      },
-      imageBase64: {
-        type: "string",
-        description:
-          "Base64-encoded image bytes with no data: prefix. LAST RESORT for small images only (max ~1MB decoded): base64 in tool arguments is emitted as model output tokens, so large images take minutes to send and bloat the conversation. If you have a local file and shell access, POST it as multipart instead (see tool description). Do NOT base64-encode a URL — pass it as imageUrl. Requires contentType.",
-      },
-      contentType: {
-        type: "string",
-        enum: ["image/png", "image/jpeg", "image/webp"],
-        description:
-          "Required with imageBase64. Ignored with imageUrl (derived from the server-side response).",
+          "Public http(s) URL to fetch the image from. The server downloads, validates, and uploads it. Use this whenever the user gives you an image URL — do not fetch it yourself. For a local file, use the multipart upload endpoint described in the tool description instead.",
       },
     },
-    description:
-      "Set a recipe's image. Prefer, in order: (1) imageUrl when the image is reachable at a URL — the server fetches it; (2) if you have a local file and shell access, do NOT base64 it through this tool — POST the raw bytes to this server's HTTP endpoint instead. First call the get_token tool with this recipe's id to obtain a short-lived (5-minute) upload token, then pass it as the bearer header: curl -H \"Authorization: Bearer <token-from-get_token>\" -F \"file=@<path>\" -F \"updateSchema=true\" <origin>/api/recipes/<id>/upload-image (same origin as this MCP server; the route returns 401 without a valid token; updates schema.image and returns the storage URL) — the <origin> domain may need to be in your shell/network allowlist for the curl to reach it; (3) imageBase64 + contentType only as a last resort for small images.",
   },
 } as const;

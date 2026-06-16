@@ -126,20 +126,42 @@ describe("POST /api/recipes/[id]/upload-image", () => {
     );
   });
 
-  it("does not touch the recipe row by default", async () => {
+  it("updates schema.image by default (no updateSchema field)", async () => {
     const storage = await import("@/lib/storage");
     const recipes = await import("@/lib/recipes");
     vi.mocked(storage.uploadRecipeImage).mockResolvedValueOnce(
       "https://cdn.example.com/recipe-1-123.png",
     );
+    vi.mocked(recipes.updateRecipeRow).mockResolvedValueOnce({} as never);
 
     const form = new FormData();
     form.append("file", makeFile(new Uint8Array([1, 2, 3])));
     const res = await POST(makeRequest(form), makeParams());
 
     expect(res.status).toBe(200);
-    expect(recipes.updateRecipeRow).not.toHaveBeenCalled();
+    expect(recipes.updateRecipeRow).toHaveBeenCalledWith("recipe-1", {
+      schema: { image: "https://cdn.example.com/recipe-1-123.png" },
+    });
   });
+
+  it.each(["false", "0"])(
+    "does not touch the recipe row when updateSchema=%s",
+    async (optOut) => {
+      const storage = await import("@/lib/storage");
+      const recipes = await import("@/lib/recipes");
+      vi.mocked(storage.uploadRecipeImage).mockResolvedValueOnce(
+        "https://cdn.example.com/recipe-1-123.png",
+      );
+
+      const form = new FormData();
+      form.append("file", makeFile(new Uint8Array([1, 2, 3])));
+      form.append("updateSchema", optOut);
+      const res = await POST(makeRequest(form), makeParams());
+
+      expect(res.status).toBe(200);
+      expect(recipes.updateRecipeRow).not.toHaveBeenCalled();
+    },
+  );
 
   it("updates schema.image when updateSchema=true", async () => {
     const storage = await import("@/lib/storage");

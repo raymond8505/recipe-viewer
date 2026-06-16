@@ -17,6 +17,13 @@ import { env } from "@/env";
 const RECIPE_TOKEN_AUDIENCE = "recipe-action";
 export const RECIPE_TOKEN_TTL_SECONDS = 5 * 60;
 
+// Human-readable TTL for agent-facing tool descriptions. Derived from the
+// constant above so the prose never drifts when the TTL changes.
+export const RECIPE_TOKEN_TTL_LABEL =
+  RECIPE_TOKEN_TTL_SECONDS % 60 === 0
+    ? `${RECIPE_TOKEN_TTL_SECONDS / 60}-minute`
+    : `${RECIPE_TOKEN_TTL_SECONDS}-second`;
+
 let cachedSecret: Uint8Array | null = null;
 function getSecret(): Uint8Array {
   if (!cachedSecret) cachedSecret = new TextEncoder().encode(env.OAUTH_JWT_SECRET);
