@@ -109,6 +109,12 @@ When a handler calls a state setter with data from `fetch` or a webhook response
 2. **Guard before the state setter**: check that the expected key is present (e.g. `if (!result.schema) throw new Error()`) so a malformed 200 response falls into the existing error state rather than setting state to `undefined`.
 3. **A state setter that receives `undefined` will not throw at the call site** — the crash happens on the next render when code accesses a property on the undefined value. Always validate at the boundary.
 
+## API Route Conventions
+
+**Auth gate.** Every route under `src/app/api/**` is classified in `src/lib/api/routePolicy.ts` — the single source of truth for its exposure level. `src/__tests__/route-auth-policy.test.ts` is a **build-breaking gate**: it fails if a route file has no registry entry (or an entry has no file), and it invokes every *protected* route unauthenticated and asserts 401/403. A new route can't ship without an explicit auth decision. Enforce auth with the wrappers in `src/lib/api/guard.ts` — `requireSession` (browser session) or `requireSessionOrRecipeToken` (session OR recipe-scoped capability token, the agent path); don't hand-roll inline checks. Anonymous routes are an explicit allowlist (`public-read` / `oauth-public` / `public-auth`), each with a written rationale. `GET /api/recipes` is `public-read` — anonymous browse/search backs the public UI including cook mode; the `x-requested-by` header is **not** the security boundary (visibility is filtered server-side by `getRecipes`).
+
+**Data access.** Route handlers must **not** call `getSupabaseClient().from("recipes")` directly — go through `src/lib/recipes.ts` (`getRecipeById`, `updateRecipeRow`, `archiveRecipe`, `createRecipeRow`) and map `RecipeRepoError` → 404 (`not_found`) / 500. `updateRecipeRow` **merges** the schema patch into `metadata.schema` and syncs the top-level `name`/`content` columns (not replace) — relying on this is what keeps list/search columns from going stale. In tests, mock `@/lib/recipes` at the module boundary with `importOriginal` so `RecipeRepoError` stays real for `instanceof`. (OAuth routes still use raw `oauth_*` Supabase calls — there is no repo layer for those yet.)
+
 ## Story Fixtures
 
 All shared `RecipeRow` fixtures — used by both stories and tests — live in `src/fixtures/` and import via `@/fixtures`. Never define inline `RecipeRow` objects in story files.
@@ -194,3 +200,12 @@ Decision tool at `/whats-for-dinner`. Winner-stays matchup; backend drives conte
 **Animation:** React key-based remounting — no imperative timers. Each slot wrapper is keyed by `recipe.id`. Key change → remount → `animate-wfd-slide-in` fires on mount. Outgoing card gets `animate-wfd-slide-out` via class change during loading (same id, no remount). `losingIndices` (all indices except winner's) is computed eagerly in the PICK reducer case before the fetch starts.
 
 **Never reuse recipe IDs across contender slots** — the animation won't fire if the key doesn't change.
+
+## Test Performance — module loading
+
+Vitest's per-test timeout is 5s. **Don't cold-load a real (unmocked) module graph inside a timed `it`/`it.each` body** — e.g. invoking `import.meta.glob` loaders, or `await import()` of a module that isn't `vi.mock`'d or statically imported at the top of the file. That triggers a cold transform + load of the whole dependency graph inside the timed case, which under full-suite parallel load can exceed 5s and surface as a flaky `Test timed out in 5000ms` (the failure is reported at the `it.each` call site, which makes it look like a different test).
+
+- **Hoist** such loads into `beforeAll` (with a generous hook timeout, e.g. `beforeAll(fn, 30000)`) and keep each test body to invoke + assert.
+- The common `await import("@/lib/x")` to read a `vi.mock`'d module is **warm and fine** — the mock factory runs at file eval, so the import returns the cached mock instantly.
+- Statically importing the module-under-test at the top of the file is also fine: its graph loads during vitest's *collect* phase, which isn't bound by the per-test timeout.
+- Reference: `src/__tests__/route-auth-policy.test.ts` preloads every route handler in `beforeAll`, then each case just invokes the preloaded handler.

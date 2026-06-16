@@ -1,11 +1,12 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { makeSupabaseClient as makeClient } from "@/fixtures/supabase";
-import type { MakeSupabaseClientOptions } from "@/fixtures/supabase";
 import { POST } from "@/app/api/recipes/[id]/notes/route";
+import { RecipeRepoError } from "@/lib/recipes";
+import { makeJsonRequest } from "@/fixtures/request";
 
-vi.mock("@/lib/supabase", () => ({
-  getSupabaseClient: vi.fn(),
-}));
+vi.mock("@/lib/recipes", async (orig) => {
+  const actual = await orig<typeof import("@/lib/recipes")>();
+  return { ...actual, updateRecipeRow: vi.fn() };
+});
 
 // Authorized by default; the dedicated 401 test overrides this per-call.
 vi.mock("@/lib/apiAuth", () => ({
@@ -16,22 +17,6 @@ function makeParams(id = "recipe-1") {
   return { params: Promise.resolve({ id }) };
 }
 
-function makeRequest(body: object) {
-  return new Request("http://localhost/api/recipes/recipe-1/notes", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
-}
-
-const storedRecipe = {
-  id: "recipe-1",
-  metadata: { schema: { name: "Test Recipe" } },
-};
-
-const makeSupabaseClient = (overrides: MakeSupabaseClientOptions = {}) =>
-  makeClient({ recipe: storedRecipe, ...overrides });
-
 describe("POST /api/recipes/[id]/notes", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -39,68 +24,56 @@ describe("POST /api/recipes/[id]/notes", () => {
 
   it("returns 401 when the request is unauthorized", async () => {
     const { requireApiAuth } = await import("@/lib/apiAuth");
-    vi.mocked(requireApiAuth).mockResolvedValueOnce(
-      new Response(null, { status: 401 })
-    );
+    vi.mocked(requireApiAuth).mockResolvedValueOnce(new Response(null, { status: 401 }));
 
-    const res = await POST(makeRequest({ cookingNotes: "more garlic" }), makeParams());
+    const res = await POST(makeJsonRequest({ cookingNotes: "more garlic" }), makeParams());
     expect(res.status).toBe(401);
   });
 
-  it("returns 404 when recipe is not found", async () => {
-    const { getSupabaseClient } = await import("@/lib/supabase");
-    vi.mocked(getSupabaseClient).mockReturnValue(
-      makeSupabaseClient({ recipe: null, fetchError: { message: "Not found" } }) as never
-    );
+  it("returns 404 when the recipe does not exist", async () => {
+    const { updateRecipeRow } = await import("@/lib/recipes");
+    vi.mocked(updateRecipeRow).mockRejectedValueOnce(new RecipeRepoError("not_found", "nope"));
 
-    const res = await POST(makeRequest({ cookingNotes: "more garlic" }), makeParams());
+    const res = await POST(makeJsonRequest({ cookingNotes: "more garlic" }), makeParams());
     expect(res.status).toBe(404);
-    const body = await res.json();
-    expect(body.error).toMatch(/not found/i);
+    expect((await res.json()).error).toMatch(/not found/i);
   });
 
-  it("returns 500 when Supabase update fails", async () => {
-    const { getSupabaseClient } = await import("@/lib/supabase");
-    vi.mocked(getSupabaseClient).mockReturnValue(
-      makeSupabaseClient({ updateError: { message: "RLS violation" } }) as never
-    );
+  it("returns 500 when the write fails", async () => {
+    const { updateRecipeRow } = await import("@/lib/recipes");
+    vi.mocked(updateRecipeRow).mockRejectedValueOnce(new RecipeRepoError("update_failed", "RLS violation"));
 
-    const res = await POST(makeRequest({ cookingNotes: "more garlic" }), makeParams());
+    const res = await POST(makeJsonRequest({ cookingNotes: "more garlic" }), makeParams());
     expect(res.status).toBe(500);
-    const body = await res.json();
-    expect(body.error).toMatch(/failed to save/i);
+    expect((await res.json()).error).toMatch(/failed to save/i);
   });
 
   it("returns 200 with ok:true on success", async () => {
-    const { getSupabaseClient } = await import("@/lib/supabase");
-    vi.mocked(getSupabaseClient).mockReturnValue(makeSupabaseClient() as never);
+    const { updateRecipeRow } = await import("@/lib/recipes");
+    vi.mocked(updateRecipeRow).mockResolvedValueOnce({} as never);
 
-    const res = await POST(makeRequest({ cookingNotes: "reduce heat earlier" }), makeParams());
+    const res = await POST(makeJsonRequest({ cookingNotes: "reduce heat earlier" }), makeParams());
     expect(res.status).toBe(200);
-    const body = await res.json();
-    expect(body.ok).toBe(true);
+    expect((await res.json()).ok).toBe(true);
   });
 
-  it("saves cookingNotes merged into existing metadata schema", async () => {
-    const { getSupabaseClient } = await import("@/lib/supabase");
-    const client = makeSupabaseClient();
-    vi.mocked(getSupabaseClient).mockReturnValue(client as never);
+  it("patches cookingNotes onto the recipe schema", async () => {
+    const { updateRecipeRow } = await import("@/lib/recipes");
+    vi.mocked(updateRecipeRow).mockResolvedValueOnce({} as never);
 
-    await POST(makeRequest({ cookingNotes: "reduce heat earlier" }), makeParams());
-
-    const updateCall = client.from.mock.results[1].value.update.mock.calls[0][0];
-    expect(updateCall.metadata.schema.cookingNotes).toBe("reduce heat earlier");
-    expect(updateCall.metadata.schema.name).toBe("Test Recipe");
+    await POST(makeJsonRequest({ cookingNotes: "reduce heat earlier" }), makeParams());
+    expect(updateRecipeRow).toHaveBeenCalledWith("recipe-1", {
+      schema: { cookingNotes: "reduce heat earlier" },
+    });
   });
 
-  it("saves cookingNotes as undefined when empty string is sent", async () => {
-    const { getSupabaseClient } = await import("@/lib/supabase");
-    const client = makeSupabaseClient();
-    vi.mocked(getSupabaseClient).mockReturnValue(client as never);
+  it("clears cookingNotes (undefined) when an empty string is sent", async () => {
+    const { updateRecipeRow } = await import("@/lib/recipes");
+    vi.mocked(updateRecipeRow).mockResolvedValueOnce({} as never);
 
-    await POST(makeRequest({ cookingNotes: "" }), makeParams());
-
-    const updateCall = client.from.mock.results[1].value.update.mock.calls[0][0];
-    expect(updateCall.metadata.schema.cookingNotes).toBeUndefined();
+    await POST(makeJsonRequest({ cookingNotes: "" }), makeParams());
+    expect(updateRecipeRow).toHaveBeenCalledWith("recipe-1", {
+      schema: { cookingNotes: undefined },
+    });
   });
 });

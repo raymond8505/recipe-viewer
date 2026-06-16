@@ -1,97 +1,84 @@
 import { NextResponse } from "next/server";
-import { getSupabaseClient } from "@/lib/supabase";
 import { env } from "@/env";
-import { consumeRequestToken, requireApiAuth } from "@/lib/apiAuth";
+import { consumeRequestToken } from "@/lib/apiAuth";
+import { requireSessionOrRecipeToken } from "@/lib/api/guard";
 import {
   ALLOWED_IMAGE_CONTENT_TYPES,
   StorageUploadError,
   uploadRecipeImage,
 } from "@/lib/storage";
-import { updateRecipeRow } from "@/lib/recipes";
+import { getRecipeById, updateRecipeRow } from "@/lib/recipes";
 
 export const runtime = "nodejs";
 
-export async function POST(
-  req: Request,
-  { params }: RouteContext<"/api/recipes/[id]/upload-image">,
-) {
-  const { id } = await params;
-  const unauthorized = await requireApiAuth(req, id);
-  if (unauthorized) return unauthorized;
+export const POST = requireSessionOrRecipeToken(
+  async (req: Request, { params }: RouteContext<"/api/recipes/[id]/upload-image">) => {
+    const { id } = await params;
 
-  const supabase = getSupabaseClient();
+    const recipe = await getRecipeById(id);
+    if (!recipe) {
+      return NextResponse.json({ error: "Recipe not found" }, { status: 404 });
+    }
 
-  const { data: recipe, error } = await supabase
-    .from("recipes")
-    .select("id")
-    .eq("id", id)
-    .single();
+    let form: FormData;
+    try {
+      form = await req.formData();
+    } catch {
+      return NextResponse.json({ error: "Invalid form data" }, { status: 400 });
+    }
 
-  if (error || !recipe) {
-    return NextResponse.json({ error: "Recipe not found" }, { status: 404 });
-  }
+    const file = form.get("file");
+    if (!(file instanceof File)) {
+      return NextResponse.json({ error: "Missing file field" }, { status: 400 });
+    }
 
-  let form: FormData;
-  try {
-    form = await req.formData();
-  } catch {
-    return NextResponse.json({ error: "Invalid form data" }, { status: 400 });
-  }
+    if (file.size > env.MAX_IMAGE_BYTES) {
+      return NextResponse.json(
+        { error: `File exceeds ${env.MAX_IMAGE_BYTES} bytes` },
+        { status: 413 },
+      );
+    }
 
-  const file = form.get("file");
-  if (!(file instanceof File)) {
-    return NextResponse.json(
-      { error: "Missing file field" },
-      { status: 400 },
-    );
-  }
+    if (!ALLOWED_IMAGE_CONTENT_TYPES.includes(file.type as never)) {
+      return NextResponse.json(
+        { error: `Unsupported content type: ${file.type}` },
+        { status: 415 },
+      );
+    }
 
-  if (file.size > env.MAX_IMAGE_BYTES) {
-    return NextResponse.json(
-      { error: `File exceeds ${env.MAX_IMAGE_BYTES} bytes` },
-      { status: 413 },
-    );
-  }
+    const bytes = new Uint8Array(await file.arrayBuffer());
 
-  if (!ALLOWED_IMAGE_CONTENT_TYPES.includes(file.type as never)) {
-    return NextResponse.json(
-      { error: `Unsupported content type: ${file.type}` },
-      { status: 415 },
-    );
-  }
+    // Opt-in: also point metadata.schema.image at the uploaded file, like the
+    // MCP upload_recipe_image tool does. The web UI omits this and folds the
+    // returned URL into its own full-schema save instead.
+    const updateSchema = form.get("updateSchema") === "true";
 
-  const bytes = new Uint8Array(await file.arrayBuffer());
-
-  // Opt-in: also point metadata.schema.image at the uploaded file, like the
-  // MCP upload_recipe_image tool does. The web UI omits this and folds the
-  // returned URL into its own full-schema save instead.
-  const updateSchema = form.get("updateSchema") === "true";
-
-  try {
-    const image = await uploadRecipeImage(id, bytes, file.type);
-    if (updateSchema) {
-      try {
-        await updateRecipeRow(id, { schema: { image } });
-      } catch {
-        return NextResponse.json(
-          {
-            error: "Image uploaded to storage but updating the recipe failed",
-            image,
-          },
-          { status: 502 },
-        );
+    try {
+      const image = await uploadRecipeImage(id, bytes, file.type);
+      if (updateSchema) {
+        try {
+          await updateRecipeRow(id, { schema: { image } });
+        } catch {
+          return NextResponse.json(
+            {
+              error: "Image uploaded to storage but updating the recipe failed",
+              image,
+            },
+            { status: 502 },
+          );
+        }
       }
+      // Spend the one-shot upload token now that the upload has fully succeeded.
+      // Left out of the 502 partial-failure path above so a failed row update
+      // keeps the token usable for a retry.
+      await consumeRequestToken(req);
+      return NextResponse.json({ image });
+    } catch (err) {
+      if (err instanceof StorageUploadError) {
+        const status = err.kind === "unsupported_type" ? 415 : 502;
+        return NextResponse.json({ error: err.detail }, { status });
+      }
+      return NextResponse.json({ error: "Upload failed" }, { status: 502 });
     }
-    // Spend the one-shot upload token now that the upload has fully succeeded.
-    // Left out of the 502 partial-failure path above so a failed row update
-    // keeps the token usable for a retry.
-    await consumeRequestToken(req);
-    return NextResponse.json({ image });
-  } catch (err) {
-    if (err instanceof StorageUploadError) {
-      const status = err.kind === "unsupported_type" ? 415 : 502;
-      return NextResponse.json({ error: err.detail }, { status });
-    }
-    return NextResponse.json({ error: "Upload failed" }, { status: 502 });
-  }
-}
+  },
+);
