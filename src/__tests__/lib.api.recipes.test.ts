@@ -33,6 +33,9 @@ describe("uploadRecipeImageFile", () => {
     expect(init.method).toBe("POST");
     expect(init.body).toBeInstanceOf(FormData);
     expect(init.body.get("file")).toBe(file);
+    // The UI saves the image via its own verified full-schema save, so it opts
+    // out of the route's default schema update.
+    expect(init.body.get("updateSchema")).toBe("false");
   });
 
   it("throws when the response is not ok", async () => {

@@ -10,6 +10,9 @@ export async function uploadRecipeImageFile(
 ): Promise<string> {
   const form = new FormData();
   form.append("file", file);
+  // The UI saves the image through its own verified full-schema save, so opt out
+  // of the route's default schema update (which exists for the review-less agent path).
+  form.append("updateSchema", "false");
   const res = await fetch(`/api/recipes/${recipeId}/upload-image`, {
     method: "POST",
     body: form,

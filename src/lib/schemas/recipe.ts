@@ -122,7 +122,7 @@ export const recipeImageUploadInputSchema = z
       .min(1)
       .max(1_400_000, {
         message:
-          "imageBase64 too large (max ~1MB decoded). Use imageUrl, or POST the file as multipart form data to /api/recipes/{id}/upload-image with updateSchema=true.",
+          "imageBase64 too large (max ~1MB decoded). Use imageUrl, or POST the file as multipart form data to /api/recipes/{id}/upload-image.",
       })
       .optional(),
     contentType: z.enum(["image/png", "image/jpeg", "image/webp"]).optional(),
