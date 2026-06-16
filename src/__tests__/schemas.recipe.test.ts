@@ -3,24 +3,24 @@ import { describe, it, expect } from "vitest";
 import { recipeImageUploadInputSchema } from "@/lib/schemas/recipe";
 
 describe("recipeImageUploadInputSchema", () => {
-  it("accepts base64 at the cap", () => {
+  it("accepts an id and a valid imageUrl", () => {
     const result = recipeImageUploadInputSchema.safeParse({
       id: "r1",
-      imageBase64: "a".repeat(1_400_000),
-      contentType: "image/png",
+      imageUrl: "https://example.com/foo.jpg",
     });
     expect(result.success).toBe(true);
   });
 
-  it("rejects oversized base64 with a message naming the fast paths", () => {
+  it("rejects a missing imageUrl", () => {
+    const result = recipeImageUploadInputSchema.safeParse({ id: "r1" });
+    expect(result.success).toBe(false);
+  });
+
+  it("rejects a non-URL imageUrl", () => {
     const result = recipeImageUploadInputSchema.safeParse({
       id: "r1",
-      imageBase64: "a".repeat(1_400_001),
-      contentType: "image/png",
+      imageUrl: "not-a-url",
     });
     expect(result.success).toBe(false);
-    const message = result.success ? "" : result.error.issues[0].message;
-    expect(message).toMatch(/imageUrl/);
-    expect(message).toMatch(/upload-image/);
   });
 });

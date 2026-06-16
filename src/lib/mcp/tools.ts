@@ -6,7 +6,6 @@ import {
   RecipeRepoError,
   updateRecipeRow,
 } from "@/lib/recipes";
-import { env } from "@/env";
 import { RECIPE_TOKEN_TTL_SECONDS, signRecipeToken } from "./recipeToken";
 import {
   fetchImageBytes,
@@ -101,29 +100,18 @@ export async function uploadRecipeImage(
   let bytes: Buffer;
   let contentType: string;
 
-  if (args.imageUrl) {
-    try {
-      const fetched = await fetchImageBytes(args.imageUrl);
-      bytes = fetched.bytes;
-      contentType = fetched.contentType;
-    } catch (err) {
-      if (err instanceof StorageUploadError) {
-        throw new ToolError(err.kind, err.detail);
-      }
-      throw new ToolError(
-        "fetch_failed",
-        err instanceof Error ? err.message : "Failed to fetch image",
-      );
+  try {
+    const fetched = await fetchImageBytes(args.imageUrl);
+    bytes = fetched.bytes;
+    contentType = fetched.contentType;
+  } catch (err) {
+    if (err instanceof StorageUploadError) {
+      throw new ToolError(err.kind, err.detail);
     }
-  } else {
-    bytes = Buffer.from(args.imageBase64!, "base64");
-    if (bytes.length > env.MAX_IMAGE_BYTES) {
-      throw new ToolError(
-        "too_large",
-        `Decoded image is ${bytes.length} bytes (max ${env.MAX_IMAGE_BYTES})`,
-      );
-    }
-    contentType = args.contentType!;
+    throw new ToolError(
+      "fetch_failed",
+      err instanceof Error ? err.message : "Failed to fetch image",
+    );
   }
 
   let imageUrl: string;
