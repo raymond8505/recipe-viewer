@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi, beforeAll } from "vitest";
 import { ROUTE_POLICY, isProtectedPolicy } from "@/lib/api/routePolicy";
 
 // The hard, deterministic auth gate.
@@ -51,19 +51,39 @@ describe("route auth policy registry", () => {
   });
 });
 
+type RouteHandler = (req: Request, ctx?: unknown) => Promise<Response>;
+
 describe("protected routes reject unauthenticated requests (behavioral gate)", () => {
+  // Load every protected route's POST handler ONCE, up front. Importing a route
+  // module is a cold dynamic import that pulls a sizeable graph (e.g. mcp/server,
+  // or upload-image → storage → node:net); doing it inside each timed `it` case
+  // occasionally blew the 5s per-test timeout under full-suite parallel load.
+  // Hoisting it into beforeAll (one-time, with its own generous timeout) keeps
+  // each case to a fast invoke + assert.
+  const handlers = new Map<string, RouteHandler>();
+
+  beforeAll(async () => {
+    await Promise.all(
+      protectedPaths.map(async (routePath) => {
+        const fileKey = `/src/app${routePath}/route.ts`;
+        const loader = routeModules[fileKey];
+        if (typeof loader !== "function") {
+          throw new Error(`no module loader for ${fileKey}`);
+        }
+        const mod = (await loader()) as Record<string, unknown>;
+        if (typeof mod.POST !== "function") {
+          throw new Error(`${routePath} must export a POST handler`);
+        }
+        handlers.set(routePath, mod.POST as RouteHandler);
+      }),
+    );
+  }, 30000);
+
   it.each(protectedPaths)(
     "POST %s with no credentials → 401/403",
     async (routePath) => {
-      const fileKey = `/src/app${routePath}/route.ts`;
-      const loader = routeModules[fileKey];
-      expect(loader, `no module loader for ${fileKey}`).toBeTypeOf("function");
-
-      const mod = (await loader()) as Record<string, unknown>;
-      const handler = mod.POST as
-        | ((req: Request, ctx?: unknown) => Promise<Response>)
-        | undefined;
-      expect(handler, `${routePath} must export a POST handler`).toBeTypeOf("function");
+      const handler = handlers.get(routePath);
+      expect(handler, `${routePath} handler was not preloaded`).toBeTypeOf("function");
 
       const url = `http://localhost${routePath.replace("[id]", "test-id")}`;
       const req = new Request(url, { method: "POST" });
