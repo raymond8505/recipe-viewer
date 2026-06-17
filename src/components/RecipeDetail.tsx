@@ -72,6 +72,7 @@ export default function RecipeDetail({
 
   // Edit mode state
   const [editState, setEditState] = useState<EditState>("idle");
+  const [editName, setEditName] = useState("");
   const [editUrl, setEditUrl] = useState("");
   const [editDesc, setEditDesc] = useState("");
   const [editIngredients, setEditIngredients] = useState("");
@@ -116,6 +117,7 @@ export default function RecipeDetail({
       if (!updated) throw new Error();
       setPreRescrapeSchema(schema);
       setSchema(updated);
+      setEditName(updated.name);
       setEditUrl(recipe.url ?? "");
       setEditDesc(updated.description ?? "");
       setEditIngredients(ingredientsToText(updated.recipeIngredient ?? []));
@@ -144,6 +146,7 @@ export default function RecipeDetail({
       setRescrapeState("idle");
       setPreRegenImageSchema(schema);
       setSchema({ ...schema, image: result.image });
+      setEditName(schema.name);
       setEditUrl(recipe.url ?? "");
       setEditDesc(schema.description ?? "");
       setEditIngredients(ingredientsToText(schema.recipeIngredient ?? []));
@@ -187,6 +190,7 @@ export default function RecipeDetail({
     setSelectedFile(file);
     setPreviewUrl(URL.createObjectURL(file));
 
+    setEditName(schema.name);
     setEditUrl(recipe.url ?? "");
     setEditDesc(schema.description ?? "");
     setEditIngredients(ingredientsToText(schema.recipeIngredient ?? []));
@@ -199,6 +203,7 @@ export default function RecipeDetail({
   };
 
   const handleEditStart = () => {
+    setEditName(schema.name);
     setEditUrl(recipe.url ?? "");
     setEditDesc(schema.description ?? "");
     setEditIngredients(ingredientsToText(schema.recipeIngredient ?? []));
@@ -232,6 +237,7 @@ export default function RecipeDetail({
     setEditState("saving");
     const updatedSchema: SchemaRecipe = {
       ...schema,
+      name: editName.trim() || schema.name,
       description: editDesc || undefined,
       recipeIngredient: textToIngredients(editIngredients),
       recipeInstructions: markdownToInstructions(editInstructions),
@@ -317,10 +323,24 @@ export default function RecipeDetail({
         </div>
 
         <div className="flex items-center gap-4 mb-4">
-          <h1 className="text-3xl sm:text-4xl font-bold text-gray-900 leading-tight">
-            {schema.name}
-          </h1>
-          <CookingModeButton recipe={recipe} isLoggedIn={isLoggedIn} />
+          {isEditing ? (
+            <input
+              type="text"
+              aria-label="Recipe title"
+              value={editName}
+              onChange={(e) => setEditName(e.target.value)}
+              disabled={editState === "saving"}
+              placeholder="Recipe title"
+              className="w-full rounded-lg border border-gray-200 p-3 text-3xl sm:text-4xl font-bold text-gray-900 leading-tight focus:outline-none focus:ring-2 focus:ring-orange-300 disabled:opacity-60"
+            />
+          ) : (
+            <>
+              <h1 className="text-3xl sm:text-4xl font-bold text-gray-900 leading-tight">
+                {schema.name}
+              </h1>
+              <CookingModeButton recipe={recipe} isLoggedIn={isLoggedIn} />
+            </>
+          )}
         </div>
 
         {isEditing ? (
