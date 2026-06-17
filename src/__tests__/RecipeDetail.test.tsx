@@ -284,7 +284,9 @@ describe("RecipeDetail — controls section", () => {
     });
     expect(screen.getByRole("button", { name: /^cancel$/i })).toBeTruthy();
     expect(screen.getByText(/reviewing re-scraped data/i)).toBeTruthy();
-    expect(screen.getByText(rescrapeFixture.name)).toBeTruthy();
+    expect(
+      (screen.getByRole("textbox", { name: /recipe title/i }) as HTMLInputElement).value
+    ).toBe(rescrapeFixture.name);
   });
 
   it("reverts to original schema when rescrape review is cancelled", async () => {
@@ -393,7 +395,9 @@ describe("RecipeDetail — controls section", () => {
     await waitFor(() => {
       expect(screen.getByText(/save failed/i)).toBeTruthy();
     });
-    expect(screen.getByText("My Recipe")).toBeTruthy();
+    expect(
+      (screen.getByRole("textbox", { name: /recipe title/i }) as HTMLInputElement).value
+    ).toBe("My Recipe");
   });
 
   it("shows Edit button when logged in", () => {
@@ -530,5 +534,38 @@ describe("RecipeDetail — controls section", () => {
     await waitFor(() => expect(mockFetch).toHaveBeenCalled());
     const body = JSON.parse(mockFetch.mock.calls[0][1].body);
     expect(body.url).toBe("https://example.com");
+  });
+
+  it("shows title input pre-filled with current name in edit mode", async () => {
+    render(<RecipeDetail recipe={makeRecipe({ name: "Original Title" })} isLoggedIn={true} />);
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /^edit$/i }));
+    });
+    const input = screen.getByRole("textbox", { name: /recipe title/i }) as HTMLInputElement;
+    expect(input.value).toBe("Original Title");
+  });
+
+  it("includes the edited name in the save request body", async () => {
+    const mockFetch = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ schema: rescrapeFixture, status: "draft" }), { status: 200 })
+    );
+    vi.stubGlobal("fetch", mockFetch);
+
+    render(<RecipeDetail recipe={makeRecipe({ name: "Old Title" })} isLoggedIn={true} />);
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /^edit$/i }));
+    });
+    await act(async () => {
+      fireEvent.change(screen.getByRole("textbox", { name: /recipe title/i }), {
+        target: { value: "New Title" },
+      });
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /^save$/i }));
+    });
+
+    await waitFor(() => expect(mockFetch).toHaveBeenCalled());
+    const body = JSON.parse(mockFetch.mock.calls[0][1].body);
+    expect(body.schema.name).toBe("New Title");
   });
 });
