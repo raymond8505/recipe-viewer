@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useCallback } from "react";
 import Image from "next/image";
 import type {
   RecipeRow,
@@ -15,17 +15,15 @@ import {
   toArray,
   getIngredientText,
   toSchemaOrgJsonLd,
-  instructionsToMarkdown,
-  markdownToInstructions,
-  ingredientsToText,
-  textToIngredients,
 } from "@/lib/format";
 import { useScalableRecipe } from "@/hooks/useScalableRecipe";
+import { useRecipeEditor } from "@/hooks/useRecipeEditor";
+import { useUndoableSchemaOp } from "@/hooks/useUndoableSchemaOp";
+import { useImageUpload } from "@/hooks/useImageUpload";
 import {
   ALLOWED_IMAGE_CONTENT_TYPES,
   DEFAULT_MAX_IMAGE_BYTES,
 } from "@/lib/imageTypes";
-import { uploadRecipeImageFile } from "@/lib/api/recipes";
 import CookingModeButton from "./CookingModeButton";
 import { CheckIcon, CopyIcon } from "@/components/icons";
 import IngredientItem from "./IngredientItem";
@@ -40,8 +38,6 @@ interface RecipeDetailProps {
   // access in the browser — so the prop is the only wiring.
   maxImageBytes?: number;
 }
-
-type EditState = "idle" | "editing" | "saving" | "error";
 
 export default function RecipeDetail({
   recipe,
@@ -62,202 +58,100 @@ export default function RecipeDetail({
     anchorIngredientAmount,
   } = useScalableRecipe(schema);
 
-  const [selectedIngredients, setSelectedIngredients] = useState<Set<string>>(
-    new Set(),
-  );
-  const [copyFeedback, setCopyFeedback] = useState(false);
-  const [rescrapeState, setRescrapeState] = useState<
-    "idle" | "loading" | "success" | "error"
-  >("idle");
-
-  // Edit mode state
-  const [editState, setEditState] = useState<EditState>("idle");
-  const [editName, setEditName] = useState("");
-  const [editUrl, setEditUrl] = useState("");
-  const [editDesc, setEditDesc] = useState("");
-  const [editIngredients, setEditIngredients] = useState("");
-  const [editInstructions, setEditInstructions] = useState("");
-  const [editNotes, setEditNotes] = useState("");
-  const [editStatus, setEditStatus] = useState("");
-  const [preRescrapeSchema, setPreRescrapeSchema] =
-    useState<SchemaRecipe | null>(null);
-  const [regenImageState, setRegenImageState] = useState<
-    "idle" | "loading" | "success" | "error"
-  >("idle");
-  const [preRegenImageSchema, setPreRegenImageSchema] =
-    useState<SchemaRecipe | null>(null);
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
-  const [uploadImageState, setUploadImageState] = useState<
-    "idle" | "error"
-  >("idle");
-  const fileInputRef = useRef<HTMLInputElement | null>(null);
-  const [isMounted, setIsMounted] = useState(false);
-  useEffect(() => setIsMounted(true), []);
-
-  useEffect(() => {
-    return () => {
-      if (previewUrl) URL.revokeObjectURL(previewUrl);
-    };
-  }, [previewUrl]);
-
-  const isEditing = editState !== "idle";
-  const isRescrapeReview = preRescrapeSchema !== null;
-  const isRegenImageReview = preRegenImageSchema !== null;
-  const isUploadImageReview = selectedFile !== null;
-
-  const handleRescrape = async () => {
-    setRescrapeState("loading");
-    try {
+  // Edit buffer + the two undoable schema operations (re-scrape / regen image)
+  // + image-upload staging each own their slice of state in a dedicated hook;
+  // this component only orchestrates the cross-cutting save/cancel flows.
+  const editor = useRecipeEditor();
+  const { editState, draft, patch } = editor;
+  const imageUpload = useImageUpload(maxImageBytes);
+  const rescrape = useUndoableSchemaOp(
+    useCallback(async () => {
       const res = await fetch(`/api/recipes/${recipe.id}/rescrape`, {
         method: "POST",
       });
       if (!res.ok) throw new Error();
       const { schema: updated } = await res.json();
       if (!updated) throw new Error();
-      setPreRescrapeSchema(schema);
-      setSchema(updated);
-      setEditName(updated.name);
-      setEditUrl(recipe.url ?? "");
-      setEditDesc(updated.description ?? "");
-      setEditIngredients(ingredientsToText(updated.recipeIngredient ?? []));
-      setEditInstructions(
-        instructionsToMarkdown(updated.recipeInstructions ?? []),
-      );
-      setEditNotes(updated.notes ?? "");
-      setEditStatus(status);
-      setEditState("editing");
-      setRescrapeState("success");
-    } catch {
-      setRescrapeState("error");
-    }
+      return updated as SchemaRecipe;
+    }, [recipe.id]),
+  );
+  const regenImage = useUndoableSchemaOp(
+    useCallback(
+      async (current: SchemaRecipe) => {
+        const res = await fetch(`/api/recipes/${recipe.id}/regenerate-image`, {
+          method: "POST",
+        });
+        if (!res.ok) throw new Error();
+        const result = await res.json();
+        if (!result.image || typeof result.image !== "string")
+          throw new Error();
+        return { ...current, image: result.image };
+      },
+      [recipe.id],
+    ),
+  );
+
+  // Shopping list
+  const [selectedIngredients, setSelectedIngredients] = useState<Set<string>>(
+    new Set(),
+  );
+  const [copyFeedback, setCopyFeedback] = useState(false);
+  const [isMounted, setIsMounted] = useState(false);
+  useEffect(() => setIsMounted(true), []);
+
+  // Read-only aliases consumed by the JSX below.
+  const isEditing = editor.isEditing;
+  const isRescrapeReview = rescrape.isReview;
+  const isRegenImageReview = regenImage.isReview;
+  const isUploadImageReview = imageUpload.isStaged;
+  const rescrapeState = rescrape.state;
+  const regenImageState = regenImage.state;
+  const previewUrl = imageUpload.previewUrl;
+  const fileInputRef = imageUpload.fileInputRef;
+
+  // Adopt an op's resulting schema and open the editor on it for review.
+  const beginReview = (next: SchemaRecipe) => {
+    setSchema(next);
+    editor.begin(next, status, recipe.url ?? "");
   };
 
-  const handleRegenImage = async () => {
-    setRegenImageState("loading");
-    try {
-      const res = await fetch(`/api/recipes/${recipe.id}/regenerate-image`, {
-        method: "POST",
-      });
-      if (!res.ok) throw new Error();
-      const result = await res.json();
-      if (!result.image || typeof result.image !== "string") throw new Error();
-      setPreRescrapeSchema(null);
-      setRescrapeState("idle");
-      setPreRegenImageSchema(schema);
-      setSchema({ ...schema, image: result.image });
-      setEditName(schema.name);
-      setEditUrl(recipe.url ?? "");
-      setEditDesc(schema.description ?? "");
-      setEditIngredients(ingredientsToText(schema.recipeIngredient ?? []));
-      setEditInstructions(
-        instructionsToMarkdown(schema.recipeInstructions ?? []),
-      );
-      setEditNotes(schema.notes ?? "");
-      setEditStatus(status);
-      setEditState("editing");
-      setRegenImageState("success");
-    } catch {
-      setRegenImageState("error");
-    }
-  };
+  const handleRescrape = () => rescrape.run(schema, beginReview);
 
-  const handleUploadImageClick = () => {
-    setUploadImageState("idle");
-    fileInputRef.current?.click();
-  };
+  const handleRegenImage = () =>
+    regenImage.run(schema, (next) => {
+      rescrape.clear();
+      beginReview(next);
+    });
 
-  const handleFileSelected = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    e.target.value = "";
-    if (!file) return;
+  const handleFileSelected = (e: React.ChangeEvent<HTMLInputElement>) =>
+    imageUpload.onFileChange(e, () => {
+      rescrape.clear();
+      regenImage.clear();
+      editor.begin(schema, status, recipe.url ?? "");
+    });
 
-    if (!ALLOWED_IMAGE_CONTENT_TYPES.includes(file.type as never)) {
-      setUploadImageState("error");
-      return;
-    }
-    if (file.size > maxImageBytes) {
-      setUploadImageState("error");
-      return;
-    }
-
-    if (previewUrl) URL.revokeObjectURL(previewUrl);
-    setPreRescrapeSchema(null);
-    setRescrapeState("idle");
-    setPreRegenImageSchema(null);
-    setRegenImageState("idle");
-    setUploadImageState("idle");
-    setSelectedFile(file);
-    setPreviewUrl(URL.createObjectURL(file));
-
-    setEditName(schema.name);
-    setEditUrl(recipe.url ?? "");
-    setEditDesc(schema.description ?? "");
-    setEditIngredients(ingredientsToText(schema.recipeIngredient ?? []));
-    setEditInstructions(
-      instructionsToMarkdown(schema.recipeInstructions ?? []),
-    );
-    setEditNotes(schema.notes ?? "");
-    setEditStatus(status);
-    setEditState("editing");
-  };
-
-  const handleEditStart = () => {
-    setEditName(schema.name);
-    setEditUrl(recipe.url ?? "");
-    setEditDesc(schema.description ?? "");
-    setEditIngredients(ingredientsToText(schema.recipeIngredient ?? []));
-    setEditInstructions(
-      instructionsToMarkdown(schema.recipeInstructions ?? []),
-    );
-    setEditNotes(schema.notes ?? "");
-    setEditStatus(status);
-    setEditState("editing");
-  };
+  const handleEditStart = () => editor.begin(schema, status, recipe.url ?? "");
 
   const handleEditCancel = () => {
-    if (preRescrapeSchema) {
-      setSchema(preRescrapeSchema);
-      setPreRescrapeSchema(null);
-      setRescrapeState("idle");
-    } else if (preRegenImageSchema) {
-      setSchema(preRegenImageSchema);
-      setPreRegenImageSchema(null);
-      setRegenImageState("idle");
-    }
-    if (selectedFile) {
-      if (previewUrl) URL.revokeObjectURL(previewUrl);
-      setSelectedFile(null);
-      setPreviewUrl(null);
-    }
-    setEditState("idle");
+    if (rescrape.isReview) rescrape.undo(setSchema);
+    else if (regenImage.isReview) regenImage.undo(setSchema);
+    imageUpload.clear();
+    editor.cancel();
   };
 
-  const handleEditSave = async () => {
-    setEditState("saving");
-    const updatedSchema: SchemaRecipe = {
-      ...schema,
-      name: editName.trim() || schema.name,
-      description: editDesc || undefined,
-      recipeIngredient: textToIngredients(editIngredients),
-      recipeInstructions: markdownToInstructions(editInstructions),
-      notes: editNotes || undefined,
-    };
-    try {
-      if (selectedFile) {
-        updatedSchema.image = await uploadRecipeImageFile(
-          recipe.id,
-          selectedFile,
-        );
+  const handleEditSave = () =>
+    editor.runSave(async () => {
+      const updatedSchema = editor.buildSchema(schema);
+      if (imageUpload.isStaged) {
+        updatedSchema.image = await imageUpload.upload(recipe.id);
       }
-
       const res = await fetch(`/api/recipes/${recipe.id}/update`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           schema: updatedSchema,
-          status: editStatus,
-          url: editUrl,
+          status: draft.status,
+          url: draft.url,
         }),
       });
       if (!res.ok) throw new Error();
@@ -265,20 +159,10 @@ export default function RecipeDetail({
       if (!result.schema) throw new Error();
       setSchema(result.schema);
       setStatus(result.status);
-      setPreRescrapeSchema(null);
-      setRescrapeState("idle");
-      setPreRegenImageSchema(null);
-      setRegenImageState("idle");
-      if (selectedFile) {
-        if (previewUrl) URL.revokeObjectURL(previewUrl);
-        setSelectedFile(null);
-        setPreviewUrl(null);
-      }
-      setEditState("idle");
-    } catch {
-      setEditState("error");
-    }
-  };
+      rescrape.clear();
+      regenImage.clear();
+      imageUpload.clear();
+    });
 
   const toggleIngredient = (text: string) => {
     setSelectedIngredients((prev) => {
@@ -327,8 +211,8 @@ export default function RecipeDetail({
             <input
               type="text"
               aria-label="Recipe title"
-              value={editName}
-              onChange={(e) => setEditName(e.target.value)}
+              value={draft.name}
+              onChange={(e) => patch({ name: e.target.value })}
               disabled={editState === "saving"}
               placeholder="Recipe title"
               className="w-full rounded-lg border border-gray-200 p-3 text-3xl sm:text-4xl font-bold text-gray-900 leading-tight focus:outline-none focus:ring-2 focus:ring-orange-300 disabled:opacity-60"
@@ -345,8 +229,8 @@ export default function RecipeDetail({
 
         {isEditing ? (
           <textarea
-            value={editDesc}
-            onChange={(e) => setEditDesc(e.target.value)}
+            value={draft.description}
+            onChange={(e) => patch({ description: e.target.value })}
             disabled={editState === "saving"}
             placeholder="Description"
             className="w-full rounded-lg border border-gray-200 p-3 text-gray-700 text-lg leading-relaxed min-h-[80px] focus:outline-none focus:ring-2 focus:ring-orange-300 disabled:opacity-60 resize-y"
@@ -401,16 +285,16 @@ export default function RecipeDetail({
                   </label>
                   <input
                     type="url"
-                    value={editUrl}
-                    onChange={(e) => setEditUrl(e.target.value)}
+                    value={draft.url}
+                    onChange={(e) => patch({ url: e.target.value })}
                     disabled={editState === "saving"}
                     placeholder="https://example.com/recipe"
                     className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-orange-300 disabled:opacity-60"
                   />
                 </div>
                 <select
-                  value={editStatus}
-                  onChange={(e) => setEditStatus(e.target.value)}
+                  value={draft.status}
+                  onChange={(e) => patch({ status: e.target.value })}
                   disabled={editState === "saving"}
                   className="px-3 py-2 text-sm font-medium rounded-lg border border-gray-200 text-gray-700 bg-white focus:outline-none focus:ring-2 focus:ring-orange-300 disabled:opacity-60"
                   aria-label="Recipe status"
@@ -487,7 +371,7 @@ export default function RecipeDetail({
                   </span>
                 )}
                 <button
-                  onClick={handleUploadImageClick}
+                  onClick={imageUpload.open}
                   className="px-4 py-2 text-sm font-medium rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 transition-colors"
                 >
                   Upload Image
@@ -500,7 +384,7 @@ export default function RecipeDetail({
                   className="hidden"
                   aria-label="Choose image file to upload"
                 />
-                {uploadImageState === "error" && (
+                {imageUpload.error && (
                   <span className="text-sm text-red-600">
                     File must be PNG, JPEG, or WebP and under 4MB.
                   </span>
@@ -574,8 +458,8 @@ export default function RecipeDetail({
             </div>
             {isEditing ? (
               <textarea
-                value={editIngredients}
-                onChange={(e) => setEditIngredients(e.target.value)}
+                value={draft.ingredients}
+                onChange={(e) => patch({ ingredients: e.target.value })}
                 disabled={editState === "saving"}
                 placeholder={
                   "One ingredient per line.\nUse ## Group Name for sections."
@@ -632,8 +516,8 @@ export default function RecipeDetail({
             </h2>
             {isEditing ? (
               <textarea
-                value={editInstructions}
-                onChange={(e) => setEditInstructions(e.target.value)}
+                value={draft.instructions}
+                onChange={(e) => patch({ instructions: e.target.value })}
                 disabled={editState === "saving"}
                 placeholder={
                   "- Step one\n- Step two\n\n## Section Name\n- Step in section"
@@ -688,8 +572,8 @@ export default function RecipeDetail({
           <h2 className="text-xl font-semibold text-gray-900 mb-3">Notes</h2>
           {isEditing ? (
             <textarea
-              value={editNotes}
-              onChange={(e) => setEditNotes(e.target.value)}
+              value={draft.notes}
+              onChange={(e) => patch({ notes: e.target.value })}
               disabled={editState === "saving"}
               placeholder="Add notes…"
               className="w-full rounded-lg border border-gray-200 p-3 text-gray-700 leading-relaxed min-h-[120px] focus:outline-none focus:ring-2 focus:ring-orange-300 disabled:opacity-60 resize-y"
