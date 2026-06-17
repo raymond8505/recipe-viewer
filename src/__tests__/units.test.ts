@@ -170,9 +170,14 @@ describe("closestCommonFraction", () => {
     expect(hint?.value).toBe(2);
   });
 
-  it("snaps 1.7 tbsp to 1½ tbsp", () => {
+  it("snaps 1.7 tbsp to 1¾ tbsp", () => {
     const hint = closestCommonFraction(1.7, "tbsp");
-    expect(hint?.label).toBe("1½ tbsp");
+    expect(hint?.label).toBe("1¾ tbsp");
+  });
+
+  it("snaps 0.7 tbsp to ¾ tbsp", () => {
+    const hint = closestCommonFraction(0.7, "tbsp");
+    expect(hint?.label).toBe("¾ tbsp");
   });
 
   it("snaps 1.2 tsp to 1¼ tsp", () => {
