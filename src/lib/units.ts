@@ -70,10 +70,9 @@ export function roundDecimal(value: number, places = 1): number {
 }
 
 export function formatAmount(n: number): string {
-  const rounded = roundDecimal(n, 1);
-  const asInt = Math.round(rounded);
-  if (Math.abs(rounded - asInt) < 1e-9) return String(asInt);
-  return rounded.toFixed(1);
+  // 2 dp so quarter-amounts survive (¼ → 0.25, not 0.3). String() trims
+  // trailing zeros: 0.25 → "0.25", 0.5 → "0.5", 2 → "2" (never "2.00").
+  return String(roundDecimal(n, 2));
 }
 
 // Volume threshold rule: a single value's ml-equivalent picks the default unit.

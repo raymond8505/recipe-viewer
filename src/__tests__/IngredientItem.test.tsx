@@ -77,13 +77,13 @@ describe("IngredientItem — rendering", () => {
 });
 
 describe("IngredientItem — threshold-default unit and hint", () => {
-  it("promotes 90 ml to tbsp by default (7 < 90 ≤ 60 fails; 90 > 60 → cup; cup → 0.4)", () => {
-    // 90 ml > 60 ml → threshold default is cup. 90 ml = 0.38 cup → "0.4".
+  it("promotes 90 ml to cup by default (90 > 60 → cup; cup → 0.38)", () => {
+    // 90 ml > 60 ml → threshold default is cup. 90 ml = 0.38 cup → "0.38".
     // The closest common cup fraction is ⅓ → hint shows.
     const { container } = render(
       <IngredientItem ingredient={makeIngredient("90 ml distilled white vinegar")} />,
     );
-    expect(container.textContent).toContain("0.4");
+    expect(container.textContent).toContain("0.38");
     const select = screen.getByRole("combobox", { name: "unit" }) as HTMLSelectElement;
     expect(select.value).toBe("cup");
     expect(container.textContent).toContain("⅓");
@@ -93,22 +93,46 @@ describe("IngredientItem — threshold-default unit and hint", () => {
     const { container } = render(<IngredientItem ingredient={makeIngredient("30 ml vinegar")} />);
     const select = screen.getByRole("combobox", { name: "unit" }) as HTMLSelectElement;
     expect(select.value).toBe("tbsp");
-    // 30 ml = 2.03 tbsp → "2"; hint "2 tbsp" → suppressed (redundant)
-    expect(container.textContent).toContain("2");
+    // 30 ml = 2.03 tbsp → "2.03"; hint "2 tbsp" → suppressed (redundant)
+    expect(container.textContent).toContain("2.03");
+  });
+
+  it("renders a quarter teaspoon as 0.25, not 0.3", () => {
+    // ¼ tsp = 0.25; 2-dp formatting keeps the quarter instead of rounding to 0.3.
+    const { container } = render(
+      <IngredientItem ingredient={makeIngredient("¼ tsp everything bagel seasoning")} />,
+    );
+    expect(container.textContent).toContain("0.25");
+    expect(container.textContent).not.toContain("0.3");
+  });
+
+  it("pre-fills the edit input with 0.25 for a quarter teaspoon (no anchor drift)", () => {
+    // The edit input seeds from the displayed value; with 0.25 (not 0.3),
+    // committing unchanged is a no-op instead of rescaling the recipe 1.2×.
+    render(
+      <IngredientItem
+        ingredient={makeIngredient("¼ tsp everything bagel seasoning")}
+        onAnchor={vi.fn()}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: /edit amount/i }));
+    const input = screen.getByRole("textbox") as HTMLInputElement;
+    expect(input.value).toBe("0.25");
   });
 
   it("uses tsp for small volumes (< 7 ml)", () => {
     const { container } = render(<IngredientItem ingredient={makeIngredient("5 ml extract")} />);
     const select = screen.getByRole("combobox", { name: "unit" }) as HTMLSelectElement;
     expect(select.value).toBe("tsp");
-    // 5 ml = 1.01 tsp → "1"
-    expect(container.textContent).toContain("1");
+    // 5 ml = 1.01 tsp → "1.01"
+    expect(container.textContent).toContain("1.01");
   });
 
   it("suppresses hint when displayed decimal already matches the common fraction", () => {
-    // 120 ml = 0.5 cup; threshold = cup; hint "½ cup" matches display "0.5" → no hint.
+    // 120 ml = 0.51 cup; threshold = cup; rounds to the same 1-dp value as
+    // ½ cup, so the "½ cup" hint is suppressed as redundant.
     const { container } = render(<IngredientItem ingredient={makeIngredient("120 ml water")} />);
-    expect(container.textContent).toContain("0.5");
+    expect(container.textContent).toContain("0.51");
     expect(container.textContent).not.toContain("≈");
   });
 

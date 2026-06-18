@@ -9,7 +9,6 @@ import {
   formatParsedAmount,
   parseAmountToken,
   convertParsedAmount,
-  roundParsedAmount,
   isVolumeUnit,
   getDefaultVolumeUnit,
   closestCommonFraction,
@@ -51,10 +50,10 @@ export default function IngredientItem({ ingredient, onAnchor }: IngredientItemP
 
   const displayUnit = selectedUnit ?? thresholdUnit;
 
-  const displayedAmount = roundParsedAmount(
-    convertParsedAmount(scaledAmount, unit, displayUnit),
-  );
-  const displayString = formatParsedAmount(displayedAmount);
+  // formatAmount rounds to 2 dp, so format the unrounded converted amount
+  // directly — pre-rounding here would re-introduce the ¼ → 0.3 precision loss.
+  const convertedAmount = convertParsedAmount(scaledAmount, unit, displayUnit);
+  const displayString = formatParsedAmount(convertedAmount);
   const unitGroup = getUnitGroup(unit);
 
   // Hint = closest common fraction in the threshold unit. Single-amount, volume only.
@@ -75,10 +74,10 @@ export default function IngredientItem({ ingredient, onAnchor }: IngredientItemP
     // For ranges, pre-fill with the midpoint as a single value — commitEdit
     // rejects range input, so showing "6-10" would silently no-op on Enter.
     const initial =
-      displayedAmount.kind === "range"
+      convertedAmount.kind === "range"
         ? formatParsedAmount({
             kind: "single",
-            value: (displayedAmount.min + displayedAmount.max) / 2,
+            value: (convertedAmount.min + convertedAmount.max) / 2,
           })
         : displayString;
     setEditValue(initial);

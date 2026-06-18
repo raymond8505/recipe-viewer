@@ -72,16 +72,16 @@ describe("formatAmount", () => {
     expect(formatAmount(2)).toBe("2");
   });
 
-  it("strips trailing .0 for near-integer values", () => {
-    expect(formatAmount(6.04)).toBe("6");
+  it("strips trailing zeros for near-integer values", () => {
+    expect(formatAmount(6.004)).toBe("6");
     expect(formatAmount(1.0)).toBe("1");
   });
 
-  it("rounds to one decimal place", () => {
-    expect(formatAmount(0.375)).toBe("0.4");
-    expect(formatAmount(0.333)).toBe("0.3");
-    expect(formatAmount(2.57)).toBe("2.6");
-    expect(formatAmount(6.087)).toBe("6.1");
+  it("rounds to two decimal places", () => {
+    expect(formatAmount(0.375)).toBe("0.38");
+    expect(formatAmount(0.333)).toBe("0.33");
+    expect(formatAmount(2.57)).toBe("2.57");
+    expect(formatAmount(6.087)).toBe("6.09");
   });
 
   it("renders exact halves and tenths cleanly", () => {
@@ -90,10 +90,9 @@ describe("formatAmount", () => {
     expect(formatAmount(0.1)).toBe("0.1");
   });
 
-  it("rounds half-up away from zero", () => {
-    // Math.round(0.25 * 10) = Math.round(2.5) = 3 in JS
-    expect(formatAmount(0.25)).toBe("0.3");
-    expect(formatAmount(0.75)).toBe("0.8");
+  it("preserves quarter amounts at two decimal places", () => {
+    expect(formatAmount(0.25)).toBe("0.25");
+    expect(formatAmount(0.75)).toBe("0.75");
   });
 });
 
