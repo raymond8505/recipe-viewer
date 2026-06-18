@@ -15,14 +15,24 @@ import { useTimers, timerState } from "@/hooks/useTimers";
 import type { Timer } from "@/hooks/useTimers";
 import { ScalableRecipe } from "@/lib/ScalableRecipe";
 import { useWakeLock } from "@/hooks/useWakeLock";
-import { registerCookingModeRecipe, unregisterCookingModeRecipe } from "@/lib/windowApi";
+import {
+  registerCookingModeRecipe,
+  unregisterCookingModeRecipe,
+} from "@/lib/windowApi";
 import TimerColumn from "@/components/cooking/TimerColumn";
 import TimerCard from "@/components/cooking/TimerCard";
 import AddTimerModal from "@/components/cooking/AddTimerModal";
 import DraggableRibbon from "@/components/cooking/DraggableRibbon";
 import MealSearch from "@/components/cooking/MealSearch";
 import MealTabs from "@/components/cooking/MealTabs";
-import { CheckIcon, CopyIcon, CloseIcon, SmallPlusIcon, EnterFullscreenIcon, ExitFullscreenIcon } from "@/components/icons";
+import {
+  CheckIcon,
+  CopyIcon,
+  CloseIcon,
+  SmallPlusIcon,
+  EnterFullscreenIcon,
+  ExitFullscreenIcon,
+} from "@/components/icons";
 import IngredientItem from "@/components/IngredientItem";
 import ServingsControl from "@/components/ServingsControl";
 import NutritionPanel from "@/components/NutritionPanel";
@@ -33,34 +43,61 @@ interface CookingModeProps {
   isLoggedIn?: boolean;
 }
 
-const TIMER_PRIORITY = { alarm: 0, running: 1, paused: 2, finished: 3 } as const;
+const TIMER_PRIORITY = {
+  alarm: 0,
+  running: 1,
+  paused: 2,
+  finished: 3,
+} as const;
 function sortedTimers(timers: Timer[]): Timer[] {
-  return [...timers].sort((a, b) => TIMER_PRIORITY[timerState(a)] - TIMER_PRIORITY[timerState(b)]);
+  return [...timers].sort(
+    (a, b) => TIMER_PRIORITY[timerState(a)] - TIMER_PRIORITY[timerState(b)],
+  );
 }
 
-export default function CookingMode({ recipe, onClose, isLoggedIn = false }: CookingModeProps) {
+export default function CookingMode({
+  recipe,
+  onClose,
+  isLoggedIn = false,
+}: CookingModeProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const pendingScrollId = useRef<string | null>(null);
   // Fullscreen state is always derived from the real browser state via the event.
   // Initialize from current DOM state so it's correct even if fullscreen was
   // entered before this component mounted.
   const [isFullscreen, setIsFullscreen] = useState(
-    () => typeof document !== "undefined" && document.fullscreenElement != null
+    () => typeof document !== "undefined" && document.fullscreenElement != null,
   );
   const [showAddTimer, setShowAddTimer] = useState(false);
   const [editingTimer, setEditingTimer] = useState<Timer | null>(null);
-  const { timers, addTimer, editTimer, togglePause, resetTimer, dismissTimer, removeTimer, removeTimers, resetAll } = useTimers(recipe.url);
+  const {
+    timers,
+    addTimer,
+    editTimer,
+    togglePause,
+    resetTimer,
+    dismissTimer,
+    removeTimer,
+    removeTimers,
+    resetAll,
+  } = useTimers(recipe.url);
 
   const [schema, setSchema] = useState(recipe.metadata.schema);
-  const [cookingNotes, setCookingNotes] = useState(() => recipe.metadata.schema.cookingNotes ?? "");
-  const [notesSaveState, setNotesSaveState] = useState<"idle" | "saving" | "saved" | "error">("idle");
+  const [cookingNotes, setCookingNotes] = useState(
+    () => recipe.metadata.schema.cookingNotes ?? "",
+  );
+  const [notesSaveState, setNotesSaveState] = useState<
+    "idle" | "saving" | "saved" | "error"
+  >("idle");
   const notesFirstRender = useRef(true);
 
   // Meal state — primary recipe is always at index 0 and cannot be removed
   const [mealRecipes, setMealRecipes] = useState<RecipeRow[]>([recipe]);
   const [activeIndex, setActiveIndex] = useState(0);
   // Maps recipe.id → timer IDs that were seeded when that recipe was added to the meal
-  const [mealTimerIds, setMealTimerIds] = useState<Map<string, string[]>>(() => new Map());
+  const [mealTimerIds, setMealTimerIds] = useState<Map<string, string[]>>(
+    () => new Map(),
+  );
 
   // Per-recipe ScalableRecipe instances. Primary is seeded immediately; secondaries
   // are seeded inside handleAddToMeal so the lookup never misses. The primary's
@@ -85,7 +122,10 @@ export default function CookingMode({ recipe, onClose, isLoggedIn = false }: Coo
   const activeScalable = scalables.get(mealRecipes[activeIndex].id)!;
   const activeSchema = activeScalable.schema;
 
-  const updateScalable = (id: string, fn: (r: ScalableRecipe) => ScalableRecipe) =>
+  const updateScalable = (
+    id: string,
+    fn: (r: ScalableRecipe) => ScalableRecipe,
+  ) =>
     setScalables((prev) => {
       const existing = prev.get(id);
       if (!existing) return prev;
@@ -116,7 +156,10 @@ export default function CookingMode({ recipe, onClose, isLoggedIn = false }: Coo
   useWakeLock();
 
   useEffect(() => {
-    if (notesFirstRender.current) { notesFirstRender.current = false; return; }
+    if (notesFirstRender.current) {
+      notesFirstRender.current = false;
+      return;
+    }
     const t = setTimeout(async () => {
       setNotesSaveState("saving");
       try {
@@ -133,7 +176,7 @@ export default function CookingMode({ recipe, onClose, isLoggedIn = false }: Coo
       }
     }, 1500);
     return () => clearTimeout(t);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cookingNotes]);
 
   useEffect(() => {
@@ -160,14 +203,17 @@ export default function CookingMode({ recipe, onClose, isLoggedIn = false }: Coo
   }, []);
 
   // Shopping list — single Set across all meal recipes; key = "${recipeId}::${ingredientText}"
-  const [selectedIngredients, setSelectedIngredients] = useState<Set<string>>(new Set());
+  const [selectedIngredients, setSelectedIngredients] = useState<Set<string>>(
+    new Set(),
+  );
   const [copyFeedback, setCopyFeedback] = useState(false);
 
   const toggleIngredient = (recipeId: string, text: string) => {
     const key = `${recipeId}::${text}`;
     setSelectedIngredients((prev) => {
       const next = new Set(prev);
-      if (next.has(key)) next.delete(key); else next.add(key);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
       return next;
     });
   };
@@ -175,8 +221,11 @@ export default function CookingMode({ recipe, onClose, isLoggedIn = false }: Coo
   const copyShoppingList = async () => {
     const lines: string[] = [];
     for (const r of mealRecipes) {
-      const ings = r.id === recipe.id ? schema.recipeIngredient : r.metadata.schema.recipeIngredient;
-      for (const ing of (ings ?? [])) {
+      const ings =
+        r.id === recipe.id
+          ? schema.recipeIngredient
+          : r.metadata.schema.recipeIngredient;
+      for (const ing of ings ?? []) {
         const text = getIngredientText(ing);
         if (selectedIngredients.has(`${r.id}::${text}`)) lines.push(text);
       }
@@ -185,14 +234,17 @@ export default function CookingMode({ recipe, onClose, isLoggedIn = false }: Coo
       await navigator.clipboard.writeText(lines.join("\n"));
       setCopyFeedback(true);
       setTimeout(() => setCopyFeedback(false), 2000);
-    } catch { /* silent fail */ }
+    } catch {
+      /* silent fail */
+    }
   };
 
   // Instruction completion — not persisted between sessions, tracked per recipe
-  const [completedStepsMap, setCompletedStepsMap] = useState<Map<string, Set<string>>>(
-    () => new Map([[recipe.id, new Set<string>()]])
-  );
-  const completedSteps = completedStepsMap.get(mealRecipes[activeIndex].id) ?? new Set<string>();
+  const [completedStepsMap, setCompletedStepsMap] = useState<
+    Map<string, Set<string>>
+  >(() => new Map([[recipe.id, new Set<string>()]]));
+  const completedSteps =
+    completedStepsMap.get(mealRecipes[activeIndex].id) ?? new Set<string>();
 
   const toggleStep = (key: string) => {
     const id = mealRecipes[activeIndex].id;
@@ -210,7 +262,10 @@ export default function CookingMode({ recipe, onClose, isLoggedIn = false }: Coo
     setMealRecipes((prev) => [...prev, newRecipe]);
     setCompletedStepsMap((prev) => new Map(prev).set(newRecipe.id, new Set()));
     setScalables((prev) =>
-      new Map(prev).set(newRecipe.id, new ScalableRecipe(newRecipe.metadata.schema)),
+      new Map(prev).set(
+        newRecipe.id,
+        new ScalableRecipe(newRecipe.metadata.schema),
+      ),
     );
     // Seed this recipe's timers unconditionally (bypass the "skip if timers > 0" guard on mount)
     const seededIds: string[] = [];
@@ -254,7 +309,9 @@ export default function CookingMode({ recipe, onClose, isLoggedIn = false }: Coo
       return next;
     });
     setMealRecipes((prev) => prev.filter((_, i) => i !== index));
-    setActiveIndex((prev) => (prev === index ? 0 : prev > index ? prev - 1 : prev));
+    setActiveIndex((prev) =>
+      prev === index ? 0 : prev > index ? prev - 1 : prev,
+    );
   };
 
   useEffect(() => {
@@ -263,7 +320,8 @@ export default function CookingMode({ recipe, onClose, isLoggedIn = false }: Coo
       setIsFullscreen(document.fullscreenElement === containerRef.current);
     };
     document.addEventListener("fullscreenchange", handleFullscreenChange);
-    return () => document.removeEventListener("fullscreenchange", handleFullscreenChange);
+    return () =>
+      document.removeEventListener("fullscreenchange", handleFullscreenChange);
   }, []);
 
   useEffect(() => {
@@ -276,10 +334,16 @@ export default function CookingMode({ recipe, onClose, isLoggedIn = false }: Coo
 
   useEffect(() => {
     if (!pendingScrollId.current) return;
-    const els = document.querySelectorAll(`[data-timer-id="${pendingScrollId.current}"]`);
+    const els = document.querySelectorAll(
+      `[data-timer-id="${pendingScrollId.current}"]`,
+    );
     if (els.length > 0) {
       els.forEach((el) =>
-        el.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "nearest" })
+        el.scrollIntoView({
+          behavior: "smooth",
+          block: "nearest",
+          inline: "nearest",
+        }),
       );
       pendingScrollId.current = null;
     }
@@ -308,9 +372,13 @@ export default function CookingMode({ recipe, onClose, isLoggedIn = false }: Coo
       {/* Sticky header */}
       <div className="shrink-0 flex items-center justify-between px-4 py-2 border-b border-gray-200 bg-white">
         <button
-          onClick={() => { if (document.fullscreenElement) document.exitFullscreen(); }}
+          onClick={() => {
+            if (document.fullscreenElement) document.exitFullscreen();
+          }}
           className="text-sm font-medium text-gray-500"
-        >Cooking mode</button>
+        >
+          Cooking mode
+        </button>
         <div className="flex items-center gap-1">
           <button
             onClick={toggleFullscreen}
@@ -353,7 +421,11 @@ export default function CookingMode({ recipe, onClose, isLoggedIn = false }: Coo
         {timers.length > 0 ? (
           <DraggableRibbon className="px-3 pb-3 pt-1 gap-2">
             {sortedTimers(timers).map((timer) => (
-              <div key={timer.id} data-timer-id={timer.id} className="snap-start shrink-0 w-44">
+              <div
+                key={timer.id}
+                data-timer-id={timer.id}
+                className="snap-start shrink-0 w-44"
+              >
                 <TimerCard
                   timer={timer}
                   onTogglePause={togglePause}
@@ -370,7 +442,9 @@ export default function CookingMode({ recipe, onClose, isLoggedIn = false }: Coo
             ))}
           </DraggableRibbon>
         ) : (
-          <p className="text-xs text-gray-400 text-center pb-2">No timers yet</p>
+          <p className="text-xs text-gray-400 text-center pb-2">
+            No timers yet
+          </p>
         )}
       </div>
 
@@ -378,10 +452,18 @@ export default function CookingMode({ recipe, onClose, isLoggedIn = false }: Coo
       {isLoggedIn && (
         <div className="lg:hidden shrink-0 bg-white border-b border-gray-200 px-3 py-2">
           <div className="flex items-center justify-between mb-1">
-            <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">Cooking notes</p>
-            {notesSaveState === "saving" && <span className="text-xs text-gray-400">Saving…</span>}
-            {notesSaveState === "saved" && <span className="text-xs text-green-500">Saved ✓</span>}
-            {notesSaveState === "error" && <span className="text-xs text-red-500">Error saving</span>}
+            <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">
+              Cooking notes
+            </p>
+            {notesSaveState === "saving" && (
+              <span className="text-xs text-gray-400">Saving…</span>
+            )}
+            {notesSaveState === "saved" && (
+              <span className="text-xs text-green-500">Saved ✓</span>
+            )}
+            {notesSaveState === "error" && (
+              <span className="text-xs text-red-500">Error saving</span>
+            )}
           </div>
           <textarea
             value={cookingNotes}
@@ -395,7 +477,6 @@ export default function CookingMode({ recipe, onClose, isLoggedIn = false }: Coo
 
       {/* Main content row */}
       <div className="flex-1 flex overflow-hidden min-h-0">
-
         {/* Recipe content — full width on mobile, 3/4 on desktop */}
         <div className="flex-1 min-w-0 overflow-y-auto">
           <div className="max-w-3xl mx-auto px-4 sm:px-8 py-6 sm:py-8">
@@ -428,7 +509,6 @@ export default function CookingMode({ recipe, onClose, isLoggedIn = false }: Coo
               )}
 
               <div className="flex flex-wrap items-center gap-x-6 gap-y-2 mt-4 text-sm text-gray-500">
-                {schema.author?.name && <span>By {schema.author.name}</span>}
                 {schema.datePublished && (
                   <span>{formatDate(schema.datePublished)}</span>
                 )}
@@ -456,14 +536,24 @@ export default function CookingMode({ recipe, onClose, isLoggedIn = false }: Coo
                 {prepTime && <Stat label="Prep time" value={prepTime} />}
                 {cookTime && <Stat label="Cook time" value={cookTime} />}
                 {totalTime && <Stat label="Total time" value={totalTime} />}
-                {schema.recipeYield && (
-                  primaryScalable.currentServings != null
-                    ? <ServingsControl
-                        servings={primaryScalable.currentServings}
-                        onChange={(n) => updateScalable(recipe.id, (r) => r.scalePortionsTo(n))}
-                      />
-                    : <Stat label="Servings" value={Array.isArray(schema.recipeYield) ? schema.recipeYield[0] : schema.recipeYield} />
-                )}
+                {schema.recipeYield &&
+                  (primaryScalable.currentServings != null ? (
+                    <ServingsControl
+                      servings={primaryScalable.currentServings}
+                      onChange={(n) =>
+                        updateScalable(recipe.id, (r) => r.scalePortionsTo(n))
+                      }
+                    />
+                  ) : (
+                    <Stat
+                      label="Servings"
+                      value={
+                        Array.isArray(schema.recipeYield)
+                          ? schema.recipeYield[0]
+                          : schema.recipeYield
+                      }
+                    />
+                  ))}
               </div>
             )}
 
@@ -488,147 +578,186 @@ export default function CookingMode({ recipe, onClose, isLoggedIn = false }: Coo
             <div
               id="meal-recipe-panel"
               role={mealRecipes.length > 1 ? "tabpanel" : undefined}
-              aria-labelledby={mealRecipes.length > 1 ? `meal-tab-${mealRecipes[activeIndex].id}` : undefined}
+              aria-labelledby={
+                mealRecipes.length > 1
+                  ? `meal-tab-${mealRecipes[activeIndex].id}`
+                  : undefined
+              }
               tabIndex={mealRecipes.length > 1 ? 0 : undefined}
               className="grid grid-cols-1 sm:grid-cols-3 gap-8"
             >
               {/* Ingredients */}
-              {activeSchema.recipeIngredient && activeSchema.recipeIngredient.length > 0 && (
-                <div className="sm:col-span-1">
-                  <div className="flex items-center justify-between mb-4">
-                    <h2 className="text-2xl sm:text-xl font-semibold text-gray-900">
-                      Ingredients
-                    </h2>
-                    <button
-                      onClick={copyShoppingList}
-                      disabled={selectedIngredients.size === 0}
-                      className={`p-2 rounded-lg transition-colors ${selectedIngredients.size === 0 ? "invisible" : "text-gray-500 hover:bg-gray-100 hover:text-gray-800"}`}
-                      aria-label={`Copy shopping list, ${selectedIngredients.size} item${selectedIngredients.size === 1 ? "" : "s"}`}
-                    >
-                      {copyFeedback ? <CheckIcon size={14} /> : <CopyIcon />}
-                    </button>
-                  </div>
-                  {activeScalable.groupedIngredients.map(({ heading, items }, gi) => (
-                    <div key={gi} className={gi > 0 ? "mt-4" : ""}>
-                      {heading && (
-                        <h3 className="text-sm sm:text-xs font-semibold uppercase tracking-widest text-orange-500 mb-2">
-                          {heading}
-                        </h3>
-                      )}
-                      <ul className="space-y-2">
-                        {items.map((ing, i) => {
-                          const text = ing.original;
-                          const selected = selectedIngredients.has(`${mealRecipes[activeIndex].id}::${text}`);
-                          return (
-                            <li
-                              key={i}
-                              className={`flex items-start gap-2 text-lg sm:text-sm rounded-lg px-2 py-1 -mx-2 cursor-pointer select-none transition-colors active:opacity-60 ${selected ? "bg-green-50 text-gray-700" : "text-gray-700"}`}
-                              onClick={() => toggleIngredient(mealRecipes[activeIndex].id, text)}
-                              role="checkbox"
-                              aria-checked={selected}
-                              aria-label={text}
-                            >
-                              <span className={`mt-1.5 w-1.5 h-1.5 rounded-full shrink-0 transition-colors ${selected ? "bg-green-500" : "bg-orange-400"}`} />
-                              <IngredientItem
-                                ingredient={ing}
-                                onAnchor={
-                                  activeIndex === 0
-                                    ? (amount) =>
-                                        updateScalable(recipe.id, (r) =>
-                                          r.anchorIngredientAmount(ing.index, amount),
-                                        )
-                                    : undefined
-                                }
-                              />
-                            </li>
-                          );
-                        })}
-                      </ul>
+              {activeSchema.recipeIngredient &&
+                activeSchema.recipeIngredient.length > 0 && (
+                  <div className="sm:col-span-1">
+                    <div className="flex items-center justify-between mb-4">
+                      <h2 className="text-2xl sm:text-xl font-semibold text-gray-900">
+                        Ingredients
+                      </h2>
+                      <button
+                        onClick={copyShoppingList}
+                        disabled={selectedIngredients.size === 0}
+                        className={`p-2 rounded-lg transition-colors ${selectedIngredients.size === 0 ? "invisible" : "text-gray-500 hover:bg-gray-100 hover:text-gray-800"}`}
+                        aria-label={`Copy shopping list, ${selectedIngredients.size} item${selectedIngredients.size === 1 ? "" : "s"}`}
+                      >
+                        {copyFeedback ? <CheckIcon size={14} /> : <CopyIcon />}
+                      </button>
                     </div>
-                  ))}
-                </div>
-              )}
-
-              {/* Instructions */}
-              {activeSchema.recipeInstructions && activeSchema.recipeInstructions.length > 0 && (
-                <div className="sm:col-span-2">
-                  <h2 className="text-2xl sm:text-xl font-semibold text-gray-900 mb-4">
-                    Instructions
-                  </h2>
-                  {activeSchema.recipeInstructions[0]["@type"] === "HowToSection" ? (
-                    <div className="space-y-6">
-                      {(activeSchema.recipeInstructions as HowToSection[]).map((section, i) => (
-                        <div key={i}>
-                          <h3 className="text-sm sm:text-xs font-semibold uppercase tracking-widest text-orange-500 mb-3">
-                            {section.name}
-                          </h3>
-                          <ol className="space-y-3">
-                            {section.itemListElement.map((step, j) => {
-                              const key = `${i}-${j}`;
-                              const done = completedSteps.has(key);
+                    {activeScalable.groupedIngredients.map(
+                      ({ heading, items }, gi) => (
+                        <div key={gi} className={gi > 0 ? "mt-4" : ""}>
+                          {heading && (
+                            <h3 className="text-sm sm:text-xs font-semibold uppercase tracking-widest text-orange-500 mb-2">
+                              {heading}
+                            </h3>
+                          )}
+                          <ul className="space-y-2">
+                            {items.map((ing, i) => {
+                              const text = ing.original;
+                              const selected = selectedIngredients.has(
+                                `${mealRecipes[activeIndex].id}::${text}`,
+                              );
                               return (
                                 <li
-                                  key={j}
-                                  className="flex gap-4 active:opacity-60"
-                                  onClick={() => toggleStep(key)}
-                                  role="button"
-                                  aria-pressed={done}
-                                  aria-label={`Step ${j + 1}: ${done ? "completed" : "mark complete"}`}
+                                  key={i}
+                                  className={`flex items-start gap-2 text-lg sm:text-sm rounded-lg px-2 py-1 -mx-2 cursor-pointer select-none transition-colors active:opacity-60 ${selected ? "bg-green-50 text-gray-700" : "text-gray-700"}`}
+                                  onClick={() =>
+                                    toggleIngredient(
+                                      mealRecipes[activeIndex].id,
+                                      text,
+                                    )
+                                  }
+                                  role="checkbox"
+                                  aria-checked={selected}
+                                  aria-label={text}
                                 >
-                                  <span className={`shrink-0 w-8 h-8 sm:w-7 sm:h-7 rounded-full text-base sm:text-sm font-bold flex items-center justify-center transition-colors ${done ? "bg-green-500 text-white" : "bg-orange-500 text-white"}`}>
-                                    {done ? <CheckIcon size={14} /> : j + 1}
-                                  </span>
-                                  <p className={`text-xl sm:text-base leading-relaxed pt-0.5 transition-colors ${done ? "line-through text-gray-400" : "text-gray-700"}`}>
-                                    {step.text}
-                                  </p>
+                                  <span
+                                    className={`mt-1.5 w-1.5 h-1.5 rounded-full shrink-0 transition-colors ${selected ? "bg-green-500" : "bg-orange-400"}`}
+                                  />
+                                  <IngredientItem
+                                    ingredient={ing}
+                                    onAnchor={
+                                      activeIndex === 0
+                                        ? (amount) =>
+                                            updateScalable(recipe.id, (r) =>
+                                              r.anchorIngredientAmount(
+                                                ing.index,
+                                                amount,
+                                              ),
+                                            )
+                                        : undefined
+                                    }
+                                  />
                                 </li>
                               );
                             })}
-                          </ol>
+                          </ul>
                         </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <ol className="space-y-4">
-                      {(activeSchema.recipeInstructions as HowToStep[]).map((step, i) => {
-                        const key = `${i}`;
-                        const done = completedSteps.has(key);
-                        return (
-                          <li
-                            key={i}
-                            className="flex gap-4 active:opacity-60"
-                            onClick={() => toggleStep(key)}
-                            role="button"
-                            aria-pressed={done}
-                            aria-label={`Step ${i + 1}: ${done ? "completed" : "mark complete"}`}
-                          >
-                            <span className={`shrink-0 w-8 h-8 sm:w-7 sm:h-7 rounded-full text-base sm:text-sm font-bold flex items-center justify-center transition-colors ${done ? "bg-green-500 text-white" : "bg-orange-500 text-white"}`}>
-                              {done ? <CheckIcon size={14} /> : i + 1}
-                            </span>
-                            <p className={`text-xl sm:text-base leading-relaxed pt-0.5 transition-colors ${done ? "line-through text-gray-400" : "text-gray-700"}`}>
-                              {step.text}
-                            </p>
-                          </li>
-                        );
-                      })}
-                    </ol>
-                  )}
-                </div>
-              )}
+                      ),
+                    )}
+                  </div>
+                )}
+
+              {/* Instructions */}
+              {activeSchema.recipeInstructions &&
+                activeSchema.recipeInstructions.length > 0 && (
+                  <div className="sm:col-span-2">
+                    <h2 className="text-2xl sm:text-xl font-semibold text-gray-900 mb-4">
+                      Instructions
+                    </h2>
+                    {activeSchema.recipeInstructions[0]["@type"] ===
+                    "HowToSection" ? (
+                      <div className="space-y-6">
+                        {(
+                          activeSchema.recipeInstructions as HowToSection[]
+                        ).map((section, i) => (
+                          <div key={i}>
+                            <h3 className="text-sm sm:text-xs font-semibold uppercase tracking-widest text-orange-500 mb-3">
+                              {section.name}
+                            </h3>
+                            <ol className="space-y-3">
+                              {section.itemListElement.map((step, j) => {
+                                const key = `${i}-${j}`;
+                                const done = completedSteps.has(key);
+                                return (
+                                  <li
+                                    key={j}
+                                    className="flex gap-4 active:opacity-60"
+                                    onClick={() => toggleStep(key)}
+                                    role="button"
+                                    aria-pressed={done}
+                                    aria-label={`Step ${j + 1}: ${done ? "completed" : "mark complete"}`}
+                                  >
+                                    <span
+                                      className={`shrink-0 w-8 h-8 sm:w-7 sm:h-7 rounded-full text-base sm:text-sm font-bold flex items-center justify-center transition-colors ${done ? "bg-green-500 text-white" : "bg-orange-500 text-white"}`}
+                                    >
+                                      {done ? <CheckIcon size={14} /> : j + 1}
+                                    </span>
+                                    <p
+                                      className={`text-xl sm:text-base leading-relaxed pt-0.5 transition-colors ${done ? "line-through text-gray-400" : "text-gray-700"}`}
+                                    >
+                                      {step.text}
+                                    </p>
+                                  </li>
+                                );
+                              })}
+                            </ol>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <ol className="space-y-4">
+                        {(activeSchema.recipeInstructions as HowToStep[]).map(
+                          (step, i) => {
+                            const key = `${i}`;
+                            const done = completedSteps.has(key);
+                            return (
+                              <li
+                                key={i}
+                                className="flex gap-4 active:opacity-60"
+                                onClick={() => toggleStep(key)}
+                                role="button"
+                                aria-pressed={done}
+                                aria-label={`Step ${i + 1}: ${done ? "completed" : "mark complete"}`}
+                              >
+                                <span
+                                  className={`shrink-0 w-8 h-8 sm:w-7 sm:h-7 rounded-full text-base sm:text-sm font-bold flex items-center justify-center transition-colors ${done ? "bg-green-500 text-white" : "bg-orange-500 text-white"}`}
+                                >
+                                  {done ? <CheckIcon size={14} /> : i + 1}
+                                </span>
+                                <p
+                                  className={`text-xl sm:text-base leading-relaxed pt-0.5 transition-colors ${done ? "line-through text-gray-400" : "text-gray-700"}`}
+                                >
+                                  {step.text}
+                                </p>
+                              </li>
+                            );
+                          },
+                        )}
+                      </ol>
+                    )}
+                  </div>
+                )}
             </div>
 
             {/* Notes */}
             {activeSchema.notes && (
               <div className="mt-8">
-                <h2 className="text-2xl sm:text-xl font-semibold text-gray-900 mb-3">Notes</h2>
-                <p className="text-xl sm:text-base text-gray-700 leading-relaxed whitespace-pre-line">{activeSchema.notes}</p>
+                <h2 className="text-2xl sm:text-xl font-semibold text-gray-900 mb-3">
+                  Notes
+                </h2>
+                <p className="text-xl sm:text-base text-gray-700 leading-relaxed whitespace-pre-line">
+                  {activeSchema.notes}
+                </p>
               </div>
             )}
 
             {/* Nutrition */}
             <NutritionPanel
               recipe={primaryScalable}
-              onSplitPortions={(n) => updateScalable(recipe.id, (r) => r.splitPortions(n))}
+              onSplitPortions={(n) =>
+                updateScalable(recipe.id, (r) => r.splitPortions(n))
+              }
             />
           </div>
         </div>
@@ -655,8 +784,8 @@ export default function CookingMode({ recipe, onClose, isLoggedIn = false }: Coo
             })}
           />
         </div>
-
-      </div>{/* end main content row */}
+      </div>
+      {/* end main content row */}
 
       {/* Modals — children of cooking mode wrapper, not the column */}
       {showAddTimer && (
@@ -686,7 +815,9 @@ export default function CookingMode({ recipe, onClose, isLoggedIn = false }: Coo
 function Stat({ label, value }: { label: string; value: string }) {
   return (
     <div className="text-center">
-      <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">{label}</p>
+      <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">
+        {label}
+      </p>
       <p className="font-semibold text-gray-900">{value}</p>
     </div>
   );
