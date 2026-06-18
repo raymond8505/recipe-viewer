@@ -35,7 +35,7 @@ export default async function RootLayout({
               href="/"
               className="text-lg font-bold text-orange-500 hover:text-orange-600 transition"
             >
-              🍳 Recipes
+              🍳 Test
             </Link>
             <AuthButton isLoggedIn={isLoggedIn} />
           </div>
