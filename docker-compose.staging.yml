@@ -1,0 +1,42 @@
+# Per-PR staging deployment. Driven by .github/workflows/staging.yml.
+#
+# Unlike docker-compose.yml (prod), every fixed identifier here is interpolated
+# from the environment so each PR gets an isolated container + Traefik route:
+#   PR_ID        e.g. "pr-42"  — container/router/service identity (stable per PR)
+#   STAGING_HOST e.g. "my-branch.new.raymonds.recipes" — public host (branch slug)
+#
+# Always run with an explicit project name so compose state never collides:
+#   docker compose -p recipe-viewer-staging-${PR_ID} -f docker-compose.staging.yml up -d --build
+services:
+  recipe-viewer-staging:
+    build:
+      context: .
+      args:
+        NEXT_PUBLIC_SUPABASE_URL: ${NEXT_PUBLIC_SUPABASE_URL}
+        NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY: ${NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY}
+    container_name: recipe-viewer-staging-${PR_ID}
+    env_file: .env
+    environment:
+      NODE_ENV: production
+    restart: unless-stopped
+    networks:
+      - n8n_default
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.recipe-viewer-staging-${PR_ID}.rule=Host(`${STAGING_HOST}`)"
+      - "traefik.http.routers.recipe-viewer-staging-${PR_ID}.entrypoints=websecure"
+      - "traefik.http.routers.recipe-viewer-staging-${PR_ID}.tls.certresolver=mytlschallenge"
+      - "traefik.http.services.recipe-viewer-staging-${PR_ID}.loadbalancer.server.port=3001"
+      - "traefik.http.routers.recipe-viewer-staging-${PR_ID}-http.rule=Host(`${STAGING_HOST}`)"
+      - "traefik.http.routers.recipe-viewer-staging-${PR_ID}-http.entrypoints=web"
+      - "traefik.http.routers.recipe-viewer-staging-${PR_ID}-http.middlewares=staging-${PR_ID}-redirect"
+      - "traefik.http.middlewares.staging-${PR_ID}-redirect.redirectscheme.scheme=https"
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+networks:
+  n8n_default:
+    external: true
