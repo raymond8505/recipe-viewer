@@ -1,0 +1,300 @@
+name: Staging
+
+# Per-PR preview deployments.
+#   open / push to PR  -> build the branch on the VPS, bring up an isolated
+#                         container behind Traefik at <branch>.new.raymonds.recipes,
+#                         surface the link as a GitHub Deployment (the "View
+#                         deployment" button in the PR, Vercel-style).
+#   close (merge OR not) -> tear the container + its dir down, mark the
+#                         deployment inactive.
+#
+# Staging shares the production Supabase and reuses all prod secrets. The only
+# per-PR difference is MCP_PUBLIC_URL, pointed at the staging host so OAuth/MCP
+# callbacks resolve correctly.
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, closed]
+    branches: [main]
+
+permissions:
+  contents: read
+  deployments: write
+
+concurrency:
+  group: staging-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  deploy-staging:
+    runs-on: ubuntu-latest
+    if: github.event.action != 'closed'
+    steps:
+      - name: Compute staging identifiers
+        id: meta
+        run: |
+          PR_ID="pr-${{ github.event.pull_request.number }}"
+          # Branch name -> DNS label: lowercase, non-alnum -> '-', collapse, trim, cap length.
+          SLUG=$(printf '%s' "${{ github.head_ref }}" \
+            | tr '[:upper:]' '[:lower:]' \
+            | sed -E 's/[^a-z0-9]+/-/g; s/^-+//; s/-+$//' \
+            | cut -c1-40 \
+            | sed -E 's/-+$//')
+          HOST="${SLUG}.new.raymonds.recipes"
+          # Use printf (not the double-quoted echo form) so the env-sync validator,
+          # which scans for .env heredoc lines, doesn't misparse these step outputs.
+          printf 'pr_id=%s\n' "${PR_ID}" >> "$GITHUB_OUTPUT"
+          printf 'host=%s\n' "${HOST}" >> "$GITHUB_OUTPUT"
+          printf 'mcp_url=https://%s\n' "${HOST}" >> "$GITHUB_OUTPUT"
+          printf 'Staging host: %s\n' "${HOST}"
+
+      - name: Start GitHub deployment
+        id: deployment
+        uses: actions/github-script@v7
+        env:
+          ENVIRONMENT: staging-${{ steps.meta.outputs.pr_id }}
+        with:
+          script: |
+            const environment = process.env.ENVIRONMENT;
+            const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+            const dep = await github.rest.repos.createDeployment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              ref: context.payload.pull_request.head.sha,
+              environment,
+              auto_merge: false,           // don't try to merge the base branch in
+              required_contexts: [],       // deploy regardless of other checks
+              transient_environment: true, // lets GitHub auto-inactivate prior deploys
+              production_environment: false,
+              description: 'Staging preview build',
+            });
+            if (!dep.data || !dep.data.id) {
+              core.setFailed(`Could not create deployment: ${JSON.stringify(dep.data)}`);
+              return;
+            }
+            await github.rest.repos.createDeploymentStatus({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              deployment_id: dep.data.id,
+              state: 'in_progress',
+              log_url: runUrl,
+              environment,
+              description: 'Building staging container…',
+            });
+            core.setOutput('id', dep.data.id);
+
+      - name: Deploy staging container to VPS
+        uses: appleboy/ssh-action@v1.2.0
+        env:
+          SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY }}
+          AUTH_PASSWORD: ${{ secrets.AUTH_PASSWORD }}
+          RESCRAPE_WEBHOOK_URL: ${{ secrets.RESCRAPE_WEBHOOK_URL }}
+          EDIT_WEBHOOK_URL: ${{ secrets.EDIT_WEBHOOK_URL }}
+          MCP_API_TOKEN: ${{ secrets.MCP_API_TOKEN }}
+          REGEN_IMAGE_WEBHOOK_URL: ${{ secrets.REGEN_IMAGE_WEBHOOK_URL }}
+          WHATS_FOR_DINNER_WEBHOOK_URL: ${{ secrets.WHATS_FOR_DINNER_WEBHOOK_URL }}
+          HEADSUP_SEARCH_WEBHOOK_URL: ${{ secrets.HEADSUP_SEARCH_WEBHOOK_URL }}
+          OAUTH_JWT_SECRET: ${{ secrets.OAUTH_JWT_SECRET }}
+          STAGING_MCP_PUBLIC_URL: ${{ steps.meta.outputs.mcp_url }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          MAX_IMAGE_BYTES: ${{ secrets.MAX_IMAGE_BYTES }}
+          GH_DEPLOY_KEY: ${{ secrets.GH_DEPLOY_KEY }}
+          PR_ID: ${{ steps.meta.outputs.pr_id }}
+          STAGING_HOST: ${{ steps.meta.outputs.host }}
+          STAGING_BRANCH: ${{ github.head_ref }}
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          envs: SUPABASE_URL,SUPABASE_KEY,AUTH_PASSWORD,RESCRAPE_WEBHOOK_URL,EDIT_WEBHOOK_URL,MCP_API_TOKEN,REGEN_IMAGE_WEBHOOK_URL,WHATS_FOR_DINNER_WEBHOOK_URL,HEADSUP_SEARCH_WEBHOOK_URL,OAUTH_JWT_SECRET,STAGING_MCP_PUBLIC_URL,SUPABASE_SERVICE_ROLE_KEY,MAX_IMAGE_BYTES,GH_DEPLOY_KEY,PR_ID,STAGING_HOST,STAGING_BRANCH
+          script: |
+            set -e
+
+            if [ -z "${PR_ID}" ] || [ "${PR_ID}" = "pr-" ]; then
+              echo "PR_ID is empty — aborting"; exit 1
+            fi
+
+            # Set up deploy key for private repo access
+            mkdir -p ~/.ssh && chmod 700 ~/.ssh
+            printf '%s\n' "${GH_DEPLOY_KEY}" > ~/.ssh/github_recipe_viewer
+            chmod 600 ~/.ssh/github_recipe_viewer
+            ssh-keyscan -t ed25519 github.com >> ~/.ssh/known_hosts 2>/dev/null || true
+            export GIT_SSH_COMMAND="ssh -i ~/.ssh/github_recipe_viewer"
+
+            DEPLOY_PATH="${{ secrets.VPS_DEPLOY_PATH }}"
+            STAGING_DIR="${DEPLOY_PATH}/staging/${PR_ID}"
+            mkdir -p "${DEPLOY_PATH}/staging"
+
+            if [ -d "${STAGING_DIR}/.git" ]; then
+              cd "${STAGING_DIR}"
+              git remote set-url origin git@github.com:raymond8505/recipe-viewer.git
+              git fetch origin "${STAGING_BRANCH}"
+              git checkout -f -B "${STAGING_BRANCH}" "origin/${STAGING_BRANCH}"
+              git reset --hard "origin/${STAGING_BRANCH}"
+            else
+              rm -rf "${STAGING_DIR}"
+              git clone git@github.com:raymond8505/recipe-viewer.git "${STAGING_DIR}"
+              cd "${STAGING_DIR}"
+              git checkout -f -B "${STAGING_BRANCH}" "origin/${STAGING_BRANCH}"
+            fi
+
+            # Write env file for docker compose build args and runtime.
+            # Mirrors prod's .env exactly, except MCP_PUBLIC_URL points at the staging host.
+            {
+              echo "NEXT_PUBLIC_SUPABASE_URL=${SUPABASE_URL}"
+              echo "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY=${SUPABASE_KEY}"
+              echo "AUTH_PASSWORD=${AUTH_PASSWORD}"
+              echo "RESCRAPE_WEBHOOK_URL=${RESCRAPE_WEBHOOK_URL}"
+              echo "EDIT_WEBHOOK_URL=${EDIT_WEBHOOK_URL}"
+              echo "MCP_API_TOKEN=${MCP_API_TOKEN}"
+              echo "REGEN_IMAGE_WEBHOOK_URL=${REGEN_IMAGE_WEBHOOK_URL}"
+              echo "WHATS_FOR_DINNER_WEBHOOK_URL=${WHATS_FOR_DINNER_WEBHOOK_URL}"
+              echo "HEADSUP_SEARCH_WEBHOOK_URL=${HEADSUP_SEARCH_WEBHOOK_URL}"
+              echo "OAUTH_JWT_SECRET=${OAUTH_JWT_SECRET}"
+              echo "MCP_PUBLIC_URL=${STAGING_MCP_PUBLIC_URL}"
+              echo "SUPABASE_SERVICE_ROLE_KEY=${SUPABASE_SERVICE_ROLE_KEY}"
+              echo "MAX_IMAGE_BYTES=${MAX_IMAGE_BYTES}"
+            } > .env
+
+            # PR_ID + STAGING_HOST drive the compose container_name / Traefik labels.
+            export PR_ID STAGING_HOST
+
+            docker compose -p "recipe-viewer-staging-${PR_ID}" -f docker-compose.staging.yml up -d --build --remove-orphans
+
+            CONTAINER="recipe-viewer-staging-${PR_ID}"
+            echo "Waiting for ${CONTAINER}..."
+            for i in $(seq 1 24); do
+              docker exec "${CONTAINER}" curl --silent --fail http://localhost:3001/ > /dev/null && \
+                echo "Health check passed!" && break || true
+              if [ "$i" = "24" ]; then
+                echo "Health check failed after 120s — recent logs:"
+                docker logs --tail 50 "${CONTAINER}"
+                exit 1
+              fi
+              sleep 5
+            done
+
+            docker image prune -f
+
+      - name: Finalize deployment status
+        if: always() && steps.deployment.outputs.id
+        uses: actions/github-script@v7
+        env:
+          DEPLOYMENT_ID: ${{ steps.deployment.outputs.id }}
+          ENVIRONMENT: staging-${{ steps.meta.outputs.pr_id }}
+          HOST: ${{ steps.meta.outputs.host }}
+          JOB_STATUS: ${{ job.status }}
+        with:
+          script: |
+            const deployment_id = Number(process.env.DEPLOYMENT_ID);
+            const environment = process.env.ENVIRONMENT;
+            const host = process.env.HOST;
+            const jobStatus = process.env.JOB_STATUS; // success | failure | cancelled
+            const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+            const state =
+              jobStatus === 'success' ? 'success'
+              : jobStatus === 'cancelled' ? 'inactive'
+              : 'failure';
+            await github.rest.repos.createDeploymentStatus({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              deployment_id,
+              state,
+              environment,
+              log_url: runUrl,
+              // environment_url renders the "View deployment" button — only on success
+              ...(state === 'success' ? { environment_url: `https://${host}` } : {}),
+              description:
+                state === 'success' ? 'Staging ready'
+                : state === 'inactive' ? 'Superseded by a newer build'
+                : 'Staging build failed',
+            });
+
+  teardown-staging:
+    runs-on: ubuntu-latest
+    if: github.event.action == 'closed'
+    steps:
+      - name: Compute staging identifiers
+        id: meta
+        run: |
+          PR_ID="pr-${{ github.event.pull_request.number }}"
+          printf 'pr_id=%s\n' "${PR_ID}" >> "$GITHUB_OUTPUT"
+
+      - name: Tear down staging container on VPS
+        uses: appleboy/ssh-action@v1.2.0
+        env:
+          PR_ID: ${{ steps.meta.outputs.pr_id }}
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          envs: PR_ID
+          script: |
+            set -e
+
+            if [ -z "${PR_ID}" ] || [ "${PR_ID}" = "pr-" ]; then
+              echo "PR_ID is empty — refusing to tear down"; exit 1
+            fi
+
+            DEPLOY_PATH="${{ secrets.VPS_DEPLOY_PATH }}"
+            STAGING_DIR="${DEPLOY_PATH}/staging/${PR_ID}"
+            PROJECT="recipe-viewer-staging-${PR_ID}"
+            CONTAINER="${PROJECT}"
+
+            # Compose needs these defined to interpolate the file without warnings;
+            # their values don't affect removal (matched by project + container name).
+            export PR_ID
+            export STAGING_HOST="teardown.invalid"
+
+            if [ -d "${STAGING_DIR}" ]; then
+              cd "${STAGING_DIR}"
+              docker compose -p "${PROJECT}" -f docker-compose.staging.yml down --rmi local --remove-orphans || \
+                docker rm -f "${CONTAINER}" 2>/dev/null || true
+              cd "${DEPLOY_PATH}/staging"
+              rm -rf "${PR_ID}"
+            else
+              echo "No staging dir for ${PR_ID} — removing container directly if present"
+              docker rm -f "${CONTAINER}" 2>/dev/null || true
+            fi
+
+            docker image prune -f
+
+      - name: Deactivate deployment
+        if: always()
+        uses: actions/github-script@v7
+        env:
+          ENVIRONMENT: staging-${{ steps.meta.outputs.pr_id }}
+        with:
+          script: |
+            const environment = process.env.ENVIRONMENT;
+            const { data: deployments } = await github.rest.repos.listDeployments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              environment,
+              per_page: 100,
+            });
+            // Mark every deployment in this PR's environment inactive so the
+            // "View deployment" link is retired.
+            for (const d of deployments) {
+              await github.rest.repos.createDeploymentStatus({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                deployment_id: d.id,
+                state: 'inactive',
+                description: 'Staging torn down',
+              });
+            }
+            // Best-effort: remove the now-empty environment entirely. The default
+            // GITHUB_TOKEN usually lacks admin to delete environments, so this is
+            // expected to fail on most repos — the inactive status above is what
+            // actually retires the deployment in the PR UI.
+            try {
+              await github.rest.repos.deleteAnEnvironment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                environment_name: environment,
+              });
+            } catch (e) {
+              core.info(`Environment not deleted (non-fatal): ${e.message}`);
+            }
