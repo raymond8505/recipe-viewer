@@ -89,7 +89,7 @@ export function getDefaultVolumeUnit(amountInMl: number): "tsp" | "tbsp" | "cup"
 const COMMON_FRACTIONS_PER_UNIT: Record<string, [number, string][]> = {
   cup:  [[1 / 4, "¼"], [1 / 3, "⅓"], [1 / 2, "½"], [2 / 3, "⅔"], [3 / 4, "¾"]],
   tbsp: [[1 / 4, "¼"], [1 / 2, "½"], [3 / 4, "¾"]],
-  tsp:  [[1 / 4, "¼"], [1 / 2, "½"], [3 / 4, "¾"]],
+  tsp:  [[1 / 8, "⅛"], [1 / 4, "¼"], [1 / 2, "½"], [3 / 4, "¾"]],
 };
 
 export interface FractionHint {

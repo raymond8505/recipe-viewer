@@ -185,6 +185,11 @@ describe("closestCommonFraction", () => {
     expect(hint?.label).toBe("1¼ tsp");
   });
 
+  it("snaps 0.12 tsp to ⅛ tsp", () => {
+    const hint = closestCommonFraction(0.12, "tsp");
+    expect(hint?.label).toBe("⅛ tsp");
+  });
+
   it("returns null for units without a defined fraction set (ml, oz, g)", () => {
     expect(closestCommonFraction(90, "ml")).toBeNull();
     expect(closestCommonFraction(2, "oz")).toBeNull();
