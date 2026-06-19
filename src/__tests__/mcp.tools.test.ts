@@ -144,7 +144,7 @@ describe("createRecipe", () => {
     expect(arg.id).toMatch(
       /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/,
     );
-    expect(arg.url).toBe(`https://new.raymonds.recipes/recipes/${arg.id}`);
+    expect(arg.url).toBe(`http://localhost:3000/recipes/${arg.id}`);
   });
 
   it("ignores cookingNotes and returns a warning explaining why", async () => {

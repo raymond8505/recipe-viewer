@@ -7,6 +7,7 @@ import {
   updateRecipeRow,
 } from "@/lib/recipes";
 import { RECIPE_TOKEN_TTL_SECONDS, signRecipeToken } from "./recipeToken";
+import { env } from "@/env";
 import {
   fetchImageBytes,
   StorageUploadError,
@@ -57,11 +58,6 @@ export async function getToken(
   return { token, recipeId: args.id, expiresInSeconds: RECIPE_TOKEN_TTL_SECONDS };
 }
 
-// Public site base — used to default a created recipe's URL to its own
-// canonical page when the caller doesn't supply one. Intentionally the prod
-// host (not MCP_PUBLIC_URL, which is overridden per-PR on staging).
-const PUBLIC_RECIPE_BASE_URL = "https://new.raymonds.recipes";
-
 // cookingNotes is user-authored in cooking mode and read-only to agents: the
 // create/update tools strip it rather than fail, and surface why in the
 // response. The dedicated clear_cooking_notes tool is the only agent-writable
@@ -76,7 +72,10 @@ export async function createRecipe(
 ): Promise<RecipeRowWithWarnings> {
   const { cookingNotes, ...schema } = args.schema;
   const id = crypto.randomUUID();
-  const url = args.url ?? `${PUBLIC_RECIPE_BASE_URL}/recipes/${id}`;
+  // Default to the recipe's own canonical page on this instance.
+  // MCP_PUBLIC_URL is the app's base-URL source of truth (also the OAuth /
+  // recipe-token issuer), and is overridden per-PR on staging.
+  const url = args.url ?? `${env.MCP_PUBLIC_URL}/recipes/${id}`;
   try {
     const row = await createRecipeRow({
       id,

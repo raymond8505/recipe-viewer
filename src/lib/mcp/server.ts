@@ -63,7 +63,7 @@ export const TOOLS: ToolDefinition[] = [
   {
     name: "create_recipe",
     description:
-      "Insert a new recipe row. Requires source and a SchemaRecipe object; defaults status to 'draft'. url is OPTIONAL — when omitted it defaults to the recipe's own canonical page (https://new.raymonds.recipes/recipes/<new-uuid>). cookingNotes is read-only for agents: if present it is ignored (the call still succeeds) and the response carries a 'warnings' note explaining why.",
+      "Insert a new recipe row. Requires source and a SchemaRecipe object; defaults status to 'draft'. url is OPTIONAL — when omitted it defaults to the recipe's own canonical page on this instance (<base-url>/recipes/<new-uuid>). cookingNotes is read-only for agents: if present it is ignored (the call still succeeds) and the response carries a 'warnings' note explaining why.",
     inputSchema: TOOL_SCHEMAS.create_recipe,
     call: (args) => createRecipe(recipeCreateInputSchema.parse(args)),
   },

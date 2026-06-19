@@ -93,7 +93,7 @@ export const TOOL_SCHEMAS = {
         type: "string",
         format: "uri",
         description:
-          "Optional. Defaults to the recipe's own canonical page (https://new.raymonds.recipes/recipes/<new-uuid>) when omitted.",
+          "Optional. Defaults to the recipe's own canonical page on this instance (<base-url>/recipes/<new-uuid>) when omitted.",
       },
       source: { type: "string" },
       status: statusEnum,
