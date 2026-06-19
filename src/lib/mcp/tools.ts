@@ -27,7 +27,19 @@ import type {
 // dispatcher can render a uniform isError content envelope. Supabase calls
 // live in the recipes module — see CR feedback on PR #13.
 
-export async function searchRecipes(args: RecipeSearchInput) {
+// Trimmed search hit. Search returns enough to identify/disambiguate a recipe
+// without shipping the full schema (ingredients, instructions, nutrition, …) for
+// every row — agents call get_recipe for the full document once they pick one.
+export interface RecipeSearchResultItem {
+  id: string;
+  url: string;
+  name: string;
+  description?: string;
+}
+
+export async function searchRecipes(
+  args: RecipeSearchInput,
+): Promise<{ data: RecipeSearchResultItem[]; count: number }> {
   const { data, count } = await getRecipes({
     query: args.query,
     source: args.source,
@@ -38,7 +50,15 @@ export async function searchRecipes(args: RecipeSearchInput) {
     // drafts/archived rows when filtering explicitly by status.
     isLoggedIn: true,
   });
-  return { data, count };
+  return {
+    data: data.map((row) => ({
+      id: row.id,
+      url: row.url,
+      name: row.metadata.schema.name,
+      description: row.metadata.schema.description,
+    })),
+    count,
+  };
 }
 
 export async function getRecipe(args: RecipeIdInput): Promise<RecipeRow> {

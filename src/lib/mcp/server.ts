@@ -43,7 +43,7 @@ export const TOOLS: ToolDefinition[] = [
   {
     name: "search_recipes",
     description:
-      "Search recipes by name, source, or status. Returns a paginated list with total count. Use this before get_recipe when you only have a name.",
+      "Search recipes by name, source, or status. Returns a paginated list with total count; each result is trimmed to { id, url, name, description } — call get_recipe with an id for the full schema. Use this before get_recipe when you only have a name.",
     inputSchema: TOOL_SCHEMAS.search_recipes,
     call: (args) => searchRecipes(recipeSearchInputSchema.parse(args)),
   },

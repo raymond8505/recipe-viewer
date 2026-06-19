@@ -61,6 +61,24 @@ describe("searchRecipes", () => {
     expect(out.count).toBe(2);
     expect(out.data).toHaveLength(2);
   });
+
+  it("trims each result to id, url, name, description", async () => {
+    const { getRecipes } = await import("@/lib/recipes");
+    const fixture = recipeFixtures[0];
+    vi.mocked(getRecipes).mockResolvedValueOnce({ data: [fixture], count: 1 });
+
+    const out = await searchRecipes({ query: "tofu" });
+
+    expect(out.data[0]).toEqual({
+      id: fixture.id,
+      url: fixture.url,
+      name: fixture.metadata.schema.name,
+      description: fixture.metadata.schema.description,
+    });
+    // Full-schema fields must not leak through search.
+    expect(out.data[0]).not.toHaveProperty("metadata");
+    expect(out.data[0]).not.toHaveProperty("source");
+  });
 });
 
 describe("getRecipe", () => {
