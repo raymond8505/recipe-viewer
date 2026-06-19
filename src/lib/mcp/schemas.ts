@@ -46,7 +46,11 @@ const schemaRecipeJsonSchema = {
     nutrition: { type: "object" },
     datePublished: { type: "string" },
     notes: { type: "string", description: "App-internal notes (not part of Schema.org/Recipe)" },
-    cookingNotes: { type: "string", description: "App-internal cooking notes" },
+    cookingNotes: {
+      type: "string",
+      description:
+        "App-internal cooking notes — READ-ONLY for agents. Ignored by create_recipe/update_recipe (the call still succeeds with a warning). Authored by users in cooking mode; clear it via the clear_cooking_notes tool.",
+    },
   },
   additionalProperties: true,
 } as const;
@@ -83,9 +87,14 @@ export const TOOL_SCHEMAS = {
   },
   create_recipe: {
     type: "object",
-    required: ["url", "source", "schema"],
+    required: ["source", "schema"],
     properties: {
-      url: { type: "string", format: "uri" },
+      url: {
+        type: "string",
+        format: "uri",
+        description:
+          "Optional. Defaults to the recipe's own canonical page (https://new.raymonds.recipes/recipes/<new-uuid>) when omitted.",
+      },
       source: { type: "string" },
       status: statusEnum,
       schema: schemaRecipeJsonSchema,
@@ -104,6 +113,13 @@ export const TOOL_SCHEMAS = {
         required: [],
         description: "Partial SchemaRecipe; merged into existing metadata.schema",
       },
+    },
+  },
+  clear_cooking_notes: {
+    type: "object",
+    required: ["id"],
+    properties: {
+      id: { type: "string", description: "Recipe UUID whose cookingNotes will be cleared" },
     },
   },
   delete_recipe: {
