@@ -1,13 +1,12 @@
 import { Suspense } from "react";
 import type { Metadata } from "next";
-import { getRecipes, getSources, getStatusCounts, type SortOption } from "@/lib/recipes";
+import { getRecipes, getStatusCounts, type SortOption } from "@/lib/recipes";
 import { getFeatures } from "@/lib/features";
 import { getIsLoggedIn } from "@/lib/auth";
 import RecipeGrid from "@/components/RecipeGrid";
 import RecipeStateProvider from "@/components/RecipeStateProvider";
 import SearchBar from "@/components/SearchBar";
 import SortBar from "@/components/SortBar";
-import SourceFilter from "@/components/SourceFilter";
 import StatusFilter from "@/components/StatusFilter";
 import Pagination from "@/components/Pagination";
 import WFDButton from "@/components/whats-for-dinner/WFDButton";
@@ -34,9 +33,8 @@ export default async function Home({ searchParams }: HomeProps) {
   const isLoggedIn = await getIsLoggedIn();
   const features = getFeatures(isLoggedIn);
 
-  const [{ data: recipes, count }, sources, statusCounts] = await Promise.all([
+  const [{ data: recipes, count }, statusCounts] = await Promise.all([
     getRecipes({ query, page, limit: PAGE_SIZE, sort, source: sourceParam, status: statusParam, isLoggedIn }),
-    features.showSourceFilter ? getSources({ isLoggedIn }) : Promise.resolve([]),
     features.showStatusFilter ? getStatusCounts({ query, source: sourceParam, isLoggedIn }) : Promise.resolve({}),
   ]);
 
@@ -54,21 +52,17 @@ export default async function Home({ searchParams }: HomeProps) {
         <SearchBar defaultValue={query} />
       </Suspense>
 
-      <Suspense>
-        <SortBar current={sort} />
-      </Suspense>
-
-      {sources.length > 1 && (
+      <div className="flex flex-wrap items-center gap-x-6 gap-y-3">
         <Suspense>
-          <SourceFilter sources={sources} current={sourceParam} />
+          <SortBar current={sort} />
         </Suspense>
-      )}
 
-      {features.showStatusFilter && (
-        <Suspense>
-          <StatusFilter counts={statusCounts} current={statusParam} />
-        </Suspense>
-      )}
+        {features.showStatusFilter && (
+          <Suspense>
+            <StatusFilter counts={statusCounts} current={statusParam} />
+          </Suspense>
+        )}
+      </div>
 
       <RecipeStateProvider schemas={recipes.map((r) => r.metadata.schema)} />
       <RecipeGrid recipes={recipes} showStatusBadge={isLoggedIn} />
