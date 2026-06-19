@@ -71,30 +71,6 @@ export async function getStatusCounts(opts?: {
   return counts;
 }
 
-export async function getSources(opts?: { isLoggedIn?: boolean }): Promise<string[]> {
-  const supabase = getSupabaseClient();
-  const features = getFeatures(opts?.isLoggedIn ?? false);
-
-  let queryBuilder = supabase
-    .from("recipes")
-    .select("source")
-    .not("metadata->schema->>name", "ilike", "%(NEEDS RE-SCRAPE)%")
-    .not("metadata->schema->>name", "ilike", "%null%");
-
-  if (features.filterByStatus) {
-    queryBuilder = queryBuilder.eq("status", "published");
-  } else {
-    queryBuilder = queryBuilder.or("status.neq.archived,status.is.null");
-  }
-
-  const { data, error } = await queryBuilder;
-
-  if (error || !data) return [];
-
-  const sources = [...new Set(data.map((r) => r.source).filter(Boolean))];
-  return sources.sort();
-}
-
 export async function getRecipes(opts?: {
   query?: string;
   page?: number;
