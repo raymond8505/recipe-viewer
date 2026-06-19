@@ -95,7 +95,9 @@ export const recipeIdInputSchema = z.object({
 });
 
 export const recipeCreateInputSchema = z.object({
-  url: z.string().url(),
+  // Optional — when omitted, the create tool defaults it to the recipe's own
+  // canonical URL on this instance (env.MCP_PUBLIC_URL + /recipes/<new-uuid>).
+  url: z.string().url().optional(),
   source: z.string().min(1),
   status: recipeStatusSchema.optional(),
   schema: schemaRecipeSchema,

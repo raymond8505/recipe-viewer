@@ -8,6 +8,7 @@ import {
   recipeUpdateInputSchema,
 } from "@/lib/schemas/recipe";
 import {
+  clearCookingNotes,
   createRecipe,
   deleteRecipe,
   getRecipe,
@@ -42,7 +43,7 @@ export const TOOLS: ToolDefinition[] = [
   {
     name: "search_recipes",
     description:
-      "Search recipes by name, source, or status. Returns a paginated list with total count. Use this before get_recipe when you only have a name.",
+      "Search recipes by name, source, or status. Returns a paginated list with total count; each result is trimmed to { id, url, name, description } — call get_recipe with an id for the full schema. Use this before get_recipe when you only have a name.",
     inputSchema: TOOL_SCHEMAS.search_recipes,
     call: (args) => searchRecipes(recipeSearchInputSchema.parse(args)),
   },
@@ -62,16 +63,23 @@ export const TOOLS: ToolDefinition[] = [
   {
     name: "create_recipe",
     description:
-      "Insert a new recipe row. Requires url, source, and a SchemaRecipe object. Defaults status to 'draft'.",
+      "Insert a new recipe row. Requires source and a SchemaRecipe object; defaults status to 'draft'. url is OPTIONAL — when omitted it defaults to the recipe's own canonical page on this instance (<base-url>/recipes/<new-uuid>). cookingNotes is read-only for agents: if present it is ignored (the call still succeeds) and the response carries a 'warnings' note explaining why.",
     inputSchema: TOOL_SCHEMAS.create_recipe,
     call: (args) => createRecipe(recipeCreateInputSchema.parse(args)),
   },
   {
     name: "update_recipe",
     description:
-      "Patch fields on an existing recipe. The schema field is merged into existing metadata.schema (not replaced).",
+      "Patch fields on an existing recipe. The schema field is merged into existing metadata.schema (not replaced). cookingNotes is read-only for agents: if present it is ignored (the call still succeeds) and the response carries a 'warnings' note. Use clear_cooking_notes to clear it.",
     inputSchema: TOOL_SCHEMAS.update_recipe,
     call: (args) => updateRecipe(recipeUpdateInputSchema.parse(args)),
+  },
+  {
+    name: "clear_cooking_notes",
+    description:
+      "Clear a recipe's cooking notes (sets cookingNotes to empty). This is the ONLY agent-writable path for cookingNotes — use it only when the user explicitly asks to clear the notes, e.g. after you've applied them.",
+    inputSchema: TOOL_SCHEMAS.clear_cooking_notes,
+    call: (args) => clearCookingNotes(recipeIdInputSchema.parse(args)),
   },
   {
     name: "delete_recipe",

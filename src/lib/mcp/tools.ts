@@ -7,6 +7,7 @@ import {
   updateRecipeRow,
 } from "@/lib/recipes";
 import { RECIPE_TOKEN_TTL_SECONDS, signRecipeToken } from "./recipeToken";
+import { env } from "@/env";
 import {
   fetchImageBytes,
   StorageUploadError,
@@ -26,7 +27,19 @@ import type {
 // dispatcher can render a uniform isError content envelope. Supabase calls
 // live in the recipes module — see CR feedback on PR #13.
 
-export async function searchRecipes(args: RecipeSearchInput) {
+// Trimmed search hit. Search returns enough to identify/disambiguate a recipe
+// without shipping the full schema (ingredients, instructions, nutrition, …) for
+// every row — agents call get_recipe for the full document once they pick one.
+export interface RecipeSearchResultItem {
+  id: string;
+  url: string;
+  name: string;
+  description?: string;
+}
+
+export async function searchRecipes(
+  args: RecipeSearchInput,
+): Promise<{ data: RecipeSearchResultItem[]; count: number }> {
   const { data, count } = await getRecipes({
     query: args.query,
     source: args.source,
@@ -37,7 +50,15 @@ export async function searchRecipes(args: RecipeSearchInput) {
     // drafts/archived rows when filtering explicitly by status.
     isLoggedIn: true,
   });
-  return { data, count };
+  return {
+    data: data.map((row) => ({
+      id: row.id,
+      url: row.url,
+      name: row.metadata.schema.name,
+      description: row.metadata.schema.description,
+    })),
+    count,
+  };
 }
 
 export async function getRecipe(args: RecipeIdInput): Promise<RecipeRow> {
@@ -57,27 +78,64 @@ export async function getToken(
   return { token, recipeId: args.id, expiresInSeconds: RECIPE_TOKEN_TTL_SECONDS };
 }
 
-export async function createRecipe(args: RecipeCreateInput): Promise<RecipeRow> {
+// cookingNotes is user-authored in cooking mode and read-only to agents: the
+// create/update tools strip it rather than fail, and surface why in the
+// response. The dedicated clear_cooking_notes tool is the only agent-writable
+// path. See CLAUDE.md "Cooking Notes" rules.
+const COOKING_NOTES_IGNORED_WARNING =
+  "cookingNotes is read-only for agents and was ignored — it is authored by users in cooking mode. Use the clear_cooking_notes tool when explicitly asked to clear it.";
+
+export type RecipeRowWithWarnings = RecipeRow & { warnings?: string[] };
+
+export async function createRecipe(
+  args: RecipeCreateInput,
+): Promise<RecipeRowWithWarnings> {
+  const { cookingNotes, ...schema } = args.schema;
+  const id = crypto.randomUUID();
+  // Default to the recipe's own canonical page on this instance.
+  // MCP_PUBLIC_URL is the app's base-URL source of truth (also the OAuth /
+  // recipe-token issuer), and is overridden per-PR on staging.
+  const url = args.url ?? `${env.MCP_PUBLIC_URL}/recipes/${id}`;
   try {
-    return await createRecipeRow({
-      url: args.url,
+    const row = await createRecipeRow({
+      id,
+      url,
       source: args.source,
       status: args.status,
-      schema: args.schema,
+      schema,
     });
+    return cookingNotes !== undefined
+      ? { ...row, warnings: [COOKING_NOTES_IGNORED_WARNING] }
+      : row;
   } catch (err) {
     throw toToolError(err, "create_failed");
   }
 }
 
-export async function updateRecipe(args: RecipeUpdateInput): Promise<RecipeRow> {
+export async function updateRecipe(
+  args: RecipeUpdateInput,
+): Promise<RecipeRowWithWarnings> {
+  const { cookingNotes, ...schema } = args.schema ?? {};
   try {
-    return await updateRecipeRow(args.id, {
+    const row = await updateRecipeRow(args.id, {
       url: args.url,
       source: args.source,
       status: args.status,
-      schema: args.schema,
+      schema: args.schema !== undefined ? schema : undefined,
     });
+    return cookingNotes !== undefined
+      ? { ...row, warnings: [COOKING_NOTES_IGNORED_WARNING] }
+      : row;
+  } catch (err) {
+    throw toToolError(err, "update_failed");
+  }
+}
+
+// The only agent-writable path for cookingNotes. Sets it to empty string;
+// used when the user explicitly asks to clear notes (e.g. after applying them).
+export async function clearCookingNotes(args: RecipeIdInput): Promise<RecipeRow> {
+  try {
+    return await updateRecipeRow(args.id, { schema: { cookingNotes: "" } });
   } catch (err) {
     throw toToolError(err, "update_failed");
   }

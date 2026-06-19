@@ -36,6 +36,7 @@ vi.mock("@/lib/storage", () => ({
 }));
 
 import {
+  clearCookingNotes,
   createRecipe,
   deleteRecipe,
   getRecipe,
@@ -59,6 +60,24 @@ describe("searchRecipes", () => {
     expect(getRecipes).toHaveBeenCalledWith(expect.objectContaining({ query: "tofu", isLoggedIn: true }));
     expect(out.count).toBe(2);
     expect(out.data).toHaveLength(2);
+  });
+
+  it("trims each result to id, url, name, description", async () => {
+    const { getRecipes } = await import("@/lib/recipes");
+    const fixture = recipeFixtures[0];
+    vi.mocked(getRecipes).mockResolvedValueOnce({ data: [fixture], count: 1 });
+
+    const out = await searchRecipes({ query: "tofu" });
+
+    expect(out.data[0]).toEqual({
+      id: fixture.id,
+      url: fixture.url,
+      name: fixture.metadata.schema.name,
+      description: fixture.metadata.schema.description,
+    });
+    // Full-schema fields must not leak through search.
+    expect(out.data[0]).not.toHaveProperty("metadata");
+    expect(out.data[0]).not.toHaveProperty("source");
   });
 });
 
@@ -127,6 +146,45 @@ describe("createRecipe", () => {
     );
   });
 
+  it("defaults url to the recipe's own canonical page when omitted", async () => {
+    const { createRecipeRow } = await import("@/lib/recipes");
+    vi.mocked(createRecipeRow).mockResolvedValueOnce({
+      id: "x",
+      url: "u",
+      source: "s",
+      status: "draft",
+      metadata: { schema: { name: "New" } },
+    } as never);
+
+    await createRecipe({ source: "example.com", schema: { name: "New" } });
+
+    const arg = vi.mocked(createRecipeRow).mock.calls[0][0];
+    expect(arg.id).toMatch(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/,
+    );
+    expect(arg.url).toBe(`http://localhost:3000/recipes/${arg.id}`);
+  });
+
+  it("ignores cookingNotes and returns a warning explaining why", async () => {
+    const { createRecipeRow } = await import("@/lib/recipes");
+    vi.mocked(createRecipeRow).mockResolvedValueOnce({
+      id: "x",
+      url: "u",
+      source: "s",
+      status: "draft",
+      metadata: { schema: { name: "New" } },
+    } as never);
+
+    const out = await createRecipe({
+      source: "example.com",
+      schema: { name: "New", cookingNotes: "should be stripped" },
+    });
+
+    const arg = vi.mocked(createRecipeRow).mock.calls[0][0];
+    expect(arg.schema).not.toHaveProperty("cookingNotes");
+    expect(out.warnings?.[0]).toMatch(/cookingNotes is read-only/);
+  });
+
   it("translates RecipeRepoError to ToolError(create_failed)", async () => {
     const { createRecipeRow } = await import("@/lib/recipes");
     vi.mocked(createRecipeRow).mockRejectedValueOnce(new RecipeRepoError("insert_failed", "RLS"));
@@ -156,10 +214,51 @@ describe("updateRecipe", () => {
     );
   });
 
+  it("ignores cookingNotes in the patch and returns a warning", async () => {
+    const { updateRecipeRow } = await import("@/lib/recipes");
+    const existing = recipeFixtures[0];
+    vi.mocked(updateRecipeRow).mockResolvedValueOnce(existing);
+
+    const out = await updateRecipe({
+      id: existing.id,
+      schema: { description: "patched", cookingNotes: "should be stripped" },
+    });
+
+    expect(updateRecipeRow).toHaveBeenCalledWith(
+      existing.id,
+      expect.objectContaining({ schema: { description: "patched" } }),
+    );
+    expect(out.warnings?.[0]).toMatch(/cookingNotes is read-only/);
+  });
+
   it("translates RecipeRepoError(not_found) to ToolError(not_found)", async () => {
     const { updateRecipeRow } = await import("@/lib/recipes");
     vi.mocked(updateRecipeRow).mockRejectedValueOnce(new RecipeRepoError("not_found", "missing"));
     await expect(updateRecipe({ id: "missing", status: "archived" })).rejects.toMatchObject({
+      code: "not_found",
+    });
+  });
+});
+
+describe("clearCookingNotes", () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it("sets cookingNotes to an empty string via updateRecipeRow", async () => {
+    const { updateRecipeRow } = await import("@/lib/recipes");
+    const existing = recipeFixtures[0];
+    vi.mocked(updateRecipeRow).mockResolvedValueOnce(existing);
+
+    await clearCookingNotes({ id: existing.id });
+
+    expect(updateRecipeRow).toHaveBeenCalledWith(existing.id, {
+      schema: { cookingNotes: "" },
+    });
+  });
+
+  it("translates RecipeRepoError(not_found) to ToolError(not_found)", async () => {
+    const { updateRecipeRow } = await import("@/lib/recipes");
+    vi.mocked(updateRecipeRow).mockRejectedValueOnce(new RecipeRepoError("not_found", "missing"));
+    await expect(clearCookingNotes({ id: "missing" })).rejects.toMatchObject({
       code: "not_found",
     });
   });

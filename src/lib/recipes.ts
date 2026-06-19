@@ -20,6 +20,10 @@ export class RecipeRepoError extends Error {
 const RECIPE_COLUMNS = "id, url, source, status, metadata";
 
 export interface CreateRecipeInput {
+  // Optional explicit primary key. When provided (e.g. so the caller can build
+  // a self-referential URL before the insert), it's used verbatim; otherwise
+  // the column's gen_random_uuid() default applies.
+  id?: string;
   url: string;
   source: string;
   status?: RecipeStatus;
@@ -167,6 +171,7 @@ export async function createRecipeRow(input: CreateRecipeInput): Promise<RecipeR
   const { data, error } = await supabase
     .from("recipes")
     .insert({
+      ...(input.id !== undefined ? { id: input.id } : {}),
       name: input.schema.name,
       content: input.schema.description ?? input.schema.name,
       url: input.url,
