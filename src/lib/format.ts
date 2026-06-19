@@ -267,19 +267,26 @@ export function toArray(val: string | string[] | undefined | null): string[] {
 // ---------------------------------------------------------------------------
 
 /**
- * Build an ISO 8601 duration from hours + minutes. Returns undefined when both
- * are zero/blank (so a step with no timer omits `timeRequired` entirely).
+ * Build an ISO 8601 duration from minutes + seconds. Returns undefined when
+ * both are zero/blank (so a step with no timer omits `timeRequired`). Minutes
+ * over 59 are normalized into hours so the stored duration stays canonical
+ * (e.g. 90:00 → "PT1H30M", 5:30 → "PT5M30S").
  */
-export function hmToIsoDuration(
-  hours: number,
+export function msToIsoDuration(
   minutes: number,
+  seconds: number,
 ): string | undefined {
-  const h = Math.max(0, Math.floor(hours || 0));
-  const m = Math.max(0, Math.floor(minutes || 0));
-  if (h === 0 && m === 0) return undefined;
+  const total =
+    Math.max(0, Math.floor(minutes || 0)) * 60 +
+    Math.max(0, Math.floor(seconds || 0));
+  if (total <= 0) return undefined;
+  const h = Math.floor(total / 3600);
+  const m = Math.floor((total % 3600) / 60);
+  const s = total % 60;
   let out = "PT";
   if (h > 0) out += `${h}H`;
   if (m > 0) out += `${m}M`;
+  if (s > 0) out += `${s}S`;
   return out;
 }
 
@@ -317,8 +324,8 @@ function stepToEditable(step: HowToStep): EditableStep {
     id: nanoid(),
     text: step.text,
     name: step.name ?? "",
-    hours: Math.floor(secs / 3600),
-    minutes: Math.floor((secs % 3600) / 60),
+    minutes: Math.floor(secs / 60),
+    seconds: secs % 60,
   };
 }
 
@@ -364,7 +371,7 @@ export function editableInstructionsToSchema(
       if (!text) continue;
       const step: HowToStep = { "@type": "HowToStep", text };
       const name = item.name.trim();
-      const duration = hmToIsoDuration(item.hours, item.minutes);
+      const duration = msToIsoDuration(item.minutes, item.seconds);
       if (name && duration) {
         step.name = name;
         step.timeRequired = duration;

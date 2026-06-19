@@ -27,12 +27,18 @@ import { fromGroupSortId, isGroupSortId, toGroupSortId } from "./dragIds";
 interface SortableGroupedListProps<T extends { id: string }> {
   groups: EditableGroup<T>[];
   onChange: (groups: EditableGroup<T>[]) => void;
-  /** Render the editable field(s) for one row. `update` patches that item. */
+  /** Render the editable field(s) for one row. `update` patches that item;
+   *  `requestDelete` opens the delete confirm (for rows that place their own
+   *  delete trigger instead of the default right-rail one). */
   renderItem: (
     item: T,
     update: (partial: Partial<T>) => void,
     errored: boolean,
+    requestDelete: () => void,
   ) => ReactNode;
+  /** Hide the default right-rail trash and let `renderItem` place delete via
+   *  `requestDelete` (instruction cards put it in their bottom row). */
+  rowDeleteInline?: boolean;
   /** Factory for a new blank item. */
   makeItem: () => T;
   /** Short display text for the row, used in drag/delete a11y labels. */
@@ -79,6 +85,7 @@ export default function SortableGroupedList<T extends { id: string }>({
   itemNoun,
   groupNoun,
   erroredItemIds,
+  rowDeleteInline,
   disabled,
 }: SortableGroupedListProps<T>) {
   const [, setActiveId] = useState<string | null>(null);
@@ -233,14 +240,18 @@ export default function SortableGroupedList<T extends { id: string }>({
                     dragLabel={`Reorder ${itemLabel(item) || itemNoun}`}
                     confirmMessage={`Delete this ${itemNoun}?`}
                     onDelete={() => deleteItem(group.id, item.id)}
+                    showDeleteButton={!rowDeleteInline}
                     errored={erroredItemIds?.has(item.id)}
                     disabled={disabled}
                   >
-                    {renderItem(
-                      item,
-                      (partial) => updateItem(group.id, item.id, partial),
-                      erroredItemIds?.has(item.id) ?? false,
-                    )}
+                    {({ requestDelete }) =>
+                      renderItem(
+                        item,
+                        (partial) => updateItem(group.id, item.id, partial),
+                        erroredItemIds?.has(item.id) ?? false,
+                        requestDelete,
+                      )
+                    }
                   </SortableItem>
                 ))}
               </SortableContext>

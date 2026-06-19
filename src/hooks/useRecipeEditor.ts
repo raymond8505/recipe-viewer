@@ -68,7 +68,7 @@ function findInstructionErrors(
   for (const group of instructions) {
     for (const step of group.items) {
       const hasName = step.name.trim().length > 0;
-      const hasTime = (step.hours || 0) > 0 || (step.minutes || 0) > 0;
+      const hasTime = (step.minutes || 0) > 0 || (step.seconds || 0) > 0;
       if (hasName !== hasTime) errors.add(step.id);
     }
   }

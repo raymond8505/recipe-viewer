@@ -20,14 +20,15 @@ export interface EditableIngredient {
 }
 
 /** A single instruction step: body text plus an optional co-dependent
- *  timer (`name` + `hours`/`minutes`, which map to `HowToStep.name` /
- *  `timeRequired`). */
+ *  timer (`name` + `minutes`/`seconds`, which map to `HowToStep.name` /
+ *  `timeRequired`). Duration is minutes:seconds — cook-mode timers run in
+ *  seconds, and step timers are sub-hour; `minutes` may exceed 59. */
 export interface EditableStep {
   id: string;
   text: string;
   name: string;
-  hours: number;
   minutes: number;
+  seconds: number;
 }
 
 /**

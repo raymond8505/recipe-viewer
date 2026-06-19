@@ -9,7 +9,7 @@ import {
   markdownToInstructions,
   normalizeRecipeInstructions,
   toSchemaOrgJsonLd,
-  hmToIsoDuration,
+  msToIsoDuration,
   schemaToEditableIngredients,
   editableIngredientsToSchema,
   schemaToEditableInstructions,
@@ -208,22 +208,26 @@ describe("markdownToInstructions", () => {
   });
 });
 
-describe("hmToIsoDuration", () => {
-  it("builds hours + minutes", () => {
-    expect(hmToIsoDuration(1, 30)).toBe("PT1H30M");
+describe("msToIsoDuration", () => {
+  it("builds minutes + seconds", () => {
+    expect(msToIsoDuration(5, 30)).toBe("PT5M30S");
   });
 
   it("omits the zero component", () => {
-    expect(hmToIsoDuration(0, 45)).toBe("PT45M");
-    expect(hmToIsoDuration(2, 0)).toBe("PT2H");
+    expect(msToIsoDuration(0, 45)).toBe("PT45S");
+    expect(msToIsoDuration(2, 0)).toBe("PT2M");
+  });
+
+  it("normalizes minutes over 59 into hours", () => {
+    expect(msToIsoDuration(90, 0)).toBe("PT1H30M");
   });
 
   it("returns undefined when both are zero", () => {
-    expect(hmToIsoDuration(0, 0)).toBeUndefined();
+    expect(msToIsoDuration(0, 0)).toBeUndefined();
   });
 
   it("floors and clamps negatives", () => {
-    expect(hmToIsoDuration(-1, 5)).toBe("PT5M");
+    expect(msToIsoDuration(-1, 5)).toBe("PT5S");
   });
 });
 
@@ -272,7 +276,7 @@ describe("schemaToEditableInstructions / editableInstructionsToSchema", () => {
             "@type": "HowToStep" as const,
             text: "Simmer.",
             name: "Simmer",
-            timeRequired: "PT1H30M",
+            timeRequired: "PT5M30S",
           },
         ],
       },
@@ -280,7 +284,7 @@ describe("schemaToEditableInstructions / editableInstructionsToSchema", () => {
     const editable = schemaToEditableInstructions(original);
     expect(editable.map((g) => g.heading)).toEqual([null, "Sauce"]);
     const step = editable[1].items[0];
-    expect(step).toMatchObject({ name: "Simmer", hours: 1, minutes: 30 });
+    expect(step).toMatchObject({ name: "Simmer", minutes: 5, seconds: 30 });
     expect(editableInstructionsToSchema(editable)).toEqual(original);
   });
 
@@ -290,9 +294,9 @@ describe("schemaToEditableInstructions / editableInstructionsToSchema", () => {
         id: "g",
         heading: null,
         items: [
-          { id: "s1", text: "Name only", name: "Boil", hours: 0, minutes: 0 },
-          { id: "s2", text: "Time only", name: "", hours: 0, minutes: 5 },
-          { id: "s3", text: "Both", name: "Rest", hours: 0, minutes: 10 },
+          { id: "s1", text: "Name only", name: "Boil", minutes: 0, seconds: 0 },
+          { id: "s2", text: "Time only", name: "", minutes: 0, seconds: 30 },
+          { id: "s3", text: "Both", name: "Rest", minutes: 10, seconds: 0 },
         ],
       },
     ];
@@ -311,7 +315,7 @@ describe("schemaToEditableInstructions / editableInstructionsToSchema", () => {
 
   it("drops blank-text steps and empty groups", () => {
     const editable: EditableInstructions = [
-      { id: "g0", heading: null, items: [{ id: "s0", text: "  ", name: "", hours: 0, minutes: 0 }] },
+      { id: "g0", heading: null, items: [{ id: "s0", text: "  ", name: "", minutes: 0, seconds: 0 }] },
       { id: "g1", heading: "Empty", items: [] },
     ];
     expect(editableInstructionsToSchema(editable)).toEqual([]);

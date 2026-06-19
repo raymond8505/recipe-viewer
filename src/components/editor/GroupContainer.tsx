@@ -78,10 +78,10 @@ export default function GroupContainer({
             }}
           />
         ) : (
-          <div className="flex items-center gap-1 mb-2">
+          <div className="flex items-stretch gap-0.5 mb-2">
             <button
               type="button"
-              className="shrink-0 flex items-center justify-center w-11 h-11 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 touch-none cursor-grab active:cursor-grabbing disabled:opacity-40"
+              className="shrink-0 flex items-center justify-center w-5 min-h-[40px] rounded text-gray-300 hover:text-gray-600 hover:bg-gray-100 touch-none cursor-grab active:cursor-grabbing disabled:opacity-40"
               aria-label={`Reorder section ${heading || "(untitled)"}`}
               disabled={disabled}
               {...attributes}
@@ -96,13 +96,13 @@ export default function GroupContainer({
               disabled={disabled}
               placeholder="Group name"
               aria-label="Group name"
-              className="flex-1 min-w-0 min-h-[44px] rounded-lg border border-gray-200 px-3 text-sm font-semibold uppercase tracking-wide text-orange-600 focus:outline-none focus:ring-2 focus:ring-orange-300 disabled:opacity-60"
+              className="flex-1 min-w-0 min-h-[40px] rounded-lg border border-gray-200 px-2 text-sm font-semibold uppercase tracking-wide text-orange-600 focus:outline-none focus:ring-2 focus:ring-orange-300 disabled:opacity-60"
             />
             <button
               type="button"
               onClick={() => setConfirming(true)}
               disabled={disabled}
-              className="shrink-0 flex items-center justify-center w-11 h-11 rounded-lg text-gray-400 hover:text-red-600 hover:bg-red-50 disabled:opacity-40"
+              className="shrink-0 flex items-center justify-center w-7 min-h-[40px] rounded text-gray-300 hover:text-red-600 hover:bg-red-50 disabled:opacity-40"
               aria-label={`Delete section ${heading || "(untitled)"}`}
             >
               <TrashIcon />

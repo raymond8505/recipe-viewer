@@ -189,7 +189,7 @@ export default function RecipeDetail({
   };
 
   return (
-    <article className="max-w-3xl mx-auto">
+    <article className="max-w-3xl lg:max-w-5xl mx-auto">
       {/* Header */}
       <header className="mb-8">
         <div className="flex flex-wrap gap-2 mb-4">

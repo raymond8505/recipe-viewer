@@ -25,7 +25,7 @@ const oneStep: EditableInstructions = [
   {
     id: "g0",
     heading: null,
-    items: [{ id: "s1", text: "Boil water.", name: "", hours: 0, minutes: 0 }],
+    items: [{ id: "s1", text: "Boil water.", name: "", minutes: 0, seconds: 0 }],
   },
 ];
 
@@ -48,11 +48,33 @@ describe("InstructionsEditor", () => {
     ).toBe("Boil 2L water.");
   });
 
-  it("exposes a timer label + hours + minutes per step", () => {
+  it("exposes a timer label + a single duration input (no AM/PM time picker)", () => {
     render(<Harness initial={oneStep} />);
     expect(screen.getByLabelText("Timer label")).toBeInTheDocument();
-    expect(screen.getByLabelText("Timer hours")).toBeInTheDocument();
-    expect(screen.getByLabelText("Timer minutes")).toBeInTheDocument();
+    const duration = screen.getByLabelText("Timer duration") as HTMLInputElement;
+    expect(duration).toBeInTheDocument();
+    // type="text", NOT type="time" (which renders an AM/PM time-of-day control)
+    expect(duration.type).toBe("text");
+  });
+
+  it("renders an existing timer as h:mm and round-trips edits", () => {
+    render(
+      <Harness
+        initial={[
+          {
+            id: "g0",
+            heading: null,
+            items: [{ id: "s1", text: "Simmer.", name: "Simmer", minutes: 1, seconds: 30 }],
+          },
+        ]}
+      />,
+    );
+    const duration = screen.getByLabelText("Timer duration") as HTMLInputElement;
+    expect(duration.value).toBe("1:30");
+    fireEvent.change(duration, { target: { value: "0:05" } });
+    expect((screen.getByLabelText("Timer duration") as HTMLInputElement).value).toBe(
+      "0:05",
+    );
   });
 
   it("shows the co-dependency error for a flagged step", () => {

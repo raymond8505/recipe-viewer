@@ -2,7 +2,10 @@
 
 import { nanoid } from "nanoid";
 import type { EditableStep, EditableInstructions } from "@/types/editor";
+import { TrashIcon } from "@/components/icons";
 import SortableGroupedList from "./SortableGroupedList";
+import AutoresizeTextarea from "./AutoresizeTextarea";
+import DurationInput from "./DurationInput";
 
 interface InstructionsEditorProps {
   value: EditableInstructions;
@@ -11,9 +14,6 @@ interface InstructionsEditorProps {
   erroredStepIds?: Set<string>;
   disabled?: boolean;
 }
-
-const numberValue = (n: number) => (n > 0 ? String(n) : "");
-const toCount = (raw: string) => Math.max(0, parseInt(raw, 10) || 0);
 
 /**
  * Structured instruction editor: each step is a draggable card with a body
@@ -33,20 +33,20 @@ export default function InstructionsEditor({
       onChange={onChange}
       disabled={disabled}
       erroredItemIds={erroredStepIds}
-      makeItem={() => ({ id: nanoid(), text: "", name: "", hours: 0, minutes: 0 })}
+      makeItem={() => ({ id: nanoid(), text: "", name: "", minutes: 0, seconds: 0 })}
       itemLabel={(item) => item.text || item.name}
       itemNoun="step"
       groupNoun="section"
-      renderItem={(step, update, errored) => (
+      rowDeleteInline
+      renderItem={(step, update, errored, requestDelete) => (
         <div className="space-y-2 py-1">
-          <textarea
+          <AutoresizeTextarea
             value={step.text}
             onChange={(e) => update({ text: e.target.value })}
             disabled={disabled}
             placeholder="Describe this step…"
             aria-label="Step instructions"
-            rows={2}
-            className="w-full rounded-lg border border-gray-200 p-2 text-sm text-gray-700 leading-relaxed focus:outline-none focus:ring-2 focus:ring-orange-300 disabled:opacity-60 resize-y"
+            className="block w-full min-h-[44px] rounded-lg border border-gray-200 p-2 text-sm text-gray-700 leading-relaxed focus:outline-none focus:ring-2 focus:ring-orange-300 disabled:opacity-60 resize-none overflow-hidden"
           />
           <div className="flex flex-wrap items-end gap-2">
             <label className="flex-1 min-w-[8rem] text-xs text-gray-500">
@@ -58,35 +58,29 @@ export default function InstructionsEditor({
                 disabled={disabled}
                 placeholder="e.g. Simmer"
                 aria-label="Timer label"
-                className={`mt-0.5 w-full min-h-[44px] rounded-lg border px-3 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-orange-300 disabled:opacity-60 ${errored ? "border-red-300" : "border-gray-200"}`}
+                className={`mt-0.5 w-full min-h-[40px] rounded-lg border px-2 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-orange-300 disabled:opacity-60 ${errored ? "border-red-300" : "border-gray-200"}`}
               />
             </label>
             <label className="text-xs text-gray-500">
-              Hours
-              <input
-                type="number"
-                min={0}
-                value={numberValue(step.hours)}
-                onChange={(e) => update({ hours: toCount(e.target.value) })}
+              Timer
+              <DurationInput
+                minutes={step.minutes}
+                seconds={step.seconds}
+                onChange={update}
                 disabled={disabled}
-                placeholder="0"
-                aria-label="Timer hours"
-                className={`mt-0.5 w-16 min-h-[44px] rounded-lg border px-3 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-orange-300 disabled:opacity-60 ${errored ? "border-red-300" : "border-gray-200"}`}
+                errored={errored}
+                className={`mt-0.5 w-24 min-h-[40px] rounded-lg border px-2 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-orange-300 disabled:opacity-60 ${errored ? "border-red-300" : "border-gray-200"}`}
               />
             </label>
-            <label className="text-xs text-gray-500">
-              Minutes
-              <input
-                type="number"
-                min={0}
-                value={numberValue(step.minutes)}
-                onChange={(e) => update({ minutes: toCount(e.target.value) })}
-                disabled={disabled}
-                placeholder="0"
-                aria-label="Timer minutes"
-                className={`mt-0.5 w-16 min-h-[44px] rounded-lg border px-3 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-orange-300 disabled:opacity-60 ${errored ? "border-red-300" : "border-gray-200"}`}
-              />
-            </label>
+            <button
+              type="button"
+              onClick={requestDelete}
+              disabled={disabled}
+              aria-label="Delete this step?"
+              className="shrink-0 flex items-center justify-center w-10 min-h-[40px] rounded-lg text-gray-300 hover:text-red-600 hover:bg-red-50 disabled:opacity-40"
+            >
+              <TrashIcon />
+            </button>
           </div>
           {errored && (
             <p className="text-xs text-red-600">

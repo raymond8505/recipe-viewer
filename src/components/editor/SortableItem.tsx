@@ -9,13 +9,18 @@ import DeleteConfirm from "./DeleteConfirm";
 interface SortableItemProps {
   /** Sortable id — the item's bare nanoid id. */
   id: string;
-  /** The editable field(s) for this row (input or step card). */
-  children: ReactNode;
+  /** The editable field(s) for this row. May be a render function that
+   *  receives `requestDelete` so the child can place its own delete trigger
+   *  (used by the instruction card to put delete in its bottom row). */
+  children: ReactNode | ((api: { requestDelete: () => void }) => ReactNode);
   /** Accessible label for the drag handle, e.g. "Reorder 1 tsp cumin". */
   dragLabel: string;
   /** Message shown in the inline delete confirm, e.g. "Delete this ingredient?". */
   confirmMessage: string;
   onDelete: () => void;
+  /** Render the default right-rail trash button. Off when the child owns its
+   *  own delete trigger via `requestDelete`. Defaults to true. */
+  showDeleteButton?: boolean;
   /** Red outline + role flag when the row has a validation error. */
   errored?: boolean;
   disabled?: boolean;
@@ -23,9 +28,10 @@ interface SortableItemProps {
 
 /**
  * A draggable, deletable editor row. Wraps its children with a dnd-kit
- * `useSortable` handle (left) and a trash button (right) that swaps the row for
- * an inline confirm. The handle — not the whole row — carries the drag
- * listeners so the text inputs inside stay fully interactive.
+ * `useSortable` handle (left) and, by default, a trash button (right) that
+ * swaps the row for an inline confirm. The handle — not the whole row —
+ * carries the drag listeners so the text inputs inside stay fully interactive.
+ * Owns the delete-confirm overlay regardless of where the trigger lives.
  */
 export default function SortableItem({
   id,
@@ -33,10 +39,12 @@ export default function SortableItem({
   dragLabel,
   confirmMessage,
   onDelete,
+  showDeleteButton = true,
   errored,
   disabled,
 }: SortableItemProps) {
   const [confirming, setConfirming] = useState(false);
+  const requestDelete = () => setConfirming(true);
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
     useSortable({ id, disabled });
 
@@ -77,16 +85,20 @@ export default function SortableItem({
       >
         <DragHandleIcon />
       </button>
-      <div className="flex-1 min-w-0">{children}</div>
-      <button
-        type="button"
-        onClick={() => setConfirming(true)}
-        disabled={disabled}
-        className="shrink-0 flex items-center justify-center w-7 self-stretch min-h-[40px] rounded text-gray-300 hover:text-red-600 hover:bg-red-50 disabled:opacity-40"
-        aria-label={confirmMessage}
-      >
-        <TrashIcon />
-      </button>
+      <div className="flex-1 min-w-0">
+        {typeof children === "function" ? children({ requestDelete }) : children}
+      </div>
+      {showDeleteButton && (
+        <button
+          type="button"
+          onClick={requestDelete}
+          disabled={disabled}
+          className="shrink-0 flex items-center justify-center w-7 self-stretch min-h-[40px] rounded text-gray-300 hover:text-red-600 hover:bg-red-50 disabled:opacity-40"
+          aria-label={confirmMessage}
+        >
+          <TrashIcon />
+        </button>
+      )}
     </div>
   );
 }
