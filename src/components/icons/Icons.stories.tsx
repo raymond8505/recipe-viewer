@@ -6,6 +6,7 @@ import {
   CloseIcon,
   CloseSmallIcon,
   CopyIcon,
+  DragHandleIcon,
   EditIcon,
   EnterFullscreenIcon,
   ExitFullscreenIcon,
@@ -49,6 +50,7 @@ export const AllIcons: Story = {
       <Cell label="Close"><CloseIcon /></Cell>
       <Cell label="CloseSmall"><CloseSmallIcon /></Cell>
       <Cell label="Copy"><CopyIcon /></Cell>
+      <Cell label="DragHandle"><DragHandleIcon /></Cell>
       <Cell label="Edit"><EditIcon /></Cell>
       <Cell label="EnterFullscreen"><EnterFullscreenIcon /></Cell>
       <Cell label="ExitFullscreen"><ExitFullscreenIcon /></Cell>

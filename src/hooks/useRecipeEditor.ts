@@ -1,21 +1,23 @@
-import { useCallback, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import type { SchemaRecipe } from "@/types/recipe";
+import type { EditableIngredients, EditableInstructions } from "@/types/editor";
 import {
-  ingredientsToText,
-  instructionsToMarkdown,
-  markdownToInstructions,
-  textToIngredients,
+  editableIngredientsToSchema,
+  editableInstructionsToSchema,
+  schemaToEditableIngredients,
+  schemaToEditableInstructions,
 } from "@/lib/format";
 
 export type EditState = "idle" | "editing" | "saving" | "error";
 
-/** The editable form fields, as plain strings (textarea/input values). */
+/** The editable form fields. Scalar inputs are strings; ingredients and
+ *  instructions are the structured editor trees (groups of rows/steps). */
 export interface EditDraft {
   name: string;
   url: string;
   description: string;
-  ingredients: string;
-  instructions: string;
+  ingredients: EditableIngredients;
+  instructions: EditableInstructions;
   notes: string;
   status: string;
 }
@@ -24,8 +26,8 @@ const EMPTY_DRAFT: EditDraft = {
   name: "",
   url: "",
   description: "",
-  ingredients: "",
-  instructions: "",
+  ingredients: [],
+  instructions: [],
   notes: "",
   status: "",
 };
@@ -35,6 +37,11 @@ export interface UseRecipeEditor {
   editState: EditState;
   isEditing: boolean;
   isSaving: boolean;
+  /** Step ids where exactly one of `name` / time is set — both must be set or
+   *  both blank (co-dependency). A non-empty set blocks saving. */
+  instructionErrors: Set<string>;
+  /** False while a co-dependency violation exists; drives the Save button. */
+  canSave: boolean;
   /** Shallow-merge a partial draft (drives every controlled input's onChange). */
   patch: (partial: Partial<EditDraft>) => void;
   /** Seed the whole draft from a schema and enter edit mode. The single
@@ -53,10 +60,25 @@ export interface UseRecipeEditor {
   runSave: (persist: () => Promise<void>) => Promise<void>;
 }
 
+/** A step's name and timer must be both-set or both-blank. */
+function findInstructionErrors(
+  instructions: EditableInstructions,
+): Set<string> {
+  const errors = new Set<string>();
+  for (const group of instructions) {
+    for (const step of group.items) {
+      const hasName = step.name.trim().length > 0;
+      const hasTime = (step.hours || 0) > 0 || (step.minutes || 0) > 0;
+      if (hasName !== hasTime) errors.add(step.id);
+    }
+  }
+  return errors;
+}
+
 /**
  * Owns the recipe edit buffer for RecipeDetail: the draft form fields plus the
  * idle → editing → saving → idle/error state machine. State lives in a single
- * `useState<EditDraft>` (patched shallowly) rather than seven separate fields,
+ * `useState<EditDraft>` (patched shallowly) rather than separate fields,
  * which is what previously let an entry path silently miss a field.
  */
 export function useRecipeEditor(): UseRecipeEditor {
@@ -74,8 +96,10 @@ export function useRecipeEditor(): UseRecipeEditor {
         name: schema.name,
         url,
         description: schema.description ?? "",
-        ingredients: ingredientsToText(schema.recipeIngredient ?? []),
-        instructions: instructionsToMarkdown(schema.recipeInstructions ?? []),
+        ingredients: schemaToEditableIngredients(schema.recipeIngredient ?? []),
+        instructions: schemaToEditableInstructions(
+          schema.recipeInstructions ?? [],
+        ),
         notes: schema.notes ?? "",
         status,
       });
@@ -91,8 +115,8 @@ export function useRecipeEditor(): UseRecipeEditor {
       ...base,
       name: draft.name.trim() || base.name,
       description: draft.description || undefined,
-      recipeIngredient: textToIngredients(draft.ingredients),
-      recipeInstructions: markdownToInstructions(draft.instructions),
+      recipeIngredient: editableIngredientsToSchema(draft.ingredients),
+      recipeInstructions: editableInstructionsToSchema(draft.instructions),
       notes: draft.notes || undefined,
     }),
     [draft],
@@ -108,11 +132,18 @@ export function useRecipeEditor(): UseRecipeEditor {
     }
   }, []);
 
+  const instructionErrors = useMemo(
+    () => findInstructionErrors(draft.instructions),
+    [draft.instructions],
+  );
+
   return {
     draft,
     editState,
     isEditing: editState !== "idle",
     isSaving: editState === "saving",
+    instructionErrors,
+    canSave: instructionErrors.size === 0,
     patch,
     begin,
     cancel,

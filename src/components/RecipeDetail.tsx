@@ -26,6 +26,8 @@ import {
 } from "@/lib/imageTypes";
 import CookingModeButton from "./CookingModeButton";
 import { CheckIcon, CopyIcon } from "@/components/icons";
+import IngredientsEditor from "./editor/IngredientsEditor";
+import InstructionsEditor from "./editor/InstructionsEditor";
 import IngredientItem from "./IngredientItem";
 import ServingsControl from "./ServingsControl";
 import NutritionPanel from "./NutritionPanel";
@@ -305,7 +307,7 @@ export default function RecipeDetail({
                 </select>
                 <button
                   onClick={handleEditSave}
-                  disabled={editState === "saving"}
+                  disabled={editState === "saving" || !editor.canSave}
                   className="px-4 py-2 text-sm font-medium rounded-lg bg-orange-500 text-white hover:bg-orange-600 disabled:opacity-50 transition-colors"
                 >
                   {editState === "saving"
@@ -324,6 +326,11 @@ export default function RecipeDetail({
                 {editState === "error" && (
                   <span className="text-sm text-red-600">
                     Save failed. Try again.
+                  </span>
+                )}
+                {!editor.canSave && (
+                  <span className="text-sm text-red-600">
+                    A step timer needs both a label and a time.
                   </span>
                 )}
               </>
@@ -457,14 +464,10 @@ export default function RecipeDetail({
               )}
             </div>
             {isEditing ? (
-              <textarea
+              <IngredientsEditor
                 value={draft.ingredients}
-                onChange={(e) => patch({ ingredients: e.target.value })}
+                onChange={(groups) => patch({ ingredients: groups })}
                 disabled={editState === "saving"}
-                placeholder={
-                  "One ingredient per line.\nUse ## Group Name for sections."
-                }
-                className="w-full rounded-lg border border-gray-200 p-3 font-mono text-sm text-gray-700 min-h-[200px] focus:outline-none focus:ring-2 focus:ring-orange-300 disabled:opacity-60 resize-y"
               />
             ) : (
               scalable.groupedIngredients.map(({ heading, items }, gi) => (
@@ -515,14 +518,11 @@ export default function RecipeDetail({
               Instructions
             </h2>
             {isEditing ? (
-              <textarea
+              <InstructionsEditor
                 value={draft.instructions}
-                onChange={(e) => patch({ instructions: e.target.value })}
+                onChange={(groups) => patch({ instructions: groups })}
+                erroredStepIds={editor.instructionErrors}
                 disabled={editState === "saving"}
-                placeholder={
-                  "- Step one\n- Step two\n\n## Section Name\n- Step in section"
-                }
-                className="w-full rounded-lg border border-gray-200 p-3 font-mono text-sm text-gray-700 min-h-[300px] focus:outline-none focus:ring-2 focus:ring-orange-300 disabled:opacity-60 resize-y"
               />
             ) : schema.recipeInstructions![0]["@type"] === "HowToSection" ? (
               <div className="space-y-6">

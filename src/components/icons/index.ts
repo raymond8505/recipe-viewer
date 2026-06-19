@@ -4,6 +4,7 @@ export { CheckIcon } from "./CheckIcon";
 export { CloseIcon } from "./CloseIcon";
 export { CloseSmallIcon } from "./CloseSmallIcon";
 export { CopyIcon } from "./CopyIcon";
+export { DragHandleIcon } from "./DragHandleIcon";
 export { EditIcon } from "./EditIcon";
 export { EnterFullscreenIcon } from "./EnterFullscreenIcon";
 export { ExitFullscreenIcon } from "./ExitFullscreenIcon";
