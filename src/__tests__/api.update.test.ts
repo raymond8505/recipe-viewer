@@ -1,8 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { POST } from "@/app/api/recipes/[id]/update/route";
 import { RecipeRepoError } from "@/lib/recipes";
-import { makeRecipe, rescrapeFixture } from "@/fixtures";
+import { makeRecipe } from "@/fixtures";
 import { makeJsonRequest } from "@/fixtures/request";
+import type { SchemaRecipe } from "@/types/recipe";
 
 vi.mock("@/lib/recipes", async (orig) => {
   const actual = await orig<typeof import("@/lib/recipes")>();
@@ -14,34 +15,25 @@ vi.mock("@/lib/apiAuth", () => ({
   requireApiAuth: vi.fn().mockResolvedValue(null),
 }));
 
-vi.mock("@/env", () => ({
-  env: { EDIT_WEBHOOK_URL: "https://webhook.test/edit" },
-}));
-
 const storedRecipe = makeRecipe("recipe-1", "Old Recipe", {
   url: "https://example.com/recipe",
 });
-
-const webhookResponse = { schema: rescrapeFixture, status: "published" };
 
 function makeParams(id = "recipe-1") {
   return { params: Promise.resolve({ id }) };
 }
 
-function makeWebhookResponse(ok: boolean, body: object = webhookResponse) {
-  return Promise.resolve(
-    new Response(JSON.stringify(body), {
-      status: ok ? 200 : 500,
-      headers: { "Content-Type": "application/json" },
-    }),
-  );
-}
-
 describe("POST /api/recipes/[id]/update", () => {
   beforeEach(async () => {
     vi.clearAllMocks();
-    const { getRecipeById } = await import("@/lib/recipes");
+    const { getRecipeById, updateRecipeRow } = await import("@/lib/recipes");
     vi.mocked(getRecipeById).mockResolvedValue(storedRecipe);
+    vi.mocked(updateRecipeRow).mockImplementation(async (_id, patch) => ({
+      ...storedRecipe,
+      url: patch.url ?? storedRecipe.url,
+      status: patch.status ?? storedRecipe.status,
+      metadata: { schema: (patch.schema ?? storedRecipe.metadata.schema) as SchemaRecipe },
+    }));
   });
 
   it("returns 401 when the request is unauthorized", async () => {
@@ -60,67 +52,54 @@ describe("POST /api/recipes/[id]/update", () => {
     expect(res.status).toBe(404);
   });
 
-  it("returns 502 when webhook is unreachable", async () => {
-    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("Network error")));
+  it("returns 404 when the repo reports the recipe missing", async () => {
+    const { updateRecipeRow } = await import("@/lib/recipes");
+    vi.mocked(updateRecipeRow).mockRejectedValueOnce(new RecipeRepoError("not_found", "gone"));
 
     const res = await POST(makeJsonRequest({ schema: { name: "Test" }, status: "draft" }), makeParams());
-    expect(res.status).toBe(502);
-  });
-
-  it("returns 502 when webhook returns non-ok status", async () => {
-    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(null, { status: 500 })));
-
-    const res = await POST(makeJsonRequest({ schema: { name: "Test" }, status: "draft" }), makeParams());
-    expect(res.status).toBe(502);
+    expect(res.status).toBe(404);
   });
 
   it("returns 500 when the repo update fails", async () => {
     const { updateRecipeRow } = await import("@/lib/recipes");
-    vi.stubGlobal("fetch", vi.fn(() => makeWebhookResponse(true)));
     vi.mocked(updateRecipeRow).mockRejectedValueOnce(new RecipeRepoError("update_failed", "RLS violation"));
 
     const res = await POST(makeJsonRequest({ schema: { name: "Test" }, status: "draft" }), makeParams());
     expect(res.status).toBe(500);
   });
 
-  it("returns 200 with updated schema and status on success", async () => {
-    vi.stubGlobal("fetch", vi.fn(() => makeWebhookResponse(true)));
-
+  it("returns 200 with the persisted schema and status on success", async () => {
     const res = await POST(makeJsonRequest({ schema: { name: "Test" }, status: "draft" }), makeParams());
     expect(res.status).toBe(200);
     const body = await res.json();
-    expect(body.schema.name).toBe(rescrapeFixture.name);
-    expect(body.status).toBe("published");
+    expect(body.schema.name).toBe("Test");
+    expect(body.status).toBe("draft");
   });
 
-  it("sends stored recipe.url to webhook when no url in request body", async () => {
-    const mockFetch = vi.fn(() => makeWebhookResponse(true));
-    vi.stubGlobal("fetch", mockFetch);
+  it("does not call any external webhook (persists directly)", async () => {
+    const fetchSpy = vi.fn();
+    vi.stubGlobal("fetch", fetchSpy);
 
     await POST(makeJsonRequest({ schema: { name: "Test" }, status: "draft" }), makeParams());
 
-    const sent = JSON.parse(mockFetch.mock.calls[0][1].body);
-    expect(sent.url).toBe("https://example.com/recipe");
-    expect(sent.schema.name).toBe("Test");
-    expect(sent.status).toBe("draft");
+    expect(fetchSpy).not.toHaveBeenCalled();
+    vi.unstubAllGlobals();
   });
 
-  it("sends body.url to webhook when provided, overriding stored url", async () => {
-    const mockFetch = vi.fn(() => makeWebhookResponse(true));
-    vi.stubGlobal("fetch", mockFetch);
-
-    await POST(
-      makeJsonRequest({ schema: { name: "Test" }, status: "draft", url: "https://corrected.com/recipe" }),
-      makeParams(),
-    );
-
-    const sent = JSON.parse(mockFetch.mock.calls[0][1].body);
-    expect(sent.url).toBe("https://corrected.com/recipe");
-  });
-
-  it("persists the effective url, schema, and status via updateRecipeRow", async () => {
+  it("persists the stored recipe.url when no url is in the request body", async () => {
     const { updateRecipeRow } = await import("@/lib/recipes");
-    vi.stubGlobal("fetch", vi.fn(() => makeWebhookResponse(true)));
+
+    await POST(makeJsonRequest({ schema: { name: "Test" }, status: "draft" }), makeParams());
+
+    expect(updateRecipeRow).toHaveBeenCalledWith("recipe-1", {
+      url: "https://example.com/recipe",
+      schema: { name: "Test" },
+      status: "draft",
+    });
+  });
+
+  it("persists body.url when provided, overriding the stored url", async () => {
+    const { updateRecipeRow } = await import("@/lib/recipes");
 
     await POST(
       makeJsonRequest({ schema: { name: "Test" }, status: "draft", url: "https://corrected.com/recipe" }),
@@ -129,8 +108,8 @@ describe("POST /api/recipes/[id]/update", () => {
 
     expect(updateRecipeRow).toHaveBeenCalledWith("recipe-1", {
       url: "https://corrected.com/recipe",
-      schema: rescrapeFixture,
-      status: "published",
+      schema: { name: "Test" },
+      status: "draft",
     });
   });
 });

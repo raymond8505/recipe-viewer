@@ -7,9 +7,13 @@ const mockFeatures = vi.hoisted(() => ({
 }));
 
 const mockGetSupabaseClient = vi.hoisted(() => vi.fn());
+// Embedding generation hits the network; mock it. Default: no embedding
+// available (null), so write paths don't set the column unless a test opts in.
+const mockGenerateEmbedding = vi.hoisted(() => vi.fn().mockResolvedValue(null));
 
 vi.mock("@/lib/features", () => ({ getFeatures: () => mockFeatures }));
 vi.mock("@/lib/supabase", () => ({ getSupabaseClient: mockGetSupabaseClient }));
+vi.mock("@/lib/embedding", () => ({ generateEmbedding: mockGenerateEmbedding }));
 
 import {
   createRecipeRow,
@@ -19,6 +23,7 @@ import {
   RecipeRepoError,
   updateRecipeRow,
 } from "@/lib/recipes";
+import { schemaToMarkdown } from "@/lib/format";
 
 /**
  * Builds a mock Supabase client whose query builder is fully chainable.
@@ -350,32 +355,38 @@ function makeWriteSupabaseMock(opts: {
 }
 
 describe("createRecipeRow", () => {
-  it("populates the top-level name column from schema.name (bug fix)", async () => {
+  beforeEach(() => {
+    mockGenerateEmbedding.mockReset().mockResolvedValue(null);
+  });
+
+  it("stores the markdown rendering of the schema in content + the name column", async () => {
+    const schema = { name: "Soup", description: "Hot broth." };
     const inserted = {
       id: "new",
       url: "https://example.com",
       source: "example.com",
       status: "draft",
-      metadata: { schema: { name: "Soup" } },
+      metadata: { schema },
     };
     const { inserts } = makeWriteSupabaseMock({ insertSingle: { data: inserted, error: null } });
 
     await createRecipeRow({
       url: "https://example.com",
       source: "example.com",
-      schema: { name: "Soup", description: "Hot broth." } as never,
+      schema: schema as never,
     });
 
     expect(inserts[0]).toMatchObject({
       name: "Soup",
-      content: "Hot broth.",
+      content: schemaToMarkdown(schema as never),
       url: "https://example.com",
       source: "example.com",
       status: "draft",
     });
   });
 
-  it("falls back to schema.name for content when description is absent", async () => {
+  it("includes the embedding as a pgvector literal when generation succeeds", async () => {
+    mockGenerateEmbedding.mockResolvedValueOnce([0.1, 0.2, 0.3]);
     const { inserts } = makeWriteSupabaseMock({
       insertSingle: { data: { id: "x" }, error: null },
     });
@@ -383,10 +394,25 @@ describe("createRecipeRow", () => {
     await createRecipeRow({
       url: "https://example.com",
       source: "example.com",
-      schema: { name: "Bare" } as never,
+      schema: { name: "Vec" } as never,
     });
 
-    expect(inserts[0]).toMatchObject({ name: "Bare", content: "Bare" });
+    expect(inserts[0]).toMatchObject({ embedding: "[0.1,0.2,0.3]" });
+  });
+
+  it("omits the embedding column when generation fails (null)", async () => {
+    mockGenerateEmbedding.mockResolvedValueOnce(null);
+    const { inserts } = makeWriteSupabaseMock({
+      insertSingle: { data: { id: "x" }, error: null },
+    });
+
+    await createRecipeRow({
+      url: "https://example.com",
+      source: "example.com",
+      schema: { name: "NoVec" } as never,
+    });
+
+    expect(inserts[0]).not.toHaveProperty("embedding");
   });
 
   it("throws RecipeRepoError(insert_failed) on Supabase error", async () => {
@@ -411,6 +437,10 @@ describe("updateRecipeRow", () => {
     metadata: { schema: { name: "Original", description: "Old blurb" } },
   };
 
+  beforeEach(() => {
+    mockGenerateEmbedding.mockReset().mockResolvedValue(null);
+  });
+
   it("syncs the top-level name column when schema.name changes (bug fix)", async () => {
     const { updates } = makeWriteSupabaseMock({
       selectSingle: { data: existing, error: null },
@@ -424,7 +454,7 @@ describe("updateRecipeRow", () => {
     expect((updates[0].metadata as { schema: { name: string } }).schema.name).toBe("Renamed");
   });
 
-  it("syncs the top-level content column when schema.description changes", async () => {
+  it("recomputes content as the markdown of the merged schema on any schema change", async () => {
     const { updates } = makeWriteSupabaseMock({
       selectSingle: { data: existing, error: null },
       updateSingle: { data: existing, error: null },
@@ -432,10 +462,35 @@ describe("updateRecipeRow", () => {
 
     await updateRecipeRow("r1", { schema: { description: "Fresh blurb" } } as never);
 
-    expect(updates[0]).toMatchObject({ content: "Fresh blurb" });
+    const mergedSchema = { name: "Original", description: "Fresh blurb" };
+    expect(updates[0]).toMatchObject({ content: schemaToMarkdown(mergedSchema as never) });
   });
 
-  it("does not touch top-level name/content when schema patch omits them", async () => {
+  it("sets the embedding from the merged schema when generation succeeds", async () => {
+    mockGenerateEmbedding.mockResolvedValueOnce([0.5, 0.5]);
+    const { updates } = makeWriteSupabaseMock({
+      selectSingle: { data: existing, error: null },
+      updateSingle: { data: existing, error: null },
+    });
+
+    await updateRecipeRow("r1", { schema: { description: "Fresh blurb" } } as never);
+
+    expect(updates[0]).toMatchObject({ embedding: "[0.5,0.5]" });
+  });
+
+  it("leaves the embedding column untouched when generation fails (null)", async () => {
+    mockGenerateEmbedding.mockResolvedValueOnce(null);
+    const { updates } = makeWriteSupabaseMock({
+      selectSingle: { data: existing, error: null },
+      updateSingle: { data: existing, error: null },
+    });
+
+    await updateRecipeRow("r1", { schema: { description: "Fresh blurb" } } as never);
+
+    expect(updates[0]).not.toHaveProperty("embedding");
+  });
+
+  it("does not touch name/content/embedding when schema patch omits the schema field", async () => {
     const { updates } = makeWriteSupabaseMock({
       selectSingle: { data: existing, error: null },
       updateSingle: { data: existing, error: null },
@@ -445,6 +500,8 @@ describe("updateRecipeRow", () => {
 
     expect(updates[0]).not.toHaveProperty("name");
     expect(updates[0]).not.toHaveProperty("content");
+    expect(updates[0]).not.toHaveProperty("embedding");
     expect(updates[0]).toMatchObject({ status: "archived" });
+    expect(mockGenerateEmbedding).not.toHaveBeenCalled();
   });
 });
