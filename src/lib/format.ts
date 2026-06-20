@@ -248,6 +248,33 @@ export function extractRecipeStats(schema: SchemaRecipe): RecipeStat[] {
 }
 
 /**
+ * Render structured recipe instructions to a markdown fragment.
+ *
+ * HowToSection → "## Section Name" header followed by its steps as "- text";
+ * a top-level HowToStep → "- text"; sections are separated by a blank line.
+ * Consumed by `schemaToMarkdown` to build the searchable `content`/embedding
+ * text — it is NOT part of the editor (which uses the structured converters).
+ */
+export function instructionsToMarkdown(
+  instructions: Array<HowToStep | HowToSection>,
+): string {
+  const blocks: string[] = [];
+  for (const item of instructions) {
+    if (item["@type"] === "HowToSection") {
+      const section = item as HowToSection;
+      const lines = [`## ${section.name}`];
+      for (const step of section.itemListElement) {
+        lines.push(`- ${step.text}`);
+      }
+      blocks.push(lines.join("\n"));
+    } else {
+      blocks.push(`- ${(item as HowToStep).text}`);
+    }
+  }
+  return blocks.join("\n\n");
+}
+
+/**
  * Render a recipe schema to a plain markdown document.
  *
  * This is the value stored in the `content` column AND the text embedded for
