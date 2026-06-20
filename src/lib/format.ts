@@ -248,6 +248,52 @@ export function extractRecipeStats(schema: SchemaRecipe): RecipeStat[] {
 }
 
 /**
+ * Render a recipe schema to a plain markdown document.
+ *
+ * This is the value stored in the `content` column AND the text embedded for
+ * semantic search, so it should capture the full substance of the recipe
+ * (title, description, ingredients, instructions, key metadata) in a stable,
+ * deterministic form. Custom/internal fields (notes, cookingNotes) are
+ * intentionally excluded — they aren't part of the recipe's searchable body.
+ */
+export function schemaToMarkdown(schema: SchemaRecipe): string {
+  const blocks: string[] = [`# ${schema.name}`];
+
+  if (schema.description) blocks.push(schema.description);
+
+  const meta: string[] = [];
+  const yieldValue = toArray(schema.recipeYield)[0];
+  if (yieldValue) meta.push(`Yield: ${yieldValue}`);
+  const prep = formatDuration(schema.prepTime);
+  if (prep) meta.push(`Prep: ${prep}`);
+  const cook = formatDuration(schema.cookTime);
+  if (cook) meta.push(`Cook: ${cook}`);
+  const total = formatDuration(schema.totalTime);
+  if (total) meta.push(`Total: ${total}`);
+  if (schema.recipeCuisine) meta.push(`Cuisine: ${schema.recipeCuisine}`);
+  const category = toArray(schema.recipeCategory)[0];
+  if (category) meta.push(`Category: ${category}`);
+  if (meta.length) blocks.push(meta.join(" · "));
+
+  if (schema.recipeIngredient?.length) {
+    const lines = ["## Ingredients"];
+    for (const { heading, items } of groupIngredients(schema.recipeIngredient)) {
+      if (heading) lines.push(`### ${heading}`);
+      for (const item of items) lines.push(`- ${getIngredientText(item)}`);
+    }
+    blocks.push(lines.join("\n"));
+  }
+
+  if (schema.recipeInstructions?.length) {
+    blocks.push(
+      `## Instructions\n${instructionsToMarkdown(schema.recipeInstructions)}`,
+    );
+  }
+
+  return blocks.join("\n\n");
+}
+
+/**
  * Normalize recipeCategory/recipeCuisine to an array.
  */
 export function toArray(val: string | string[] | undefined | null): string[] {

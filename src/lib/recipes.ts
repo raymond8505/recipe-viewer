@@ -1,6 +1,7 @@
 import { getSupabaseClient } from "./supabase";
 import { getFeatures } from "./features";
-import { normalizeRecipeInstructions } from "./format";
+import { normalizeRecipeInstructions, schemaToMarkdown } from "./format";
+import { generateEmbedding } from "./embedding";
 import type { RecipeRow, RecipesResult, SchemaRecipe } from "@/types/recipe";
 
 export type RecipeStatus = "published" | "archived" | "draft";
@@ -18,6 +19,12 @@ export class RecipeRepoError extends Error {
 }
 
 const RECIPE_COLUMNS = "id, url, source, status, metadata";
+
+// Format a float array as a pgvector literal ("[v1,v2,...]"). supabase-js sends
+// values as JSON via PostgREST; a `vector` column accepts this bracketed string.
+function toVectorLiteral(values: number[]): string {
+  return `[${values.join(",")}]`;
+}
 
 export interface CreateRecipeInput {
   // Optional explicit primary key. When provided (e.g. so the caller can build
@@ -157,23 +164,20 @@ export async function getRecipeById(id: string): Promise<RecipeRow | null> {
 }
 
 // Insert a new recipe row. Defaults status to "draft" if not provided.
-// Throws RecipeRepoError("insert_failed") on Supabase failure.
-//
-// The `recipes` table has top-level NOT NULL `name` and `content` columns that
-// mirror `schema.name` and `schema.description` (the latter is what powers
-// vector search). The MCP path is the canonical creator now, so we derive both
-// from the SchemaRecipe instead of leaving them for an upstream pipeline.
-// `content` falls back to `schema.name` when no description is provided —
-// satisfies the NOT NULL constraint and keeps search functioning, even if not
-// optimally, for stub rows.
+// Throws RecipeRepoError("insert_failed") on Supabase failure. Derives the
+// `content` and `embedding` columns from the schema — see the "Derived content
+// + embedding columns" note in .claude/CLAUDE.md.
 export async function createRecipeRow(input: CreateRecipeInput): Promise<RecipeRow> {
   const supabase = getSupabaseClient();
+  const content = schemaToMarkdown(input.schema);
+  const embedding = await generateEmbedding(content);
   const { data, error } = await supabase
     .from("recipes")
     .insert({
       ...(input.id !== undefined ? { id: input.id } : {}),
       name: input.schema.name,
-      content: input.schema.description ?? input.schema.name,
+      content,
+      ...(embedding ? { embedding: toVectorLiteral(embedding) } : {}),
       url: input.url,
       source: input.source,
       status: input.status ?? "draft",
@@ -214,6 +218,7 @@ export async function updateRecipeRow(
   const writePatch: Partial<{
     name: string;
     content: string;
+    embedding: string;
     url: string;
     source: string;
     status: RecipeStatus;
@@ -224,15 +229,21 @@ export async function updateRecipeRow(
   if (patch.source !== undefined) writePatch.source = patch.source;
   if (patch.status !== undefined) writePatch.status = patch.status;
   if (patch.schema !== undefined) {
-    writePatch.metadata = {
-      ...current.metadata,
-      schema: { ...current.metadata.schema, ...patch.schema } as SchemaRecipe,
-    };
-    // Keep the top-level name/content columns in sync when the schema patch
-    // touches them — otherwise list/search views keep showing the old values
-    // until the next full re-scrape.
+    const mergedSchema = {
+      ...current.metadata.schema,
+      ...patch.schema,
+    } as SchemaRecipe;
+    writePatch.metadata = { ...current.metadata, schema: mergedSchema };
+    // Keep the top-level name in sync when the schema patch touches it —
+    // otherwise list/search views keep showing the old value.
     if (patch.schema.name !== undefined) writePatch.name = patch.schema.name;
-    if (patch.schema.description !== undefined) writePatch.content = patch.schema.description;
+    // `content` (markdown) and `embedding` are always recomputed from the
+    // merged schema on any schema change. Embedding is best-effort: on failure
+    // we leave the existing embedding untouched rather than nulling it.
+    const content = schemaToMarkdown(mergedSchema);
+    writePatch.content = content;
+    const embedding = await generateEmbedding(content);
+    if (embedding) writePatch.embedding = toVectorLiteral(embedding);
   }
 
   if (Object.keys(writePatch).length === 0) return current;
