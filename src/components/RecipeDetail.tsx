@@ -252,11 +252,52 @@ export default function RecipeDetail({
         </div>
       </header>
 
+      {/* Image */}
+      {(previewUrl || image) && (
+        <div className="w-full rounded-2xl overflow-hidden mb-8 bg-gray-100">
+          <Image
+            src={previewUrl ?? (image as string)}
+            alt={schema.name}
+            width={0}
+            height={0}
+            sizes="(max-width: 768px) 100vw, 768px"
+            className="w-full h-auto"
+            priority
+            unoptimized={previewUrl !== null}
+          />
+        </div>
+      )}
+
+      {/* Time / Yield stats */}
+      {(prepTime || cookTime || totalTime || schema.recipeYield) && (
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-8 p-4 bg-orange-50 rounded-2xl">
+          {prepTime && <Stat label="Prep time" value={prepTime} />}
+          {cookTime && <Stat label="Cook time" value={cookTime} />}
+          {totalTime && <Stat label="Total time" value={totalTime} />}
+          {schema.recipeYield &&
+            (scalable.currentServings != null ? (
+              <ServingsControl
+                servings={scalable.currentServings}
+                onChange={scalePortionsTo}
+              />
+            ) : (
+              <Stat
+                label="Servings"
+                value={
+                  Array.isArray(schema.recipeYield)
+                    ? schema.recipeYield[0]
+                    : schema.recipeYield
+                }
+              />
+            ))}
+        </div>
+      )}
+
       {/* Recipe Controls — logged-in only */}
       {isLoggedIn && (
         <section
           aria-label="Recipe management"
-          className="mt-12 pt-6 border-t border-gray-100"
+          className="mb-8"
         >
           <h2 className="text-xs font-semibold uppercase tracking-widest text-gray-400 mb-4">
             Manage
@@ -400,47 +441,6 @@ export default function RecipeDetail({
             )}
           </div>
         </section>
-      )}
-
-      {/* Image */}
-      {(previewUrl || image) && (
-        <div className="w-full rounded-2xl overflow-hidden mb-8 bg-gray-100">
-          <Image
-            src={previewUrl ?? (image as string)}
-            alt={schema.name}
-            width={0}
-            height={0}
-            sizes="(max-width: 768px) 100vw, 768px"
-            className="w-full h-auto"
-            priority
-            unoptimized={previewUrl !== null}
-          />
-        </div>
-      )}
-
-      {/* Time / Yield stats */}
-      {(prepTime || cookTime || totalTime || schema.recipeYield) && (
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-8 p-4 bg-orange-50 rounded-2xl">
-          {prepTime && <Stat label="Prep time" value={prepTime} />}
-          {cookTime && <Stat label="Cook time" value={cookTime} />}
-          {totalTime && <Stat label="Total time" value={totalTime} />}
-          {schema.recipeYield &&
-            (scalable.currentServings != null ? (
-              <ServingsControl
-                servings={scalable.currentServings}
-                onChange={scalePortionsTo}
-              />
-            ) : (
-              <Stat
-                label="Servings"
-                value={
-                  Array.isArray(schema.recipeYield)
-                    ? schema.recipeYield[0]
-                    : schema.recipeYield
-                }
-              />
-            ))}
-        </div>
       )}
 
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-8">
