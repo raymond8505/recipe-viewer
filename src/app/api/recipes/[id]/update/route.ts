@@ -23,7 +23,6 @@ export const POST = requireSessionOrRecipeToken(
     };
     const effectiveUrl = body.url ?? recipe.url;
 
-    // Persist directly through the repo layer — no n8n round-trip. The repo
     // recomputes the markdown `content` column and the search embedding from
     // the saved schema.
     let saved;
