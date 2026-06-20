@@ -21,6 +21,9 @@ interface SortableItemProps {
   /** Render the default right-rail trash button. Off when the child owns its
    *  own delete trigger via `requestDelete`. Defaults to true. */
   showDeleteButton?: boolean;
+  /** Pin the drag handle to the row's top-left instead of stretching it the
+   *  full height — for tall card rows (instruction steps). */
+  alignHandleTop?: boolean;
   /** Red outline + role flag when the row has a validation error. */
   errored?: boolean;
   disabled?: boolean;
@@ -40,6 +43,7 @@ export default function SortableItem({
   confirmMessage,
   onDelete,
   showDeleteButton = true,
+  alignHandleTop,
   errored,
   disabled,
 }: SortableItemProps) {
@@ -77,7 +81,11 @@ export default function SortableItem({
     >
       <button
         type="button"
-        className="shrink-0 flex items-center justify-center w-5 self-stretch min-h-[40px] rounded text-gray-300 hover:text-gray-600 hover:bg-gray-100 touch-none cursor-grab active:cursor-grabbing disabled:opacity-40"
+        className={`shrink-0 flex justify-center w-5 rounded text-gray-300 hover:text-gray-600 hover:bg-gray-100 touch-none cursor-grab active:cursor-grabbing disabled:opacity-40 ${
+          alignHandleTop
+            ? "items-start self-start pt-1"
+            : "items-center self-stretch min-h-[40px]"
+        }`}
         aria-label={dragLabel}
         disabled={disabled}
         {...attributes}

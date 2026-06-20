@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/nextjs-vite";
-import { userEvent, within } from "storybook/test";
+import { expect, userEvent, within } from "storybook/test";
 import RecipeDetail from "./RecipeDetail";
 import { recipeFixtures, makeRecipe } from "@/fixtures";
 
@@ -44,6 +44,17 @@ export const LoggedIn: Story = {
   args: { recipe: baseRecipe, isLoggedIn: true },
 };
 
+export const Editing: Story = {
+  args: { recipe: baseRecipe, isLoggedIn: true },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await userEvent.click(canvas.getByRole("button", { name: "Edit" }));
+    // Edit mode swaps the title heading for a controlled input — observable proof
+    // the editor opened.
+    await expect(canvas.getByLabelText("Recipe title")).toBeInTheDocument();
+  },
+};
+
 export const Draft: Story = {
   args: {
     recipe: { ...baseRecipe, status: "draft" },
@@ -62,7 +73,9 @@ export const ImageUploadPreview: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     const file = new File([TINY_PNG_BYTES], "tiny.png", { type: "image/png" });
-    const input = canvas.getByLabelText("Choose image file to upload") as HTMLInputElement;
+    const input = canvas.getByLabelText(
+      "Choose image file to upload",
+    ) as HTMLInputElement;
     await userEvent.upload(input, file);
   },
 };

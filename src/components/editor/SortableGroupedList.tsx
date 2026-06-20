@@ -39,6 +39,9 @@ interface SortableGroupedListProps<T extends { id: string }> {
   /** Hide the default right-rail trash and let `renderItem` place delete via
    *  `requestDelete` (instruction cards put it in their bottom row). */
   rowDeleteInline?: boolean;
+  /** Tall-card layout: top-aligned drag handles and doubled spacing between
+   *  rows (instruction steps). */
+  spacious?: boolean;
   /** Factory for a new blank item. */
   makeItem: () => T;
   /** Short display text for the row, used in drag/delete a11y labels. */
@@ -80,12 +83,13 @@ export default function SortableGroupedList<T extends { id: string }>({
   groups,
   onChange,
   renderItem,
+  rowDeleteInline,
+  spacious,
   makeItem,
   itemLabel,
   itemNoun,
   groupNoun,
   erroredItemIds,
-  rowDeleteInline,
   disabled,
 }: SortableGroupedListProps<T>) {
   const [, setActiveId] = useState<string | null>(null);
@@ -209,7 +213,7 @@ export default function SortableGroupedList<T extends { id: string }>({
       onDragEnd={handleDragEnd}
       onDragCancel={() => setActiveId(null)}
     >
-      <div className="space-y-3">
+      <div className={spacious ? "space-y-5" : "space-y-3"}>
         <SortableContext
           items={groups.map((g) => toGroupSortId(g.id))}
           strategy={verticalListSortingStrategy}
@@ -227,6 +231,8 @@ export default function SortableGroupedList<T extends { id: string }>({
               }
               itemCount={group.items.length}
               itemNoun={itemNoun}
+              itemGapClassName={spacious ? "space-y-2" : "space-y-1"}
+              spacious={spacious}
               disabled={disabled}
             >
               <SortableContext
@@ -241,6 +247,7 @@ export default function SortableGroupedList<T extends { id: string }>({
                     confirmMessage={`Delete this ${itemNoun}?`}
                     onDelete={() => deleteItem(group.id, item.id)}
                     showDeleteButton={!rowDeleteInline}
+                    alignHandleTop={spacious}
                     errored={erroredItemIds?.has(item.id)}
                     disabled={disabled}
                   >

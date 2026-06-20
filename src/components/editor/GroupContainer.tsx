@@ -19,6 +19,11 @@ interface GroupContainerProps {
   /** Number of items — surfaced in the group delete confirm message. */
   itemCount: number;
   itemNoun: string;
+  /** Vertical spacing between the group's rows. Defaults to "space-y-1". */
+  itemGapClassName?: string;
+  /** Tall-card layout (instruction sections): tint the section with a light
+   *  background + a bit more padding so sections read as distinct blocks. */
+  spacious?: boolean;
   children: ReactNode;
   disabled?: boolean;
 }
@@ -37,6 +42,8 @@ export default function GroupContainer({
   onDelete,
   itemCount,
   itemNoun,
+  itemGapClassName = "space-y-1",
+  spacious,
   children,
   disabled,
 }: GroupContainerProps) {
@@ -65,7 +72,13 @@ export default function GroupContainer({
     <div
       ref={setNodeRef}
       style={style}
-      className={isUngrouped ? "" : "rounded-xl border border-gray-200 p-1.5"}
+      className={
+        isUngrouped
+          ? ""
+          : spacious
+            ? "rounded-xl border border-gray-200 bg-gray-50 p-2"
+            : "rounded-xl border border-gray-200 p-1.5"
+      }
     >
       {!isUngrouped &&
         (confirming ? (
@@ -81,7 +94,7 @@ export default function GroupContainer({
           <div className="flex items-stretch gap-0.5 mb-2">
             <button
               type="button"
-              className="shrink-0 flex items-center justify-center w-5 min-h-[40px] rounded text-gray-300 hover:text-gray-600 hover:bg-gray-100 touch-none cursor-grab active:cursor-grabbing disabled:opacity-40"
+              className="shrink-0 flex items-center justify-center w-5 min-h-[40px] rounded text-orange-600 hover:bg-gray-100 touch-none cursor-grab active:cursor-grabbing disabled:opacity-40"
               aria-label={`Reorder section ${heading || "(untitled)"}`}
               disabled={disabled}
               {...attributes}
@@ -109,7 +122,7 @@ export default function GroupContainer({
             </button>
           </div>
         ))}
-      {!confirming && <div className="space-y-1">{children}</div>}
+      {!confirming && <div className={itemGapClassName}>{children}</div>}
     </div>
   );
 }

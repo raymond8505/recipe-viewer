@@ -1,0 +1,206 @@
+"use client";
+
+import type { ChangeEvent, MutableRefObject } from "react";
+import type { OpState } from "@/hooks/useUndoableSchemaOp";
+import type { EditState } from "@/hooks/useRecipeEditor";
+import { ALLOWED_IMAGE_CONTENT_TYPES } from "@/lib/imageTypes";
+
+export interface RecipeControlsProps {
+  isEditing: boolean;
+  editState: EditState;
+  canSave: boolean;
+  /** Edit-mode source URL + status fields. */
+  draftUrl: string;
+  draftStatus: string;
+  onUrlChange: (value: string) => void;
+  onStatusChange: (value: string) => void;
+  /** Review banners shown when an op pre-populated the editor for confirmation. */
+  isRescrapeReview: boolean;
+  isRegenImageReview: boolean;
+  isUploadImageReview: boolean;
+  rescrapeState: OpState;
+  regenImageState: OpState;
+  /** Whether the Re-scrape button applies (mounted + not viewing the source URL). */
+  canRescrape: boolean;
+  /** Image-upload validation error flag. */
+  uploadError: boolean;
+  fileInputRef: MutableRefObject<HTMLInputElement | null>;
+  onEditStart: () => void;
+  onEditSave: () => void;
+  onEditCancel: () => void;
+  onRescrape: () => void;
+  onRegenImage: () => void;
+  onUploadOpen: () => void;
+  onFileSelected: (e: ChangeEvent<HTMLInputElement>) => void;
+}
+
+/**
+ * Presentational "Manage" toolbar for a recipe (edit / re-scrape / regen image /
+ * upload image, plus the edit-mode source URL + status + Save/Cancel). Pure UI:
+ * RecipeDetail owns all the editor/op/upload hooks and the composite handlers
+ * and passes state + callbacks in. The `isLoggedIn` gate stays in RecipeDetail.
+ */
+export default function RecipeControls({
+  isEditing,
+  editState,
+  canSave,
+  draftUrl,
+  draftStatus,
+  onUrlChange,
+  onStatusChange,
+  isRescrapeReview,
+  isRegenImageReview,
+  isUploadImageReview,
+  rescrapeState,
+  regenImageState,
+  canRescrape,
+  uploadError,
+  fileInputRef,
+  onEditStart,
+  onEditSave,
+  onEditCancel,
+  onRescrape,
+  onRegenImage,
+  onUploadOpen,
+  onFileSelected,
+}: RecipeControlsProps) {
+  return (
+    <section aria-label="Recipe management" className="mb-8">
+      <h2 className="text-xs font-semibold uppercase tracking-widest text-gray-400 mb-4">
+        Manage
+      </h2>
+      <div className="flex flex-wrap items-center gap-3">
+        {isEditing ? (
+          <>
+            {isRescrapeReview && (
+              <p className="w-full text-sm text-blue-700 bg-blue-50 rounded-lg px-3 py-2 mb-1">
+                Reviewing re-scraped data. Edit if needed, then confirm or
+                cancel.
+              </p>
+            )}
+            {isRegenImageReview && (
+              <p className="w-full text-sm text-purple-700 bg-purple-50 rounded-lg px-3 py-2 mb-1">
+                New image generated. Edit if needed, then confirm or cancel.
+              </p>
+            )}
+            {isUploadImageReview && (
+              <p className="w-full text-sm text-purple-700 bg-purple-50 rounded-lg px-3 py-2 mb-1">
+                Reviewing uploaded image. Edit if needed, then confirm or
+                cancel.
+              </p>
+            )}
+            <div className="w-full mb-1">
+              <label className="block text-xs font-medium text-gray-500 mb-1">
+                Source URL
+              </label>
+              <input
+                type="url"
+                value={draftUrl}
+                onChange={(e) => onUrlChange(e.target.value)}
+                disabled={editState === "saving"}
+                placeholder="https://example.com/recipe"
+                className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-orange-300 disabled:opacity-60"
+              />
+            </div>
+            <select
+              value={draftStatus}
+              onChange={(e) => onStatusChange(e.target.value)}
+              disabled={editState === "saving"}
+              className="px-3 py-2 text-sm font-medium rounded-lg border border-gray-200 text-gray-700 bg-white focus:outline-none focus:ring-2 focus:ring-orange-300 disabled:opacity-60"
+              aria-label="Recipe status"
+            >
+              <option value="published">Published</option>
+              <option value="draft">Draft</option>
+              <option value="archived">Archived</option>
+            </select>
+            <button
+              onClick={onEditSave}
+              disabled={editState === "saving" || !canSave}
+              className="px-4 py-2 text-sm font-medium rounded-lg bg-orange-500 text-white hover:bg-orange-600 disabled:opacity-50 transition-colors"
+            >
+              {editState === "saving"
+                ? "Saving…"
+                : isRescrapeReview || isRegenImageReview || isUploadImageReview
+                  ? "Confirm"
+                  : "Save"}
+            </button>
+            <button
+              onClick={onEditCancel}
+              disabled={editState === "saving"}
+              className="px-4 py-2 text-sm font-medium rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 disabled:opacity-50 transition-colors"
+            >
+              Cancel
+            </button>
+            {editState === "error" && (
+              <span className="text-sm text-red-600">
+                Save failed. Try again.
+              </span>
+            )}
+            {!canSave && (
+              <span className="text-sm text-red-600">
+                A step timer needs both a label and a time.
+              </span>
+            )}
+          </>
+        ) : (
+          <>
+            <button
+              onClick={onEditStart}
+              className="px-4 py-2 text-sm font-medium rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 transition-colors"
+            >
+              Edit
+            </button>
+            {canRescrape && (
+              <button
+                onClick={onRescrape}
+                disabled={rescrapeState === "loading"}
+                className="px-4 py-2 text-sm font-medium rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 disabled:opacity-50 transition-colors"
+              >
+                {rescrapeState === "loading" ? "Re-scraping…" : "Re-scrape"}
+              </button>
+            )}
+            {rescrapeState === "success" && (
+              <span className="text-sm text-green-600">Recipe updated.</span>
+            )}
+            {rescrapeState === "error" && (
+              <span className="text-sm text-red-600">
+                Re-scrape failed. Try again.
+              </span>
+            )}
+            <button
+              onClick={onRegenImage}
+              disabled={regenImageState === "loading"}
+              className="px-4 py-2 text-sm font-medium rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 disabled:opacity-50 transition-colors"
+            >
+              {regenImageState === "loading" ? "Generating…" : "Regen Image"}
+            </button>
+            {regenImageState === "error" && (
+              <span className="text-sm text-red-600">
+                Image generation failed. Try again.
+              </span>
+            )}
+            <button
+              onClick={onUploadOpen}
+              className="px-4 py-2 text-sm font-medium rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 transition-colors"
+            >
+              Upload Image
+            </button>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept={ALLOWED_IMAGE_CONTENT_TYPES.join(",")}
+              onChange={onFileSelected}
+              className="hidden"
+              aria-label="Choose image file to upload"
+            />
+            {uploadError && (
+              <span className="text-sm text-red-600">
+                File must be PNG, JPEG, or WebP and under 4MB.
+              </span>
+            )}
+          </>
+        )}
+      </div>
+    </section>
+  );
+}

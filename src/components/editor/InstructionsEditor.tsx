@@ -33,11 +33,18 @@ export default function InstructionsEditor({
       onChange={onChange}
       disabled={disabled}
       erroredItemIds={erroredStepIds}
-      makeItem={() => ({ id: nanoid(), text: "", name: "", minutes: 0, seconds: 0 })}
+      makeItem={() => ({
+        id: nanoid(),
+        text: "",
+        name: "",
+        minutes: 0,
+        seconds: 0,
+      })}
       itemLabel={(item) => item.text || item.name}
       itemNoun="step"
       groupNoun="section"
       rowDeleteInline
+      spacious
       renderItem={(step, update, errored, requestDelete) => (
         <div className="space-y-2 py-1">
           <AutoresizeTextarea
