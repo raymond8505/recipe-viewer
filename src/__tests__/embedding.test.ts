@@ -42,15 +42,12 @@ describe("generateEmbedding", () => {
     });
   });
 
-  it("L2-normalizes the returned vector", async () => {
+  it("returns the raw vector unchanged (no normalization)", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse({ embedding: { values: [3, 4] } })));
 
     const result = await generateEmbedding("text");
 
-    expect(result).toEqual([0.6, 0.8]);
-    // Unit length
-    const magnitude = Math.sqrt(result!.reduce((s, v) => s + v * v, 0));
-    expect(magnitude).toBeCloseTo(1, 10);
+    expect(result).toEqual([3, 4]);
   });
 
   it("returns null on a non-200 response", async () => {

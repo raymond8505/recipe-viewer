@@ -1,8 +1,10 @@
 import { env } from "@/env";
 
-// Google Gemini embedding model. At outputDimensionality below 3072 this model
-// returns UN-normalized vectors, so we L2-normalize ourselves before storing —
-// otherwise cosine/inner-product similarity in pgvector is meaningless.
+// Google Gemini embedding model. We store the raw vector as returned by the API
+// (no normalization). Vectors are queried with pgvector cosine distance (<=>),
+// which is scale-invariant, so L2-normalizing would change nothing — and it
+// would make new rows inconsistent with the existing (un-normalized) corpus
+// written by the prior n8n pipeline.
 const MODEL = "gemini-embedding-001";
 const OUTPUT_DIMENSIONALITY = 768;
 const TASK_TYPE = "RETRIEVAL_DOCUMENT";
@@ -12,16 +14,8 @@ interface EmbedContentResponse {
   embedding?: { values?: number[] };
 }
 
-function l2Normalize(values: number[]): number[] {
-  let sumSquares = 0;
-  for (const v of values) sumSquares += v * v;
-  const magnitude = Math.sqrt(sumSquares);
-  if (magnitude === 0) return values;
-  return values.map((v) => v / magnitude);
-}
-
 /**
- * Generate an L2-normalized embedding for `text` via the Gemini API.
+ * Generate an embedding for `text` via the Gemini API.
  *
  * Best-effort: any failure (network error, non-200, malformed body, empty
  * vector) is logged and returns `null` — callers persist the recipe regardless
@@ -55,7 +49,7 @@ export async function generateEmbedding(text: string): Promise<number[] | null> 
       return null;
     }
 
-    return l2Normalize(values);
+    return values;
   } catch (err) {
     console.error("Embedding request threw:", err);
     return null;

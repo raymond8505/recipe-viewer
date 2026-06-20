@@ -5,7 +5,10 @@ import type { RecipeStatus } from "@/lib/recipes";
 import { requireSessionOrRecipeToken } from "@/lib/api/guard";
 
 export const POST = requireSessionOrRecipeToken(
-  async (req: Request, { params }: RouteContext<"/api/recipes/[id]/update">) => {
+  async (
+    req: Request,
+    { params }: RouteContext<"/api/recipes/[id]/update">,
+  ) => {
     const { id } = await params;
 
     const recipe = await getRecipeById(id);
