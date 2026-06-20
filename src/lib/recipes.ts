@@ -164,14 +164,9 @@ export async function getRecipeById(id: string): Promise<RecipeRow | null> {
 }
 
 // Insert a new recipe row. Defaults status to "draft" if not provided.
-// Throws RecipeRepoError("insert_failed") on Supabase failure.
-//
-// The `recipes` table has a top-level NOT NULL `content` column and a nullable
-// `embedding vector(768)` column. Both are derived here from the SchemaRecipe
-// so every write path (MCP + UI) produces them identically: `content` is the
-// full markdown rendering of the recipe, `embedding` is the Gemini embedding of
-// that markdown. Embedding generation is best-effort — if it returns null
-// (e.g. Google is down) the row still inserts without an embedding.
+// Throws RecipeRepoError("insert_failed") on Supabase failure. Derives the
+// `content` and `embedding` columns from the schema — see the "Derived content
+// + embedding columns" note in .claude/CLAUDE.md.
 export async function createRecipeRow(input: CreateRecipeInput): Promise<RecipeRow> {
   const supabase = getSupabaseClient();
   const content = schemaToMarkdown(input.schema);
