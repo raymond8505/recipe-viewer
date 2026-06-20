@@ -6,3 +6,7 @@ node_modules
 .env
 *.md
 coverage
+# Per-PR staging clones live at ${VPS_DEPLOY_PATH}/staging/pr-N, nested inside the
+# prod deploy checkout. Keep them out of the prod build context so the prod image
+# never compiles another PR's source (which would cross-resolve @/env to root).
+staging
