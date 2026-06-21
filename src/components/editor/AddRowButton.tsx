@@ -8,7 +8,7 @@ interface AddRowButtonProps {
   disabled?: boolean;
 }
 
-/** Dashed "+ label" button for adding an item or group. ≥44px tall. */
+/** "+ label" button for adding an item or group. ≥44px tall. */
 export default function AddRowButton({
   label,
   onClick,

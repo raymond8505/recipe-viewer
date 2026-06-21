@@ -1,6 +1,8 @@
 import { describe, it, expect } from "vitest";
 import {
   formatDuration,
+  formatMS,
+  parseMS,
   formatDate,
   getFirstImage,
   toArray,
@@ -51,6 +53,36 @@ describe("formatDuration", () => {
 
   it("handles multi-digit hours and minutes", () => {
     expect(formatDuration("PT12H45M")).toBe("12 hr 45 min");
+  });
+});
+
+describe("formatMS", () => {
+  it("blanks a zero duration", () => {
+    expect(formatMS(0, 0)).toBe("");
+  });
+  it("shows m:ss", () => {
+    expect(formatMS(5, 30)).toBe("5:30");
+    expect(formatMS(0, 45)).toBe("0:45");
+    expect(formatMS(2, 0)).toBe("2:00");
+  });
+  it("does not cap minutes", () => {
+    expect(formatMS(90, 0)).toBe("90:00");
+  });
+});
+
+describe("parseMS", () => {
+  it("parses m:ss", () => {
+    expect(parseMS("5:30")).toEqual({ minutes: 5, seconds: 30 });
+  });
+  it("carries seconds >= 60 into minutes", () => {
+    expect(parseMS("1:90")).toEqual({ minutes: 2, seconds: 30 });
+  });
+  it("treats a bare number as minutes", () => {
+    expect(parseMS("5")).toEqual({ minutes: 5, seconds: 0 });
+  });
+  it("treats blank/garbage as zero", () => {
+    expect(parseMS("")).toEqual({ minutes: 0, seconds: 0 });
+    expect(parseMS("abc")).toEqual({ minutes: 0, seconds: 0 });
   });
 });
 

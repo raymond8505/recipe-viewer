@@ -37,6 +37,30 @@ export function parseDurationToSeconds(
   return total > 0 ? total : null;
 }
 
+const pad = (n: number) => String(n).padStart(2, "0");
+
+/** minutes/seconds → "m:ss" display; a zero duration is blank (no timer).
+ *  Minutes are not capped, so a long step reads e.g. "90:00". */
+export function formatMS(minutes: number, seconds: number): string {
+  if (minutes <= 0 && seconds <= 0) return "";
+  return `${minutes}:${pad(seconds)}`;
+}
+
+/** Lenient parse of a duration: "5:30" → 5m30s (seconds ≥60 carry into
+ *  minutes); a bare number is minutes ("5" → 5:00). Never time-of-day, so no
+ *  AM/PM. */
+export function parseMS(raw: string): { minutes: number; seconds: number } {
+  const text = raw.trim();
+  if (!text) return { minutes: 0, seconds: 0 };
+  if (text.includes(":")) {
+    const [m, s] = text.split(":");
+    const total =
+      Math.max(0, parseInt(m, 10) || 0) * 60 + Math.max(0, parseInt(s, 10) || 0);
+    return { minutes: Math.floor(total / 60), seconds: total % 60 };
+  }
+  return { minutes: Math.max(0, parseInt(text, 10) || 0), seconds: 0 };
+}
+
 /**
  * Format an ISO 8601 date string to a human-readable date.
  * e.g. "2026-02-25" → "February 25, 2026"

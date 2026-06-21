@@ -23,6 +23,7 @@ import GroupContainer from "./GroupContainer";
 import SortableItem from "./SortableItem";
 import AddRowButton from "./AddRowButton";
 import { fromGroupSortId, isGroupSortId, toGroupSortId } from "./dragIds";
+import { containerIndexOf, findGroupIndexByItem } from "./groupHelpers";
 
 interface SortableGroupedListProps<T extends { id: string }> {
   groups: EditableGroup<T>[];
@@ -53,24 +54,6 @@ interface SortableGroupedListProps<T extends { id: string }> {
   /** Item ids with a validation error (highlighted). */
   erroredItemIds?: Set<string>;
   disabled?: boolean;
-}
-
-function findGroupIndexByItem<T extends { id: string }>(
-  groups: EditableGroup<T>[],
-  itemId: string,
-): number {
-  return groups.findIndex((g) => g.items.some((it) => it.id === itemId));
-}
-
-function containerIndexOf<T extends { id: string }>(
-  groups: EditableGroup<T>[],
-  id: string,
-): number {
-  if (isGroupSortId(id)) {
-    const realId = fromGroupSortId(id);
-    return groups.findIndex((g) => g.id === realId);
-  }
-  return findGroupIndexByItem(groups, id);
 }
 
 /**
