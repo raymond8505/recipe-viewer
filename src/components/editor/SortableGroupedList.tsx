@@ -95,7 +95,9 @@ export default function SortableGroupedList<T extends { id: string }>({
   const [, setActiveId] = useState<string | null>(null);
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
-    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    }),
   );
 
   const updateItem = (groupId: string, itemId: string, partial: Partial<T>) =>
@@ -131,7 +133,10 @@ export default function SortableGroupedList<T extends { id: string }>({
   const addItemToList = () => {
     const nullIdx = groups.findIndex((g) => g.heading === null);
     if (nullIdx === -1) {
-      onChange([...groups, { id: nanoid(), heading: null, items: [makeItem()] }]);
+      onChange([
+        ...groups,
+        { id: nanoid(), heading: null, items: [makeItem()] },
+      ]);
     } else {
       onChange(
         groups.map((g, i) =>
@@ -225,9 +230,7 @@ export default function SortableGroupedList<T extends { id: string }>({
               heading={group.heading}
               onHeadingChange={(h) => setHeading(group.id, h)}
               onDelete={
-                group.heading === null
-                  ? undefined
-                  : () => deleteGroup(group.id)
+                group.heading === null ? undefined : () => deleteGroup(group.id)
               }
               itemCount={group.items.length}
               itemNoun={itemNoun}
