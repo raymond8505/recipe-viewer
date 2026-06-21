@@ -11,9 +11,6 @@ const securityHeaders = [
 ];
 
 const nextConfig: NextConfig = {
-  turbopack: {
-    root: "./",
-  },
   output: "standalone",
   images: {
     // Recipe images come from arbitrary food blog domains — wildcard is intentional.
