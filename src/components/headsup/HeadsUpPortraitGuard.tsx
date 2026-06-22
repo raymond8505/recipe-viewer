@@ -2,7 +2,7 @@
 
 export default function HeadsUpPortraitGuard() {
   return (
-    <div className="fixed inset-0 z-[60] bg-gray-900 flex flex-col items-center justify-center text-center px-8">
+    <div className="fixed inset-0 z-60 bg-gray-900 flex flex-col items-center justify-center text-center px-8">
       {/* Rotating phone icon */}
       <svg
         width="80"

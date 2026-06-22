@@ -111,7 +111,7 @@ export default function MealSearch({ excludeIds, onAdd }: MealSearchProps) {
           onChange={(e) => handleQueryChange(e.target.value)}
           onKeyDown={handleInputKeyDown}
           placeholder="Add recipe to meal…"
-          className="flex-1 min-w-0 text-sm text-gray-800 placeholder-gray-400 outline-none bg-transparent"
+          className="flex-1 min-w-0 text-sm text-gray-800 placeholder-gray-400 outline-hidden bg-transparent"
           aria-label="Search recipes to add to meal"
           aria-haspopup="listbox"
           aria-expanded={showDropdown}

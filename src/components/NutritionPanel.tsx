@@ -32,7 +32,7 @@ export default function NutritionPanel({ recipe, onSplitPortions }: NutritionPan
             >
               −
             </button>
-            <span className="font-semibold text-gray-900 min-w-[3rem] text-center tabular-nums text-sm">
+            <span className="font-semibold text-gray-900 min-w-12 text-center tabular-nums text-sm">
               1/{portions}
             </span>
             <button

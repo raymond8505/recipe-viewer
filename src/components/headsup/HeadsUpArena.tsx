@@ -63,11 +63,11 @@ export default function HeadsUpArena({
         {/* VS divider */}
         <div className="flex items-center justify-center px-4 shrink-0">
           <div className="flex flex-col items-center gap-1">
-            <div className="w-px h-8 bg-gradient-to-b from-transparent via-amber-500 to-transparent" />
+            <div className="w-px h-8 bg-linear-to-b from-transparent via-amber-500 to-transparent" />
             <span className="text-3xl font-black text-amber-400 drop-shadow-[0_0_12px_rgba(218,165,32,0.6)] select-none">
               VS
             </span>
-            <div className="w-px h-8 bg-gradient-to-b from-transparent via-amber-500 to-transparent" />
+            <div className="w-px h-8 bg-linear-to-b from-transparent via-amber-500 to-transparent" />
           </div>
         </div>
 

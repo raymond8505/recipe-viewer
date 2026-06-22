@@ -99,14 +99,14 @@ export default function RecipeControls({
                 onChange={(e) => onUrlChange(e.target.value)}
                 disabled={editState === "saving"}
                 placeholder="https://example.com/recipe"
-                className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-orange-300 disabled:opacity-60"
+                className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm text-gray-700 focus:outline-hidden focus:ring-2 focus:ring-orange-300 disabled:opacity-60"
               />
             </div>
             <select
               value={draftStatus}
               onChange={(e) => onStatusChange(e.target.value)}
               disabled={editState === "saving"}
-              className="px-3 py-2 text-sm font-medium rounded-lg border border-gray-200 text-gray-700 bg-white focus:outline-none focus:ring-2 focus:ring-orange-300 disabled:opacity-60"
+              className="px-3 py-2 text-sm font-medium rounded-lg border border-gray-200 text-gray-700 bg-white focus:outline-hidden focus:ring-2 focus:ring-orange-300 disabled:opacity-60"
               aria-label="Recipe status"
             >
               <option value="published">Published</option>

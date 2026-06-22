@@ -38,7 +38,7 @@ export default function IngredientsEditor({
           disabled={disabled}
           placeholder="e.g. 1 tsp cumin"
           aria-label="Ingredient"
-          className="w-full min-h-[40px] rounded-lg border border-gray-200 px-2 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-orange-300 disabled:opacity-60"
+          className="w-full min-h-[40px] rounded-lg border border-gray-200 px-2 text-sm text-gray-700 focus:outline-hidden focus:ring-2 focus:ring-orange-300 disabled:opacity-60"
         />
       )}
     />

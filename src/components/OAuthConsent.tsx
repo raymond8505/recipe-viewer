@@ -64,7 +64,7 @@ export default function OAuthConsent({
             placeholder="Password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            className="w-full min-h-[44px] px-4 border border-gray-300 rounded-xl text-base focus:outline-none focus:ring-2 focus:ring-orange-400"
+            className="w-full min-h-[44px] px-4 border border-gray-300 rounded-xl text-base focus:outline-hidden focus:ring-2 focus:ring-orange-400"
             autoComplete="current-password"
             autoFocus
           />

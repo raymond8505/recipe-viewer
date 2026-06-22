@@ -12,7 +12,7 @@ function Demo({ initial }: { initial: string }) {
         onChange={(e) => setValue(e.target.value)}
         aria-label="Step instructions"
         placeholder="Describe this step…"
-        className="block w-full min-h-[44px] rounded-lg border border-gray-200 p-2 text-sm text-gray-700 leading-relaxed focus:outline-none focus:ring-2 focus:ring-orange-300 resize-none overflow-hidden"
+        className="block w-full min-h-[44px] rounded-lg border border-gray-200 p-2 text-sm text-gray-700 leading-relaxed focus:outline-hidden focus:ring-2 focus:ring-orange-300 resize-none overflow-hidden"
       />
     </div>
   );

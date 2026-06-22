@@ -17,7 +17,7 @@ export default function ServingsControl({ servings, onChange }: ServingsControlP
         >
           −
         </button>
-        <span className="font-semibold text-gray-900 min-w-[2rem] text-center tabular-nums">
+        <span className="font-semibold text-gray-900 min-w-8 text-center tabular-nums">
           {servings}
         </span>
         <button

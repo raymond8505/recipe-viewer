@@ -215,7 +215,7 @@ export default function RecipeDetail({
               onChange={(e) => patch({ name: e.target.value })}
               disabled={editState === "saving"}
               placeholder="Recipe title"
-              className="w-full rounded-lg border border-gray-200 p-3 text-3xl sm:text-4xl font-bold text-gray-900 leading-tight focus:outline-none focus:ring-2 focus:ring-orange-300 disabled:opacity-60"
+              className="w-full rounded-lg border border-gray-200 p-3 text-3xl sm:text-4xl font-bold text-gray-900 leading-tight focus:outline-hidden focus:ring-2 focus:ring-orange-300 disabled:opacity-60"
             />
           ) : (
             <>
@@ -233,7 +233,7 @@ export default function RecipeDetail({
             onChange={(e) => patch({ description: e.target.value })}
             disabled={editState === "saving"}
             placeholder="Description"
-            className="w-full rounded-lg border border-gray-200 p-3 text-gray-700 text-lg leading-relaxed min-h-[80px] focus:outline-none focus:ring-2 focus:ring-orange-300 disabled:opacity-60 resize-y"
+            className="w-full rounded-lg border border-gray-200 p-3 text-gray-700 text-lg leading-relaxed min-h-[80px] focus:outline-hidden focus:ring-2 focus:ring-orange-300 disabled:opacity-60 resize-y"
           />
         ) : (
           schema.description && (
@@ -452,7 +452,7 @@ export default function RecipeDetail({
               onChange={(e) => patch({ notes: e.target.value })}
               disabled={editState === "saving"}
               placeholder="Add notes…"
-              className="w-full rounded-lg border border-gray-200 p-3 text-gray-700 leading-relaxed min-h-[120px] focus:outline-none focus:ring-2 focus:ring-orange-300 disabled:opacity-60 resize-y"
+              className="w-full rounded-lg border border-gray-200 p-3 text-gray-700 leading-relaxed min-h-[120px] focus:outline-hidden focus:ring-2 focus:ring-orange-300 disabled:opacity-60 resize-y"
             />
           ) : (
             <p className="text-gray-700 leading-relaxed whitespace-pre-line">

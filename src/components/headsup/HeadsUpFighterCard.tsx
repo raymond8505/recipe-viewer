@@ -37,7 +37,7 @@ export default function HeadsUpFighterCard({
         relative w-full max-w-sm text-left
         transition-transform duration-200
         ${isSelected ? "scale-[1.02]" : ""}
-        focus:outline-none focus:ring-2 focus:ring-amber-400 focus:ring-offset-2 focus:ring-offset-gray-900
+        focus:outline-hidden focus:ring-2 focus:ring-amber-400 focus:ring-offset-2 focus:ring-offset-gray-900
         ${slideClass}
       `}
     >
@@ -45,7 +45,7 @@ export default function HeadsUpFighterCard({
         <div className="card-inner">
           {/* Inset image */}
           <div className="image-frame">
-            <div className="relative w-full aspect-[4/3]">
+            <div className="relative w-full aspect-4/3">
               {image && !imgError ? (
                 <Image
                   src={image}
@@ -79,7 +79,7 @@ export default function HeadsUpFighterCard({
 
           {/* Flavor text */}
           {schema.description && (
-            <p className="text-xs text-gray-500 italic text-center px-2 py-1.5 line-clamp-2 leading-relaxed flex-shrink min-h-0">
+            <p className="text-xs text-gray-500 italic text-center px-2 py-1.5 line-clamp-2 leading-relaxed shrink min-h-0">
               {schema.description}
             </p>
           )}
