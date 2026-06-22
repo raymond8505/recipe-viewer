@@ -23,15 +23,18 @@ describe("useRecipeEditor", () => {
     const { result } = renderHook(() => useRecipeEditor());
     act(() => result.current.begin(schema, "published", "https://x.test"));
     expect(result.current.isEditing).toBe(true);
-    expect(result.current.draft).toEqual({
+    expect(result.current.draft).toMatchObject({
       name: "Pancakes",
       url: "https://x.test",
       description: "Fluffy.",
-      ingredients: "2 cups flour\n1 egg",
-      instructions: expect.stringContaining("Mix"),
       notes: "Use buttermilk.",
       status: "published",
     });
+    // ingredients/instructions are the structured editor trees
+    expect(result.current.draft.ingredients[0].items.map((i) => i.name)).toEqual(
+      ["2 cups flour", "1 egg"],
+    );
+    expect(result.current.draft.instructions[0].items[0].text).toBe("Mix");
   });
 
   it("patch shallow-merges the draft", () => {
@@ -56,6 +59,62 @@ describe("useRecipeEditor", () => {
     const built = result.current.buildSchema(schema);
     expect(built.name).toBe("Pancakes");
     expect(built.description).toBeUndefined();
+  });
+
+  it("buildSchema produces structured ingredient/instruction arrays", () => {
+    const { result } = renderHook(() => useRecipeEditor());
+    act(() => result.current.begin(schema, "draft", ""));
+    const built = result.current.buildSchema(schema);
+    expect(built.recipeIngredient).toEqual(["2 cups flour", "1 egg"]);
+    expect(built.recipeInstructions).toEqual([
+      { "@type": "HowToStep", text: "Mix" },
+    ]);
+  });
+
+  it("flags a step with a name but no time and blocks saving", () => {
+    const { result } = renderHook(() => useRecipeEditor());
+    act(() => result.current.begin(schema, "draft", ""));
+    const stepId = result.current.draft.instructions[0].items[0].id;
+    act(() =>
+      result.current.patch({
+        instructions: [
+          {
+            ...result.current.draft.instructions[0],
+            items: [
+              {
+                ...result.current.draft.instructions[0].items[0],
+                name: "Mix well",
+              },
+            ],
+          },
+        ],
+      }),
+    );
+    expect(result.current.instructionErrors.has(stepId)).toBe(true);
+    expect(result.current.canSave).toBe(false);
+  });
+
+  it("canSave is true once name and time are both set", () => {
+    const { result } = renderHook(() => useRecipeEditor());
+    act(() => result.current.begin(schema, "draft", ""));
+    act(() =>
+      result.current.patch({
+        instructions: [
+          {
+            ...result.current.draft.instructions[0],
+            items: [
+              {
+                ...result.current.draft.instructions[0].items[0],
+                name: "Mix well",
+                minutes: 5,
+              },
+            ],
+          },
+        ],
+      }),
+    );
+    expect(result.current.canSave).toBe(true);
+    expect(result.current.instructionErrors.size).toBe(0);
   });
 
   it("runSave transitions saving → idle on success", async () => {

@@ -11,6 +11,17 @@ const config: StorybookConfig = {
     options: {},
   },
   viteFinal(config, { configType }) {
+    // tsconfig excludes **/*.stories.tsx (a tsc-perf choice), which also removes
+    // them from vite-tsconfig-paths' file scope — so `@/…` imports inside story
+    // files stop resolving. Define the alias explicitly here, mirroring
+    // vitest.config.ts, to keep Storybook resolution independent of tsconfig scope.
+    const srcDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../src");
+    config.resolve ??= {};
+    if (Array.isArray(config.resolve.alias)) {
+      config.resolve.alias.push({ find: /^@\//, replacement: `${srcDir}/` });
+    } else {
+      config.resolve.alias = { ...config.resolve.alias, "@": srcDir };
+    }
     if (configType === "DEVELOPMENT") {
       const certsDir = path.join(path.dirname(fileURLToPath(import.meta.url)), "certs");
       config.server ??= {};

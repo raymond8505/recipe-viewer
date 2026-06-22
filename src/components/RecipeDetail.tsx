@@ -20,12 +20,12 @@ import { useScalableRecipe } from "@/hooks/useScalableRecipe";
 import { useRecipeEditor } from "@/hooks/useRecipeEditor";
 import { useUndoableSchemaOp } from "@/hooks/useUndoableSchemaOp";
 import { useImageUpload } from "@/hooks/useImageUpload";
-import {
-  ALLOWED_IMAGE_CONTENT_TYPES,
-  DEFAULT_MAX_IMAGE_BYTES,
-} from "@/lib/imageTypes";
+import { DEFAULT_MAX_IMAGE_BYTES } from "@/lib/imageTypes";
 import CookingModeButton from "./CookingModeButton";
+import RecipeControls from "./RecipeControls";
 import { CheckIcon, CopyIcon } from "@/components/icons";
+import IngredientsEditor from "./editor/IngredientsEditor";
+import InstructionsEditor from "./editor/InstructionsEditor";
 import IngredientItem from "./IngredientItem";
 import ServingsControl from "./ServingsControl";
 import NutritionPanel from "./NutritionPanel";
@@ -187,7 +187,7 @@ export default function RecipeDetail({
   };
 
   return (
-    <article className="max-w-3xl mx-auto">
+    <article className="max-w-3xl lg:max-w-5xl mx-auto">
       {/* Header */}
       <header className="mb-8">
         <div className="flex flex-wrap gap-2 mb-4">
@@ -250,151 +250,6 @@ export default function RecipeDetail({
         </div>
       </header>
 
-      {/* Recipe Controls — logged-in only */}
-      {isLoggedIn && (
-        <section
-          aria-label="Recipe management"
-          className="mt-12 pt-6 border-t border-gray-100"
-        >
-          <h2 className="text-xs font-semibold uppercase tracking-widest text-gray-400 mb-4">
-            Manage
-          </h2>
-          <div className="flex flex-wrap items-center gap-3">
-            {isEditing ? (
-              <>
-                {isRescrapeReview && (
-                  <p className="w-full text-sm text-blue-700 bg-blue-50 rounded-lg px-3 py-2 mb-1">
-                    Reviewing re-scraped data. Edit if needed, then confirm or
-                    cancel.
-                  </p>
-                )}
-                {isRegenImageReview && (
-                  <p className="w-full text-sm text-purple-700 bg-purple-50 rounded-lg px-3 py-2 mb-1">
-                    New image generated. Edit if needed, then confirm or cancel.
-                  </p>
-                )}
-                {isUploadImageReview && (
-                  <p className="w-full text-sm text-purple-700 bg-purple-50 rounded-lg px-3 py-2 mb-1">
-                    Reviewing uploaded image. Edit if needed, then confirm or
-                    cancel.
-                  </p>
-                )}
-                <div className="w-full mb-1">
-                  <label className="block text-xs font-medium text-gray-500 mb-1">
-                    Source URL
-                  </label>
-                  <input
-                    type="url"
-                    value={draft.url}
-                    onChange={(e) => patch({ url: e.target.value })}
-                    disabled={editState === "saving"}
-                    placeholder="https://example.com/recipe"
-                    className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-orange-300 disabled:opacity-60"
-                  />
-                </div>
-                <select
-                  value={draft.status}
-                  onChange={(e) => patch({ status: e.target.value })}
-                  disabled={editState === "saving"}
-                  className="px-3 py-2 text-sm font-medium rounded-lg border border-gray-200 text-gray-700 bg-white focus:outline-none focus:ring-2 focus:ring-orange-300 disabled:opacity-60"
-                  aria-label="Recipe status"
-                >
-                  <option value="published">Published</option>
-                  <option value="draft">Draft</option>
-                  <option value="archived">Archived</option>
-                </select>
-                <button
-                  onClick={handleEditSave}
-                  disabled={editState === "saving"}
-                  className="px-4 py-2 text-sm font-medium rounded-lg bg-orange-500 text-white hover:bg-orange-600 disabled:opacity-50 transition-colors"
-                >
-                  {editState === "saving"
-                    ? "Saving\u2026"
-                    : isRescrapeReview || isRegenImageReview || isUploadImageReview
-                      ? "Confirm"
-                      : "Save"}
-                </button>
-                <button
-                  onClick={handleEditCancel}
-                  disabled={editState === "saving"}
-                  className="px-4 py-2 text-sm font-medium rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 disabled:opacity-50 transition-colors"
-                >
-                  Cancel
-                </button>
-                {editState === "error" && (
-                  <span className="text-sm text-red-600">
-                    Save failed. Try again.
-                  </span>
-                )}
-              </>
-            ) : (
-              <>
-                <button
-                  onClick={handleEditStart}
-                  className="px-4 py-2 text-sm font-medium rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 transition-colors"
-                >
-                  Edit
-                </button>
-                {isMounted && recipe.url !== window.location.href && (
-                  <button
-                    onClick={handleRescrape}
-                    disabled={rescrapeState === "loading"}
-                    className="px-4 py-2 text-sm font-medium rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 disabled:opacity-50 transition-colors"
-                  >
-                    {rescrapeState === "loading"
-                      ? "Re-scraping\u2026"
-                      : "Re-scrape"}
-                  </button>
-                )}
-                {rescrapeState === "success" && (
-                  <span className="text-sm text-green-600">
-                    Recipe updated.
-                  </span>
-                )}
-                {rescrapeState === "error" && (
-                  <span className="text-sm text-red-600">
-                    Re-scrape failed. Try again.
-                  </span>
-                )}
-                <button
-                  onClick={handleRegenImage}
-                  disabled={regenImageState === "loading"}
-                  className="px-4 py-2 text-sm font-medium rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 disabled:opacity-50 transition-colors"
-                >
-                  {regenImageState === "loading"
-                    ? "Generating\u2026"
-                    : "Regen Image"}
-                </button>
-                {regenImageState === "error" && (
-                  <span className="text-sm text-red-600">
-                    Image generation failed. Try again.
-                  </span>
-                )}
-                <button
-                  onClick={imageUpload.open}
-                  className="px-4 py-2 text-sm font-medium rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 transition-colors"
-                >
-                  Upload Image
-                </button>
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept={ALLOWED_IMAGE_CONTENT_TYPES.join(",")}
-                  onChange={handleFileSelected}
-                  className="hidden"
-                  aria-label="Choose image file to upload"
-                />
-                {imageUpload.error && (
-                  <span className="text-sm text-red-600">
-                    File must be PNG, JPEG, or WebP and under 4MB.
-                  </span>
-                )}
-              </>
-            )}
-          </div>
-        </section>
-      )}
-
       {/* Image */}
       {(previewUrl || image) && (
         <div className="w-full rounded-2xl overflow-hidden mb-8 bg-gray-100">
@@ -436,6 +291,34 @@ export default function RecipeDetail({
         </div>
       )}
 
+      {/* Recipe Controls — logged-in only */}
+      {isLoggedIn && (
+        <RecipeControls
+          isEditing={isEditing}
+          editState={editState}
+          canSave={editor.canSave}
+          draftUrl={draft.url}
+          draftStatus={draft.status}
+          onUrlChange={(url) => patch({ url })}
+          onStatusChange={(status) => patch({ status })}
+          isRescrapeReview={isRescrapeReview}
+          isRegenImageReview={isRegenImageReview}
+          isUploadImageReview={isUploadImageReview}
+          rescrapeState={rescrapeState}
+          regenImageState={regenImageState}
+          canRescrape={isMounted && recipe.url !== window.location.href}
+          uploadError={imageUpload.error}
+          fileInputRef={fileInputRef}
+          onEditStart={handleEditStart}
+          onEditSave={handleEditSave}
+          onEditCancel={handleEditCancel}
+          onRescrape={handleRescrape}
+          onRegenImage={handleRegenImage}
+          onUploadOpen={imageUpload.open}
+          onFileSelected={handleFileSelected}
+        />
+      )}
+
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-8">
         {/* Ingredients */}
         {(isEditing ||
@@ -457,14 +340,10 @@ export default function RecipeDetail({
               )}
             </div>
             {isEditing ? (
-              <textarea
+              <IngredientsEditor
                 value={draft.ingredients}
-                onChange={(e) => patch({ ingredients: e.target.value })}
+                onChange={(groups) => patch({ ingredients: groups })}
                 disabled={editState === "saving"}
-                placeholder={
-                  "One ingredient per line.\nUse ## Group Name for sections."
-                }
-                className="w-full rounded-lg border border-gray-200 p-3 font-mono text-sm text-gray-700 min-h-[200px] focus:outline-none focus:ring-2 focus:ring-orange-300 disabled:opacity-60 resize-y"
               />
             ) : (
               scalable.groupedIngredients.map(({ heading, items }, gi) => (
@@ -515,14 +394,11 @@ export default function RecipeDetail({
               Instructions
             </h2>
             {isEditing ? (
-              <textarea
+              <InstructionsEditor
                 value={draft.instructions}
-                onChange={(e) => patch({ instructions: e.target.value })}
+                onChange={(groups) => patch({ instructions: groups })}
+                erroredStepIds={editor.instructionErrors}
                 disabled={editState === "saving"}
-                placeholder={
-                  "- Step one\n- Step two\n\n## Section Name\n- Step in section"
-                }
-                className="w-full rounded-lg border border-gray-200 p-3 font-mono text-sm text-gray-700 min-h-[300px] focus:outline-none focus:ring-2 focus:ring-orange-300 disabled:opacity-60 resize-y"
               />
             ) : schema.recipeInstructions![0]["@type"] === "HowToSection" ? (
               <div className="space-y-6">

@@ -1,18 +1,26 @@
 import { describe, it, expect } from "vitest";
 import {
   formatDuration,
+  formatMS,
+  parseMS,
   formatDate,
   getFirstImage,
   toArray,
   groupIngredients,
   getIngredientText,
-  instructionsToMarkdown,
   markdownToInstructions,
   normalizeRecipeInstructions,
-  ingredientsToText,
-  textToIngredients,
   toSchemaOrgJsonLd,
+  msToIsoDuration,
+  schemaToEditableIngredients,
+  editableIngredientsToSchema,
+  schemaToEditableInstructions,
+  editableInstructionsToSchema,
 } from "@/lib/format";
+import type {
+  EditableIngredients,
+  EditableInstructions,
+} from "@/types/editor";
 
 describe("formatDuration", () => {
   it("formats hours and minutes", () => {
@@ -45,6 +53,36 @@ describe("formatDuration", () => {
 
   it("handles multi-digit hours and minutes", () => {
     expect(formatDuration("PT12H45M")).toBe("12 hr 45 min");
+  });
+});
+
+describe("formatMS", () => {
+  it("blanks a zero duration", () => {
+    expect(formatMS(0, 0)).toBe("");
+  });
+  it("shows m:ss", () => {
+    expect(formatMS(5, 30)).toBe("5:30");
+    expect(formatMS(0, 45)).toBe("0:45");
+    expect(formatMS(2, 0)).toBe("2:00");
+  });
+  it("does not cap minutes", () => {
+    expect(formatMS(90, 0)).toBe("90:00");
+  });
+});
+
+describe("parseMS", () => {
+  it("parses m:ss", () => {
+    expect(parseMS("5:30")).toEqual({ minutes: 5, seconds: 30 });
+  });
+  it("carries seconds >= 60 into minutes", () => {
+    expect(parseMS("1:90")).toEqual({ minutes: 2, seconds: 30 });
+  });
+  it("treats a bare number as minutes", () => {
+    expect(parseMS("5")).toEqual({ minutes: 5, seconds: 0 });
+  });
+  it("treats blank/garbage as zero", () => {
+    expect(parseMS("")).toEqual({ minutes: 0, seconds: 0 });
+    expect(parseMS("abc")).toEqual({ minutes: 0, seconds: 0 });
   });
 });
 
@@ -160,34 +198,6 @@ describe("groupIngredients", () => {
   });
 });
 
-describe("instructionsToMarkdown", () => {
-  it("converts flat HowToStep list to bullet lines", () => {
-    const result = instructionsToMarkdown([
-      { "@type": "HowToStep", text: "Boil water." },
-      { "@type": "HowToStep", text: "Add pasta." },
-    ]);
-    expect(result).toBe("- Boil water.\n\n- Add pasta.");
-  });
-
-  it("converts HowToSection list with headers", () => {
-    const result = instructionsToMarkdown([
-      {
-        "@type": "HowToSection",
-        name: "For the sauce",
-        itemListElement: [
-          { text: "Simmer tomatoes." },
-          { text: "Add garlic." },
-        ],
-      },
-    ]);
-    expect(result).toBe("## For the sauce\n- Simmer tomatoes.\n- Add garlic.");
-  });
-
-  it("returns empty string for empty array", () => {
-    expect(instructionsToMarkdown([])).toBe("");
-  });
-});
-
 describe("markdownToInstructions", () => {
   it("parses bullet lines as flat HowToStep list", () => {
     const result = markdownToInstructions("- Boil water.\n- Add pasta.");
@@ -221,16 +231,8 @@ describe("markdownToInstructions", () => {
     expect(markdownToInstructions("")).toHaveLength(0);
   });
 
-  it("round-trips through instructionsToMarkdown", () => {
-    const original = [
-      {
-        "@type": "HowToSection" as const,
-        name: "Prep",
-        itemListElement: [{ "@type": "HowToStep" as const, text: "Chop onions." }],
-      },
-    ];
-    const md = instructionsToMarkdown(original);
-    const parsed = markdownToInstructions(md);
+  it("parses a multi-section markdown block", () => {
+    const parsed = markdownToInstructions("## Prep\n- Chop onions.");
     expect(parsed).toHaveLength(1);
     const section = parsed[0] as import("@/types/recipe").HowToSection;
     expect(section.name).toBe("Prep");
@@ -238,59 +240,117 @@ describe("markdownToInstructions", () => {
   });
 });
 
-describe("ingredientsToText", () => {
-  it("converts plain strings to one per line", () => {
-    expect(ingredientsToText(["2 cups flour", "1 tsp salt"])).toBe(
-      "2 cups flour\n1 tsp salt"
-    );
+describe("msToIsoDuration", () => {
+  it("builds minutes + seconds", () => {
+    expect(msToIsoDuration(5, 30)).toBe("PT5M30S");
   });
 
-  it("emits ## headers for grouped ingredients", () => {
-    const result = ingredientsToText([
-      { name: "2 cups flour", group: "Cake" },
-      { name: "1 tsp vanilla", group: "Frosting" },
-    ]);
-    expect(result).toContain("## Cake");
-    expect(result).toContain("2 cups flour");
-    expect(result).toContain("## Frosting");
-    expect(result).toContain("1 tsp vanilla");
+  it("omits the zero component", () => {
+    expect(msToIsoDuration(0, 45)).toBe("PT45S");
+    expect(msToIsoDuration(2, 0)).toBe("PT2M");
   });
 
-  it("returns empty string for empty array", () => {
-    expect(ingredientsToText([])).toBe("");
+  it("normalizes minutes over 59 into hours", () => {
+    expect(msToIsoDuration(90, 0)).toBe("PT1H30M");
+  });
+
+  it("returns undefined when both are zero", () => {
+    expect(msToIsoDuration(0, 0)).toBeUndefined();
+  });
+
+  it("floors and clamps negatives", () => {
+    expect(msToIsoDuration(-1, 5)).toBe("PT5S");
   });
 });
 
-describe("textToIngredients", () => {
-  it("parses plain lines as strings", () => {
-    const result = textToIngredients("2 cups flour\n1 tsp salt");
-    expect(result).toEqual(["2 cups flour", "1 tsp salt"]);
-  });
-
-  it("parses ## headers as group and attaches to following ingredients", () => {
-    const result = textToIngredients("## Cake\n2 cups flour\n1 cup sugar");
-    expect(result).toHaveLength(2);
-    expect(result[0]).toEqual({ name: "2 cups flour", group: "Cake" });
-    expect(result[1]).toEqual({ name: "1 cup sugar", group: "Cake" });
-  });
-
-  it("ignores empty lines", () => {
-    const result = textToIngredients("2 cups flour\n\n1 tsp salt");
-    expect(result).toHaveLength(2);
-  });
-
-  it("returns empty array for empty string", () => {
-    expect(textToIngredients("")).toHaveLength(0);
-  });
-
-  it("round-trips through ingredientsToText", () => {
+describe("schemaToEditableIngredients / editableIngredientsToSchema", () => {
+  it("round-trips a mix of grouped and ungrouped ingredients", () => {
     const original = [
-      { name: "2 cups flour", group: "Batter" },
-      { name: "1 egg", group: "Batter" },
+      "1 tsp salt",
+      { name: "2 cups flour", group: "Dough" },
+      { name: "1 egg", group: "Dough" },
     ];
-    const text = ingredientsToText(original);
-    const parsed = textToIngredients(text);
-    expect(parsed).toEqual(original);
+    const editable = schemaToEditableIngredients(original);
+    // ungrouped section + one named group, in insertion order
+    expect(editable.map((g) => g.heading)).toEqual([null, "Dough"]);
+    expect(editableIngredientsToSchema(editable)).toEqual(original);
+  });
+
+  it("assigns stable ids to groups and items", () => {
+    const editable = schemaToEditableIngredients(["a", "b"]);
+    expect(editable[0].id).toBeTruthy();
+    expect(editable[0].items[0].id).toBeTruthy();
+    expect(editable[0].items[0].id).not.toBe(editable[0].items[1].id);
+  });
+
+  it("drops blank-name rows and treats a blank heading as ungrouped", () => {
+    const editable: EditableIngredients = [
+      { id: "g0", heading: "  ", items: [{ id: "a", name: "1 onion" }] },
+      { id: "g1", heading: "Spices", items: [{ id: "b", name: "  " }] },
+    ];
+    expect(editableIngredientsToSchema(editable)).toEqual(["1 onion"]);
+  });
+
+  it("empties to an empty list", () => {
+    expect(editableIngredientsToSchema([])).toEqual([]);
+  });
+});
+
+describe("schemaToEditableInstructions / editableInstructionsToSchema", () => {
+  it("round-trips top-level steps and a section with a timer", () => {
+    const original = [
+      { "@type": "HowToStep" as const, text: "Preheat oven." },
+      {
+        "@type": "HowToSection" as const,
+        name: "Sauce",
+        itemListElement: [
+          {
+            "@type": "HowToStep" as const,
+            text: "Simmer.",
+            name: "Simmer",
+            timeRequired: "PT5M30S",
+          },
+        ],
+      },
+    ];
+    const editable = schemaToEditableInstructions(original);
+    expect(editable.map((g) => g.heading)).toEqual([null, "Sauce"]);
+    const step = editable[1].items[0];
+    expect(step).toMatchObject({ name: "Simmer", minutes: 5, seconds: 30 });
+    expect(editableInstructionsToSchema(editable)).toEqual(original);
+  });
+
+  it("emits name + timeRequired only when both are set", () => {
+    const editable: EditableInstructions = [
+      {
+        id: "g",
+        heading: null,
+        items: [
+          { id: "s1", text: "Name only", name: "Boil", minutes: 0, seconds: 0 },
+          { id: "s2", text: "Time only", name: "", minutes: 0, seconds: 30 },
+          { id: "s3", text: "Both", name: "Rest", minutes: 10, seconds: 0 },
+        ],
+      },
+    ];
+    const result = editableInstructionsToSchema(editable);
+    expect(result).toEqual([
+      { "@type": "HowToStep", text: "Name only" },
+      { "@type": "HowToStep", text: "Time only" },
+      {
+        "@type": "HowToStep",
+        text: "Both",
+        name: "Rest",
+        timeRequired: "PT10M",
+      },
+    ]);
+  });
+
+  it("drops blank-text steps and empty groups", () => {
+    const editable: EditableInstructions = [
+      { id: "g0", heading: null, items: [{ id: "s0", text: "  ", name: "", minutes: 0, seconds: 0 }] },
+      { id: "g1", heading: "Empty", items: [] },
+    ];
+    expect(editableInstructionsToSchema(editable)).toEqual([]);
   });
 });
 

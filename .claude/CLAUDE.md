@@ -10,6 +10,14 @@ Cooking mode is designed for use on a tablet or phone while actively cooking —
 - Prefer bold visual affordances: large buttons, visible drag handles, high-contrast feedback
 - Cursor styles (`cursor-pointer`, `cursor-ns-resize`, etc.) are fine for desktop polish but are not the primary affordance signal
 
+## Editor Helper Placement
+
+Pure functions must not live inside component files (PR #26 review). Two homes:
+- **Recipe-wide pure logic** → `src/lib/format.ts` (e.g. `formatMS`/`parseMS` sit beside `formatDuration`/`parseDurationToSeconds`). `format.ts` is client-safe — importable from `"use client"` components.
+- **Editor-specific pure logic** (drag/group-tree math) → co-located `*Helpers.ts` / `dragIds.ts` in `src/components/editor/` (e.g. `groupHelpers.ts`'s `findGroupIndexByItem`/`containerIndexOf`).
+
+Unit tests follow the code: helpers moved into `format.ts` are tested in `format.test.ts`; component files keep only component tests.
+
 ## Ingredient Grouping System
 
 The app uses a custom schema that extends Schema.org/Recipe. Individual ingredients in `recipeIngredient` can be either plain strings (legacy/ungrouped) or objects with the following shape:

@@ -37,6 +37,30 @@ export function parseDurationToSeconds(
   return total > 0 ? total : null;
 }
 
+const pad = (n: number) => String(n).padStart(2, "0");
+
+/** minutes/seconds → "m:ss" display; a zero duration is blank (no timer).
+ *  Minutes are not capped, so a long step reads e.g. "90:00". */
+export function formatMS(minutes: number, seconds: number): string {
+  if (minutes <= 0 && seconds <= 0) return "";
+  return `${minutes}:${pad(seconds)}`;
+}
+
+/** Lenient parse of a duration: "5:30" → 5m30s (seconds ≥60 carry into
+ *  minutes); a bare number is minutes ("5" → 5:00). Never time-of-day, so no
+ *  AM/PM. */
+export function parseMS(raw: string): { minutes: number; seconds: number } {
+  const text = raw.trim();
+  if (!text) return { minutes: 0, seconds: 0 };
+  if (text.includes(":")) {
+    const [m, s] = text.split(":");
+    const total =
+      Math.max(0, parseInt(m, 10) || 0) * 60 + Math.max(0, parseInt(s, 10) || 0);
+    return { minutes: Math.floor(total / 60), seconds: total % 60 };
+  }
+  return { minutes: Math.max(0, parseInt(text, 10) || 0), seconds: 0 };
+}
+
 /**
  * Format an ISO 8601 date string to a human-readable date.
  * e.g. "2026-02-25" → "February 25, 2026"
@@ -53,6 +77,7 @@ export function formatDate(iso: string | undefined | null): string | null {
   });
 }
 
+import { nanoid } from "nanoid";
 import type {
   HowToSection,
   HowToStep,
@@ -60,6 +85,11 @@ import type {
   RecipeStat,
   SchemaRecipe,
 } from "@/types/recipe";
+import type {
+  EditableIngredients,
+  EditableInstructions,
+  EditableStep,
+} from "@/types/editor";
 
 /**
  * Get the ingredient text from a string or RecipeIngredient object.
@@ -142,33 +172,7 @@ export function toSchemaOrgJsonLd(schema: SchemaRecipe): object {
 }
 
 /**
- * Convert structured recipe instructions to an editable markdown string.
- *
- * HowToSection → "## Section Name" header followed by its steps as "- text"
- * Top-level HowToStep → "- text"
- * Sections are separated by a blank line.
- */
-export function instructionsToMarkdown(
-  instructions: Array<HowToStep | HowToSection>,
-): string {
-  const blocks: string[] = [];
-  for (const item of instructions) {
-    if (item["@type"] === "HowToSection") {
-      const section = item as HowToSection;
-      const lines = [`## ${section.name}`];
-      for (const step of section.itemListElement) {
-        lines.push(`- ${step.text}`);
-      }
-      blocks.push(lines.join("\n"));
-    } else {
-      blocks.push(`- ${(item as HowToStep).text}`);
-    }
-  }
-  return blocks.join("\n\n");
-}
-
-/**
- * Parse an editable markdown string back to structured recipe instructions.
+ * Parse a markdown string into structured recipe instructions.
  *
  * "## Section Name" → opens a new HowToSection
  * "- text", "* text", "1. text" → HowToStep added to current section (or top-level)
@@ -226,59 +230,6 @@ export function normalizeRecipeInstructions(
 }
 
 /**
- * Convert a recipe ingredient list to an editable plain-text string.
- *
- * Groups are emitted as "## Group Name" headers before their ingredients.
- * Ungrouped ingredients have no header. One ingredient per line.
- */
-export function ingredientsToText(
-  ingredients: Array<string | RecipeIngredient>,
-): string {
-  const groups = groupIngredients(ingredients);
-  const blocks: string[] = [];
-  for (const { heading, items } of groups) {
-    const lines: string[] = [];
-    if (heading) lines.push(`## ${heading}`);
-    for (const item of items) lines.push(getIngredientText(item));
-    blocks.push(lines.join("\n"));
-  }
-  return blocks.join("\n\n");
-}
-
-/**
- * Parse an editable plain-text ingredient list back to structured ingredients.
- *
- * "## Group Name" → sets the current group for subsequent ingredients
- * Other non-empty lines → ingredient; emits { name, group } if group is active,
- *   otherwise a plain string
- * Empty lines → ignored
- */
-export function textToIngredients(
-  text: string,
-): Array<string | RecipeIngredient> {
-  const result: Array<string | RecipeIngredient> = [];
-  let currentGroup: string | null = null;
-
-  for (const rawLine of text.split("\n")) {
-    const line = rawLine.trim();
-    if (!line) continue;
-
-    if (line.startsWith("## ")) {
-      currentGroup = line.slice(3).trim();
-      continue;
-    }
-
-    if (currentGroup) {
-      result.push({ name: line, group: currentGroup });
-    } else {
-      result.push(line);
-    }
-  }
-
-  return result;
-}
-
-/**
  * Extract key-value "stats" from a recipe schema for deck-builder card display.
  * Only includes stats where the source field is present and truthy.
  */
@@ -318,6 +269,33 @@ export function extractRecipeStats(schema: SchemaRecipe): RecipeStat[] {
   if (category) stats.push({ label: "Category", value: category, icon: "tag" });
 
   return stats;
+}
+
+/**
+ * Render structured recipe instructions to a markdown fragment.
+ *
+ * HowToSection → "## Section Name" header followed by its steps as "- text";
+ * a top-level HowToStep → "- text"; sections are separated by a blank line.
+ * Consumed by `schemaToMarkdown` to build the searchable `content`/embedding
+ * text — it is NOT part of the editor (which uses the structured converters).
+ */
+export function instructionsToMarkdown(
+  instructions: Array<HowToStep | HowToSection>,
+): string {
+  const blocks: string[] = [];
+  for (const item of instructions) {
+    if (item["@type"] === "HowToSection") {
+      const section = item as HowToSection;
+      const lines = [`## ${section.name}`];
+      for (const step of section.itemListElement) {
+        lines.push(`- ${step.text}`);
+      }
+      blocks.push(lines.join("\n"));
+    } else {
+      blocks.push(`- ${(item as HowToStep).text}`);
+    }
+  }
+  return blocks.join("\n\n");
 }
 
 /**
@@ -373,4 +351,141 @@ export function toArray(val: string | string[] | undefined | null): string[] {
   if (!val) return [];
   if (Array.isArray(val)) return val.filter(Boolean);
   return [val];
+}
+
+// ---------------------------------------------------------------------------
+// Structured-editor converters (UI tree ⇄ stored schema)
+//
+// Groups exist ONLY in the editor's draft. The stored schema is flat:
+// ingredients carry a `group` string, instructions are HowToStep/HowToSection.
+// These four functions are the single translation boundary — see
+// `src/types/editor.ts`. They preserve group order so a load → save round-trip
+// is lossless; they never inject empty groups.
+// ---------------------------------------------------------------------------
+
+/**
+ * Build an ISO 8601 duration from minutes + seconds. Returns undefined when
+ * both are zero/blank (so a step with no timer omits `timeRequired`). Minutes
+ * over 59 are normalized into hours so the stored duration stays canonical
+ * (e.g. 90:00 → "PT1H30M", 5:30 → "PT5M30S").
+ */
+export function msToIsoDuration(
+  minutes: number,
+  seconds: number,
+): string | undefined {
+  const total =
+    Math.max(0, Math.floor(minutes || 0)) * 60 +
+    Math.max(0, Math.floor(seconds || 0));
+  if (total <= 0) return undefined;
+  const h = Math.floor(total / 3600);
+  const m = Math.floor((total % 3600) / 60);
+  const s = total % 60;
+  let out = "PT";
+  if (h > 0) out += `${h}H`;
+  if (m > 0) out += `${m}M`;
+  if (s > 0) out += `${s}S`;
+  return out;
+}
+
+/** Stored ingredient list → editor groups (insertion order preserved). */
+export function schemaToEditableIngredients(
+  ingredients: Array<string | RecipeIngredient>,
+): EditableIngredients {
+  return groupIngredients(ingredients).map(({ heading, items }) => ({
+    id: nanoid(),
+    heading,
+    items: items.map((ing) => ({ id: nanoid(), name: getIngredientText(ing) })),
+  }));
+}
+
+/** Editor groups → stored ingredient list. Blank-name rows are dropped; a
+ *  group with a blank heading is treated as ungrouped (plain strings). */
+export function editableIngredientsToSchema(
+  groups: EditableIngredients,
+): Array<string | RecipeIngredient> {
+  const result: Array<string | RecipeIngredient> = [];
+  for (const group of groups) {
+    const heading = group.heading?.trim() || null;
+    for (const item of group.items) {
+      const name = item.name.trim();
+      if (!name) continue;
+      result.push(heading ? { name, group: heading } : name);
+    }
+  }
+  return result;
+}
+
+function stepToEditable(step: HowToStep): EditableStep {
+  const secs = parseDurationToSeconds(step.timeRequired) ?? 0;
+  return {
+    id: nanoid(),
+    text: step.text,
+    name: step.name ?? "",
+    minutes: Math.floor(secs / 60),
+    seconds: secs % 60,
+  };
+}
+
+/** Stored instructions → editor groups. Top-level steps collect into a
+ *  null-heading group; HowToSections become headed groups (order preserved). */
+export function schemaToEditableInstructions(
+  instructions: Array<HowToStep | HowToSection>,
+): EditableInstructions {
+  const groups: EditableInstructions = [];
+  let looseGroup: EditableInstructions[number] | null = null;
+  for (const item of instructions) {
+    if (item["@type"] === "HowToSection") {
+      looseGroup = null;
+      const section = item as HowToSection;
+      groups.push({
+        id: nanoid(),
+        heading: section.name,
+        items: section.itemListElement.map(stepToEditable),
+      });
+    } else {
+      if (!looseGroup) {
+        looseGroup = { id: nanoid(), heading: null, items: [] };
+        groups.push(looseGroup);
+      }
+      looseGroup.items.push(stepToEditable(item as HowToStep));
+    }
+  }
+  return groups;
+}
+
+/** Editor groups → stored instructions. Blank-text steps are dropped; `name`
+ *  and `timeRequired` are emitted only when BOTH are set (co-dependency).
+ *  A headed group becomes a HowToSection; the null group emits top-level
+ *  steps. Groups that yield no steps are dropped. */
+export function editableInstructionsToSchema(
+  groups: EditableInstructions,
+): Array<HowToStep | HowToSection> {
+  const result: Array<HowToStep | HowToSection> = [];
+  for (const group of groups) {
+    const steps: HowToStep[] = [];
+    for (const item of group.items) {
+      const text = item.text.trim();
+      if (!text) continue;
+      const step: HowToStep = { "@type": "HowToStep", text };
+      const name = item.name.trim();
+      const duration = msToIsoDuration(item.minutes, item.seconds);
+      if (name && duration) {
+        step.name = name;
+        step.timeRequired = duration;
+      }
+      steps.push(step);
+    }
+    if (steps.length === 0) continue;
+    const heading = group.heading?.trim() || null;
+    if (heading) {
+      result.push({
+        "@type": "HowToSection",
+        name: heading,
+        itemListElement: steps,
+      });
+    } else {
+      result.push(...steps);
+    }
+  }
+  return result;
 }

@@ -44,6 +44,7 @@ next-env.d.ts
 
 # claude
 .claude/settings.local.json
+.claude/scratch/*
 
 # codegraph
 .codegraph/*
