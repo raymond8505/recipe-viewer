@@ -10,15 +10,16 @@ import DurationInput from "./DurationInput";
 interface InstructionsEditorProps {
   value: EditableInstructions;
   onChange: (groups: EditableInstructions) => void;
-  /** Step ids where name/time are not both-set-or-both-blank. */
+  /** Step ids with a timer but no label (a label is required for a timer). */
   erroredStepIds?: Set<string>;
   disabled?: boolean;
 }
 
 /**
  * Structured instruction editor: each step is a draggable card with a body
- * textarea plus an optional, co-dependent timer (name + hours/minutes → the
- * schema's `HowToStep.name` / `timeRequired`, which seed cook-mode timers).
+ * textarea plus an optional timer label + hours/minutes → the schema's
+ * `HowToStep.name` / `timeRequired`, which seed cook-mode timers. A label may
+ * stand alone, but a timer requires a label.
  * Sections (HowToSection) map to reorderable groups, same as ingredient groups.
  */
 export default function InstructionsEditor({
@@ -75,8 +76,7 @@ export default function InstructionsEditor({
                 seconds={step.seconds}
                 onChange={update}
                 disabled={disabled}
-                errored={errored}
-                className={`mt-0.5 w-24 min-h-[40px] rounded-lg border px-2 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-orange-300 disabled:opacity-60 ${errored ? "border-red-300" : "border-gray-200"}`}
+                className="mt-0.5 w-24 min-h-[40px] rounded-lg border border-gray-200 px-2 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-orange-300 disabled:opacity-60"
               />
             </label>
             <button
@@ -91,7 +91,7 @@ export default function InstructionsEditor({
           </div>
           {errored && (
             <p className="text-xs text-red-600">
-              A timer needs both a label and a time — set both, or clear both.
+              A timer needs a label — add one or clear the time.
             </p>
           )}
         </div>

@@ -469,10 +469,8 @@ export function editableInstructionsToSchema(
       const step: HowToStep = { "@type": "HowToStep", text };
       const name = item.name.trim();
       const duration = msToIsoDuration(item.minutes, item.seconds);
-      if (name && duration) {
-        step.name = name;
-        step.timeRequired = duration;
-      }
+      if (name) step.name = name;
+      if (name && duration) step.timeRequired = duration;
       steps.push(step);
     }
     if (steps.length === 0) continue;

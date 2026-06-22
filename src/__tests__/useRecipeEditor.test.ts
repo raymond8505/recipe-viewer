@@ -71,7 +71,7 @@ describe("useRecipeEditor", () => {
     ]);
   });
 
-  it("flags a step with a name but no time and blocks saving", () => {
+  it("allows a label with no time and keeps saving enabled", () => {
     const { result } = renderHook(() => useRecipeEditor());
     act(() => result.current.begin(schema, "draft", ""));
     const stepId = result.current.draft.instructions[0].items[0].id;
@@ -84,6 +84,29 @@ describe("useRecipeEditor", () => {
               {
                 ...result.current.draft.instructions[0].items[0],
                 name: "Mix well",
+              },
+            ],
+          },
+        ],
+      }),
+    );
+    expect(result.current.instructionErrors.has(stepId)).toBe(false);
+    expect(result.current.canSave).toBe(true);
+  });
+
+  it("flags a step with a time but no label and blocks saving", () => {
+    const { result } = renderHook(() => useRecipeEditor());
+    act(() => result.current.begin(schema, "draft", ""));
+    const stepId = result.current.draft.instructions[0].items[0].id;
+    act(() =>
+      result.current.patch({
+        instructions: [
+          {
+            ...result.current.draft.instructions[0],
+            items: [
+              {
+                ...result.current.draft.instructions[0].items[0],
+                minutes: 5,
               },
             ],
           },

@@ -320,7 +320,7 @@ describe("schemaToEditableInstructions / editableInstructionsToSchema", () => {
     expect(editableInstructionsToSchema(editable)).toEqual(original);
   });
 
-  it("emits name + timeRequired only when both are set", () => {
+  it("emits name when set; timeRequired only when name and time are both set", () => {
     const editable: EditableInstructions = [
       {
         id: "g",
@@ -334,7 +334,7 @@ describe("schemaToEditableInstructions / editableInstructionsToSchema", () => {
     ];
     const result = editableInstructionsToSchema(editable);
     expect(result).toEqual([
-      { "@type": "HowToStep", text: "Name only" },
+      { "@type": "HowToStep", text: "Name only", name: "Boil" },
       { "@type": "HowToStep", text: "Time only" },
       {
         "@type": "HowToStep",
