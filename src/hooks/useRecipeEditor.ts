@@ -60,7 +60,8 @@ export interface UseRecipeEditor {
   runSave: (persist: () => Promise<void>) => Promise<void>;
 }
 
-/** A step's name and timer must be both-set or both-blank. */
+/** A timer needs a label; a label on its own is fine. So the only invalid
+ *  state is a time entered with no label. */
 function findInstructionErrors(
   instructions: EditableInstructions,
 ): Set<string> {
@@ -69,7 +70,7 @@ function findInstructionErrors(
     for (const step of group.items) {
       const hasName = step.name.trim().length > 0;
       const hasTime = (step.minutes || 0) > 0 || (step.seconds || 0) > 0;
-      if (hasName !== hasTime) errors.add(step.id);
+      if (hasTime && !hasName) errors.add(step.id);
     }
   }
   return errors;

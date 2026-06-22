@@ -56,8 +56,9 @@ export const WithSectionsAndTimer: Story = {
   ),
 };
 
-/** A step with a label but no time (or vice-versa) is flagged — Save is blocked
- *  until both are set or both cleared. */
+/** A step with a time but no label is flagged — a timer needs a label, so Save
+ *  is blocked until a label is added or the time is cleared. (A label on its
+ *  own is fine and not flagged.) */
 export const TimerValidationError: Story = {
   render: () => (
     <Demo
@@ -67,7 +68,7 @@ export const TimerValidationError: Story = {
           id: "g0",
           heading: null,
           items: [
-            { id: "s1", text: "Rest the dough.", name: "Rest", minutes: 0, seconds: 0 },
+            { id: "s1", text: "Rest the dough.", name: "", minutes: 5, seconds: 0 },
           ],
         },
       ]}

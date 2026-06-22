@@ -77,17 +77,15 @@ describe("InstructionsEditor", () => {
     );
   });
 
-  it("shows the co-dependency error for a flagged step", () => {
+  it("shows the timer-needs-a-label error for a flagged step", () => {
     render(<Harness initial={oneStep} erroredStepIds={new Set(["s1"])} />);
-    expect(
-      screen.getByText(/needs both a label and a time/i),
-    ).toBeInTheDocument();
+    expect(screen.getByText(/a timer needs a label/i)).toBeInTheDocument();
   });
 
   it("does not show the error when no step is flagged", () => {
     render(<Harness initial={oneStep} />);
     expect(
-      screen.queryByText(/needs both a label and a time/i),
+      screen.queryByText(/a timer needs a label/i),
     ).not.toBeInTheDocument();
   });
 
