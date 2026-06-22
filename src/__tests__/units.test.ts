@@ -169,14 +169,37 @@ describe("closestCommonFraction", () => {
     expect(hint?.value).toBe(2);
   });
 
-  it("snaps 1.7 tbsp to 1¾ tbsp", () => {
+  it("snaps 1.7 tbsp to 1⅔ tbsp", () => {
     const hint = closestCommonFraction(1.7, "tbsp");
-    expect(hint?.label).toBe("1¾ tbsp");
+    expect(hint?.label).toBe("1⅔ tbsp");
   });
 
-  it("snaps 0.7 tbsp to ¾ tbsp", () => {
-    const hint = closestCommonFraction(0.7, "tbsp");
+  it("snaps 0.67 tbsp to ⅔ tbsp", () => {
+    const hint = closestCommonFraction(0.67, "tbsp");
+    expect(hint?.label).toBe("⅔ tbsp");
+    expect(hint?.value).toBeCloseTo(2 / 3, 4);
+  });
+
+  it("snaps 0.33 tbsp to ⅓ tbsp", () => {
+    const hint = closestCommonFraction(0.33, "tbsp");
+    expect(hint?.label).toBe("⅓ tbsp");
+    expect(hint?.value).toBeCloseTo(1 / 3, 4);
+  });
+
+  it("snaps 0.8 tbsp to ¾ tbsp (¾ still wins over ⅔)", () => {
+    const hint = closestCommonFraction(0.8, "tbsp");
     expect(hint?.label).toBe("¾ tbsp");
+  });
+
+  it("snaps 0.67 tsp to ⅔ tsp", () => {
+    const hint = closestCommonFraction(0.67, "tsp");
+    expect(hint?.label).toBe("⅔ tsp");
+    expect(hint?.value).toBeCloseTo(2 / 3, 4);
+  });
+
+  it("snaps 0.33 tsp to ⅓ tsp", () => {
+    const hint = closestCommonFraction(0.33, "tsp");
+    expect(hint?.label).toBe("⅓ tsp");
   });
 
   it("snaps 1.2 tsp to 1¼ tsp", () => {
