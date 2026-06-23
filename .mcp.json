@@ -3,6 +3,13 @@
     "recipe-viewer-storybook": {
       "url": "http://localhost:6006/mcp",
       "type": "http"
+    },
+    "shadcn": {
+      "command": "npx",
+      "args": [
+        "shadcn@latest",
+        "mcp"
+      ]
     }
   }
 }
