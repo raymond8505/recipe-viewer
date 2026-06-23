@@ -13,6 +13,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { RecipeStatusBadge } from "@/components/RecipeStatusBadge";
+import { RecipeCategoryBadge } from "@/components/RecipeCategoryBadge";
 
 interface RecipeCardProps {
   recipe: RecipeRow;
@@ -97,11 +98,7 @@ export default function RecipeCard({ recipe, showStatusBadge }: RecipeCardProps)
                 {totalTime}
               </span>
             )}
-            {categories[0] && (
-              <span className="px-2 py-0.5 bg-brand-subtle text-brand rounded-full font-medium">
-                {categories[0]}
-              </span>
-            )}
+            {categories[0] && <RecipeCategoryBadge category={categories[0]} />}
           </CardFooter>
         </CardContent>
       </Card>
