@@ -12,6 +12,7 @@ import {
   CardFooter,
   CardTitle,
 } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 
 interface RecipeCardProps {
   recipe: RecipeRow;
@@ -52,11 +53,11 @@ export default function RecipeCard({ recipe, showStatusBadge }: RecipeCardProps)
       <Card className="h-full gap-0 py-0 rounded-2xl border border-border ring-0 bg-card hover:shadow-lg transition-shadow duration-200">
         <div className="relative w-full">
           {showStatusBadge && (
-            <span
-              className={`absolute top-2 right-2 z-10 px-2 py-0.5 text-xs font-medium rounded-full capitalize ${STATUS_STYLES[status] ?? "bg-gray-100 text-gray-500"}`}
+            <Badge
+              className={`absolute top-2 right-2 z-10 rounded-full capitalize ${STATUS_STYLES[status] ?? "bg-gray-100 text-gray-500"}`}
             >
               {status}
-            </span>
+            </Badge>
           )}
           {image && !imgError ? (
             <div className="relative w-full aspect-square overflow-hidden bg-muted">
