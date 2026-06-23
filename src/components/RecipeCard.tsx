@@ -12,18 +12,12 @@ import {
   CardFooter,
   CardTitle,
 } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
+import { RecipeStatusBadge } from "@/components/RecipeStatusBadge";
 
 interface RecipeCardProps {
   recipe: RecipeRow;
   showStatusBadge?: boolean;
 }
-
-const STATUS_STYLES: Record<string, string> = {
-  published: "bg-green-100 text-green-700",
-  draft: "bg-amber-100 text-amber-700",
-  archived: "bg-gray-100 text-gray-500",
-};
 
 function ImagePlaceholder() {
   return (
@@ -46,18 +40,16 @@ export default function RecipeCard({ recipe, showStatusBadge }: RecipeCardProps)
   const totalTime = formatDuration(schema.totalTime ?? schema.cookTime);
   const categories = toArray(schema.recipeCategory);
   const [imgError, setImgError] = useState(false);
-  const status = recipe.status ?? "draft";
 
   return (
     <Link href={`/recipes/${id}`} className="group block h-full">
       <Card className="h-full gap-0 py-0 rounded-2xl border border-border ring-0 bg-card hover:shadow-lg transition-shadow duration-200">
         <div className="relative w-full">
           {showStatusBadge && (
-            <Badge
-              className={`absolute top-2 right-2 z-10 rounded-full capitalize ${STATUS_STYLES[status] ?? "bg-gray-100 text-gray-500"}`}
-            >
-              {status}
-            </Badge>
+            <RecipeStatusBadge
+              status={recipe.status}
+              className="absolute top-2 right-2 z-10"
+            />
           )}
           {image && !imgError ? (
             <div className="relative w-full aspect-square overflow-hidden bg-muted">
