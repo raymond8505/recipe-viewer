@@ -53,11 +53,11 @@ export default function WFDArena({
             {!isLast && (
               <div className="flex items-center justify-center px-1 shrink-0">
                 <div className="flex flex-col items-center gap-1">
-                  <div className="w-px h-10 bg-gradient-to-b from-transparent via-gray-600 to-transparent" />
+                  <div className="w-px h-10 bg-linear-to-b from-transparent via-gray-600 to-transparent" />
                   <span className="text-xs font-bold text-gray-600 uppercase tracking-widest select-none">
                     or
                   </span>
-                  <div className="w-px h-10 bg-gradient-to-b from-transparent via-gray-600 to-transparent" />
+                  <div className="w-px h-10 bg-linear-to-b from-transparent via-gray-600 to-transparent" />
                 </div>
               </div>
             )}

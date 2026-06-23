@@ -116,7 +116,7 @@ export default function IngredientItem({ ingredient, onAnchor }: IngredientItemP
           onFocus={(e) => e.target.select()}
           onBlur={commitEdit}
           onKeyDown={handleKeyDown}
-          className="w-24 text-center border-b-2 border-orange-400 bg-transparent focus:outline-none"
+          className="w-24 text-center border-b-2 border-orange-400 bg-transparent focus:outline-hidden"
           autoFocus
           tabIndex={0}
         />
@@ -141,7 +141,7 @@ export default function IngredientItem({ ingredient, onAnchor }: IngredientItemP
           <select
             value={displayUnit}
             onChange={(e) => setSelectedUnit(e.target.value)}
-            className="bg-transparent appearance-none border-0 p-0 cursor-pointer underline underline-offset-2 decoration-orange-400 focus:outline-none focus-visible:ring-2 focus-visible:ring-orange-400 rounded"
+            className="bg-transparent appearance-none border-0 p-0 cursor-pointer underline underline-offset-2 decoration-orange-400 focus:outline-hidden focus-visible:ring-2 focus-visible:ring-orange-400 rounded-sm"
             aria-label="unit"
           >
             {unitGroup.map((u) => (

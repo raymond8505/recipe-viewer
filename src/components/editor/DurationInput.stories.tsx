@@ -11,7 +11,7 @@ function Demo({ m, s }: { m: number; s: number }) {
         minutes={minutes}
         seconds={seconds}
         onChange={set}
-        className="w-24 min-h-[40px] rounded-lg border border-gray-200 px-2 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-orange-300"
+        className="w-24 min-h-[40px] rounded-lg border border-gray-200 px-2 text-sm text-gray-700 focus:outline-hidden focus:ring-2 focus:ring-orange-300"
       />
       <p className="mt-2 text-xs text-gray-500">
         stored: {minutes}m {seconds}s

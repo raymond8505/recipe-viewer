@@ -101,7 +101,7 @@ export default function SortableItem({
           type="button"
           onClick={requestDelete}
           disabled={disabled}
-          className="shrink-0 flex items-center justify-center w-7 self-stretch min-h-[40px] rounded text-gray-300 hover:text-red-600 hover:bg-red-50 disabled:opacity-40"
+          className="shrink-0 flex items-center justify-center w-7 self-stretch min-h-[40px] rounded-sm text-gray-300 hover:text-red-600 hover:bg-red-50 disabled:opacity-40"
           aria-label={confirmMessage}
         >
           <TrashIcon />

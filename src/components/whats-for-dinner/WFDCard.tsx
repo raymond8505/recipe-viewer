@@ -24,7 +24,7 @@ export default function WFDCard({ recipe, onClick, disabled = false }: WFDCardPr
       onKeyUp={(e) => { if ((e.key === "Enter" || e.key === " ") && !disabled) onClick(); }}
       className="
         relative w-full h-full text-left
-        focus:outline-none focus:ring-2 focus:ring-sky-400 focus:ring-offset-2 focus:ring-offset-gray-900
+        focus:outline-hidden focus:ring-2 focus:ring-sky-400 focus:ring-offset-2 focus:ring-offset-gray-900
         disabled:cursor-not-allowed
         group
       "
@@ -39,7 +39,7 @@ export default function WFDCard({ recipe, onClick, disabled = false }: WFDCardPr
         transition-colors duration-150
       ">
         {/* Image */}
-        <div className="relative w-full aspect-[4/3]">
+        <div className="relative w-full aspect-4/3">
           {image && !imgError ? (
             <Image
               src={image}

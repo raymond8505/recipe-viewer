@@ -88,7 +88,7 @@ export default function TimerColumn({
             onChange={(e) => onNotesChange(e.target.value)}
             placeholder="Note changes for next time…"
             rows={4}
-            className="w-full resize-none text-sm text-gray-700 placeholder-gray-400 focus:outline-none leading-relaxed"
+            className="w-full resize-none text-sm text-gray-700 placeholder-gray-400 focus:outline-hidden leading-relaxed"
           />
         </div>
       )}

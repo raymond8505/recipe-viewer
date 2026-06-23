@@ -34,7 +34,7 @@ export default function HeadsUpWinner({ recipe, onPlayAgain }: HeadsUpWinnerProp
           <div className="card-inner">
             {/* Inset image */}
             <div className="image-frame">
-              <div className="relative w-full aspect-[4/3]">
+              <div className="relative w-full aspect-4/3">
                 {image && !imgError ? (
                   <Image
                     src={image}

@@ -173,7 +173,7 @@ function FewResultsCard({
       onClick={onSelect}
       className="
         flex-1 max-w-[240px]
-        focus:outline-none focus:ring-2 focus:ring-amber-400
+        focus:outline-hidden focus:ring-2 focus:ring-amber-400
         focus:ring-offset-2 focus:ring-offset-gray-900
         transition-transform hover:scale-[1.02]
       "
@@ -182,7 +182,7 @@ function FewResultsCard({
         <div className="card-inner">
           {/* Inset image */}
           <div className="image-frame">
-            <div className="relative w-full aspect-[4/3]">
+            <div className="relative w-full aspect-4/3">
               {image && !imgError ? (
                 <Image
                   src={image}

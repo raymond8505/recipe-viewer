@@ -54,10 +54,10 @@ export default function InstructionsEditor({
             disabled={disabled}
             placeholder="Describe this step…"
             aria-label="Step instructions"
-            className="block w-full min-h-[44px] rounded-lg border border-gray-200 p-2 text-sm text-gray-700 leading-relaxed focus:outline-none focus:ring-2 focus:ring-orange-300 disabled:opacity-60 resize-none overflow-hidden"
+            className="block w-full min-h-[44px] rounded-lg border border-gray-200 p-2 text-sm text-gray-700 leading-relaxed focus:outline-hidden focus:ring-2 focus:ring-orange-300 disabled:opacity-60 resize-none overflow-hidden"
           />
           <div className="flex flex-wrap items-end gap-2">
-            <label className="flex-1 min-w-[8rem] text-xs text-gray-500">
+            <label className="flex-1 min-w-32 text-xs text-gray-500">
               Timer label
               <input
                 type="text"
@@ -66,7 +66,7 @@ export default function InstructionsEditor({
                 disabled={disabled}
                 placeholder="e.g. Simmer"
                 aria-label="Timer label"
-                className={`mt-0.5 w-full min-h-[40px] rounded-lg border px-2 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-orange-300 disabled:opacity-60 ${errored ? "border-red-300" : "border-gray-200"}`}
+                className={`mt-0.5 w-full min-h-[40px] rounded-lg border px-2 text-sm text-gray-700 focus:outline-hidden focus:ring-2 focus:ring-orange-300 disabled:opacity-60 ${errored ? "border-red-300" : "border-gray-200"}`}
               />
             </label>
             <label className="text-xs text-gray-500">
@@ -76,7 +76,7 @@ export default function InstructionsEditor({
                 seconds={step.seconds}
                 onChange={update}
                 disabled={disabled}
-                className="mt-0.5 w-24 min-h-[40px] rounded-lg border border-gray-200 px-2 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-orange-300 disabled:opacity-60"
+                className="mt-0.5 w-24 min-h-[40px] rounded-lg border border-gray-200 px-2 text-sm text-gray-700 focus:outline-hidden focus:ring-2 focus:ring-orange-300 disabled:opacity-60"
               />
             </label>
             <button

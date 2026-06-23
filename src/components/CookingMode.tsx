@@ -470,7 +470,7 @@ export default function CookingMode({
             onChange={(e) => setCookingNotes(e.target.value)}
             placeholder="Note changes for next time…"
             rows={3}
-            className="w-full resize-none text-sm text-gray-700 placeholder-gray-400 focus:outline-none leading-relaxed"
+            className="w-full resize-none text-sm text-gray-700 placeholder-gray-400 focus:outline-hidden leading-relaxed"
           />
         </div>
       )}
