@@ -1,14 +1,10 @@
 import type { Metadata } from "next";
-import { Inter } from "next/font/google";
 import Link from "next/link";
 import "./globals.css";
 import WindowApiProvider from "@/components/WindowApiProvider";
 import AuthButton from "@/components/AuthButton";
 import { getIsLoggedIn } from "@/lib/auth";
-
-// Inter is the app font; expose it as --font-sans so shadcn's `font-sans`
-// token (used by ui/* components) resolves to the same family.
-const inter = Inter({ subsets: ["latin"], variable: "--font-sans" });
+import { appFont, APP_SURFACE_CLASS } from "@/components/AppChrome";
 
 export const metadata: Metadata = {
   title: {
@@ -29,8 +25,8 @@ export default async function RootLayout({
   const isLoggedIn = await getIsLoggedIn();
 
   return (
-    <html lang="en" className={inter.variable}>
-      <body className={`${inter.className} bg-gray-50 min-h-screen`}>
+    <html lang="en" className={appFont.variable}>
+      <body className={`${appFont.className} ${APP_SURFACE_CLASS}`}>
         <header className="bg-white border-b border-gray-200 sticky top-0 z-10">
           <div className="max-w-6xl mx-auto px-4 sm:px-6 h-14 flex items-center justify-between">
             <Link

@@ -230,6 +230,32 @@ describe("RecipeDetail — shopping list", () => {
       expect(navigator.clipboard.writeText).toHaveBeenCalledWith("2 cups flour\n1 tsp salt");
     });
   });
+
+  it("clears the copy-feedback reset timer on unmount", async () => {
+    const setSpy = vi.spyOn(globalThis, "setTimeout");
+    const clearSpy = vi.spyOn(globalThis, "clearTimeout");
+    const { unmount } = render(<RecipeDetail recipe={makeRecipe({ recipeIngredient: ["2 cups flour"] })} />);
+    fireEvent.click(screen.getByRole("checkbox", { name: "2 cups flour" }));
+
+    // The handler schedules the 2s feedback-reset timer in an async continuation
+    // (after the awaited clipboard write) — flush it inside act, then wait for it.
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /copy shopping list/i }));
+      await vi.waitFor(() =>
+        expect(setSpy.mock.calls.some(([, delay]) => delay === 2000)).toBe(true),
+      );
+    });
+    const idx = setSpy.mock.calls.findIndex(([, delay]) => delay === 2000);
+    const timerId = setSpy.mock.results[idx].value;
+
+    // Unmounting must clear that exact timer, or it fires after teardown and
+    // calls setState on an unmounted component ("window is not defined").
+    unmount();
+    expect(clearSpy).toHaveBeenCalledWith(timerId);
+
+    setSpy.mockRestore();
+    clearSpy.mockRestore();
+  });
 });
 
 describe("RecipeDetail — controls section", () => {

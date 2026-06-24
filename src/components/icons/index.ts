@@ -1,9 +1,11 @@
 export { ChatBubbleIcon } from "./ChatBubbleIcon";
 export { ChefHatIcon } from "./ChefHatIcon";
 export { CheckIcon } from "./CheckIcon";
+export { ClockIcon } from "./ClockIcon";
 export { CloseIcon } from "./CloseIcon";
 export { CloseSmallIcon } from "./CloseSmallIcon";
 export { CopyIcon } from "./CopyIcon";
+export { ImageIcon } from "./ImageIcon";
 export { DragHandleIcon } from "./DragHandleIcon";
 export { EditIcon } from "./EditIcon";
 export { EnterFullscreenIcon } from "./EnterFullscreenIcon";
