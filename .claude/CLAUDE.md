@@ -144,6 +144,7 @@ The styling layer has **single sources of truth**. Do not re-declare style decis
 **Purpose-built badges/pills → named components wrapping a shadcn primitive.** Never inline a styled `<Badge>` or a hand-rolled `<span>` pill in a feature component. Each badge variant is its own named component that wraps `@/components/ui/badge` and owns its styling + logic — e.g. `RecipeStatusBadge` (status normalization + status colors), `RecipeCategoryBadge` (brand accent). This mirrors the icon-component rule (see Shopping List Feature). The shadcn primitive's base already supplies padding/size/weight — the wrapper sets only what differs.
 
 **shadcn primitives → `src/components/ui/`** (generated, unedited). Feature components compose them; overrides go through `className` (twMerge last-wins), not by editing the generated primitive.
+- These are the **`radix-nova`** style (per `components.json`), not vanilla shadcn — quirks worth knowing when matching a hand-rolled look: `Card` uses `ring-1 ring-foreground/10` (not `border`) + a `--card-spacing` var for padding/gap + `rounded-xl` (override with `ring-0 border gap-0 py-0 rounded-2xl`); `Badge` is `rounded-4xl` + fixed `h-5` (override `rounded-full`); `CardTitle` is a plain `<div>` with **no `asChild`**.
 
 ## Story Fixtures
 
