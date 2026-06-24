@@ -24,6 +24,7 @@ import { DEFAULT_MAX_IMAGE_BYTES } from "@/lib/imageTypes";
 import CookingModeButton from "./CookingModeButton";
 import RecipeControls from "./RecipeControls";
 import { CheckIcon, CopyIcon } from "@/components/icons";
+import { IconButton } from "@/components/buttons";
 import IngredientsEditor from "./editor/IngredientsEditor";
 import InstructionsEditor from "./editor/InstructionsEditor";
 import IngredientItem from "./IngredientItem";
@@ -339,14 +340,14 @@ export default function RecipeDetail({
                 Ingredients
               </h2>
               {!isEditing && (
-                <button
+                <IconButton
                   onClick={copyShoppingList}
                   disabled={selectedIngredients.size === 0}
-                  className={`p-2 rounded-lg transition-colors ${selectedIngredients.size === 0 ? "invisible" : "text-gray-500 hover:bg-gray-100 hover:text-gray-800"}`}
+                  className={`size-9 text-muted-foreground hover:bg-muted hover:text-foreground ${selectedIngredients.size === 0 ? "invisible" : ""}`}
                   aria-label={`Copy shopping list, ${selectedIngredients.size} item${selectedIngredients.size === 1 ? "" : "s"}`}
                 >
                   {copyFeedback ? <CheckIcon /> : <CopyIcon />}
-                </button>
+                </IconButton>
               )}
             </div>
             {isEditing ? (

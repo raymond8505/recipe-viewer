@@ -3,6 +3,8 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { loginWithPassword } from "@/lib/api/auth";
+import { Button } from "@/components/ui/button";
+import { PrimaryActionButton } from "@/components/buttons";
 
 interface AuthorizeParams {
   client_id: string;
@@ -69,13 +71,13 @@ export default function OAuthConsent({
             autoFocus
           />
           {error && <p className="text-sm text-red-600">{error}</p>}
-          <button
+          <PrimaryActionButton
             type="submit"
             disabled={loading || !password}
-            className="w-full min-h-[44px] rounded-xl bg-orange-500 text-white text-sm font-medium hover:bg-orange-600 disabled:opacity-50 transition"
+            className="h-auto min-h-[44px] w-full rounded-xl"
           >
             {loading ? "Signing in…" : "Sign in"}
-          </button>
+          </PrimaryActionButton>
         </form>
       </div>
     );
@@ -102,22 +104,23 @@ export default function OAuthConsent({
       ))}
 
       <div className="mt-6 flex gap-3">
-        <button
+        <Button
           type="submit"
           name="action"
           value="deny"
-          className="flex-1 min-h-[44px] rounded-xl border border-gray-300 text-sm font-medium text-gray-700 hover:bg-gray-50 transition"
+          variant="outline"
+          className="h-auto min-h-[44px] flex-1 rounded-xl"
         >
           Deny
-        </button>
-        <button
+        </Button>
+        <PrimaryActionButton
           type="submit"
           name="action"
           value="allow"
-          className="flex-1 min-h-[44px] rounded-xl bg-orange-500 text-white text-sm font-medium hover:bg-orange-600 transition"
+          className="h-auto min-h-[44px] flex-1 rounded-xl"
         >
           Allow
-        </button>
+        </PrimaryActionButton>
       </div>
     </form>
   );
