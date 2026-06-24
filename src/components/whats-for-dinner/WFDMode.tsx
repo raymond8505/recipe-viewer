@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useWFD } from "@/hooks/useWFD";
+import { Button } from "@/components/ui/button";
 import WFDPrompt from "./WFDPrompt";
 import WFDArena from "./WFDArena";
 
@@ -50,13 +51,14 @@ export default function WFDMode() {
             <p className="text-xs text-gray-500 italic truncate max-w-[70%]">
               &ldquo;{state.prompt}&rdquo;
             </p>
-            <button
+            <Button
               type="button"
+              variant="ghost"
               onClick={reset}
-              className="text-xs text-gray-600 hover:text-gray-400 transition-colors ml-2 shrink-0"
+              className="ml-2 h-auto shrink-0 p-0 text-xs text-gray-600 hover:bg-transparent hover:text-gray-400"
             >
               Start over
-            </button>
+            </Button>
           </div>
 
           <WFDArena
@@ -72,13 +74,14 @@ export default function WFDMode() {
       {phase === "error" && (
         <div className="flex flex-col items-center justify-center h-full gap-6 px-8 text-center">
           <p className="text-red-400 text-sm max-w-sm">{state.error}</p>
-          <button
+          <Button
             type="button"
+            variant="outline"
             onClick={reset}
-            className="px-6 py-3 bg-gray-800 border border-gray-700 rounded-xl text-sm font-medium text-gray-300 hover:bg-gray-700 transition-colors"
+            className="h-auto rounded-xl border-gray-700 bg-gray-800 px-6 py-3 text-gray-300 hover:bg-gray-700 hover:text-gray-300"
           >
             Try again
-          </button>
+          </Button>
         </div>
       )}
     </div>

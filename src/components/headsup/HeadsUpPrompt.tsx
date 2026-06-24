@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { Button } from "@/components/ui/button";
 
 interface HeadsUpPromptProps {
   onSubmit: (prompt: string) => void;
@@ -51,18 +52,10 @@ export default function HeadsUpPrompt({ onSubmit, isLoading, error }: HeadsUpPro
             "
           />
 
-          <button
+          <Button
             type="submit"
             disabled={!value.trim() || isLoading}
-            className="
-              w-full px-6 py-4 min-h-[52px]
-              text-lg font-black uppercase tracking-wider
-              bg-orange-500 text-white rounded-2xl
-              hover:bg-orange-600 active:bg-orange-700
-              disabled:opacity-40 disabled:cursor-not-allowed
-              transition-colors
-              flex items-center justify-center gap-2
-            "
+            className="h-auto min-h-[52px] w-full gap-2 rounded-2xl bg-orange-500 px-6 py-4 text-lg font-black uppercase tracking-wider text-white hover:bg-orange-600 active:bg-orange-700 disabled:opacity-40"
           >
             {isLoading ? (
               <>
@@ -90,7 +83,7 @@ export default function HeadsUpPrompt({ onSubmit, isLoading, error }: HeadsUpPro
             ) : (
               "Fight!"
             )}
-          </button>
+          </Button>
         </form>
 
         {/* Error display */}
