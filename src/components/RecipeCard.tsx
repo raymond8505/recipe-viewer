@@ -23,7 +23,13 @@ interface RecipeCardProps {
 function ImagePlaceholder() {
   return (
     <div className="flex items-center justify-center text-muted-foreground/40 w-full aspect-square bg-muted">
-      <svg className="w-12 h-12" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <svg
+        className="w-12 h-12"
+        fill="none"
+        stroke="currentColor"
+        viewBox="0 0 24 24"
+        aria-hidden
+      >
         <path
           strokeLinecap="round"
           strokeLinejoin="round"
@@ -35,8 +41,14 @@ function ImagePlaceholder() {
   );
 }
 
-export default function RecipeCard({ recipe, showStatusBadge }: RecipeCardProps) {
-  const { metadata: { schema }, id } = recipe;
+export default function RecipeCard({
+  recipe,
+  showStatusBadge,
+}: RecipeCardProps) {
+  const {
+    metadata: { schema },
+    id,
+  } = recipe;
   const image = getFirstImage(schema.image);
   const totalTime = formatDuration(schema.totalTime ?? schema.cookTime);
   const categories = toArray(schema.recipeCategory);
@@ -87,6 +99,7 @@ export default function RecipeCard({ recipe, showStatusBadge }: RecipeCardProps)
                   fill="none"
                   stroke="currentColor"
                   viewBox="0 0 24 24"
+                  aria-hidden
                 >
                   <path
                     strokeLinecap="round"
