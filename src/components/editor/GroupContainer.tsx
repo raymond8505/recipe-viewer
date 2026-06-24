@@ -3,7 +3,9 @@
 import { useState, type ReactNode } from "react";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { DragHandleIcon, TrashIcon } from "@/components/icons";
+import { TrashIcon } from "@/components/icons";
+import { Button } from "@/components/ui/button";
+import { DragHandleButton } from "@/components/buttons";
 import DeleteConfirm from "./DeleteConfirm";
 import { toGroupSortId } from "./dragIds";
 
@@ -92,16 +94,13 @@ export default function GroupContainer({
           />
         ) : (
           <div className="flex items-stretch gap-0.5 mb-2">
-            <button
-              type="button"
-              className="shrink-0 flex items-center justify-center w-5 min-h-[40px] rounded-sm text-orange-600 hover:bg-gray-100 touch-none cursor-grab active:cursor-grabbing disabled:opacity-40"
+            <DragHandleButton
+              className="min-h-[40px] items-center text-brand hover:bg-muted"
               aria-label={`Reorder section ${heading || "(untitled)"}`}
               disabled={disabled}
               {...attributes}
               {...listeners}
-            >
-              <DragHandleIcon />
-            </button>
+            />
             <input
               type="text"
               value={heading}
@@ -111,15 +110,17 @@ export default function GroupContainer({
               aria-label="Group name"
               className="flex-1 min-w-0 min-h-[40px] rounded-lg border border-gray-200 px-2 text-sm font-semibold uppercase tracking-wide text-orange-600 focus:outline-hidden focus:ring-2 focus:ring-orange-300 disabled:opacity-60"
             />
-            <button
+            <Button
               type="button"
+              variant="ghost"
+              size="icon"
               onClick={() => setConfirming(true)}
               disabled={disabled}
-              className="shrink-0 flex items-center justify-center w-7 min-h-[40px] rounded-sm text-gray-300 hover:text-red-600 hover:bg-red-50 disabled:opacity-40"
+              className="h-auto w-7 min-h-[40px] shrink-0 rounded-sm text-gray-300 hover:bg-destructive/10 hover:text-destructive disabled:opacity-40"
               aria-label={`Delete section ${heading || "(untitled)"}`}
             >
               <TrashIcon />
-            </button>
+            </Button>
           </div>
         ))}
       {!confirming && <div className={itemGapClassName}>{children}</div>}

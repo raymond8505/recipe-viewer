@@ -3,6 +3,7 @@
 import { nanoid } from "nanoid";
 import type { EditableStep, EditableInstructions } from "@/types/editor";
 import { TrashIcon } from "@/components/icons";
+import { Button } from "@/components/ui/button";
 import SortableGroupedList from "./SortableGroupedList";
 import AutoresizeTextarea from "./AutoresizeTextarea";
 import DurationInput from "./DurationInput";
@@ -79,15 +80,17 @@ export default function InstructionsEditor({
                 className="mt-0.5 w-24 min-h-[40px] rounded-lg border border-gray-200 px-2 text-sm text-gray-700 focus:outline-hidden focus:ring-2 focus:ring-orange-300 disabled:opacity-60"
               />
             </label>
-            <button
+            <Button
               type="button"
+              variant="ghost"
+              size="icon"
               onClick={requestDelete}
               disabled={disabled}
               aria-label="Delete this step?"
-              className="shrink-0 flex items-center justify-center w-10 min-h-[40px] rounded-lg text-gray-300 hover:text-red-600 hover:bg-red-50 disabled:opacity-40"
+              className="h-auto w-10 min-h-[40px] shrink-0 rounded-lg text-gray-300 hover:bg-destructive/10 hover:text-destructive disabled:opacity-40"
             >
               <TrashIcon />
-            </button>
+            </Button>
           </div>
           {errored && (
             <p className="text-xs text-red-600">

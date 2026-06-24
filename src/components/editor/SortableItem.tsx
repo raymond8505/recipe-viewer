@@ -3,7 +3,9 @@
 import { useState, type ReactNode } from "react";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { DragHandleIcon, TrashIcon } from "@/components/icons";
+import { TrashIcon } from "@/components/icons";
+import { Button } from "@/components/ui/button";
+import { DragHandleButton } from "@/components/buttons";
 import DeleteConfirm from "./DeleteConfirm";
 
 interface SortableItemProps {
@@ -79,9 +81,8 @@ export default function SortableItem({
       style={style}
       className={`flex items-start gap-0.5 rounded-lg ${errored ? "ring-1 ring-red-300" : ""}`}
     >
-      <button
-        type="button"
-        className={`shrink-0 flex justify-center w-5 rounded text-gray-300 hover:text-gray-600 hover:bg-gray-100 touch-none cursor-grab active:cursor-grabbing disabled:opacity-40 ${
+      <DragHandleButton
+        className={`rounded text-gray-300 hover:bg-muted hover:text-gray-600 ${
           alignHandleTop
             ? "items-start self-start pt-1"
             : "items-center self-stretch min-h-[40px]"
@@ -90,22 +91,22 @@ export default function SortableItem({
         disabled={disabled}
         {...attributes}
         {...listeners}
-      >
-        <DragHandleIcon />
-      </button>
+      />
       <div className="flex-1 min-w-0">
         {typeof children === "function" ? children({ requestDelete }) : children}
       </div>
       {showDeleteButton && (
-        <button
+        <Button
           type="button"
+          variant="ghost"
+          size="icon"
           onClick={requestDelete}
           disabled={disabled}
-          className="shrink-0 flex items-center justify-center w-7 self-stretch min-h-[40px] rounded-sm text-gray-300 hover:text-red-600 hover:bg-red-50 disabled:opacity-40"
+          className="h-auto w-7 min-h-[40px] shrink-0 self-stretch rounded-sm text-gray-300 hover:bg-destructive/10 hover:text-destructive disabled:opacity-40"
           aria-label={confirmMessage}
         >
           <TrashIcon />
-        </button>
+        </Button>
       )}
     </div>
   );

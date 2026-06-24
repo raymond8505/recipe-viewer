@@ -1,5 +1,7 @@
 "use client";
 
+import { Button } from "@/components/ui/button";
+
 interface DeleteConfirmProps {
   message: string;
   onCancel: () => void;
@@ -21,20 +23,22 @@ export default function DeleteConfirm({
     <div className="rounded-xl border border-red-200 bg-red-50 p-3">
       <p className="text-sm font-medium text-red-700 mb-3">{message}</p>
       <div className="flex gap-2">
-        <button
+        <Button
           type="button"
+          variant="outline"
           onClick={onCancel}
-          className="flex-1 min-h-[44px] py-3 rounded-xl border border-gray-300 bg-white text-gray-700 font-medium text-sm active:bg-gray-100"
+          className="h-auto min-h-[44px] flex-1 rounded-xl py-3"
         >
           Cancel
-        </button>
-        <button
+        </Button>
+        <Button
           type="button"
+          variant="destructive"
           onClick={onConfirm}
-          className="flex-1 min-h-[44px] py-3 rounded-xl bg-red-500 text-white font-medium text-sm active:bg-red-600"
+          className="h-auto min-h-[44px] flex-1 rounded-xl py-3"
         >
           Delete
-        </button>
+        </Button>
       </div>
     </div>
   );
