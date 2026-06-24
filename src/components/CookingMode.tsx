@@ -33,6 +33,8 @@ import {
   EnterFullscreenIcon,
   ExitFullscreenIcon,
 } from "@/components/icons";
+import { Button } from "@/components/ui/button";
+import { IconButton, PrimaryActionButton } from "@/components/buttons";
 import IngredientItem from "@/components/IngredientItem";
 import ServingsControl from "@/components/ServingsControl";
 import NutritionPanel from "@/components/NutritionPanel";
@@ -371,29 +373,32 @@ export default function CookingMode({
     >
       {/* Sticky header */}
       <div className="shrink-0 flex items-center justify-between px-4 py-2 border-b border-gray-200 bg-white">
-        <button
+        <Button
+          variant="ghost"
           onClick={() => {
             if (document.fullscreenElement) document.exitFullscreen();
           }}
-          className="text-sm font-medium text-gray-500"
+          className="h-auto p-0 text-sm font-medium text-muted-foreground hover:bg-transparent hover:text-muted-foreground"
         >
           Cooking mode
-        </button>
+        </Button>
         <div className="flex items-center gap-1">
-          <button
+          <IconButton
             onClick={toggleFullscreen}
-            className="p-2 rounded-lg hover:bg-gray-100 text-gray-500 hover:text-gray-800 transition-colors"
+            className="size-9 text-muted-foreground hover:bg-muted hover:text-foreground"
+            aria-label={isFullscreen ? "Exit fullscreen" : "Enter fullscreen"}
             title={isFullscreen ? "Exit fullscreen" : "Enter fullscreen"}
           >
             {isFullscreen ? <ExitFullscreenIcon /> : <EnterFullscreenIcon />}
-          </button>
-          <button
+          </IconButton>
+          <IconButton
             onClick={onClose}
-            className="p-2 rounded-lg hover:bg-gray-100 text-gray-500 hover:text-gray-800 transition-colors"
+            className="size-9 text-muted-foreground hover:bg-muted hover:text-foreground"
+            aria-label="Exit cooking mode"
             title="Exit cooking mode"
           >
             <CloseIcon />
-          </button>
+          </IconButton>
         </div>
       </div>
 
@@ -401,20 +406,21 @@ export default function CookingMode({
       <div className="lg:hidden shrink-0 bg-white border-b border-gray-200">
         {/* Add timer + Reset all — inline, add timer grows */}
         <div className="flex items-center gap-2 px-3 pt-2 pb-1">
-          <button
+          <PrimaryActionButton
             onClick={() => setShowAddTimer(true)}
-            className="flex-1 py-2.5 rounded-xl bg-orange-500 hover:bg-orange-600 active:bg-orange-700 text-white font-semibold text-sm transition-colors flex items-center justify-center gap-1.5"
+            className="h-auto flex-1 gap-1.5 rounded-xl py-2.5 text-sm font-semibold"
           >
             <SmallPlusIcon />
             Add Timer
-          </button>
+          </PrimaryActionButton>
           {timers.length > 0 && (
-            <button
+            <Button
+              variant="outline"
               onClick={resetAll}
-              className="shrink-0 py-2.5 px-3 rounded-xl border border-gray-300 hover:bg-gray-50 text-gray-600 text-sm font-medium transition-colors whitespace-nowrap"
+              className="h-auto shrink-0 rounded-xl px-3 py-2.5"
             >
               Reset All
-            </button>
+            </Button>
           )}
         </div>
         {/* Horizontal scrollable timer cards */}
@@ -594,14 +600,14 @@ export default function CookingMode({
                       <h2 className="text-2xl sm:text-xl font-semibold text-gray-900">
                         Ingredients
                       </h2>
-                      <button
+                      <IconButton
                         onClick={copyShoppingList}
                         disabled={selectedIngredients.size === 0}
-                        className={`p-2 rounded-lg transition-colors ${selectedIngredients.size === 0 ? "invisible" : "text-gray-500 hover:bg-gray-100 hover:text-gray-800"}`}
+                        className={`size-9 text-muted-foreground hover:bg-muted hover:text-foreground ${selectedIngredients.size === 0 ? "invisible" : ""}`}
                         aria-label={`Copy shopping list, ${selectedIngredients.size} item${selectedIngredients.size === 1 ? "" : "s"}`}
                       >
                         {copyFeedback ? <CheckIcon size={14} /> : <CopyIcon />}
-                      </button>
+                      </IconButton>
                     </div>
                     {activeScalable.groupedIngredients.map(
                       ({ heading, items }, gi) => (

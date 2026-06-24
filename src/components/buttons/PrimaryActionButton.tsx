@@ -1,5 +1,5 @@
 import * as React from "react";
-import { Button } from "@/components/ui/button";
+import { Button, type ButtonProps } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 /**
@@ -12,17 +12,17 @@ import { cn } from "@/lib/utils";
  * No `type` default: passes straight through so it preserves the exact submit
  * semantics of whatever `<button>` it replaces.
  */
-export function PrimaryActionButton({
-  className,
-  ...props
-}: React.ComponentProps<typeof Button>) {
-  return (
-    <Button
-      className={cn(
-        "bg-brand text-white shadow-xs hover:bg-brand/90 active:bg-brand/95",
-        className,
-      )}
-      {...props}
-    />
-  );
-}
+export const PrimaryActionButton = React.forwardRef<
+  HTMLButtonElement,
+  ButtonProps
+>(({ className, ...props }, ref) => (
+  <Button
+    ref={ref}
+    className={cn(
+      "bg-brand text-white shadow-xs hover:bg-brand/90 active:bg-brand/95",
+      className,
+    )}
+    {...props}
+  />
+));
+PrimaryActionButton.displayName = "PrimaryActionButton";

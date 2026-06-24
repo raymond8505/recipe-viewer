@@ -1,8 +1,8 @@
 import * as React from "react";
-import { Button } from "@/components/ui/button";
+import { Button, type ButtonProps } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
-interface SegmentButtonProps extends React.ComponentProps<typeof Button> {
+export interface SegmentButtonProps extends ButtonProps {
   /** Whether this segment is the selected one (brand fill vs. outline). */
   active: boolean;
 }
@@ -12,24 +12,23 @@ interface SegmentButtonProps extends React.ComponentProps<typeof Button> {
  * `active` drives the look: brand fill when selected, neutral outline when
  * not. Sets `aria-pressed` so the toggle state is exposed to assistive tech.
  */
-export function SegmentButton({
-  active,
-  className,
-  ...props
-}: SegmentButtonProps) {
-  return (
-    <Button
-      type="button"
-      variant="ghost"
-      aria-pressed={active}
-      className={cn(
-        "h-auto rounded-lg px-3 py-1.5 text-sm font-medium",
-        active
-          ? "bg-brand text-white hover:bg-brand/90 hover:text-white"
-          : "border border-border text-muted-foreground hover:bg-muted hover:text-foreground",
-        className,
-      )}
-      {...props}
-    />
-  );
-}
+export const SegmentButton = React.forwardRef<
+  HTMLButtonElement,
+  SegmentButtonProps
+>(({ active, className, ...props }, ref) => (
+  <Button
+    ref={ref}
+    type="button"
+    variant="ghost"
+    aria-pressed={active}
+    className={cn(
+      "h-auto rounded-lg px-3 py-1.5 text-sm font-medium",
+      active
+        ? "bg-brand text-white hover:bg-brand/90 hover:text-white"
+        : "border border-border text-muted-foreground hover:bg-muted hover:text-foreground",
+      className,
+    )}
+    {...props}
+  />
+));
+SegmentButton.displayName = "SegmentButton";

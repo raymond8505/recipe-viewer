@@ -3,6 +3,8 @@
 import type { Timer } from "@/hooks/useTimers";
 import TimerCard from "./TimerCard";
 import { PlusIcon } from "@/components/icons";
+import { Button } from "@/components/ui/button";
+import { PrimaryActionButton } from "@/components/buttons";
 
 interface TimerColumnProps {
   timers: Timer[];
@@ -37,20 +39,21 @@ export default function TimerColumn({
     <div className="w-full h-full border-l border-gray-200 flex flex-col min-w-0">
       {/* Sticky header */}
       <div className="shrink-0 bg-white border-b border-gray-200 px-4 py-3 flex items-center gap-2">
-        <button
+        <PrimaryActionButton
           onClick={onAddTimer}
-          className="flex-1 py-3 rounded-xl bg-orange-500 hover:bg-orange-600 active:bg-orange-700 text-white font-semibold text-base transition-colors flex items-center justify-center gap-2 whitespace-nowrap"
+          className="h-auto flex-1 gap-2 rounded-xl py-3 text-base font-semibold"
         >
           <PlusIcon />
           Add Timer
-        </button>
+        </PrimaryActionButton>
         {timers.length > 0 && (
-          <button
+          <Button
+            variant="outline"
             onClick={onResetAll}
-            className="shrink-0 py-3 px-3 rounded-xl border border-gray-300 hover:bg-gray-50 text-gray-600 text-sm font-medium transition-colors whitespace-nowrap"
+            className="h-auto shrink-0 rounded-xl px-3 py-3"
           >
             Reset All
-          </button>
+          </Button>
         )}
       </div>
 

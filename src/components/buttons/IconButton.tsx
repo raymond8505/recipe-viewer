@@ -1,8 +1,8 @@
 import * as React from "react";
-import { Button } from "@/components/ui/button";
+import { Button, type ButtonProps } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
-interface IconButtonProps extends React.ComponentProps<typeof Button> {
+export interface IconButtonProps extends ButtonProps {
   /** Required — an icon-only button must name its action for screen readers. */
   "aria-label": string;
 }
@@ -13,16 +13,14 @@ interface IconButtonProps extends React.ComponentProps<typeof Button> {
  * overridable via `className` for the spots that fill a flex column or sit in
  * a denser toolbar (TimerCard rails, modal close, etc.).
  */
-export function IconButton({
-  className,
-  variant = "ghost",
-  ...props
-}: IconButtonProps) {
-  return (
+export const IconButton = React.forwardRef<HTMLButtonElement, IconButtonProps>(
+  ({ className, variant = "ghost", ...props }, ref) => (
     <Button
+      ref={ref}
       variant={variant}
       className={cn("size-11 rounded-lg", className)}
       {...props}
     />
-  );
-}
+  ),
+);
+IconButton.displayName = "IconButton";

@@ -1,9 +1,9 @@
 import * as React from "react";
-import { Button } from "@/components/ui/button";
+import { Button, type ButtonProps } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
-interface PortionStepperButtonProps
-  extends Omit<React.ComponentProps<typeof Button>, "children"> {
+export interface PortionStepperButtonProps
+  extends Omit<ButtonProps, "children"> {
   /** Which way this stepper steps — picks the `+` / `−` glyph. */
   direction: "increase" | "decrease";
   /**
@@ -15,26 +15,24 @@ interface PortionStepperButtonProps
 }
 
 /**
- * Large round `+` / `−` stepper used by ServingsControl, NutritionPanel and
- * the AddTimerModal duration controls. 44px touch target, brand hover/active
- * tint. The glyph comes from `direction`; the label comes from the caller.
+ * Large round `+` / `−` stepper used by ServingsControl and NutritionPanel.
+ * 44px touch target, brand hover/active tint. The glyph comes from
+ * `direction`; the label comes from the caller.
  */
-export function PortionStepperButton({
-  direction,
-  className,
-  variant = "ghost",
-  ...props
-}: PortionStepperButtonProps) {
-  return (
-    <Button
-      variant={variant}
-      className={cn(
-        "size-11 rounded-lg text-xl text-muted-foreground hover:bg-brand-subtle hover:text-brand active:bg-brand-subtle disabled:opacity-30",
-        className,
-      )}
-      {...props}
-    >
-      {direction === "increase" ? "+" : "−"}
-    </Button>
-  );
-}
+export const PortionStepperButton = React.forwardRef<
+  HTMLButtonElement,
+  PortionStepperButtonProps
+>(({ direction, className, variant = "ghost", ...props }, ref) => (
+  <Button
+    ref={ref}
+    variant={variant}
+    className={cn(
+      "size-11 rounded-lg text-xl text-muted-foreground hover:bg-brand-subtle hover:text-brand active:bg-brand-subtle disabled:opacity-30",
+      className,
+    )}
+    {...props}
+  >
+    {direction === "increase" ? "+" : "−"}
+  </Button>
+));
+PortionStepperButton.displayName = "PortionStepperButton";
