@@ -1,14 +1,10 @@
 import type { Preview } from "@storybook/react";
-import { Inter } from "next/font/google";
 import "../src/app/globals.css";
 import { AppChrome } from "../src/components/AppChrome";
 
-// Same top-level loader call as src/app/layout.tsx (Next static-analysis
-// constraint — see AppChrome). Every other global style decision (background,
-// font application) is centralized in AppChrome and reused via the decorator
-// below so stories render with the same chrome as the live site.
-const appFont = Inter({ subsets: ["latin"], variable: "--font-sans" });
-
+// All global style decisions (the app font + page surface) live in AppChrome;
+// the decorator below wraps every story in it so stories render with the same
+// chrome as the live site.
 const preview: Preview = {
   parameters: {
     controls: {
@@ -23,7 +19,7 @@ const preview: Preview = {
   },
   decorators: [
     (Story) => (
-      <AppChrome font={appFont} className="p-6">
+      <AppChrome className="p-6">
         <Story />
       </AppChrome>
     ),
