@@ -28,14 +28,14 @@ describe("SortBar", () => {
     expect(screen.getByText("Name Z\u2013A")).toBeTruthy();
   });
 
-  it("highlights the active sort option with orange styling", () => {
+  it("marks the active sort option as pressed", () => {
     render(<SortBar current="oldest" />);
-    expect(screen.getByText("Oldest").className).toContain("bg-orange-500");
+    expect(screen.getByText("Oldest")).toHaveAttribute("aria-pressed", "true");
   });
 
-  it("does not highlight inactive sort options", () => {
+  it("does not mark inactive sort options as pressed", () => {
     render(<SortBar current="oldest" />);
-    expect(screen.getByText("Newest").className).not.toContain("bg-orange-500");
+    expect(screen.getByText("Newest")).toHaveAttribute("aria-pressed", "false");
   });
 
   it("removes the sort param when clicking Newest (the default sort)", () => {
