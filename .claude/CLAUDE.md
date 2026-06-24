@@ -129,6 +129,22 @@ When a handler calls a state setter with data from `fetch` or a webhook response
 - Embeddings are stored **raw (un-normalized)**: they're queried with pgvector cosine distance (`<=>`), which is scale-invariant, so normalizing would be a no-op and would also split the column's scale from the older n8n-written rows.
 - Neither column is in `RECIPE_COLUMNS`, so both are **write-only** — not read back onto `RecipeRow`.
 
+## Styling Layer — Keep It Centralized
+
+The styling layer has **single sources of truth**. Do not re-declare style decisions at call sites — thread them back to these homes so the site and Storybook (and every component) stay in sync.
+
+**Theme colors → `src/app/globals.css`.** Color decisions live as CSS tokens: values in `:root`, util mappings in the `@theme inline` block. The neutral + brand palette is built from the app's base colors (e.g. `--brand: var(--color-orange-600)`, `--card: var(--color-white)`).
+- In UI components use **theme-token utilities** (`bg-card`, `text-card-foreground`, `text-muted-foreground`, `border-border`, `bg-muted`, `text-brand`, `bg-brand-subtle`) — **not** raw palette utilities (`bg-white`, `text-gray-900`, `text-orange-600`).
+- A new semantic/brand color is a **new token** (add to `:root` + `@theme inline`), never a hardcoded hex/gray sprinkled across components.
+- Exception: genuinely one-off *semantic status* colors with no theme meaning (e.g. the green/amber/gray status pill) may stay as explicit classes, but only inside their own named component.
+
+**Global "chrome" (font + page surface) → `src/components/AppChrome.tsx`.** `APP_SURFACE_CLASS` (background + min-height) and the `AppChrome` wrapper are the only place that decides the page surface and how the app font is applied. The real site (`src/app/layout.tsx`) and Storybook (`.storybook/preview.tsx` global decorator) both consume it, so stories render with the same chrome as production. Never set the background or font on an individual page/story — change `AppChrome`.
+- The lone unavoidable duplication is the `next/font` loader call (`Inter(...)`): Next's static analysis requires it at the module top of each compiled entry (`layout.tsx`, `preview.tsx`). Only the resulting font object is passed into `AppChrome`; everything else is centralized.
+
+**Purpose-built badges/pills → named components wrapping a shadcn primitive.** Never inline a styled `<Badge>` or a hand-rolled `<span>` pill in a feature component. Each badge variant is its own named component that wraps `@/components/ui/badge` and owns its styling + logic — e.g. `RecipeStatusBadge` (status normalization + status colors), `RecipeCategoryBadge` (brand accent). This mirrors the icon-component rule (see Shopping List Feature). The shadcn primitive's base already supplies padding/size/weight — the wrapper sets only what differs.
+
+**shadcn primitives → `src/components/ui/`** (generated, unedited). Feature components compose them; overrides go through `className` (twMerge last-wins), not by editing the generated primitive.
+
 ## Story Fixtures
 
 All shared `RecipeRow` fixtures — used by both stories and tests — live in `src/fixtures/` and import via `@/fixtures`. Never define inline `RecipeRow` objects in story files.
