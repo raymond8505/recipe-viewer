@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import Image from "next/image";
 import type {
   RecipeRow,
@@ -96,6 +96,15 @@ export default function RecipeDetail({
     new Set(),
   );
   const [copyFeedback, setCopyFeedback] = useState(false);
+  // Reset timer for the "Copied!" feedback — tracked so it can be cleared on
+  // unmount (a stray fire would setState after teardown → "window is not defined").
+  const copyResetTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(
+    () => () => {
+      if (copyResetTimer.current) clearTimeout(copyResetTimer.current);
+    },
+    [],
+  );
   const [isMounted, setIsMounted] = useState(false);
   useEffect(() => setIsMounted(true), []);
 
@@ -180,7 +189,8 @@ export default function RecipeDetail({
     try {
       await navigator.clipboard.writeText(lines.join("\n"));
       setCopyFeedback(true);
-      setTimeout(() => setCopyFeedback(false), 2000);
+      if (copyResetTimer.current) clearTimeout(copyResetTimer.current);
+      copyResetTimer.current = setTimeout(() => setCopyFeedback(false), 2000);
     } catch {
       /* silent fail */
     }
