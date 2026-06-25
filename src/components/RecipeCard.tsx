@@ -42,7 +42,7 @@ export default function RecipeCard({
           {showStatusBadge && (
             <RecipeStatusBadge
               status={recipe.status}
-              className="absolute top-2 right-2 z-10"
+              className="absolute top-2 right-2 z-9"
             />
           )}
           {image && !imgError ? (
