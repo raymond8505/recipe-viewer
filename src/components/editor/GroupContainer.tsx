@@ -1,12 +1,10 @@
 "use client";
 
 import { useState, type ReactNode } from "react";
-import { useSortable } from "@dnd-kit/sortable";
-import { CSS } from "@dnd-kit/utilities";
 import { TrashIcon } from "@/components/icons";
 import { Button } from "@/components/ui/button";
-import { DragHandleButton } from "@/components/buttons";
 import DeleteConfirm from "./DeleteConfirm";
+import SortableRow from "./SortableRow";
 import { toGroupSortId } from "./dragIds";
 
 interface GroupContainerProps {
@@ -51,29 +49,13 @@ export default function GroupContainer({
 }: GroupContainerProps) {
   const [confirming, setConfirming] = useState(false);
   const isUngrouped = heading === null;
-  const {
-    attributes,
-    listeners,
-    setNodeRef,
-    transform,
-    transition,
-    isDragging,
-  } = useSortable({
-    id: toGroupSortId(groupId),
-    // Ungrouped section never drags, but must stay droppable.
-    disabled: { draggable: isUngrouped, droppable: false },
-  });
-
-  const style = {
-    transform: CSS.Transform.toString(transform),
-    transition,
-    opacity: isDragging ? 0.5 : undefined,
-  };
 
   return (
-    <div
-      ref={setNodeRef}
-      style={style}
+    <SortableRow
+      id={toGroupSortId(groupId)}
+      color="brand"
+      // Ungrouped section never drags, but must stay droppable.
+      disabled={{ draggable: isUngrouped, droppable: false }}
       className={
         isUngrouped
           ? ""
@@ -82,48 +64,50 @@ export default function GroupContainer({
             : "rounded-xl border border-gray-200 p-1.5"
       }
     >
-      {!isUngrouped &&
-        (confirming ? (
-          <DeleteConfirm
-            message={`Delete “${heading || "this section"}” and its ${itemCount} ${itemNoun}${itemCount === 1 ? "" : "s"}?`}
-            onCancel={() => setConfirming(false)}
-            onConfirm={() => {
-              onDelete?.();
-              setConfirming(false);
-            }}
-          />
-        ) : (
-          <div className="flex items-stretch gap-0.5 mb-2">
-            <DragHandleButton
-              className="min-h-[40px] items-center text-brand hover:bg-muted"
-              aria-label={`Reorder section ${heading || "(untitled)"}`}
-              disabled={disabled}
-              {...attributes}
-              {...listeners}
-            />
-            <input
-              type="text"
-              value={heading}
-              onChange={(e) => onHeadingChange(e.target.value)}
-              disabled={disabled}
-              placeholder="Group name"
-              aria-label="Group name"
-              className="flex-1 min-w-0 min-h-[40px] rounded-lg border border-gray-200 px-2 text-sm font-semibold uppercase tracking-wide text-orange-600 focus:outline-hidden focus:ring-2 focus:ring-orange-300 disabled:opacity-60"
-            />
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon"
-              onClick={() => setConfirming(true)}
-              disabled={disabled}
-              className="h-auto w-7 min-h-[40px] shrink-0 rounded-sm text-gray-300 hover:bg-destructive/10 hover:text-destructive disabled:opacity-40"
-              aria-label={`Delete section ${heading || "(untitled)"}`}
-            >
-              <TrashIcon />
-            </Button>
-          </div>
-        ))}
-      {!confirming && <div className={itemGapClassName}>{children}</div>}
-    </div>
+      {({ handle }) => (
+        <>
+          {!isUngrouped &&
+            (confirming ? (
+              <DeleteConfirm
+                message={`Delete “${heading || "this section"}” and its ${itemCount} ${itemNoun}${itemCount === 1 ? "" : "s"}?`}
+                onCancel={() => setConfirming(false)}
+                onConfirm={() => {
+                  onDelete?.();
+                  setConfirming(false);
+                }}
+              />
+            ) : (
+              <div className="flex items-stretch gap-0.5 mb-2">
+                {handle({
+                  "aria-label": `Reorder section ${heading || "(untitled)"}`,
+                  disabled,
+                  className: "min-h-[40px] items-center",
+                })}
+                <input
+                  type="text"
+                  value={heading}
+                  onChange={(e) => onHeadingChange(e.target.value)}
+                  disabled={disabled}
+                  placeholder="Group name"
+                  aria-label="Group name"
+                  className="flex-1 min-w-0 min-h-[40px] rounded-lg border border-gray-200 px-2 text-sm font-semibold uppercase tracking-wide text-orange-600 focus:outline-hidden focus:ring-2 focus:ring-orange-300 disabled:opacity-60"
+                />
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => setConfirming(true)}
+                  disabled={disabled}
+                  className="h-auto w-7 min-h-[40px] shrink-0 rounded-sm text-gray-300 hover:bg-destructive/10 hover:text-destructive disabled:opacity-40"
+                  aria-label={`Delete section ${heading || "(untitled)"}`}
+                >
+                  <TrashIcon />
+                </Button>
+              </div>
+            ))}
+          {!confirming && <div className={itemGapClassName}>{children}</div>}
+        </>
+      )}
+    </SortableRow>
   );
 }
