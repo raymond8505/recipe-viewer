@@ -3,8 +3,7 @@
 import { useState } from "react";
 import dynamic from "next/dynamic";
 import type { RecipeRow } from "@/types/recipe";
-import { ChefHatIcon } from "@/components/icons";
-import { Button } from "@/components/ui/button";
+import { CookButton } from "@/components/buttons";
 
 // Cook mode is a heavy, secondary feature (CookingMode pulls in timers, meal
 // logic, and editors). It only renders after the user taps "Cook", so load its
@@ -22,14 +21,7 @@ export default function CookingModeButton({ recipe, isLoggedIn = false }: Cookin
 
   return (
     <>
-      <Button
-        variant="ghost"
-        onClick={() => setIsOpen(true)}
-        className="h-auto gap-1.5 rounded-full bg-brand-subtle px-3 py-1 text-brand hover:bg-brand/15 hover:text-brand"
-      >
-        <ChefHatIcon />
-        Cook
-      </Button>
+      <CookButton onClick={() => setIsOpen(true)} />
       {isOpen && (
         <CookingMode recipe={recipe} isLoggedIn={isLoggedIn} onClose={() => setIsOpen(false)} />
       )}

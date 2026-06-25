@@ -2,9 +2,8 @@
 
 import { useState, useEffect, useRef } from "react";
 import DraggableRibbon from "./DraggableRibbon";
-import { CloseIcon } from "@/components/icons";
 import { Button } from "@/components/ui/button";
-import { IconButton, PrimaryActionButton } from "@/components/buttons";
+import { CloseButton, PrimaryActionButton } from "@/components/buttons";
 
 interface AddTimerModalProps {
   /** Pre-fill for edit mode. If provided, modal shows "Edit Timer" / "Save". */
@@ -135,14 +134,7 @@ export default function AddTimerModal({
           <h2 className="text-xl font-semibold text-gray-900">
             {isEditMode ? "Edit Timer" : "New Timer"}
           </h2>
-          <IconButton
-            ref={closeButtonRef}
-            onClick={onClose}
-            className="size-9 text-muted-foreground hover:bg-muted hover:text-foreground"
-            aria-label="Close"
-          >
-            <CloseIcon />
-          </IconButton>
+          <CloseButton ref={closeButtonRef} onClick={onClose} />
         </div>
 
         <div className="px-6 pb-6 space-y-5 overflow-y-auto">

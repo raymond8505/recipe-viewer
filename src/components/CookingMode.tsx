@@ -27,14 +27,16 @@ import MealSearch from "@/components/cooking/MealSearch";
 import MealTabs from "@/components/cooking/MealTabs";
 import {
   CheckIcon,
-  CopyIcon,
-  CloseIcon,
-  SmallPlusIcon,
   EnterFullscreenIcon,
   ExitFullscreenIcon,
 } from "@/components/icons";
-import { Button } from "@/components/ui/button";
-import { IconButton, PrimaryActionButton } from "@/components/buttons";
+import {
+  IconButton,
+  AddTimerButton,
+  ResetTimersButton,
+  CloseButton,
+  CopyShoppingListButton,
+} from "@/components/buttons";
 import IngredientItem from "@/components/IngredientItem";
 import ServingsControl from "@/components/ServingsControl";
 import NutritionPanel from "@/components/NutritionPanel";
@@ -373,15 +375,9 @@ export default function CookingMode({
     >
       {/* Sticky header */}
       <div className="shrink-0 flex items-center justify-between px-4 py-2 border-b border-gray-200 bg-white">
-        <Button
-          variant="ghost"
-          onClick={() => {
-            if (document.fullscreenElement) document.exitFullscreen();
-          }}
-          className="h-auto p-0 text-sm font-medium text-muted-foreground hover:bg-transparent hover:text-muted-foreground"
-        >
+        <span className="text-sm font-medium text-muted-foreground">
           Cooking mode
-        </Button>
+        </span>
         <div className="flex items-center gap-1">
           <IconButton
             onClick={toggleFullscreen}
@@ -391,14 +387,11 @@ export default function CookingMode({
           >
             {isFullscreen ? <ExitFullscreenIcon /> : <EnterFullscreenIcon />}
           </IconButton>
-          <IconButton
+          <CloseButton
             onClick={onClose}
-            className="size-9 text-muted-foreground hover:bg-muted hover:text-foreground"
             aria-label="Exit cooking mode"
             title="Exit cooking mode"
-          >
-            <CloseIcon />
-          </IconButton>
+          />
         </div>
       </div>
 
@@ -406,21 +399,9 @@ export default function CookingMode({
       <div className="lg:hidden shrink-0 bg-white border-b border-gray-200">
         {/* Add timer + Reset all — inline, add timer grows */}
         <div className="flex items-center gap-2 px-3 pt-2 pb-1">
-          <PrimaryActionButton
-            onClick={() => setShowAddTimer(true)}
-            className="h-auto flex-1 gap-1.5 rounded-xl py-2.5 text-sm font-semibold"
-          >
-            <SmallPlusIcon />
-            Add Timer
-          </PrimaryActionButton>
+          <AddTimerButton compact onClick={() => setShowAddTimer(true)} />
           {timers.length > 0 && (
-            <Button
-              variant="outline"
-              onClick={resetAll}
-              className="h-auto shrink-0 rounded-xl px-3 py-2.5"
-            >
-              Reset All
-            </Button>
+            <ResetTimersButton onClick={resetAll} className="px-3 py-2.5" />
           )}
         </div>
         {/* Horizontal scrollable timer cards */}
@@ -600,14 +581,11 @@ export default function CookingMode({
                       <h2 className="text-2xl sm:text-xl font-semibold text-gray-900">
                         Ingredients
                       </h2>
-                      <IconButton
+                      <CopyShoppingListButton
                         onClick={copyShoppingList}
-                        disabled={selectedIngredients.size === 0}
-                        className={`size-9 text-muted-foreground hover:bg-muted hover:text-foreground ${selectedIngredients.size === 0 ? "invisible" : ""}`}
-                        aria-label={`Copy shopping list, ${selectedIngredients.size} item${selectedIngredients.size === 1 ? "" : "s"}`}
-                      >
-                        {copyFeedback ? <CheckIcon size={14} /> : <CopyIcon />}
-                      </IconButton>
+                        count={selectedIngredients.size}
+                        copied={copyFeedback}
+                      />
                     </div>
                     {activeScalable.groupedIngredients.map(
                       ({ heading, items }, gi) => (
