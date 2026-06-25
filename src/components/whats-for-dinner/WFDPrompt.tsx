@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { SpinnerIcon } from "@/components/icons";
+import { Button } from "@/components/ui/button";
 
 interface WFDPromptProps {
   onSubmit: (prompt: string) => void;
@@ -50,18 +51,10 @@ export default function WFDPrompt({ onSubmit, isLoading, error }: WFDPromptProps
             "
           />
 
-          <button
+          <Button
             type="submit"
             disabled={!value.trim() || isLoading}
-            className="
-              w-full px-6 py-4 min-h-[52px]
-              text-lg font-black uppercase tracking-wider
-              bg-sky-600 text-white rounded-2xl
-              hover:bg-sky-700 active:bg-sky-800
-              disabled:opacity-40 disabled:cursor-not-allowed
-              transition-colors
-              flex items-center justify-center gap-2
-            "
+            className="h-auto min-h-[52px] w-full gap-2 rounded-2xl bg-sky-600 px-6 py-4 text-lg font-black uppercase tracking-wider text-white hover:bg-sky-700 active:bg-sky-800 disabled:opacity-40"
           >
             {isLoading ? (
               <>
@@ -71,7 +64,7 @@ export default function WFDPrompt({ onSubmit, isLoading, error }: WFDPromptProps
             ) : (
               "Let's go"
             )}
-          </button>
+          </Button>
         </form>
 
         {error && (

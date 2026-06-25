@@ -6,6 +6,7 @@ import { useState } from "react";
 import type { RecipeRow } from "@/types/recipe";
 import { getFirstImage, extractRecipeStats } from "@/lib/format";
 import { StatIcon } from "@/components/icons";
+import { Button } from "@/components/ui/button";
 
 interface HeadsUpWinnerProps {
   recipe: RecipeRow;
@@ -95,19 +96,14 @@ export default function HeadsUpWinner({ recipe, onPlayAgain }: HeadsUpWinnerProp
 
       {/* Play again button */}
       <div className="flex items-center gap-4 mt-6">
-        <button
+        <Button
           type="button"
+          variant="outline"
           onClick={onPlayAgain}
-          className="
-            px-6 py-3 min-h-[48px]
-            font-bold uppercase tracking-wider text-sm
-            bg-gray-800 text-gray-200 rounded-2xl border border-amber-900/50
-            hover:bg-gray-700 active:bg-gray-600
-            transition-colors
-          "
+          className="h-auto min-h-[48px] rounded-2xl border-amber-900/50 bg-gray-800 px-6 py-3 text-sm font-bold uppercase tracking-wider text-gray-200 hover:bg-gray-700 hover:text-gray-200 active:bg-gray-600"
         >
           Play Again
-        </button>
+        </Button>
       </div>
     </div>
   );

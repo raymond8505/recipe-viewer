@@ -1,10 +1,10 @@
 "use client";
 
 import { useState, type ReactNode } from "react";
-import { useSortable } from "@dnd-kit/sortable";
-import { CSS } from "@dnd-kit/utilities";
-import { DragHandleIcon, TrashIcon } from "@/components/icons";
+import { TrashIcon } from "@/components/icons";
+import { Button } from "@/components/ui/button";
 import DeleteConfirm from "./DeleteConfirm";
+import SortableRow from "./SortableRow";
 
 interface SortableItemProps {
   /** Sortable id — the item's bare nanoid id. */
@@ -49,64 +49,58 @@ export default function SortableItem({
 }: SortableItemProps) {
   const [confirming, setConfirming] = useState(false);
   const requestDelete = () => setConfirming(true);
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
-    useSortable({ id, disabled });
-
-  const style = {
-    transform: CSS.Transform.toString(transform),
-    transition,
-    opacity: isDragging ? 0.5 : undefined,
-  };
-
-  if (confirming) {
-    return (
-      <div ref={setNodeRef} style={style}>
-        <DeleteConfirm
-          message={confirmMessage}
-          onCancel={() => setConfirming(false)}
-          onConfirm={() => {
-            onDelete();
-            setConfirming(false);
-          }}
-        />
-      </div>
-    );
-  }
 
   return (
-    <div
-      ref={setNodeRef}
-      style={style}
-      className={`flex items-start gap-0.5 rounded-lg ${errored ? "ring-1 ring-red-300" : ""}`}
+    <SortableRow
+      id={id}
+      color="neutral"
+      disabled={disabled}
+      className={
+        confirming
+          ? ""
+          : `flex items-start gap-0.5 rounded-lg ${errored ? "ring-1 ring-red-300" : ""}`
+      }
     >
-      <button
-        type="button"
-        className={`shrink-0 flex justify-center w-5 rounded text-gray-300 hover:text-gray-600 hover:bg-gray-100 touch-none cursor-grab active:cursor-grabbing disabled:opacity-40 ${
-          alignHandleTop
-            ? "items-start self-start pt-1"
-            : "items-center self-stretch min-h-[40px]"
-        }`}
-        aria-label={dragLabel}
-        disabled={disabled}
-        {...attributes}
-        {...listeners}
-      >
-        <DragHandleIcon />
-      </button>
-      <div className="flex-1 min-w-0">
-        {typeof children === "function" ? children({ requestDelete }) : children}
-      </div>
-      {showDeleteButton && (
-        <button
-          type="button"
-          onClick={requestDelete}
-          disabled={disabled}
-          className="shrink-0 flex items-center justify-center w-7 self-stretch min-h-[40px] rounded-sm text-gray-300 hover:text-red-600 hover:bg-red-50 disabled:opacity-40"
-          aria-label={confirmMessage}
-        >
-          <TrashIcon />
-        </button>
-      )}
-    </div>
+      {({ handle }) =>
+        confirming ? (
+          <DeleteConfirm
+            message={confirmMessage}
+            onCancel={() => setConfirming(false)}
+            onConfirm={() => {
+              onDelete();
+              setConfirming(false);
+            }}
+          />
+        ) : (
+          <>
+            {handle({
+              "aria-label": dragLabel,
+              disabled,
+              className: alignHandleTop
+                ? "rounded items-start self-start pt-1"
+                : "rounded items-center self-stretch min-h-[40px]",
+            })}
+            <div className="flex-1 min-w-0">
+              {typeof children === "function"
+                ? children({ requestDelete })
+                : children}
+            </div>
+            {showDeleteButton && (
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                onClick={requestDelete}
+                disabled={disabled}
+                className="h-auto w-7 min-h-[40px] shrink-0 self-stretch rounded-sm text-gray-300 hover:bg-destructive/10 hover:text-destructive disabled:opacity-40"
+                aria-label={confirmMessage}
+              >
+                <TrashIcon />
+              </Button>
+            )}
+          </>
+        )
+      }
+    </SortableRow>
   );
 }

@@ -1,5 +1,6 @@
 "use client";
 
+import { PortionStepperButton } from "@/components/buttons";
 import type { ScalableRecipe } from "@/lib/ScalableRecipe";
 
 export { scaleNutrientValue } from "@/lib/ScalableRecipe";
@@ -24,24 +25,20 @@ export default function NutritionPanel({ recipe, onSplitPortions }: NutritionPan
         </div>
         {canStep && (
           <div className="flex items-center gap-1">
-            <button
+            <PortionStepperButton
+              direction="decrease"
               onClick={() => onSplitPortions(Math.max(1, portions - 1))}
               disabled={portions <= 1}
-              className="w-11 h-11 flex items-center justify-center rounded-lg text-gray-500 hover:bg-orange-100 hover:text-orange-600 active:bg-orange-200 transition-colors text-xl disabled:opacity-30 disabled:pointer-events-none"
               aria-label="Larger portion size"
-            >
-              −
-            </button>
+            />
             <span className="font-semibold text-gray-900 min-w-12 text-center tabular-nums text-sm">
               1/{portions}
             </span>
-            <button
+            <PortionStepperButton
+              direction="increase"
               onClick={() => onSplitPortions(portions + 1)}
-              className="w-11 h-11 flex items-center justify-center rounded-lg text-gray-500 hover:bg-orange-100 hover:text-orange-600 active:bg-orange-200 transition-colors text-xl"
               aria-label="Smaller portion size"
-            >
-              +
-            </button>
+            />
           </div>
         )}
       </div>

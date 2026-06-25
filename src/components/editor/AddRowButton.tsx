@@ -1,6 +1,7 @@
 "use client";
 
 import { SmallPlusIcon } from "@/components/icons";
+import { Button } from "@/components/ui/button";
 
 interface AddRowButtonProps {
   label: string;
@@ -15,14 +16,15 @@ export default function AddRowButton({
   disabled,
 }: AddRowButtonProps) {
   return (
-    <button
+    <Button
       type="button"
+      variant="ghost"
       onClick={onClick}
       disabled={disabled}
-      className="flex items-center gap-2 w-full min-h-[44px] px-3 py-2 rounded-lg text-sm font-medium text-gray-500 hover:border-orange-300 hover:text-orange-600 disabled:opacity-50 transition-colors"
+      className="h-auto min-h-[44px] w-full justify-start gap-2 rounded-lg px-3 py-2 text-muted-foreground hover:bg-transparent hover:text-brand"
     >
       <SmallPlusIcon />
       {label}
-    </button>
+    </Button>
   );
 }

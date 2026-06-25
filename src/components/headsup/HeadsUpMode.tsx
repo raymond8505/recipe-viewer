@@ -13,6 +13,7 @@ import HeadsUpArena from "./HeadsUpArena";
 import HeadsUpVsSplash from "./HeadsUpVsSplash";
 import HeadsUpWinner from "./HeadsUpWinner";
 import HeadsUpPortraitGuard from "./HeadsUpPortraitGuard";
+import { Button } from "@/components/ui/button";
 
 export default function HeadsUpMode() {
   const { state, startSearch, select, splashDone, reset } = useHeadsUp();
@@ -24,21 +25,18 @@ export default function HeadsUpMode() {
     <div className="fixed inset-0 z-50 bg-gray-900 text-white headsup-container flex flex-col">
       {/* Close / back button */}
       <div className="absolute top-3 right-4 z-20">
-        <Link
-          href="/"
-          className="
-            flex items-center justify-center w-11 h-11
-            rounded-full bg-gray-800/80 border border-gray-700
-            text-gray-400 hover:text-white hover:bg-gray-700
-            transition-colors
-          "
-          aria-label="Exit Heads Up mode"
+        <Button
+          asChild
+          variant="ghost"
+          className="size-11 rounded-full border border-gray-700 bg-gray-800/80 text-gray-400 hover:bg-gray-700 hover:text-white"
         >
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M18 6 6 18" />
-            <path d="m6 6 12 12" />
-          </svg>
-        </Link>
+          <Link href="/" aria-label="Exit Heads Up mode">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d="M18 6 6 18" />
+              <path d="m6 6 12 12" />
+            </svg>
+          </Link>
+        </Button>
       </div>
 
       {/* Phase-based content */}
@@ -99,19 +97,14 @@ export default function HeadsUpMode() {
             <p className="text-red-300 text-sm">
               {state.error}
             </p>
-            <button
+            <Button
               type="button"
+              variant="outline"
               onClick={reset}
-              className="
-                px-6 py-3 min-h-[48px]
-                font-bold uppercase tracking-wider text-sm
-                bg-gray-800 text-gray-200 rounded-2xl border border-gray-700
-                hover:bg-gray-700 active:bg-gray-600
-                transition-colors
-              "
+              className="h-auto min-h-[48px] rounded-2xl border-gray-700 bg-gray-800 px-6 py-3 text-sm font-bold uppercase tracking-wider text-gray-200 hover:bg-gray-700 hover:text-gray-200 active:bg-gray-600"
             >
               Try Again
-            </button>
+            </Button>
           </div>
         </div>
       )}

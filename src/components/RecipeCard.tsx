@@ -39,12 +39,6 @@ export default function RecipeCard({
     <Link href={`/recipes/${id}`} className="group block h-full">
       <Card className="h-full gap-0 py-0 rounded-2xl border border-border ring-0 bg-card hover:shadow-lg transition-shadow duration-200">
         <div className="relative w-full">
-          {showStatusBadge && (
-            <RecipeStatusBadge
-              status={recipe.status}
-              className="absolute top-2 right-2 z-10"
-            />
-          )}
           {image && !imgError ? (
             <div className="relative w-full aspect-square overflow-hidden bg-muted">
               <Image
@@ -58,6 +52,12 @@ export default function RecipeCard({
             </div>
           ) : (
             <ImagePlaceholder />
+          )}
+          {showStatusBadge && (
+            <RecipeStatusBadge
+              status={recipe.status}
+              className="absolute top-2 right-2"
+            />
           )}
         </div>
 

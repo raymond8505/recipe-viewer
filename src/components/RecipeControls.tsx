@@ -4,6 +4,8 @@ import type { ChangeEvent, MutableRefObject } from "react";
 import type { OpState } from "@/hooks/useUndoableSchemaOp";
 import type { EditState } from "@/hooks/useRecipeEditor";
 import { ALLOWED_IMAGE_CONTENT_TYPES } from "@/lib/imageTypes";
+import { Button } from "@/components/ui/button";
+import { PrimaryActionButton } from "@/components/buttons";
 
 export interface RecipeControlsProps {
   isEditing: boolean;
@@ -113,24 +115,25 @@ export default function RecipeControls({
               <option value="draft">Draft</option>
               <option value="archived">Archived</option>
             </select>
-            <button
+            <PrimaryActionButton
               onClick={onEditSave}
               disabled={editState === "saving" || !canSave}
-              className="px-4 py-2 text-sm font-medium rounded-lg bg-orange-500 text-white hover:bg-orange-600 disabled:opacity-50 transition-colors"
+              className="rounded-lg"
             >
               {editState === "saving"
                 ? "Saving…"
                 : isRescrapeReview || isRegenImageReview || isUploadImageReview
                   ? "Confirm"
                   : "Save"}
-            </button>
-            <button
+            </PrimaryActionButton>
+            <Button
+              variant="outline"
               onClick={onEditCancel}
               disabled={editState === "saving"}
-              className="px-4 py-2 text-sm font-medium rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 disabled:opacity-50 transition-colors"
+              className="rounded-lg"
             >
               Cancel
-            </button>
+            </Button>
             {editState === "error" && (
               <span className="text-sm text-red-600">
                 Save failed. Try again.
@@ -144,20 +147,18 @@ export default function RecipeControls({
           </>
         ) : (
           <>
-            <button
-              onClick={onEditStart}
-              className="px-4 py-2 text-sm font-medium rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 transition-colors"
-            >
+            <Button variant="outline" onClick={onEditStart} className="rounded-lg">
               Edit
-            </button>
+            </Button>
             {canRescrape && (
-              <button
+              <Button
+                variant="outline"
                 onClick={onRescrape}
                 disabled={rescrapeState === "loading"}
-                className="px-4 py-2 text-sm font-medium rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 disabled:opacity-50 transition-colors"
+                className="rounded-lg"
               >
                 {rescrapeState === "loading" ? "Re-scraping…" : "Re-scrape"}
-              </button>
+              </Button>
             )}
             {rescrapeState === "success" && (
               <span className="text-sm text-green-600">Recipe updated.</span>
@@ -167,24 +168,22 @@ export default function RecipeControls({
                 Re-scrape failed. Try again.
               </span>
             )}
-            <button
+            <Button
+              variant="outline"
               onClick={onRegenImage}
               disabled={regenImageState === "loading"}
-              className="px-4 py-2 text-sm font-medium rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 disabled:opacity-50 transition-colors"
+              className="rounded-lg"
             >
               {regenImageState === "loading" ? "Generating…" : "Regen Image"}
-            </button>
+            </Button>
             {regenImageState === "error" && (
               <span className="text-sm text-red-600">
                 Image generation failed. Try again.
               </span>
             )}
-            <button
-              onClick={onUploadOpen}
-              className="px-4 py-2 text-sm font-medium rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 transition-colors"
-            >
+            <Button variant="outline" onClick={onUploadOpen} className="rounded-lg">
               Upload Image
-            </button>
+            </Button>
             <input
               ref={fileInputRef}
               type="file"

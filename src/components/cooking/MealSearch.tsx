@@ -3,6 +3,7 @@
 import { useRef, useState, useEffect } from "react";
 import type { RecipeRow } from "@/types/recipe";
 import { SearchIcon, SpinnerIcon } from "@/components/icons";
+import { Button } from "@/components/ui/button";
 
 interface MealSearchProps {
   excludeIds: Set<string>;
@@ -135,9 +136,10 @@ export default function MealSearch({ excludeIds, onAdd }: MealSearchProps) {
             <p className="py-3 px-4 text-sm text-gray-400" role="status">No recipes found</p>
           ) : (
             results.map((recipe, i) => (
-              <button
+              <Button
                 key={recipe.id}
                 ref={(el) => { resultRefs.current[i] = el; }}
+                variant="ghost"
                 role="option"
                 aria-selected={false}
                 onClick={() => {
@@ -146,7 +148,7 @@ export default function MealSearch({ excludeIds, onAdd }: MealSearchProps) {
                   setResults([]);
                 }}
                 onKeyDown={(e) => handleResultKeyDown(e, i)}
-                className="w-full text-left py-3 px-4 min-h-[44px] text-sm text-gray-800 hover:bg-orange-50 active:bg-orange-100 transition-colors border-b border-gray-100 last:border-0"
+                className="h-auto w-full min-h-[44px] flex-col items-start justify-center gap-0 whitespace-normal rounded-none border-b border-gray-100 px-4 py-3 text-left text-sm text-gray-800 hover:bg-brand-subtle hover:text-gray-800 active:bg-brand/10 last:border-0"
               >
                 <span className="block font-medium leading-snug">
                   {recipe.metadata.schema.name}
@@ -154,7 +156,7 @@ export default function MealSearch({ excludeIds, onAdd }: MealSearchProps) {
                 {recipe.source && (
                   <span className="block text-xs text-gray-400 mt-0.5">{recipe.source}</span>
                 )}
-              </button>
+              </Button>
             ))
           )}
         </div>

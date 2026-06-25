@@ -38,25 +38,25 @@ describe("StatusFilter", () => {
     expect(screen.getByText("Archived (0)")).toBeTruthy();
   });
 
-  it("highlights All when no status is selected", () => {
+  it("marks All as pressed when no status is selected", () => {
     render(<StatusFilter counts={COUNTS} current={undefined} />);
-    expect(screen.getByText("All (18)").className).toContain("bg-orange-500");
+    expect(screen.getByText("All (18)")).toHaveAttribute("aria-pressed", "true");
   });
 
-  it("does not highlight All when a status is selected", () => {
+  it("does not mark All as pressed when a status is selected", () => {
     render(<StatusFilter counts={COUNTS} current="published" />);
-    expect(screen.getByText("All (18)").className).not.toContain("bg-orange-500");
+    expect(screen.getByText("All (18)")).toHaveAttribute("aria-pressed", "false");
   });
 
-  it("highlights the active status button", () => {
+  it("marks the active status button as pressed", () => {
     render(<StatusFilter counts={COUNTS} current="draft" />);
-    expect(screen.getByText("Draft (3)").className).toContain("bg-orange-500");
+    expect(screen.getByText("Draft (3)")).toHaveAttribute("aria-pressed", "true");
   });
 
-  it("does not highlight inactive status buttons", () => {
+  it("does not mark inactive status buttons as pressed", () => {
     render(<StatusFilter counts={COUNTS} current="draft" />);
-    expect(screen.getByText("Published (10)").className).not.toContain("bg-orange-500");
-    expect(screen.getByText("Archived (2)").className).not.toContain("bg-orange-500");
+    expect(screen.getByText("Published (10)")).toHaveAttribute("aria-pressed", "false");
+    expect(screen.getByText("Archived (2)")).toHaveAttribute("aria-pressed", "false");
   });
 
   it("removes status param when clicking All", () => {

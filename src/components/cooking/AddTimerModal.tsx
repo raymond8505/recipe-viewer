@@ -2,7 +2,8 @@
 
 import { useState, useEffect, useRef } from "react";
 import DraggableRibbon from "./DraggableRibbon";
-import { CloseIcon } from "@/components/icons";
+import { Button } from "@/components/ui/button";
+import { CloseButton, PrimaryActionButton } from "@/components/buttons";
 
 interface AddTimerModalProps {
   /** Pre-fill for edit mode. If provided, modal shows "Edit Timer" / "Save". */
@@ -133,14 +134,7 @@ export default function AddTimerModal({
           <h2 className="text-xl font-semibold text-gray-900">
             {isEditMode ? "Edit Timer" : "New Timer"}
           </h2>
-          <button
-            ref={closeButtonRef}
-            onClick={onClose}
-            className="p-2 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors"
-            aria-label="Close"
-          >
-            <CloseIcon />
-          </button>
+          <CloseButton ref={closeButtonRef} onClick={onClose} />
         </div>
 
         <div className="px-6 pb-6 space-y-5 overflow-y-auto">
@@ -174,25 +168,27 @@ export default function AddTimerModal({
             <div className="flex items-center justify-center gap-6">
               {/* Minutes */}
               <div className="flex flex-col items-center gap-2">
-                <button
+                <Button
+                  variant="ghost"
                   onClick={() => setMinutes((m) => clampMin(m + 1))}
-                  className="w-14 h-14 rounded-xl bg-gray-100 hover:bg-gray-200 active:bg-gray-300 flex items-center justify-center text-2xl font-bold text-gray-700 transition-colors"
+                  className="size-14 rounded-xl bg-muted text-2xl font-bold text-gray-700 hover:bg-gray-200 active:bg-gray-300"
                   aria-label="Increase minutes"
                 >
                   +
-                </button>
+                </Button>
                 <DragNumber
                   value={minutes}
                   onChange={setMinutes}
                   clamp={clampMin}
                 />
-                <button
+                <Button
+                  variant="ghost"
                   onClick={() => setMinutes((m) => clampMin(m - 1))}
-                  className="w-14 h-14 rounded-xl bg-gray-100 hover:bg-gray-200 active:bg-gray-300 flex items-center justify-center text-2xl font-bold text-gray-700 transition-colors"
+                  className="size-14 rounded-xl bg-muted text-2xl font-bold text-gray-700 hover:bg-gray-200 active:bg-gray-300"
                   aria-label="Decrease minutes"
                 >
                   −
-                </button>
+                </Button>
                 <span className="text-xs text-gray-500 uppercase tracking-wide">
                   min
                 </span>
@@ -202,25 +198,27 @@ export default function AddTimerModal({
 
               {/* Seconds */}
               <div className="flex flex-col items-center gap-2">
-                <button
+                <Button
+                  variant="ghost"
                   onClick={() => setSeconds((s) => clampSec(s + 15))}
-                  className="w-14 h-14 rounded-xl bg-gray-100 hover:bg-gray-200 active:bg-gray-300 flex items-center justify-center text-2xl font-bold text-gray-700 transition-colors"
+                  className="size-14 rounded-xl bg-muted text-2xl font-bold text-gray-700 hover:bg-gray-200 active:bg-gray-300"
                   aria-label="Increase seconds"
                 >
                   +
-                </button>
+                </Button>
                 <DragNumber
                   value={seconds}
                   onChange={setSeconds}
                   clamp={clampSec}
                 />
-                <button
+                <Button
+                  variant="ghost"
                   onClick={() => setSeconds((s) => clampSec(s - 15))}
-                  className="w-14 h-14 rounded-xl bg-gray-100 hover:bg-gray-200 active:bg-gray-300 flex items-center justify-center text-2xl font-bold text-gray-700 transition-colors"
+                  className="size-14 rounded-xl bg-muted text-2xl font-bold text-gray-700 hover:bg-gray-200 active:bg-gray-300"
                   aria-label="Decrease seconds"
                 >
                   −
-                </button>
+                </Button>
                 <span className="text-xs text-gray-500 uppercase tracking-wide">
                   sec
                 </span>
@@ -230,35 +228,37 @@ export default function AddTimerModal({
             {/* Quick presets — horizontal ribbon, no wrapping */}
             <DraggableRibbon className="gap-2 mt-4">
               {QUICK_MINUTES.map((m) => (
-                <button
+                <Button
                   key={m}
+                  variant="ghost"
                   onClick={() => {
                     setMinutes(m);
                     setSeconds(0);
                   }}
-                  className="snap-start shrink-0 px-4 py-2 rounded-lg bg-orange-50 hover:bg-orange-100 active:bg-orange-200 text-orange-700 text-sm font-medium transition-colors"
+                  className="h-auto shrink-0 snap-start rounded-lg bg-brand-subtle px-4 py-2 text-brand hover:bg-brand/15 hover:text-brand"
                 >
                   {m}m
-                </button>
+                </Button>
               ))}
             </DraggableRibbon>
           </div>
 
           {/* Actions */}
           <div className="flex gap-3">
-            <button
+            <Button
+              variant="outline"
               onClick={onClose}
-              className="flex-1 py-4 rounded-xl border border-gray-300 text-gray-700 font-semibold text-lg hover:bg-gray-50 transition-colors"
+              className="h-auto flex-1 rounded-xl py-4 text-lg font-semibold"
             >
               Cancel
-            </button>
-            <button
+            </Button>
+            <PrimaryActionButton
               onClick={handleSubmit}
               disabled={!canSubmit}
-              className="flex-1 py-4 rounded-xl bg-orange-500 text-white font-semibold text-lg hover:bg-orange-600 active:bg-orange-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+              className="h-auto flex-1 rounded-xl py-4 text-lg font-semibold disabled:opacity-40"
             >
               {isEditMode ? "Save" : "Start Timer"}
-            </button>
+            </PrimaryActionButton>
           </div>
         </div>
       </div>

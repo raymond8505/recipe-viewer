@@ -1,6 +1,7 @@
 "use client";
 
 import { useRouter, useSearchParams } from "next/navigation";
+import { SegmentButton } from "@/components/buttons";
 import type { SortOption } from "@/lib/recipes";
 
 const SORT_OPTIONS: { value: SortOption; label: string }[] = [
@@ -34,17 +35,13 @@ export default function SortBar({ current }: SortBarProps) {
       <span className="text-sm text-gray-500 shrink-0">Sort by</span>
       <div className="flex gap-1 flex-wrap">
         {SORT_OPTIONS.map(({ value, label }) => (
-          <button
+          <SegmentButton
             key={value}
+            active={current === value}
             onClick={() => handleChange(value)}
-            className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
-              current === value
-                ? "bg-orange-500 text-white"
-                : "border border-gray-200 text-gray-600 hover:bg-gray-50"
-            }`}
           >
             {label}
-          </button>
+          </SegmentButton>
         ))}
       </div>
     </div>

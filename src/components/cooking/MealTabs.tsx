@@ -3,6 +3,8 @@
 import { useRef } from "react";
 import type { RecipeRow } from "@/types/recipe";
 import { CloseSmallIcon } from "@/components/icons";
+import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 
 interface MealTabsProps {
   recipes: RecipeRow[];
@@ -46,13 +48,14 @@ export default function MealTabs({ recipes, activeIndex, onSelect, onRemove }: M
         const active = index === activeIndex;
         const hasClose = index > 0;
         const sharedBg = active
-          ? "bg-orange-500 text-white"
-          : "bg-gray-100 text-gray-700";
+          ? "bg-brand text-white"
+          : "bg-muted text-gray-700";
 
         return (
           <div key={recipe.id} className="flex items-stretch shrink-0">
-            <button
+            <Button
               ref={(el) => { tabRefs.current[index] = el; }}
+              variant="ghost"
               role="tab"
               aria-selected={active}
               aria-controls="meal-recipe-panel"
@@ -60,16 +63,20 @@ export default function MealTabs({ recipes, activeIndex, onSelect, onRemove }: M
               tabIndex={active ? 0 : -1}
               onClick={() => onSelect(index)}
               onKeyDown={(e) => handleTabKeyDown(e, index)}
-              className={`min-h-[44px] py-2.5 text-sm font-medium transition-colors ${sharedBg} ${
-                hasClose
-                  ? "pl-4 pr-3 rounded-l-xl"
-                  : "px-4 rounded-xl"
-              } ${!active ? "active:bg-gray-200" : "active:bg-orange-600"}`}
+              className={cn(
+                "h-auto min-h-[44px] py-2.5 text-sm font-medium",
+                sharedBg,
+                hasClose ? "rounded-l-xl rounded-r-none pl-4 pr-3" : "rounded-xl px-4",
+                active
+                  ? "hover:bg-brand hover:text-white active:bg-brand/90"
+                  : "hover:bg-muted hover:text-gray-700 active:bg-gray-200",
+              )}
             >
               <span className="truncate max-w-[140px] block">{recipe.metadata.schema.name}</span>
-            </button>
+            </Button>
             {hasClose && (
-              <button
+              <Button
+                variant="ghost"
                 onClick={() => {
                   const futureActive = index === activeIndex ? 0 : index < activeIndex ? activeIndex - 1 : activeIndex;
                   onRemove(index);
@@ -77,14 +84,16 @@ export default function MealTabs({ recipes, activeIndex, onSelect, onRemove }: M
                 }}
                 tabIndex={-1}
                 aria-label={`Remove ${recipe.metadata.schema.name} from meal`}
-                className={`min-h-[44px] px-2.5 rounded-r-xl text-sm transition-colors border-l ${sharedBg} ${
+                className={cn(
+                  "h-auto min-h-[44px] rounded-l-none rounded-r-xl border-l px-2.5 text-sm",
+                  sharedBg,
                   active
-                    ? "border-orange-400 hover:bg-orange-600 active:bg-orange-700"
-                    : "border-gray-200 hover:bg-gray-200 active:bg-gray-300"
-                }`}
+                    ? "border-brand/60 hover:bg-brand/90 hover:text-white active:bg-brand/80"
+                    : "border-border hover:bg-gray-200 hover:text-gray-700 active:bg-gray-300",
+                )}
               >
                 <CloseSmallIcon />
-              </button>
+              </Button>
             )}
           </div>
         );

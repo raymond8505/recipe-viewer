@@ -2,6 +2,8 @@
 
 import { useRef, useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
+import { Button } from "@/components/ui/button";
+import { PrimaryActionButton } from "@/components/buttons";
 
 export default function AuthButton({ isLoggedIn }: { isLoggedIn: boolean }) {
   const router = useRouter();
@@ -63,23 +65,25 @@ export default function AuthButton({ isLoggedIn }: { isLoggedIn: boolean }) {
 
   if (isLoggedIn) {
     return (
-      <button
+      <Button
+        variant="ghost"
         onClick={handleLogout}
-        className="min-h-[44px] min-w-[44px] px-4 text-sm font-medium text-gray-600 hover:text-gray-900 transition"
+        className="h-auto min-h-[44px] min-w-[44px] px-4 text-muted-foreground hover:bg-transparent hover:text-foreground"
       >
         Logout
-      </button>
+      </Button>
     );
   }
 
   return (
     <>
-      <button
+      <Button
+        variant="ghost"
         onClick={() => setOpen(true)}
-        className="min-h-[44px] min-w-[44px] px-4 text-sm font-medium text-gray-600 hover:text-gray-900 transition"
+        className="h-auto min-h-[44px] min-w-[44px] px-4 text-muted-foreground hover:bg-transparent hover:text-foreground"
       >
         Login
-      </button>
+      </Button>
 
       {open && (
         <div
@@ -103,20 +107,21 @@ export default function AuthButton({ isLoggedIn }: { isLoggedIn: boolean }) {
               />
               {error && <p className="text-sm text-red-600">{error}</p>}
               <div className="flex gap-3">
-                <button
+                <Button
                   type="button"
+                  variant="outline"
                   onClick={close}
-                  className="flex-1 min-h-[44px] rounded-xl border border-gray-300 text-sm font-medium text-gray-700 hover:bg-gray-50 transition"
+                  className="h-auto min-h-[44px] flex-1 rounded-xl"
                 >
                   Cancel
-                </button>
-                <button
+                </Button>
+                <PrimaryActionButton
                   type="submit"
                   disabled={loading || !password}
-                  className="flex-1 min-h-[44px] rounded-xl bg-orange-500 text-white text-sm font-medium hover:bg-orange-600 disabled:opacity-50 transition"
+                  className="h-auto min-h-[44px] flex-1 rounded-xl"
                 >
                   {loading ? "Logging in…" : "Login"}
-                </button>
+                </PrimaryActionButton>
               </div>
             </form>
           </div>
