@@ -3,10 +3,12 @@
 - A recipe viewing tool built for use in the kitchen during cooking.
 - A barebones recipe CMS with MCP tools and agent skill for authoring recipes
 
-## ▶ Watch the demo
+## Watch the demo
 
 [![Watch the video](https://raw.githubusercontent.com/raymond8505/recipe-viewer/main/video.png)](https://www.youtube.com/watch?v=qOG80UKUkFI)
 
+## Try the app
+(https://new.raymonds.recipes/)[try the latest build with my recipes]
 ---
 
 ## Why this exists
@@ -31,6 +33,9 @@ I want to know my macros for my home cooking, I don't want to have to fill out a
 
 ### Effortless recipe iteration
 Take notes during the cook and during first taste, tell your agent to address them in the recipe- re-formulate ingredients, re-write instructions, update nutrition, or any other boring thing that isn't cooking food or eating food.
+
+### Basic publishing
+This 
 
 ---
 
@@ -67,7 +72,7 @@ Tap ingredients to build a shopping list, then copy it to your clipboard as plai
 A per-serving nutrition panel that's aware of your current portion size, shown when the recipe has the data and quietly absent when it doesn't.
 
 ### MCP + Skill
-Ships with an MCP server and skill so you can manage your recipes conversationally.
+Ships with an MCP server and skill so you can search and manage your recipes conversationally.
 
 The skill contains instructions for the agent on how to ideate, research and author recipes with reliable consistency.* As well as upload images to recipes- attachments in the conversation or URLs.
 
@@ -120,7 +125,7 @@ The premise: an AI assistant should be able to use this app the way a person can
 | Components | **shadcn/ui** (`radix-nova`) on Radix UI | named wrapper components, no inline styles |
 | Icons | **lucide-react** | one named component per icon |
 | Drag & drop | **@dnd-kit** | editor reordering |
-| Data | **Supabase** (Postgres) | repo layer in `src/lib/recipes.ts` |
+| Data | **Supabase** (Postgres) | repo layer in `src/lib/recipes.ts`, Schema.org/Recipe |
 | Search | **pgvector** + **Gemini embeddings** (768-dim) | cosine distance, embeddings as derived columns |
 | Auth / agents | **OAuth 2.1 + PKCE**, JWT (`jose`), MCP server | scoped recipe capability tokens |
 | Validation | **Zod 4** + **@t3-oss/env-nextjs** | runtime + startup env validation |
