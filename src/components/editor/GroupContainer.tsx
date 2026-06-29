@@ -3,7 +3,7 @@
 import { useState, type ReactNode } from "react";
 import { TrashIcon } from "@/components/icons";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import GroupHeadingInput from "./GroupHeadingInput";
 import DeleteConfirm from "./DeleteConfirm";
 import SortableRow from "./SortableRow";
 import { toGroupSortId } from "./dragIds";
@@ -84,14 +84,11 @@ export default function GroupContainer({
                   disabled,
                   className: "min-h-[40px] items-center",
                 })}
-                <Input
-                  type="text"
+                <GroupHeadingInput
                   value={heading}
                   onChange={(e) => onHeadingChange(e.target.value)}
                   disabled={disabled}
-                  placeholder="Group name"
-                  aria-label="Group name"
-                  className="flex-1 min-w-0 min-h-[40px] text-sm font-semibold uppercase tracking-wide text-brand"
+                  className="flex-1 min-w-0"
                 />
                 <Button
                   type="button"

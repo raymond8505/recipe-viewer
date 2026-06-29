@@ -29,7 +29,7 @@ import InstructionsEditor from "./editor/InstructionsEditor";
 import IngredientItem from "./IngredientItem";
 import ServingsControl from "./ServingsControl";
 import NutritionPanel from "./NutritionPanel";
-import { Input } from "@/components/ui/input";
+import RecipeTitleInput from "./RecipeTitleInput";
 import { Textarea } from "@/components/ui/textarea";
 
 interface RecipeDetailProps {
@@ -220,14 +220,10 @@ export default function RecipeDetail({
 
         <div className="flex items-center gap-4 mb-4">
           {isEditing ? (
-            <Input
-              type="text"
-              aria-label="Recipe title"
+            <RecipeTitleInput
               value={draft.name}
               onChange={(e) => patch({ name: e.target.value })}
               disabled={editState === "saving"}
-              placeholder="Recipe title"
-              className="h-auto p-3 text-3xl sm:text-4xl font-bold leading-tight md:text-3xl"
             />
           ) : (
             <>
