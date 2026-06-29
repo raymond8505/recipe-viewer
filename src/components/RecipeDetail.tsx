@@ -29,6 +29,8 @@ import InstructionsEditor from "./editor/InstructionsEditor";
 import IngredientItem from "./IngredientItem";
 import ServingsControl from "./ServingsControl";
 import NutritionPanel from "./NutritionPanel";
+import RecipeTitleInput from "./RecipeTitleInput";
+import { Textarea } from "@/components/ui/textarea";
 
 interface RecipeDetailProps {
   recipe: RecipeRow;
@@ -218,14 +220,10 @@ export default function RecipeDetail({
 
         <div className="flex items-center gap-4 mb-4">
           {isEditing ? (
-            <input
-              type="text"
-              aria-label="Recipe title"
+            <RecipeTitleInput
               value={draft.name}
               onChange={(e) => patch({ name: e.target.value })}
               disabled={editState === "saving"}
-              placeholder="Recipe title"
-              className="w-full rounded-lg border border-gray-200 p-3 text-3xl sm:text-4xl font-bold text-gray-900 leading-tight focus:outline-hidden focus:ring-2 focus:ring-orange-300 disabled:opacity-60"
             />
           ) : (
             <>
@@ -238,12 +236,12 @@ export default function RecipeDetail({
         </div>
 
         {isEditing ? (
-          <textarea
+          <Textarea
             value={draft.description}
             onChange={(e) => patch({ description: e.target.value })}
             disabled={editState === "saving"}
             placeholder="Description"
-            className="w-full rounded-lg border border-gray-200 p-3 text-gray-700 text-lg leading-relaxed min-h-[80px] focus:outline-hidden focus:ring-2 focus:ring-orange-300 disabled:opacity-60 resize-y"
+            className="p-3 text-lg leading-relaxed min-h-[80px] resize-y md:text-lg"
           />
         ) : (
           schema.description && (
@@ -454,12 +452,12 @@ export default function RecipeDetail({
         <div className="mt-8">
           <h2 className="text-xl font-semibold text-gray-900 mb-3">Notes</h2>
           {isEditing ? (
-            <textarea
+            <Textarea
               value={draft.notes}
               onChange={(e) => patch({ notes: e.target.value })}
               disabled={editState === "saving"}
               placeholder="Add notes…"
-              className="w-full rounded-lg border border-gray-200 p-3 text-gray-700 leading-relaxed min-h-[120px] focus:outline-hidden focus:ring-2 focus:ring-orange-300 disabled:opacity-60 resize-y"
+              className="p-3 leading-relaxed min-h-[120px] resize-y"
             />
           ) : (
             <p className="text-gray-700 leading-relaxed whitespace-pre-line">

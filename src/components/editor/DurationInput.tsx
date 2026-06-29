@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { formatMS, parseMS } from "@/lib/format";
+import { Input } from "@/components/ui/input";
 
 interface DurationInputProps {
   minutes: number;
@@ -31,7 +32,7 @@ export default function DurationInput({
   const [text, setText] = useState(() => formatMS(minutes, seconds));
 
   return (
-    <input
+    <Input
       type="text"
       inputMode="numeric"
       value={text}
@@ -43,8 +44,8 @@ export default function DurationInput({
       disabled={disabled}
       placeholder="m:ss"
       aria-label={ariaLabel}
+      aria-invalid={errored || undefined}
       className={className}
-      data-errored={errored ? "" : undefined}
     />
   );
 }

@@ -2,6 +2,7 @@
 
 import { nanoid } from "nanoid";
 import type { EditableIngredient, EditableIngredients } from "@/types/editor";
+import { Input } from "@/components/ui/input";
 import SortableGroupedList from "./SortableGroupedList";
 
 interface IngredientsEditorProps {
@@ -31,14 +32,14 @@ export default function IngredientsEditor({
       itemNoun="ingredient"
       groupNoun="group"
       renderItem={(item, update) => (
-        <input
+        <Input
           type="text"
           value={item.name}
           onChange={(e) => update({ name: e.target.value })}
           disabled={disabled}
           placeholder="e.g. 1 tsp cumin"
           aria-label="Ingredient"
-          className="w-full min-h-[40px] rounded-lg border border-gray-200 px-2 text-sm text-gray-700 focus:outline-hidden focus:ring-2 focus:ring-orange-300 disabled:opacity-60"
+          className="min-h-[40px]"
         />
       )}
     />

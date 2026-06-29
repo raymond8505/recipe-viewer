@@ -1,6 +1,7 @@
 "use client";
 
 import { useLayoutEffect, useRef, type TextareaHTMLAttributes } from "react";
+import { Textarea } from "@/components/ui/textarea";
 
 type AutoresizeTextareaProps = TextareaHTMLAttributes<HTMLTextAreaElement> & {
   value: string;
@@ -25,5 +26,5 @@ export default function AutoresizeTextarea({
     el.style.height = `${el.scrollHeight}px`;
   }, [value]);
 
-  return <textarea ref={ref} value={value} {...rest} />;
+  return <Textarea ref={ref} value={value} {...rest} />;
 }

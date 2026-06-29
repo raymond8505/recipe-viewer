@@ -4,6 +4,8 @@ import { nanoid } from "nanoid";
 import type { EditableStep, EditableInstructions } from "@/types/editor";
 import { TrashIcon } from "@/components/icons";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import SortableGroupedList from "./SortableGroupedList";
 import AutoresizeTextarea from "./AutoresizeTextarea";
 import DurationInput from "./DurationInput";
@@ -55,31 +57,32 @@ export default function InstructionsEditor({
             disabled={disabled}
             placeholder="Describe this step…"
             aria-label="Step instructions"
-            className="block w-full min-h-[44px] rounded-lg border border-gray-200 p-2 text-sm text-gray-700 leading-relaxed focus:outline-hidden focus:ring-2 focus:ring-orange-300 disabled:opacity-60 resize-none overflow-hidden"
+            className="min-h-[44px] text-sm leading-relaxed resize-none overflow-hidden"
           />
           <div className="flex flex-wrap items-end gap-2">
-            <label className="flex-1 min-w-32 text-xs text-gray-500">
+            <Label className="flex-1 min-w-32 flex-col items-stretch gap-0.5 text-xs font-normal text-muted-foreground">
               Timer label
-              <input
+              <Input
                 type="text"
                 value={step.name}
                 onChange={(e) => update({ name: e.target.value })}
                 disabled={disabled}
                 placeholder="e.g. Simmer"
                 aria-label="Timer label"
-                className={`mt-0.5 w-full min-h-[40px] rounded-lg border px-2 text-sm text-gray-700 focus:outline-hidden focus:ring-2 focus:ring-orange-300 disabled:opacity-60 ${errored ? "border-red-300" : "border-gray-200"}`}
+                aria-invalid={errored || undefined}
+                className="w-full min-h-[40px] text-sm"
               />
-            </label>
-            <label className="text-xs text-gray-500">
+            </Label>
+            <Label className="flex-col items-stretch gap-0.5 text-xs font-normal text-muted-foreground">
               Timer
               <DurationInput
                 minutes={step.minutes}
                 seconds={step.seconds}
                 onChange={update}
                 disabled={disabled}
-                className="mt-0.5 w-24 min-h-[40px] rounded-lg border border-gray-200 px-2 text-sm text-gray-700 focus:outline-hidden focus:ring-2 focus:ring-orange-300 disabled:opacity-60"
+                className="w-24 min-h-[40px] text-sm"
               />
-            </label>
+            </Label>
             <Button
               type="button"
               variant="ghost"
@@ -93,7 +96,7 @@ export default function InstructionsEditor({
             </Button>
           </div>
           {errored && (
-            <p className="text-xs text-red-600">
+            <p className="text-xs text-destructive">
               A timer needs a label — add one or clear the time.
             </p>
           )}
