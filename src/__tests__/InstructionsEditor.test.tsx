@@ -80,6 +80,12 @@ describe("InstructionsEditor", () => {
   it("shows the timer-needs-a-label error for a flagged step", () => {
     render(<Harness initial={oneStep} erroredStepIds={new Set(["s1"])} />);
     expect(screen.getByText(/a timer needs a label/i)).toBeInTheDocument();
+    // The errored timer-label input surfaces the invalid state via aria-invalid
+    // (the primitive renders the destructive ring off this), not a red border.
+    expect(screen.getByLabelText("Timer label")).toHaveAttribute(
+      "aria-invalid",
+      "true",
+    );
   });
 
   it("does not show the error when no step is flagged", () => {
