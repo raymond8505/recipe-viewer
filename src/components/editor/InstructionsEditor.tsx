@@ -57,7 +57,7 @@ export default function InstructionsEditor({
             disabled={disabled}
             placeholder="Describe this step…"
             aria-label="Step instructions"
-            className="min-h-[44px] text-sm leading-relaxed resize-none overflow-hidden"
+            className="min-h-[44px] text-sm leading-relaxed resize-none overflow-hidden font-medium"
           />
           <div className="flex flex-wrap items-end gap-2">
             <Label className="flex-1 min-w-32 flex-col items-stretch gap-0.5 text-xs font-normal text-muted-foreground">

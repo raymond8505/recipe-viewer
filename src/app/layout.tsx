@@ -4,7 +4,11 @@ import "./globals.css";
 import WindowApiProvider from "@/components/WindowApiProvider";
 import AuthButton from "@/components/AuthButton";
 import { getIsLoggedIn } from "@/lib/auth";
-import { bodyFont, headingFont, APP_SURFACE_CLASS } from "@/components/AppChrome";
+import {
+  bodyFont,
+  headingFont,
+  APP_SURFACE_CLASS,
+} from "@/components/AppChrome";
 
 export const metadata: Metadata = {
   title: {
@@ -33,7 +37,7 @@ export default async function RootLayout({
               href="/"
               className="font-heading font-normal text-lg text-orange-500 hover:text-orange-600 transition"
             >
-              🍳 Recipes
+              RECIPES
             </Link>
             <AuthButton isLoggedIn={isLoggedIn} />
           </div>
