@@ -27,7 +27,7 @@ export default async function RootLayout({
   return (
     <html lang="en" className={`${bodyFont.variable} ${headingFont.variable}`}>
       <body className={`${bodyFont.className} ${APP_SURFACE_CLASS}`}>
-        <header className="bg-white border-b border-gray-200 sticky top-0 z-10">
+        <header className="bg-card border-b border-gray-200 sticky top-0 z-10">
           <div className="max-w-6xl mx-auto px-4 sm:px-6 h-14 flex items-center justify-between">
             <Link
               href="/"

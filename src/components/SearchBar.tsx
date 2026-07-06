@@ -57,7 +57,7 @@ export default function SearchBar({ defaultValue }: SearchBarProps) {
         value={inputValue}
         onChange={(e) => handleChange(e.target.value)}
         placeholder="Search recipes…"
-        className="w-full pl-12 pr-4 py-3 rounded-xl border border-gray-200 bg-white text-gray-900 placeholder-gray-400 focus:outline-hidden focus:ring-2 focus:ring-orange-400 focus:border-transparent transition"
+        className="w-full pl-12 pr-4 py-3 rounded-xl border border-gray-200 bg-card text-gray-900 placeholder-gray-400 focus:outline-hidden focus:ring-2 focus:ring-orange-400 focus:border-transparent transition"
       />
     </div>
   );

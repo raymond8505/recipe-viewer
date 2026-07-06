@@ -143,7 +143,7 @@ export default function TimerCard({
 
   return (
     <div
-      className={`flex items-stretch rounded-xl border overflow-hidden ${outerBorder} ${isFinished ? "bg-gray-50" : "bg-white"}`}
+      className={`flex items-stretch rounded-xl border overflow-hidden ${outerBorder} ${isFinished ? "bg-gray-50" : "bg-card"}`}
     >
       {/* Left col: play/pause (top) + reset (bottom) */}
       <div className={`w-12 shrink-0 flex flex-col border-r ${dividerBg}`}>

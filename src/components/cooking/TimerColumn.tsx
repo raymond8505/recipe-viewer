@@ -36,7 +36,7 @@ export default function TimerColumn({
   return (
     <div className="w-full h-full border-l border-gray-200 flex flex-col min-w-0">
       {/* Sticky header */}
-      <div className="shrink-0 bg-white border-b border-gray-200 px-4 py-3 flex items-center gap-2">
+      <div className="shrink-0 bg-card border-b border-gray-200 px-4 py-3 flex items-center gap-2">
         <AddTimerButton onClick={onAddTimer} />
         {timers.length > 0 && (
           <ResetTimersButton onClick={onResetAll} className="px-3 py-3" />

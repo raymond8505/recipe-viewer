@@ -370,11 +370,11 @@ export default function CookingMode({
   return (
     <div
       ref={containerRef}
-      className="fixed inset-0 z-50 bg-white flex flex-col cook-mode-container"
+      className="fixed inset-0 z-50 bg-card flex flex-col cook-mode-container"
       style={{ width: "100vw" }}
     >
       {/* Sticky header */}
-      <div className="shrink-0 flex items-center justify-between px-4 py-2 border-b border-gray-200 bg-white">
+      <div className="shrink-0 flex items-center justify-between px-4 py-2 border-b border-gray-200 bg-card">
         <span className="text-sm font-medium text-muted-foreground">
           Cooking mode
         </span>
@@ -396,7 +396,7 @@ export default function CookingMode({
       </div>
 
       {/* Mobile timer ribbon — sticky below header, only on small screens */}
-      <div className="lg:hidden shrink-0 bg-white border-b border-gray-200">
+      <div className="lg:hidden shrink-0 bg-card border-b border-gray-200">
         {/* Add timer + Reset all — inline, add timer grows */}
         <div className="flex items-center gap-2 px-3 pt-2 pb-1">
           <AddTimerButton compact onClick={() => setShowAddTimer(true)} />
@@ -437,7 +437,7 @@ export default function CookingMode({
 
       {/* Mobile cooking notes — sticky below timer ribbon, above scrollable content (logged-in only) */}
       {isLoggedIn && (
-        <div className="lg:hidden shrink-0 bg-white border-b border-gray-200 px-3 py-2">
+        <div className="lg:hidden shrink-0 bg-card border-b border-gray-200 px-3 py-2">
           <div className="flex items-center justify-between mb-1">
             <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">
               Cooking notes

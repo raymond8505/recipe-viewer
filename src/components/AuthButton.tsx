@@ -93,7 +93,7 @@ export default function AuthButton({ isLoggedIn }: { isLoggedIn: boolean }) {
             if (e.target === overlayRef.current) close();
           }}
         >
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm mx-4 p-6">
+          <div className="bg-card rounded-2xl shadow-xl w-full max-w-sm mx-4 p-6">
             <h2 className="text-lg text-gray-900 mb-4">Login</h2>
             <form onSubmit={handleLogin} className="space-y-4">
               <input
