@@ -118,7 +118,6 @@ export default function RecipeControls({
             <PrimaryActionButton
               onClick={onEditSave}
               disabled={editState === "saving" || !canSave}
-              className="rounded-lg"
             >
               {editState === "saving"
                 ? "Saving…"
@@ -130,7 +129,6 @@ export default function RecipeControls({
               variant="outline"
               onClick={onEditCancel}
               disabled={editState === "saving"}
-              className="rounded-lg"
             >
               Cancel
             </Button>
@@ -147,7 +145,7 @@ export default function RecipeControls({
           </>
         ) : (
           <>
-            <Button variant="outline" onClick={onEditStart} className="rounded-lg">
+            <Button variant="outline" onClick={onEditStart}>
               Edit
             </Button>
             {canRescrape && (
@@ -155,7 +153,6 @@ export default function RecipeControls({
                 variant="outline"
                 onClick={onRescrape}
                 disabled={rescrapeState === "loading"}
-                className="rounded-lg"
               >
                 {rescrapeState === "loading" ? "Re-scraping…" : "Re-scrape"}
               </Button>
@@ -172,7 +169,6 @@ export default function RecipeControls({
               variant="outline"
               onClick={onRegenImage}
               disabled={regenImageState === "loading"}
-              className="rounded-lg"
             >
               {regenImageState === "loading" ? "Generating…" : "Regen Image"}
             </Button>
@@ -181,7 +177,7 @@ export default function RecipeControls({
                 Image generation failed. Try again.
               </span>
             )}
-            <Button variant="outline" onClick={onUploadOpen} className="rounded-lg">
+            <Button variant="outline" onClick={onUploadOpen}>
               Upload Image
             </Button>
             <input

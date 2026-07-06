@@ -111,14 +111,14 @@ export default function AuthButton({ isLoggedIn }: { isLoggedIn: boolean }) {
                   type="button"
                   variant="outline"
                   onClick={close}
-                  className="h-auto min-h-[44px] flex-1 rounded-xl"
+                  className="h-auto min-h-[44px] flex-1"
                 >
                   Cancel
                 </Button>
                 <PrimaryActionButton
                   type="submit"
                   disabled={loading || !password}
-                  className="h-auto min-h-[44px] flex-1 rounded-xl"
+                  className="h-auto min-h-[44px] flex-1"
                 >
                   {loading ? "Logging in…" : "Login"}
                 </PrimaryActionButton>

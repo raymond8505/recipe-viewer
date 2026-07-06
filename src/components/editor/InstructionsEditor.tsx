@@ -90,7 +90,7 @@ export default function InstructionsEditor({
               onClick={requestDelete}
               disabled={disabled}
               aria-label="Delete this step?"
-              className="h-auto w-10 min-h-[40px] shrink-0 rounded-lg text-gray-300 hover:bg-destructive/10 hover:text-destructive disabled:opacity-40"
+              className="h-auto w-10 min-h-[40px] shrink-0 text-gray-300 hover:bg-destructive/10 hover:text-destructive disabled:opacity-40"
             >
               <TrashIcon />
             </Button>

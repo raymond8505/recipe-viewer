@@ -74,7 +74,7 @@ export default function OAuthConsent({
           <PrimaryActionButton
             type="submit"
             disabled={loading || !password}
-            className="h-auto min-h-[44px] w-full rounded-xl"
+            className="h-auto min-h-[44px] w-full"
           >
             {loading ? "Signing in…" : "Sign in"}
           </PrimaryActionButton>
@@ -109,7 +109,7 @@ export default function OAuthConsent({
           name="action"
           value="deny"
           variant="outline"
-          className="h-auto min-h-[44px] flex-1 rounded-xl"
+          className="h-auto min-h-[44px] flex-1"
         >
           Deny
         </Button>
@@ -117,7 +117,7 @@ export default function OAuthConsent({
           type="submit"
           name="action"
           value="allow"
-          className="h-auto min-h-[44px] flex-1 rounded-xl"
+          className="h-auto min-h-[44px] flex-1"
         >
           Allow
         </PrimaryActionButton>

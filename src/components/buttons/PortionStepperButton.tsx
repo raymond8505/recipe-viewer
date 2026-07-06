@@ -27,7 +27,7 @@ export const PortionStepperButton = React.forwardRef<
     ref={ref}
     variant={variant}
     className={cn(
-      "size-11 rounded-lg text-xl text-muted-foreground hover:bg-brand-subtle hover:text-brand active:bg-brand-subtle disabled:opacity-30",
+      "size-11 text-xl text-muted-foreground hover:bg-brand-subtle hover:text-brand active:bg-brand-subtle disabled:opacity-30",
       className,
     )}
     {...props}

@@ -66,7 +66,7 @@ export default function TimerCard({
           <Button
             variant="outline"
             onClick={() => setConfirming(false)}
-            className="h-auto flex-1 rounded-xl py-3"
+            className="h-auto flex-1 py-3"
           >
             Cancel
           </Button>
@@ -76,7 +76,7 @@ export default function TimerCard({
               onRemove(timer.id);
               setConfirming(false);
             }}
-            className="h-auto flex-1 rounded-xl py-3"
+            className="h-auto flex-1 py-3"
           >
             Delete
           </Button>

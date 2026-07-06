@@ -28,7 +28,7 @@ export default function Pagination({ page, total, pageSize }: PaginationProps) {
         variant="outline"
         onClick={() => goToPage(page - 1)}
         disabled={page <= 1}
-        className="rounded-lg disabled:opacity-40"
+        className="disabled:opacity-40"
       >
         Previous
       </Button>
@@ -41,7 +41,7 @@ export default function Pagination({ page, total, pageSize }: PaginationProps) {
         variant="outline"
         onClick={() => goToPage(page + 1)}
         disabled={page >= totalPages}
-        className="rounded-lg disabled:opacity-40"
+        className="disabled:opacity-40"
       >
         Next
       </Button>

@@ -22,7 +22,7 @@ export const SegmentButton = React.forwardRef<
     variant="ghost"
     aria-pressed={active}
     className={cn(
-      "h-auto rounded-lg px-3 py-1.5 text-sm font-medium",
+      "h-auto px-3 py-1.5 text-sm font-medium",
       active
         ? "bg-brand text-white hover:bg-brand/90 hover:text-white"
         : "border border-border text-muted-foreground hover:bg-muted hover:text-foreground",
