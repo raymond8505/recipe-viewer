@@ -27,7 +27,7 @@ import { CopyShoppingListButton } from "@/components/buttons";
 import IngredientsEditor from "./editor/IngredientsEditor";
 import InstructionsEditor from "./editor/InstructionsEditor";
 import IngredientItem from "./IngredientItem";
-import ServingsControl from "./ServingsControl";
+import TimeYieldStats from "./TimeYieldStats";
 import NutritionPanel from "./NutritionPanel";
 import RecipeTitleInput from "./RecipeTitleInput";
 import { Textarea } from "@/components/ui/textarea";
@@ -199,7 +199,8 @@ export default function RecipeDetail({
   };
 
   return (
-    <article className="max-w-3xl lg:max-w-5xl mx-auto">
+    <article>
+      <div className="max-w-3xl lg:max-w-5xl mx-auto">
       {/* Header */}
       <header className="mb-8">
         <div className="flex flex-wrap gap-2 mb-4">
@@ -274,31 +275,20 @@ export default function RecipeDetail({
         </div>
       )}
 
-      {/* Time / Yield stats */}
-      {(prepTime || cookTime || totalTime || schema.recipeYield) && (
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-8 p-4 bg-orange-50 rounded-2xl">
-          {prepTime && <Stat label="Prep time" value={prepTime} />}
-          {cookTime && <Stat label="Cook time" value={cookTime} />}
-          {totalTime && <Stat label="Total time" value={totalTime} />}
-          {schema.recipeYield &&
-            (scalable.currentServings != null ? (
-              <ServingsControl
-                servings={scalable.currentServings}
-                onChange={scalePortionsTo}
-              />
-            ) : (
-              <Stat
-                label="Servings"
-                value={
-                  Array.isArray(schema.recipeYield)
-                    ? schema.recipeYield[0]
-                    : schema.recipeYield
-                }
-              />
-            ))}
-        </div>
-      )}
+      </div>
 
+      {/* Time / Yield stats — full-width band; -mx cancels layout <main>'s padding */}
+      <TimeYieldStats
+        className="-mx-4 sm:-mx-6"
+        prepTime={prepTime}
+        cookTime={cookTime}
+        totalTime={totalTime}
+        recipeYield={schema.recipeYield}
+        currentServings={scalable.currentServings}
+        onServingsChange={scalePortionsTo}
+      />
+
+      <div className="max-w-3xl lg:max-w-5xl mx-auto">
       {/* Recipe Controls — logged-in only */}
       {isLoggedIn && (
         <RecipeControls
@@ -480,18 +470,8 @@ export default function RecipeDetail({
           ),
         }}
       />
+      </div>
     </article>
-  );
-}
-
-function Stat({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="text-center">
-      <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">
-        {label}
-      </p>
-      <p className="font-semibold text-gray-900">{value}</p>
-    </div>
   );
 }
 

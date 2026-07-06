@@ -38,7 +38,7 @@ import {
   CopyShoppingListButton,
 } from "@/components/buttons";
 import IngredientItem from "@/components/IngredientItem";
-import ServingsControl from "@/components/ServingsControl";
+import TimeYieldStats from "@/components/TimeYieldStats";
 import NutritionPanel from "@/components/NutritionPanel";
 
 interface CookingModeProps {
@@ -466,7 +466,7 @@ export default function CookingMode({
       <div className="flex-1 flex overflow-hidden min-h-0">
         {/* Recipe content — full width on mobile, 3/4 on desktop */}
         <div className="flex-1 min-w-0 overflow-y-auto">
-          <div className="max-w-3xl mx-auto px-4 sm:px-8 py-6 sm:py-8">
+          <div className="max-w-3xl mx-auto px-4 sm:px-8 pt-6 sm:pt-8">
             {/* Header */}
             <header className="mb-8">
               <div className="flex flex-wrap gap-2 mb-4">
@@ -517,32 +517,21 @@ export default function CookingMode({
               </div>
             )}
 
-            {/* Time / Yield stats */}
-            {(prepTime || cookTime || totalTime || schema.recipeYield) && (
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-8 p-4 bg-orange-50 rounded-2xl">
-                {prepTime && <Stat label="Prep time" value={prepTime} />}
-                {cookTime && <Stat label="Cook time" value={cookTime} />}
-                {totalTime && <Stat label="Total time" value={totalTime} />}
-                {schema.recipeYield &&
-                  (primaryScalable.currentServings != null ? (
-                    <ServingsControl
-                      servings={primaryScalable.currentServings}
-                      onChange={(n) =>
-                        updateScalable(recipe.id, (r) => r.scalePortionsTo(n))
-                      }
-                    />
-                  ) : (
-                    <Stat
-                      label="Servings"
-                      value={
-                        Array.isArray(schema.recipeYield)
-                          ? schema.recipeYield[0]
-                          : schema.recipeYield
-                      }
-                    />
-                  ))}
-              </div>
-            )}
+          </div>
+
+          {/* Time / Yield stats — full-width band across the recipe scroll region */}
+          <TimeYieldStats
+            prepTime={prepTime}
+            cookTime={cookTime}
+            totalTime={totalTime}
+            recipeYield={schema.recipeYield}
+            currentServings={primaryScalable.currentServings}
+            onServingsChange={(n) =>
+              updateScalable(recipe.id, (r) => r.scalePortionsTo(n))
+            }
+          />
+
+          <div className="max-w-3xl mx-auto px-4 sm:px-8 pb-6 sm:pb-8">
 
             {/* Meal bar — tabs and search inline */}
             <div className="flex items-start gap-2 flex-wrap mb-6">
@@ -792,17 +781,6 @@ export default function CookingMode({
           onClose={() => setEditingTimer(null)}
         />
       )}
-    </div>
-  );
-}
-
-function Stat({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="text-center">
-      <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">
-        {label}
-      </p>
-      <p className="font-semibold text-gray-900">{value}</p>
     </div>
   );
 }
