@@ -21,6 +21,9 @@
   layer below that reads var(--color-gray-200).
 */
 @theme {
+  /* Softer semibold: 600 reads too heavy against the light body/headings,
+     so font-semibold lands between medium and bold-of-old. */
+  --font-weight-semibold: 500;
   --color-gray-50: oklch(98.5% 0.001 106.423);
   --color-gray-100: oklch(97% 0.001 106.424);
   --color-gray-200: oklch(92.3% 0.003 48.717);
