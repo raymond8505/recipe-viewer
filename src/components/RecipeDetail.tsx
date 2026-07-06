@@ -201,80 +201,79 @@ export default function RecipeDetail({
   return (
     <article>
       <div className="max-w-3xl lg:max-w-5xl mx-auto">
-      {/* Header */}
-      <header className="mb-8">
-        <div className="flex flex-wrap gap-2 mb-4">
-          {categories.map((cat) => (
-            <span
-              key={cat}
-              className="px-3 py-1 bg-orange-50 text-orange-600 text-sm font-medium rounded-full"
-            >
-              {cat}
-            </span>
-          ))}
-          {schema.recipeCuisine && (
-            <span className="px-3 py-1 bg-gray-100 text-gray-600 text-sm font-medium rounded-full">
-              {schema.recipeCuisine}
-            </span>
-          )}
-        </div>
+        {/* Header */}
+        <header className="mb-8">
+          <div className="flex flex-wrap gap-2 mb-4">
+            {categories.map((cat) => (
+              <span
+                key={cat}
+                className="px-3 py-1 bg-orange-50 text-orange-600 text-sm font-medium rounded-full"
+              >
+                {cat}
+              </span>
+            ))}
+            {schema.recipeCuisine && (
+              <span className="px-3 py-1 bg-gray-100 text-gray-600 text-sm font-medium rounded-full">
+                {schema.recipeCuisine}
+              </span>
+            )}
+          </div>
 
-        <div className="flex items-center gap-4 mb-4">
+          <div className="flex items-center gap-4 mb-4">
+            {isEditing ? (
+              <RecipeTitleInput
+                value={draft.name}
+                onChange={(e) => patch({ name: e.target.value })}
+                disabled={editState === "saving"}
+              />
+            ) : (
+              <>
+                <h1 className="text-3xl sm:text-4xl text-gray-900 leading-tight">
+                  {schema.name}
+                </h1>
+                <CookingModeButton recipe={recipe} isLoggedIn={isLoggedIn} />
+              </>
+            )}
+          </div>
+
           {isEditing ? (
-            <RecipeTitleInput
-              value={draft.name}
-              onChange={(e) => patch({ name: e.target.value })}
+            <Textarea
+              value={draft.description}
+              onChange={(e) => patch({ description: e.target.value })}
               disabled={editState === "saving"}
+              placeholder="Description"
+              className="p-3 text-lg leading-relaxed min-h-[80px] resize-y md:text-lg"
             />
           ) : (
-            <>
-              <h1 className="text-3xl sm:text-4xl text-gray-900 leading-tight">
-                {schema.name}
-              </h1>
-              <CookingModeButton recipe={recipe} isLoggedIn={isLoggedIn} />
-            </>
+            schema.description && (
+              <p className="text-gray-600 text-lg leading-relaxed">
+                {schema.description}
+              </p>
+            )
           )}
-        </div>
 
-        {isEditing ? (
-          <Textarea
-            value={draft.description}
-            onChange={(e) => patch({ description: e.target.value })}
-            disabled={editState === "saving"}
-            placeholder="Description"
-            className="p-3 text-lg leading-relaxed min-h-[80px] resize-y md:text-lg"
-          />
-        ) : (
-          schema.description && (
-            <p className="text-gray-600 text-lg leading-relaxed">
-              {schema.description}
-            </p>
-          )
+          <div className="flex flex-wrap items-center gap-x-6 gap-y-2 mt-4 text-sm text-gray-500">
+            {schema.datePublished && (
+              <span>{formatDate(schema.datePublished)}</span>
+            )}
+          </div>
+        </header>
+
+        {/* Image */}
+        {(previewUrl || image) && (
+          <div className="w-full rounded-2xl overflow-hidden mb-8 bg-gray-100">
+            <Image
+              src={previewUrl ?? (image as string)}
+              alt={schema.name}
+              width={0}
+              height={0}
+              sizes="(max-width: 768px) 100vw, 768px"
+              className="w-full h-auto"
+              priority
+              unoptimized={previewUrl !== null}
+            />
+          </div>
         )}
-
-        <div className="flex flex-wrap items-center gap-x-6 gap-y-2 mt-4 text-sm text-gray-500">
-          {schema.datePublished && (
-            <span>{formatDate(schema.datePublished)}</span>
-          )}
-        </div>
-      </header>
-
-      {/* Image */}
-      {(previewUrl || image) && (
-        <div className="w-full rounded-2xl overflow-hidden mb-8 bg-gray-100">
-          <Image
-            src={previewUrl ?? (image as string)}
-            alt={schema.name}
-            width={0}
-            height={0}
-            sizes="(max-width: 768px) 100vw, 768px"
-            className="w-full h-auto"
-            priority
-            unoptimized={previewUrl !== null}
-          />
-        </div>
-      )}
-
       </div>
 
       {/* Time / Yield stats — full-width band; -mx cancels layout <main>'s padding */}
@@ -289,187 +288,184 @@ export default function RecipeDetail({
       />
 
       <div className="max-w-3xl lg:max-w-5xl mx-auto">
-      {/* Recipe Controls — logged-in only */}
-      {isLoggedIn && (
-        <RecipeControls
-          isEditing={isEditing}
-          editState={editState}
-          canSave={editor.canSave}
-          draftUrl={draft.url}
-          draftStatus={draft.status}
-          onUrlChange={(url) => patch({ url })}
-          onStatusChange={(status) => patch({ status })}
-          isRescrapeReview={isRescrapeReview}
-          isRegenImageReview={isRegenImageReview}
-          isUploadImageReview={isUploadImageReview}
-          rescrapeState={rescrapeState}
-          regenImageState={regenImageState}
-          canRescrape={isMounted && recipe.url !== window.location.href}
-          uploadError={imageUpload.error}
-          fileInputRef={fileInputRef}
-          onEditStart={handleEditStart}
-          onEditSave={handleEditSave}
-          onEditCancel={handleEditCancel}
-          onRescrape={handleRescrape}
-          onRegenImage={handleRegenImage}
-          onUploadOpen={imageUpload.open}
-          onFileSelected={handleFileSelected}
-        />
-      )}
-
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-8">
-        {/* Ingredients */}
-        {(isEditing ||
-          (schema.recipeIngredient && schema.recipeIngredient.length > 0)) && (
-          <div className="sm:col-span-1">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-xl text-gray-900">
-                Ingredients
-              </h2>
-              {!isEditing && (
-                <CopyShoppingListButton
-                  onClick={copyShoppingList}
-                  count={selectedIngredients.size}
-                  copied={copyFeedback}
-                />
-              )}
-            </div>
-            {isEditing ? (
-              <IngredientsEditor
-                value={draft.ingredients}
-                onChange={(groups) => patch({ ingredients: groups })}
-                disabled={editState === "saving"}
-              />
-            ) : (
-              scalable.groupedIngredients.map(({ heading, items }, gi) => (
-                <div key={gi} className={gi > 0 ? "mt-4" : ""}>
-                  {heading && (
-                    <h3 className="font-sans text-xs font-semibold uppercase tracking-widest text-orange-500 mb-2">
-                      {heading}
-                    </h3>
-                  )}
-                  <ul className="space-y-2">
-                    {items.map((ing, i) => {
-                      const text = ing.original;
-                      const selected = selectedIngredients.has(text);
-                      return (
-                        <li
-                          key={i}
-                          className={`flex items-start gap-2 text-sm rounded-lg px-2 py-1 -mx-2 cursor-pointer select-none transition-colors active:opacity-60 ${selected ? "bg-green-50 text-gray-700" : "text-gray-700"}`}
-                          onClick={() => toggleIngredient(text)}
-                          role="checkbox"
-                          aria-checked={selected}
-                          aria-label={text}
-                        >
-                          <span
-                            className={`mt-1.5 w-1.5 h-1.5 rounded-full shrink-0 transition-colors ${selected ? "bg-green-500" : "bg-orange-400"}`}
-                          />
-                          <IngredientItem
-                            ingredient={ing}
-                            onAnchor={(amount) =>
-                              anchorIngredientAmount(ing.index, amount)
-                            }
-                          />
-                        </li>
-                      );
-                    })}
-                  </ul>
-                </div>
-              ))
-            )}
-          </div>
+        {/* Recipe Controls — logged-in only */}
+        {isLoggedIn && (
+          <RecipeControls
+            isEditing={isEditing}
+            editState={editState}
+            canSave={editor.canSave}
+            draftUrl={draft.url}
+            draftStatus={draft.status}
+            onUrlChange={(url) => patch({ url })}
+            onStatusChange={(status) => patch({ status })}
+            isRescrapeReview={isRescrapeReview}
+            isRegenImageReview={isRegenImageReview}
+            isUploadImageReview={isUploadImageReview}
+            rescrapeState={rescrapeState}
+            regenImageState={regenImageState}
+            canRescrape={isMounted && recipe.url !== window.location.href}
+            uploadError={imageUpload.error}
+            fileInputRef={fileInputRef}
+            onEditStart={handleEditStart}
+            onEditSave={handleEditSave}
+            onEditCancel={handleEditCancel}
+            onRescrape={handleRescrape}
+            onRegenImage={handleRegenImage}
+            onUploadOpen={imageUpload.open}
+            onFileSelected={handleFileSelected}
+          />
         )}
 
-        {/* Instructions */}
-        {(isEditing ||
-          (schema.recipeInstructions &&
-            schema.recipeInstructions.length > 0)) && (
-          <div className="sm:col-span-2">
-            <h2 className="text-xl text-gray-900 mb-4">
-              Instructions
-            </h2>
-            {isEditing ? (
-              <InstructionsEditor
-                value={draft.instructions}
-                onChange={(groups) => patch({ instructions: groups })}
-                erroredStepIds={editor.instructionErrors}
-                disabled={editState === "saving"}
-              />
-            ) : schema.recipeInstructions![0]["@type"] === "HowToSection" ? (
-              <div className="space-y-6">
-                {(schema.recipeInstructions as HowToSection[]).map(
-                  (section, i) => (
-                    <div key={i}>
-                      <h3 className="font-sans text-xs font-semibold uppercase tracking-widest text-orange-500 mb-3">
-                        {section.name}
-                      </h3>
-                      <ol className="space-y-3">
-                        {section.itemListElement.map((step, j) => (
-                          <li key={j} className="flex gap-4">
-                            <span className="shrink-0 w-7 h-7 rounded-full bg-orange-500 text-white text-sm font-bold flex items-center justify-center">
-                              {j + 1}
-                            </span>
-                            <p className="text-gray-700 leading-relaxed pt-0.5">
-                              {step.text}
-                            </p>
-                          </li>
-                        ))}
-                      </ol>
-                    </div>
-                  ),
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-8">
+          {/* Ingredients */}
+          {(isEditing ||
+            (schema.recipeIngredient &&
+              schema.recipeIngredient.length > 0)) && (
+            <div className="sm:col-span-1">
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-xl text-gray-900">Ingredients</h2>
+                {!isEditing && (
+                  <CopyShoppingListButton
+                    onClick={copyShoppingList}
+                    count={selectedIngredients.size}
+                    copied={copyFeedback}
+                  />
                 )}
               </div>
+              {isEditing ? (
+                <IngredientsEditor
+                  value={draft.ingredients}
+                  onChange={(groups) => patch({ ingredients: groups })}
+                  disabled={editState === "saving"}
+                />
+              ) : (
+                scalable.groupedIngredients.map(({ heading, items }, gi) => (
+                  <div key={gi} className={gi > 0 ? "mt-4" : ""}>
+                    {heading && (
+                      <h3 className="font-sans text-xs font-semibold uppercase tracking-widest text-orange-500 mb-2">
+                        {heading}
+                      </h3>
+                    )}
+                    <ul className="space-y-2">
+                      {items.map((ing, i) => {
+                        const text = ing.original;
+                        const selected = selectedIngredients.has(text);
+                        return (
+                          <li
+                            key={i}
+                            className={`flex items-start gap-2 text-sm rounded-lg px-2 py-1 -mx-2 cursor-pointer select-none transition-colors active:opacity-60 ${selected ? "bg-green-50 text-gray-700" : "text-gray-700"}`}
+                            onClick={() => toggleIngredient(text)}
+                            role="checkbox"
+                            aria-checked={selected}
+                            aria-label={text}
+                          >
+                            <span
+                              className={`mt-1.5 w-1.5 h-1.5 rounded-full shrink-0 transition-colors ${selected ? "bg-green-500" : "bg-orange-400"}`}
+                            />
+                            <IngredientItem
+                              ingredient={ing}
+                              onAnchor={(amount) =>
+                                anchorIngredientAmount(ing.index, amount)
+                              }
+                            />
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  </div>
+                ))
+              )}
+            </div>
+          )}
+
+          {/* Instructions */}
+          {(isEditing ||
+            (schema.recipeInstructions &&
+              schema.recipeInstructions.length > 0)) && (
+            <div className="sm:col-span-2">
+              <h2 className="text-xl text-gray-900 mb-4">Instructions</h2>
+              {isEditing ? (
+                <InstructionsEditor
+                  value={draft.instructions}
+                  onChange={(groups) => patch({ instructions: groups })}
+                  erroredStepIds={editor.instructionErrors}
+                  disabled={editState === "saving"}
+                />
+              ) : schema.recipeInstructions![0]["@type"] === "HowToSection" ? (
+                <div className="space-y-6">
+                  {(schema.recipeInstructions as HowToSection[]).map(
+                    (section, i) => (
+                      <div key={i}>
+                        <h3 className="font-sans text-xs font-semibold uppercase tracking-widest text-orange-500 mb-3">
+                          {section.name}
+                        </h3>
+                        <ol className="space-y-3">
+                          {section.itemListElement.map((step, j) => (
+                            <li key={j} className="flex gap-4">
+                              <span className="shrink-0 w-7 h-7 rounded-full bg-secondary-foreground text-white text-sm font-bold flex items-center justify-center">
+                                {j + 1}
+                              </span>
+                              <p className="text-gray-700 leading-relaxed pt-0.5">
+                                {step.text}
+                              </p>
+                            </li>
+                          ))}
+                        </ol>
+                      </div>
+                    ),
+                  )}
+                </div>
+              ) : (
+                <ol className="space-y-4">
+                  {(schema.recipeInstructions as HowToStep[]).map((step, i) => (
+                    <li key={i} className="flex gap-4">
+                      <span className="shrink-0 w-7 h-7 rounded-full bg-secondary-foreground text-white text-sm font-bold flex items-center justify-center">
+                        {i + 1}
+                      </span>
+                      <p className="text-gray-700 leading-relaxed pt-0.5">
+                        {step.text}
+                      </p>
+                    </li>
+                  ))}
+                </ol>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* Notes */}
+        {(isEditing || schema.notes) && (
+          <div className="mt-8">
+            <h2 className="text-xl text-gray-900 mb-3">Notes</h2>
+            {isEditing ? (
+              <Textarea
+                value={draft.notes}
+                onChange={(e) => patch({ notes: e.target.value })}
+                disabled={editState === "saving"}
+                placeholder="Add notes…"
+                className="p-3 leading-relaxed min-h-[120px] resize-y"
+              />
             ) : (
-              <ol className="space-y-4">
-                {(schema.recipeInstructions as HowToStep[]).map((step, i) => (
-                  <li key={i} className="flex gap-4">
-                    <span className="shrink-0 w-7 h-7 rounded-full bg-orange-500 text-white text-sm font-bold flex items-center justify-center">
-                      {i + 1}
-                    </span>
-                    <p className="text-gray-700 leading-relaxed pt-0.5">
-                      {step.text}
-                    </p>
-                  </li>
-                ))}
-              </ol>
+              <p className="text-gray-700 leading-relaxed whitespace-pre-line">
+                {schema.notes}
+              </p>
             )}
           </div>
         )}
-      </div>
 
-      {/* Notes */}
-      {(isEditing || schema.notes) && (
-        <div className="mt-8">
-          <h2 className="text-xl text-gray-900 mb-3">Notes</h2>
-          {isEditing ? (
-            <Textarea
-              value={draft.notes}
-              onChange={(e) => patch({ notes: e.target.value })}
-              disabled={editState === "saving"}
-              placeholder="Add notes…"
-              className="p-3 leading-relaxed min-h-[120px] resize-y"
-            />
-          ) : (
-            <p className="text-gray-700 leading-relaxed whitespace-pre-line">
-              {schema.notes}
-            </p>
-          )}
-        </div>
-      )}
+        {/* Nutrition */}
+        <NutritionPanel recipe={scalable} onSplitPortions={splitPortions} />
 
-      {/* Nutrition */}
-      <NutritionPanel recipe={scalable} onSplitPortions={splitPortions} />
-
-      {/* JSON-LD — Schema.org-compliant only; escape </script> sequences to prevent tag injection */}
-      <script
-        type="application/ld+json"
-        dangerouslySetInnerHTML={{
-          __html: JSON.stringify(toSchemaOrgJsonLd(schema), null, 2).replace(
-            /</g,
-            "\\u003c",
-          ),
-        }}
-      />
+        {/* JSON-LD — Schema.org-compliant only; escape </script> sequences to prevent tag injection */}
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{
+            __html: JSON.stringify(toSchemaOrgJsonLd(schema), null, 2).replace(
+              /</g,
+              "\\u003c",
+            ),
+          }}
+        />
       </div>
     </article>
   );

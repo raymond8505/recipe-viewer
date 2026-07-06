@@ -662,7 +662,7 @@ export default function CookingMode({
                                     aria-label={`Step ${j + 1}: ${done ? "completed" : "mark complete"}`}
                                   >
                                     <span
-                                      className={`shrink-0 w-8 h-8 sm:w-7 sm:h-7 rounded-full text-base sm:text-sm font-bold flex items-center justify-center transition-colors ${done ? "bg-green-500 text-white" : "bg-orange-500 text-white"}`}
+                                      className={`shrink-0 w-8 h-8 sm:w-7 sm:h-7 rounded-full text-base sm:text-sm font-bold flex items-center justify-center transition-colors ${done ? "bg-green-500 text-white" : "bg-secondary-foreground text-white"}`}
                                     >
                                       {done ? <CheckIcon size={14} /> : j + 1}
                                     </span>
@@ -694,7 +694,7 @@ export default function CookingMode({
                                 aria-label={`Step ${i + 1}: ${done ? "completed" : "mark complete"}`}
                               >
                                 <span
-                                  className={`shrink-0 w-8 h-8 sm:w-7 sm:h-7 rounded-full text-base sm:text-sm font-bold flex items-center justify-center transition-colors ${done ? "bg-green-500 text-white" : "bg-orange-500 text-white"}`}
+                                  className={`shrink-0 w-8 h-8 sm:w-7 sm:h-7 rounded-full text-base sm:text-sm font-bold flex items-center justify-center transition-colors ${done ? "bg-green-500 text-white" : "bg-secondary-foreground text-white"}`}
                                 >
                                   {done ? <CheckIcon size={14} /> : i + 1}
                                 </span>
