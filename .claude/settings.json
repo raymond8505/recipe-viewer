@@ -1,0 +1,36 @@
+{
+  "permissions": {
+    "allow": [
+      "WebFetch(domain:github.com)",
+      "Bash(node -e \"const p=require\\('./package.json'\\); const d={...p.dependencies,...p.devDependencies}; Object.keys\\(d\\).filter\\(k=>k.includes\\('storybook'\\)\\).forEach\\(k=>console.log\\(k, d[k]\\)\\)\")",
+      "Bash(node -e ' *)",
+      "Bash(git -C /c/projects/recipe-viewer diff -- .storybook/main.ts)",
+      "Bash(grep -o 'h1,h2,h3,h4,h5,h6{[^}]*}' .next/static/chunks/6db6ec5d8c93285f.css)",
+      "Bash(echo \"exit: $?\")",
+      "Read(//c/Users/crazy/.claude/skills/**)",
+      "Bash(yarn build:prod)",
+      "Read(//c/Program Files/Google/Chrome/Application/**)",
+      "Read(//c/Program Files \\(x86\\)/Google/Chrome/Application/**)",
+      "Read(//c/Program Files \\(x86\\)/Microsoft/Edge/Application/**)",
+      "Bash(node \"C:/Users/crazy/AppData/Local/Temp/claude/c--projects-recipe-viewer/4b0b499a-dfa8-4d46-817c-8f106cad24ed/scratchpad/static-server.js\" \"c:/projects/recipe-viewer/public/storybook\" 8123)",
+      "Bash(curl -s http://localhost:8123/index.json)",
+      "Bash(node -e \"const d=JSON.parse\\(require\\('fs'\\).readFileSync\\(0,'utf8'\\)\\); const ids=Object.keys\\(d.entries\\); console.log\\(ids.filter\\(i=>/ui-button|ui-badge|ui-input|recipecard|recipes-recipecard|addtimermodal|timercard|searchbar/.test\\(i\\)\\).join\\('\\\\n'\\)\\)\")",
+      "Bash('C:/Program Files/Google/Chrome/Application/chrome.exe' --headless --disable-gpu --window-size=900,420 --screenshot=C:/Users/crazy/AppData/Local/Temp/claude/c--projects-recipe-viewer/4b0b499a-dfa8-4d46-817c-8f106cad24ed/scratchpad/button-sizes.png 'http://localhost:8123/iframe.html?id=components-ui-button--sizes&viewMode=story')",
+      "Bash('C:/Program Files/Google/Chrome/Application/chrome.exe' --headless --disable-gpu --window-size=900,420 --screenshot=C:/Users/crazy/AppData/Local/Temp/claude/c--projects-recipe-viewer/4b0b499a-dfa8-4d46-817c-8f106cad24ed/scratchpad/badge-all.png 'http://localhost:8123/iframe.html?id=components-ui-badge--all-variants&viewMode=story')",
+      "Bash('C:/Program Files/Google/Chrome/Application/chrome.exe' --headless --disable-gpu --window-size=900,500 --screenshot=C:/Users/crazy/AppData/Local/Temp/claude/c--projects-recipe-viewer/4b0b499a-dfa8-4d46-817c-8f106cad24ed/scratchpad/recipecard.png 'http://localhost:8123/iframe.html?id=components-recipes-recipecard--with-status-badge&viewMode=story')",
+      "Bash('C:/Program Files/Google/Chrome/Application/chrome.exe' --headless --disable-gpu --window-size=700,700 --screenshot=C:/Users/crazy/AppData/Local/Temp/claude/c--projects-recipe-viewer/4b0b499a-dfa8-4d46-817c-8f106cad24ed/scratchpad/addtimermodal.png 'http://localhost:8123/iframe.html?id=components-cooking-mode-addtimermodal--new-timer&viewMode=story')",
+      "Bash('C:/Program Files/Google/Chrome/Application/chrome.exe' --headless --disable-gpu --virtual-time-budget=8000 --window-size=900,420 --screenshot=C:/Users/crazy/AppData/Local/Temp/claude/c--projects-recipe-viewer/4b0b499a-dfa8-4d46-817c-8f106cad24ed/scratchpad/button-sizes.png 'http://localhost:8123/iframe.html?id=components-ui-button--sizes&viewMode=story')",
+      "Bash('C:/Program Files/Google/Chrome/Application/chrome.exe' --headless --disable-gpu --virtual-time-budget=8000 --window-size=900,420 --screenshot=C:/Users/crazy/AppData/Local/Temp/claude/c--projects-recipe-viewer/4b0b499a-dfa8-4d46-817c-8f106cad24ed/scratchpad/badge-all.png 'http://localhost:8123/iframe.html?id=components-ui-badge--all-variants&viewMode=story')",
+      "Bash('C:/Program Files/Google/Chrome/Application/chrome.exe' --headless --disable-gpu --virtual-time-budget=10000 --window-size=500,620 --screenshot=C:/Users/crazy/AppData/Local/Temp/claude/c--projects-recipe-viewer/4b0b499a-dfa8-4d46-817c-8f106cad24ed/scratchpad/recipecard.png 'http://localhost:8123/iframe.html?id=components-recipes-recipecard--with-status-badge&viewMode=story')",
+      "Bash('C:/Program Files/Google/Chrome/Application/chrome.exe' --headless --disable-gpu --virtual-time-budget=10000 --window-size=560,820 --screenshot=C:/Users/crazy/AppData/Local/Temp/claude/c--projects-recipe-viewer/4b0b499a-dfa8-4d46-817c-8f106cad24ed/scratchpad/addtimermodal.png 'http://localhost:8123/iframe.html?id=components-cooking-mode-addtimermodal--new-timer&viewMode=story')",
+      "Bash('C:/Program Files/Google/Chrome/Application/chrome.exe' --headless --disable-gpu --virtual-time-budget=8000 --window-size=800,500 --screenshot=C:/Users/crazy/AppData/Local/Temp/claude/c--projects-recipe-viewer/4b0b499a-dfa8-4d46-817c-8f106cad24ed/scratchpad/input.png 'http://localhost:8123/iframe.html?id=components-ui-input--with-label&viewMode=story')",
+      "Bash(\"C:/Program Files/Google/Chrome/Application/chrome.exe\" --headless --disable-gpu --window-size=1200,800 --dump-dom \"file:///C:/Users/crazy/AppData/Local/Temp/claude/c--projects-recipe-viewer/4b0b499a-dfa8-4d46-817c-8f106cad24ed/scratchpad/cqw-test.html\")",
+      "Bash(tasklist //FI \"IMAGENAME eq node.exe\")",
+      "Bash(netstat -ano)",
+      "Bash(awk '{print $6, $7, $8}')",
+      "Bash(node -e \"const idx=require\\('c:/projects/recipe-viewer/public/storybook/index.json'\\); const e=Object.values\\(idx.entries\\); console.log\\('entries:', e.length\\); const paths=[...new Set\\(e.map\\(x=>x.importPath\\)\\)]; console.log\\('unique story files:', paths.length\\); console.log\\(paths.slice\\(0,5\\).join\\('\\\\n'\\)\\)\")",
+      "Bash(git check-ignore *)",
+      "Bash(echo \"ignore-check exit: $?\")"
+    ]
+  }
+}
