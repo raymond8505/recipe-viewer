@@ -68,7 +68,7 @@ export default function RecipeControls({
 }: RecipeControlsProps) {
   return (
     <section aria-label="Recipe management" className="mb-8">
-      <h2 className="text-xs font-semibold uppercase tracking-widest text-gray-400 mb-4">
+      <h2 className="font-sans text-xs font-semibold uppercase tracking-widest text-gray-400 mb-4">
         Manage
       </h2>
       <div className="flex flex-wrap items-center gap-3">

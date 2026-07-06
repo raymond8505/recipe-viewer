@@ -56,7 +56,7 @@ export default function OAuthConsent({
   if (!isLoggedIn) {
     return (
       <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6">
-        <h2 className="text-lg font-semibold text-gray-900">Sign in to continue</h2>
+        <h2 className="text-lg text-gray-900">Sign in to continue</h2>
         <p className="mt-1 text-sm text-gray-600">
           <span className="font-medium">{clientName}</span> wants to access your Recipe Viewer.
         </p>
@@ -89,7 +89,7 @@ export default function OAuthConsent({
       action="/api/oauth/authorize"
       className="bg-white rounded-2xl shadow-xl w-full max-w-md p-8"
     >
-      <h1 className="text-xl font-semibold text-gray-900">Authorize {clientName}?</h1>
+      <h1 className="text-xl text-gray-900">Authorize {clientName}?</h1>
       <p className="mt-2 text-sm text-gray-600">
         This will let <span className="font-medium">{clientName}</span> read and modify your recipes via the
         MCP server. You can revoke access by deleting the client row in Supabase.

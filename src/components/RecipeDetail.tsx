@@ -227,7 +227,7 @@ export default function RecipeDetail({
             />
           ) : (
             <>
-              <h1 className="text-3xl sm:text-4xl font-bold text-gray-900 leading-tight">
+              <h1 className="text-3xl sm:text-4xl text-gray-900 leading-tight">
                 {schema.name}
               </h1>
               <CookingModeButton recipe={recipe} isLoggedIn={isLoggedIn} />
@@ -333,7 +333,7 @@ export default function RecipeDetail({
           (schema.recipeIngredient && schema.recipeIngredient.length > 0)) && (
           <div className="sm:col-span-1">
             <div className="flex items-center justify-between mb-4">
-              <h2 className="text-xl font-semibold text-gray-900">
+              <h2 className="text-xl text-gray-900">
                 Ingredients
               </h2>
               {!isEditing && (
@@ -354,7 +354,7 @@ export default function RecipeDetail({
               scalable.groupedIngredients.map(({ heading, items }, gi) => (
                 <div key={gi} className={gi > 0 ? "mt-4" : ""}>
                   {heading && (
-                    <h3 className="text-xs font-semibold uppercase tracking-widest text-orange-500 mb-2">
+                    <h3 className="font-sans text-xs font-semibold uppercase tracking-widest text-orange-500 mb-2">
                       {heading}
                     </h3>
                   )}
@@ -395,7 +395,7 @@ export default function RecipeDetail({
           (schema.recipeInstructions &&
             schema.recipeInstructions.length > 0)) && (
           <div className="sm:col-span-2">
-            <h2 className="text-xl font-semibold text-gray-900 mb-4">
+            <h2 className="text-xl text-gray-900 mb-4">
               Instructions
             </h2>
             {isEditing ? (
@@ -410,7 +410,7 @@ export default function RecipeDetail({
                 {(schema.recipeInstructions as HowToSection[]).map(
                   (section, i) => (
                     <div key={i}>
-                      <h3 className="text-xs font-semibold uppercase tracking-widest text-orange-500 mb-3">
+                      <h3 className="font-sans text-xs font-semibold uppercase tracking-widest text-orange-500 mb-3">
                         {section.name}
                       </h3>
                       <ol className="space-y-3">
@@ -450,7 +450,7 @@ export default function RecipeDetail({
       {/* Notes */}
       {(isEditing || schema.notes) && (
         <div className="mt-8">
-          <h2 className="text-xl font-semibold text-gray-900 mb-3">Notes</h2>
+          <h2 className="text-xl text-gray-900 mb-3">Notes</h2>
           {isEditing ? (
             <Textarea
               value={draft.notes}

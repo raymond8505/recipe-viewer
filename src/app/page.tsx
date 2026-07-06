@@ -42,7 +42,7 @@ export default async function Home({ searchParams }: HomeProps) {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900 mb-1">Recipes</h1>
+          <h1 className="text-2xl text-gray-900 mb-1">Recipes</h1>
           <p className="text-gray-500 text-sm">{count} recipes in the collection</p>
         </div>
         {isLoggedIn && <WFDButton />}

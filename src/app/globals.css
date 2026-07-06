@@ -37,6 +37,17 @@
   html {
     @apply font-sans;
   }
+  /* Headings default to the serif at light weight (site-wide design language).
+     Call-site font-* utilities still override — eyebrow labels opt back into
+     the sans via `font-sans`. */
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
+    @apply font-heading font-light;
+  }
 }
 
 /* Hide scrollbar on ribbon containers while preserving scroll behaviour */

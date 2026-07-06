@@ -131,7 +131,7 @@ export default function AddTimerModal({
       <div className="w-full sm:max-w-sm bg-white rounded-t-2xl sm:rounded-2xl shadow-2xl overflow-hidden max-h-[90dvh] flex flex-col">
         {/* Header */}
         <div className="flex items-center justify-between px-6 pt-6 pb-4 shrink-0">
-          <h2 className="text-xl font-semibold text-gray-900">
+          <h2 className="text-xl text-gray-900">
             {isEditMode ? "Edit Timer" : "New Timer"}
           </h2>
           <CloseButton ref={closeButtonRef} onClick={onClose} />

@@ -485,7 +485,7 @@ export default function CookingMode({
                 )}
               </div>
 
-              <h1 className="text-3xl sm:text-4xl font-bold text-gray-900 leading-tight mb-4">
+              <h1 className="text-3xl sm:text-4xl text-gray-900 leading-tight mb-4">
                 {schema.name}
               </h1>
 
@@ -578,7 +578,7 @@ export default function CookingMode({
                 activeSchema.recipeIngredient.length > 0 && (
                   <div className="sm:col-span-1">
                     <div className="flex items-center justify-between mb-4">
-                      <h2 className="text-2xl sm:text-xl font-semibold text-gray-900">
+                      <h2 className="text-2xl sm:text-xl text-gray-900">
                         Ingredients
                       </h2>
                       <CopyShoppingListButton
@@ -591,7 +591,7 @@ export default function CookingMode({
                       ({ heading, items }, gi) => (
                         <div key={gi} className={gi > 0 ? "mt-4" : ""}>
                           {heading && (
-                            <h3 className="text-sm sm:text-xs font-semibold uppercase tracking-widest text-orange-500 mb-2">
+                            <h3 className="font-sans text-sm sm:text-xs font-semibold uppercase tracking-widest text-orange-500 mb-2">
                               {heading}
                             </h3>
                           )}
@@ -646,7 +646,7 @@ export default function CookingMode({
               {activeSchema.recipeInstructions &&
                 activeSchema.recipeInstructions.length > 0 && (
                   <div className="sm:col-span-2">
-                    <h2 className="text-2xl sm:text-xl font-semibold text-gray-900 mb-4">
+                    <h2 className="text-2xl sm:text-xl text-gray-900 mb-4">
                       Instructions
                     </h2>
                     {activeSchema.recipeInstructions[0]["@type"] ===
@@ -656,7 +656,7 @@ export default function CookingMode({
                           activeSchema.recipeInstructions as HowToSection[]
                         ).map((section, i) => (
                           <div key={i}>
-                            <h3 className="text-sm sm:text-xs font-semibold uppercase tracking-widest text-orange-500 mb-3">
+                            <h3 className="font-sans text-sm sm:text-xs font-semibold uppercase tracking-widest text-orange-500 mb-3">
                               {section.name}
                             </h3>
                             <ol className="space-y-3">
@@ -727,7 +727,7 @@ export default function CookingMode({
             {/* Notes */}
             {activeSchema.notes && (
               <div className="mt-8">
-                <h2 className="text-2xl sm:text-xl font-semibold text-gray-900 mb-3">
+                <h2 className="text-2xl sm:text-xl text-gray-900 mb-3">
                   Notes
                 </h2>
                 <p className="text-xl sm:text-base text-gray-700 leading-relaxed whitespace-pre-line">

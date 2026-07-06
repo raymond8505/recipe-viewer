@@ -31,7 +31,7 @@ export default async function RootLayout({
           <div className="max-w-6xl mx-auto px-4 sm:px-6 h-14 flex items-center justify-between">
             <Link
               href="/"
-              className="text-lg font-bold text-orange-500 hover:text-orange-600 transition"
+              className="font-heading font-normal text-lg text-orange-500 hover:text-orange-600 transition"
             >
               🍳 Recipes
             </Link>
