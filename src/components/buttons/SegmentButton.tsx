@@ -34,7 +34,13 @@ export const SegmentButton = React.forwardRef<
     {...props}
   >
     {children}
-    {count != null && <Badge className="px-1.5 tabular-nums">{count}</Badge>}
+    {count != null && (
+      <Badge
+        className={`px-1.5 tabular-nums bg-primary/5 text-foreground ${active ? "text-primary-foreground" : ""}`}
+      >
+        {count}
+      </Badge>
+    )}
   </Button>
 ));
 SegmentButton.displayName = "SegmentButton";
