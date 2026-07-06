@@ -21,7 +21,7 @@ export const headingFont = Source_Serif_4({
 });
 
 /** Background + min height for the page surface (site: <body>). */
-export const APP_SURFACE_CLASS = "bg-gray-50 min-h-screen";
+export const APP_SURFACE_CLASS = "bg-background min-h-screen";
 
 export interface AppChromeProps {
   children: ReactNode;

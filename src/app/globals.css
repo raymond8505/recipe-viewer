@@ -13,6 +13,28 @@
 @custom-variant dark (&:is(.dark *));
 
 /*
+  Warm-neutral palette: the whole gray scale is remapped to Tailwind's stone
+  values (copied verbatim from tailwindcss/theme.css), so every raw
+  `bg/text/border-gray-*` in the app renders warm without call-site edits.
+  Plain `@theme` (NOT `@theme inline`) is load-bearing here: inline variables
+  are never emitted at :root, which would break the v3 border-color compat
+  layer below that reads var(--color-gray-200).
+*/
+@theme {
+  --color-gray-50: oklch(98.5% 0.001 106.423);
+  --color-gray-100: oklch(97% 0.001 106.424);
+  --color-gray-200: oklch(92.3% 0.003 48.717);
+  --color-gray-300: oklch(86.9% 0.005 56.366);
+  --color-gray-400: oklch(70.9% 0.01 56.259);
+  --color-gray-500: oklch(55.3% 0.013 58.071);
+  --color-gray-600: oklch(44.4% 0.011 73.639);
+  --color-gray-700: oklch(37.4% 0.01 67.558);
+  --color-gray-800: oklch(26.8% 0.007 34.298);
+  --color-gray-900: oklch(21.6% 0.006 56.043);
+  --color-gray-950: oklch(14.7% 0.004 49.25);
+}
+
+/*
   The default border color has changed to `currentcolor` in Tailwind CSS v4,
   so we've added these compatibility styles to make sure everything still
   looks the same as it did with Tailwind CSS v3.
@@ -271,17 +293,18 @@
 */
 
 :root {
-  /* Neutral + brand tokens built from the existing hardcoded card palette
-     (cool Tailwind grays + orange brand accent), so theme tokens reproduce
-     today's colors exactly. */
-  --card: var(--color-white);
+  /* Neutral + brand tokens. The gray scale is remapped to warm stone (see the
+     @theme block up top), so the gray-derived tokens below are warm too. Card
+     and popover are a warm paper white — a literal, not var(--color-white):
+     unused palette vars get tree-shaken, so referencing one is fragile. */
+  --card: oklch(99.4% 0.001 106.42);
   --card-foreground: var(--color-gray-900);
   --muted: var(--color-gray-100);
   --muted-foreground: var(--color-gray-500);
   --border: var(--color-gray-200);
   --brand: var(--color-orange-600);
   --brand-subtle: var(--color-orange-50);
-  --popover: oklch(1 0 0);
+  --popover: oklch(99.4% 0.001 106.42);
   --popover-foreground: oklch(0.147 0.004 49.25);
   --primary: oklch(0.216 0.006 56.043);
   --primary-foreground: oklch(0.985 0.001 106.423);
@@ -306,7 +329,7 @@
   --sidebar-accent-foreground: oklch(0.205 0 0);
   --sidebar-border: oklch(0.922 0 0);
   --sidebar-ring: oklch(0.708 0 0);
-  --background: oklch(1 0 0);
+  --background: oklch(98.5% 0.001 106.423);
   --foreground: oklch(0.147 0.004 49.25);
 }
 
