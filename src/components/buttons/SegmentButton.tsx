@@ -1,10 +1,13 @@
 import * as React from "react";
 import { Button, type ButtonProps } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 
 export interface SegmentButtonProps extends ButtonProps {
   /** Whether this segment is the selected one (brand fill vs. outline). */
   active: boolean;
+  /** Optional count, rendered as an internal dark badge after the label. */
+  count?: number;
 }
 
 /**
@@ -15,7 +18,7 @@ export interface SegmentButtonProps extends ButtonProps {
 export const SegmentButton = React.forwardRef<
   HTMLButtonElement,
   SegmentButtonProps
->(({ active, className, ...props }, ref) => (
+>(({ active, count, className, children, ...props }, ref) => (
   <Button
     ref={ref}
     type="button"
@@ -29,6 +32,9 @@ export const SegmentButton = React.forwardRef<
       className,
     )}
     {...props}
-  />
+  >
+    {children}
+    {count != null && <Badge className="px-1.5 tabular-nums">{count}</Badge>}
+  </Button>
 ));
 SegmentButton.displayName = "SegmentButton";

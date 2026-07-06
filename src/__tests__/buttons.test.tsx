@@ -75,6 +75,32 @@ describe("SegmentButton", () => {
       "false",
     );
   });
+
+  it("renders the count as an internal badge when provided", () => {
+    render(
+      <SegmentButton active count={42}>
+        Published
+      </SegmentButton>,
+    );
+    const btn = screen.getByRole("button", { name: "Published 42" });
+    expect(btn.querySelector('[data-slot="badge"]')).toHaveTextContent("42");
+  });
+
+  it("renders no badge when count is omitted", () => {
+    render(<SegmentButton active={false}>Draft</SegmentButton>);
+    const btn = screen.getByRole("button", { name: "Draft" });
+    expect(btn.querySelector('[data-slot="badge"]')).toBeNull();
+  });
+
+  it("shows a zero count rather than hiding the badge", () => {
+    render(
+      <SegmentButton active={false} count={0}>
+        Archived
+      </SegmentButton>,
+    );
+    const btn = screen.getByRole("button", { name: "Archived 0" });
+    expect(btn.querySelector('[data-slot="badge"]')).toHaveTextContent("0");
+  });
 });
 
 describe("DragHandleButton", () => {
