@@ -30,7 +30,7 @@ const ingredientInput = (
   <input
     aria-label="Ingredient"
     defaultValue="1 tsp cumin"
-    className="w-full min-h-[44px] rounded-lg border border-gray-200 px-3 text-sm text-gray-700"
+    className="w-full min-h-[44px] rounded-none border-0 border-b border-gray-200 px-3 text-sm text-gray-700"
   />
 );
 
