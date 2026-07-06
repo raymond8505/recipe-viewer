@@ -143,8 +143,10 @@ The styling layer has **single sources of truth**. Do not re-declare style decis
 
 **Purpose-built badges/pills → named components wrapping a shadcn primitive.** Never inline a styled `<Badge>` or a hand-rolled `<span>` pill in a feature component. Each badge variant is its own named component that wraps `@/components/ui/badge` and owns its styling + logic — e.g. `RecipeStatusBadge` (status normalization + status colors), `RecipeCategoryBadge` (brand accent). This mirrors the icon-component rule (see Shopping List Feature). The shadcn primitive's base already supplies padding/size/weight — the wrapper sets only what differs.
 
-**shadcn primitives → `src/components/ui/`** (generated, unedited). Feature components compose them; overrides go through `className` (twMerge last-wins), not by editing the generated primitive.
-- These are the **`radix-nova`** style (per `components.json`), not vanilla shadcn — quirks worth knowing when matching a hand-rolled look: `Card` uses `ring-1 ring-foreground/10` (not `border`) + a `--card-spacing` var for padding/gap + `rounded-xl` (override with `ring-0 border gap-0 py-0 rounded-2xl`); `Badge` is `rounded-4xl` + fixed `h-5` (override `rounded-full`); `CardTitle` is a plain `<div>` with **no `asChild`**.
+**shadcn primitives → `src/components/ui/`** (generated; treat as unedited). Feature components compose them; overrides go through `className` (twMerge last-wins), not by editing the generated primitive.
+- **Deliberate divergence from the registry (June 2026 redesign):** `button.tsx` and `badge.tsx` carry `rounded-full` in their cva bases — the site-wide pill shape for interactive elements. This is the one sanctioned kind of primitive edit (a global shape re-theme that tokens can't express: button and input share `rounded-md`, so only the primitive can separate them). If either file is ever regenerated from the registry, re-apply the pill radius.
+- **Radius doctrine:** the `--radius-sm..4xl` scale in `globals.css` is **flattened** — every `rounded-sm..4xl` utility renders `var(--radius)` (2px). Surfaces are near-square; only `rounded-full` escapes. Don't "fix" a call site by swapping `rounded-lg` for `rounded-xl` — they're identical; change `--radius` if the tightness is wrong.
+- These are the **`radix-nova`** style (per `components.json`), not vanilla shadcn — quirks worth knowing when matching a hand-rolled look: `Card` uses `ring-1 ring-foreground/10` (not `border`) + a `--card-spacing` var for padding/gap; `CardTitle` is a plain `<div>` with **no `asChild`**.
 
 ## Story Fixtures
 
