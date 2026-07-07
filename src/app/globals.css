@@ -86,11 +86,11 @@
 @keyframes timer-done-pulse {
   0%,
   100% {
-    background-color: rgb(255 237 213);
-  } /* orange-100 */
+    background-color: color-mix(in oklch, var(--brand) 15%, white);
+  }
   50% {
-    background-color: rgb(253 186 116);
-  } /* orange-300 */
+    background-color: color-mix(in oklch, var(--brand) 40%, white);
+  }
 }
 
 .animate-timer-done {
@@ -363,8 +363,8 @@
   --muted: var(--color-gray-100);
   --muted-foreground: var(--color-gray-500);
   --border: var(--color-gray-200);
-  --brand: var(--color-orange-600);
-  --brand-subtle: var(--color-orange-50);
+  --brand: #4E2929;
+  --brand-subtle: color-mix(in oklch, var(--brand) 12%, white);
   --popover: oklch(99.4% 0.001 106.42);
   --popover-foreground: oklch(0.147 0.004 49.25);
   --primary: oklch(0.216 0.006 56.043);

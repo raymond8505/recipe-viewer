@@ -207,7 +207,7 @@ export default function RecipeDetail({
             {categories.map((cat) => (
               <span
                 key={cat}
-                className="px-3 py-1 bg-orange-50 text-orange-600 text-sm font-medium rounded-full"
+                className="px-3 py-1 bg-brand-subtle text-brand text-sm font-medium rounded-full"
               >
                 {cat}
               </span>
@@ -342,7 +342,7 @@ export default function RecipeDetail({
                 scalable.groupedIngredients.map(({ heading, items }, gi) => (
                   <div key={gi} className={gi > 0 ? "mt-4" : ""}>
                     {heading && (
-                      <h3 className="font-sans text-xs font-semibold uppercase tracking-widest text-orange-500 mb-2">
+                      <h3 className="font-sans text-xs font-semibold uppercase tracking-widest text-brand mb-2">
                         {heading}
                       </h3>
                     )}
@@ -360,7 +360,7 @@ export default function RecipeDetail({
                             aria-label={text}
                           >
                             <span
-                              className={`mt-1.5 w-1.5 h-1.5 rounded-full shrink-0 transition-colors ${selected ? "bg-green-500" : "bg-orange-400"}`}
+                              className={`mt-1.5 w-1.5 h-1.5 rounded-full shrink-0 transition-colors ${selected ? "bg-green-500" : "bg-brand"}`}
                             />
                             <IngredientItem
                               ingredient={ing}
@@ -396,7 +396,7 @@ export default function RecipeDetail({
                   {(schema.recipeInstructions as HowToSection[]).map(
                     (section, i) => (
                       <div key={i}>
-                        <h3 className="font-sans text-xs font-semibold uppercase tracking-widest text-orange-500 mb-3">
+                        <h3 className="font-sans text-xs font-semibold uppercase tracking-widest text-brand mb-3">
                           {section.name}
                         </h3>
                         <ol className="space-y-3">

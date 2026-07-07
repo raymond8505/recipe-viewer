@@ -152,7 +152,7 @@ export default function AddTimerModal({
               value={label}
               onChange={(e) => setLabel(e.target.value)}
               placeholder="e.g. Pasta, Sauce…"
-              className="w-full text-lg rounded-none border-0 border-b border-gray-300 px-4 py-3 focus:outline-hidden focus:border-orange-400"
+              className="w-full text-lg rounded-none border-0 border-b border-gray-300 px-4 py-3 focus:outline-hidden focus:border-brand"
               onKeyDown={(e) => {
                 if (e.key === "Enter") handleSubmit();
               }}

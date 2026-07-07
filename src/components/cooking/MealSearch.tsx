@@ -103,7 +103,7 @@ export default function MealSearch({ excludeIds, onAdd }: MealSearchProps) {
 
   return (
     <div ref={containerRef} className="relative">
-      <div className="flex items-center gap-2 px-3 py-2.5 rounded-none border-0 border-b border-gray-200 bg-card focus-within:border-orange-400 transition-colors">
+      <div className="flex items-center gap-2 px-3 py-2.5 rounded-none border-0 border-b border-gray-200 bg-card focus-within:border-brand transition-colors">
         <SearchIcon />
         <input
           ref={inputRef}
