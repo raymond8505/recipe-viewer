@@ -1,12 +1,18 @@
 # Stage 1: Install dependencies
 FROM node:24.16.0-slim AS deps
 WORKDIR /app
-COPY package.json yarn.lock ./
-RUN yarn install --frozen-lockfile --production=false
+ENV COREPACK_ENABLE_DOWNLOAD_PROMPT=0
+RUN corepack enable
+# .yarnrc.yml carries nodeLinker: node-modules — required so Yarn 4 produces a real
+# node_modules/ dir for the multi-stage COPY below (default would be PnP).
+COPY package.json yarn.lock .yarnrc.yml ./
+RUN yarn install --immutable
 
 # Stage 2: Build
 FROM node:24.16.0-slim AS builder
 WORKDIR /app
+ENV COREPACK_ENABLE_DOWNLOAD_PROMPT=0
+RUN corepack enable
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
