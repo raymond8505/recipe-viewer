@@ -21,7 +21,7 @@ export default function RecipeTitleInput({
       aria-label="Recipe title"
       placeholder="Recipe title"
       className={cn(
-        "h-auto p-3 text-3xl font-bold leading-tight sm:text-4xl md:text-4xl",
+        "h-auto p-3 font-heading text-3xl font-light leading-tight sm:text-4xl md:text-4xl",
         className,
       )}
       {...props}

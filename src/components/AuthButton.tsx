@@ -93,8 +93,8 @@ export default function AuthButton({ isLoggedIn }: { isLoggedIn: boolean }) {
             if (e.target === overlayRef.current) close();
           }}
         >
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm mx-4 p-6">
-            <h2 className="text-lg font-semibold text-gray-900 mb-4">Login</h2>
+          <div className="bg-card rounded-2xl shadow-xl w-full max-w-sm mx-4 p-6">
+            <h2 className="text-lg text-gray-900 mb-4">Login</h2>
             <form onSubmit={handleLogin} className="space-y-4">
               <input
                 ref={inputRef}
@@ -102,7 +102,7 @@ export default function AuthButton({ isLoggedIn }: { isLoggedIn: boolean }) {
                 placeholder="Password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="w-full min-h-[44px] px-4 border border-gray-300 rounded-xl text-base focus:outline-hidden focus:ring-2 focus:ring-orange-400"
+                className="w-full min-h-[44px] px-4 rounded-none border-0 border-b border-gray-300 text-base focus:outline-hidden focus:border-brand"
                 autoComplete="current-password"
               />
               {error && <p className="text-sm text-red-600">{error}</p>}
@@ -111,14 +111,14 @@ export default function AuthButton({ isLoggedIn }: { isLoggedIn: boolean }) {
                   type="button"
                   variant="outline"
                   onClick={close}
-                  className="h-auto min-h-[44px] flex-1 rounded-xl"
+                  className="h-auto min-h-[44px] flex-1"
                 >
                   Cancel
                 </Button>
                 <PrimaryActionButton
                   type="submit"
                   disabled={loading || !password}
-                  className="h-auto min-h-[44px] flex-1 rounded-xl"
+                  className="h-auto min-h-[44px] flex-1"
                 >
                   {loading ? "Logging in…" : "Login"}
                 </PrimaryActionButton>

@@ -16,8 +16,9 @@ export interface AddTimerButtonProps extends Omit<ButtonProps, "children"> {
  * The brand "Add Timer" action — a `PrimaryActionButton` with a plus glyph and
  * the "Add Timer" label. Both timer surfaces (desktop column + mobile ribbon)
  * share the same intent and brand fill; only the icon size and padding differ,
- * which `compact` selects so the two existing looks are preserved. Width/shape
- * (`flex-1 rounded-xl`) is owned here; `className` merges last for the rest.
+ * which `compact` selects so the two existing looks are preserved. Width
+ * (`flex-1`) is owned here (shape is the Button base pill); `className` merges
+ * last for the rest.
  */
 export const AddTimerButton = React.forwardRef<
   HTMLButtonElement,
@@ -26,7 +27,7 @@ export const AddTimerButton = React.forwardRef<
   <PrimaryActionButton
     ref={ref}
     className={cn(
-      "h-auto flex-1 rounded-xl font-semibold",
+      "h-auto flex-1 font-semibold",
       compact ? "gap-1.5 py-2.5 text-sm" : "gap-2 py-3 text-base",
       className,
     )}

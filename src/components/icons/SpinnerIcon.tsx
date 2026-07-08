@@ -1,6 +1,6 @@
 export function SpinnerIcon({
   size = 16,
-  className = "text-orange-400 shrink-0 animate-spin",
+  className = "text-brand shrink-0 animate-spin",
 }: { size?: number; className?: string } = {}) {
   return (
     <svg

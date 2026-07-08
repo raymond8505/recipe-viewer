@@ -38,7 +38,7 @@ import {
   CopyShoppingListButton,
 } from "@/components/buttons";
 import IngredientItem from "@/components/IngredientItem";
-import ServingsControl from "@/components/ServingsControl";
+import TimeYieldStats from "@/components/TimeYieldStats";
 import NutritionPanel from "@/components/NutritionPanel";
 
 interface CookingModeProps {
@@ -370,11 +370,11 @@ export default function CookingMode({
   return (
     <div
       ref={containerRef}
-      className="fixed inset-0 z-50 bg-white flex flex-col cook-mode-container"
+      className="fixed inset-0 z-50 bg-card flex flex-col cook-mode-container"
       style={{ width: "100vw" }}
     >
       {/* Sticky header */}
-      <div className="shrink-0 flex items-center justify-between px-4 py-2 border-b border-gray-200 bg-white">
+      <div className="shrink-0 flex items-center justify-between px-4 py-2 border-b border-gray-200 bg-card">
         <span className="text-sm font-medium text-muted-foreground">
           Cooking mode
         </span>
@@ -396,7 +396,7 @@ export default function CookingMode({
       </div>
 
       {/* Mobile timer ribbon — sticky below header, only on small screens */}
-      <div className="lg:hidden shrink-0 bg-white border-b border-gray-200">
+      <div className="lg:hidden shrink-0 bg-card border-b border-gray-200">
         {/* Add timer + Reset all — inline, add timer grows */}
         <div className="flex items-center gap-2 px-3 pt-2 pb-1">
           <AddTimerButton compact onClick={() => setShowAddTimer(true)} />
@@ -437,7 +437,7 @@ export default function CookingMode({
 
       {/* Mobile cooking notes — sticky below timer ribbon, above scrollable content (logged-in only) */}
       {isLoggedIn && (
-        <div className="lg:hidden shrink-0 bg-white border-b border-gray-200 px-3 py-2">
+        <div className="lg:hidden shrink-0 bg-card border-b border-gray-200 px-3 py-2">
           <div className="flex items-center justify-between mb-1">
             <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">
               Cooking notes
@@ -466,14 +466,14 @@ export default function CookingMode({
       <div className="flex-1 flex overflow-hidden min-h-0">
         {/* Recipe content — full width on mobile, 3/4 on desktop */}
         <div className="flex-1 min-w-0 overflow-y-auto">
-          <div className="max-w-3xl mx-auto px-4 sm:px-8 py-6 sm:py-8">
+          <div className="max-w-3xl mx-auto px-4 sm:px-8 pt-6 sm:pt-8">
             {/* Header */}
             <header className="mb-8">
               <div className="flex flex-wrap gap-2 mb-4">
                 {categories.map((cat) => (
                   <span
                     key={cat}
-                    className="px-3 py-1 bg-orange-50 text-orange-600 text-sm font-medium rounded-full"
+                    className="px-3 py-1 bg-brand-subtle text-brand text-sm font-medium rounded-full"
                   >
                     {cat}
                   </span>
@@ -485,7 +485,7 @@ export default function CookingMode({
                 )}
               </div>
 
-              <h1 className="text-3xl sm:text-4xl font-bold text-gray-900 leading-tight mb-4">
+              <h1 className="text-3xl sm:text-4xl text-gray-900 leading-tight mb-4">
                 {schema.name}
               </h1>
 
@@ -517,32 +517,21 @@ export default function CookingMode({
               </div>
             )}
 
-            {/* Time / Yield stats */}
-            {(prepTime || cookTime || totalTime || schema.recipeYield) && (
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-8 p-4 bg-orange-50 rounded-2xl">
-                {prepTime && <Stat label="Prep time" value={prepTime} />}
-                {cookTime && <Stat label="Cook time" value={cookTime} />}
-                {totalTime && <Stat label="Total time" value={totalTime} />}
-                {schema.recipeYield &&
-                  (primaryScalable.currentServings != null ? (
-                    <ServingsControl
-                      servings={primaryScalable.currentServings}
-                      onChange={(n) =>
-                        updateScalable(recipe.id, (r) => r.scalePortionsTo(n))
-                      }
-                    />
-                  ) : (
-                    <Stat
-                      label="Servings"
-                      value={
-                        Array.isArray(schema.recipeYield)
-                          ? schema.recipeYield[0]
-                          : schema.recipeYield
-                      }
-                    />
-                  ))}
-              </div>
-            )}
+          </div>
+
+          {/* Time / Yield stats — full-width band across the recipe scroll region */}
+          <TimeYieldStats
+            prepTime={prepTime}
+            cookTime={cookTime}
+            totalTime={totalTime}
+            recipeYield={schema.recipeYield}
+            currentServings={primaryScalable.currentServings}
+            onServingsChange={(n) =>
+              updateScalable(recipe.id, (r) => r.scalePortionsTo(n))
+            }
+          />
+
+          <div className="max-w-3xl mx-auto px-4 sm:px-8 pb-6 sm:pb-8">
 
             {/* Meal bar — tabs and search inline */}
             <div className="flex items-start gap-2 flex-wrap mb-6">
@@ -578,7 +567,7 @@ export default function CookingMode({
                 activeSchema.recipeIngredient.length > 0 && (
                   <div className="sm:col-span-1">
                     <div className="flex items-center justify-between mb-4">
-                      <h2 className="text-2xl sm:text-xl font-semibold text-gray-900">
+                      <h2 className="text-2xl sm:text-xl text-gray-900">
                         Ingredients
                       </h2>
                       <CopyShoppingListButton
@@ -591,7 +580,7 @@ export default function CookingMode({
                       ({ heading, items }, gi) => (
                         <div key={gi} className={gi > 0 ? "mt-4" : ""}>
                           {heading && (
-                            <h3 className="text-sm sm:text-xs font-semibold uppercase tracking-widest text-orange-500 mb-2">
+                            <h3 className="font-sans text-sm sm:text-xs font-semibold uppercase tracking-widest text-brand mb-2">
                               {heading}
                             </h3>
                           )}
@@ -616,7 +605,7 @@ export default function CookingMode({
                                   aria-label={text}
                                 >
                                   <span
-                                    className={`mt-1.5 w-1.5 h-1.5 rounded-full shrink-0 transition-colors ${selected ? "bg-green-500" : "bg-orange-400"}`}
+                                    className={`mt-1.5 w-1.5 h-1.5 rounded-full shrink-0 transition-colors ${selected ? "bg-green-500" : "bg-brand"}`}
                                   />
                                   <IngredientItem
                                     ingredient={ing}
@@ -646,7 +635,7 @@ export default function CookingMode({
               {activeSchema.recipeInstructions &&
                 activeSchema.recipeInstructions.length > 0 && (
                   <div className="sm:col-span-2">
-                    <h2 className="text-2xl sm:text-xl font-semibold text-gray-900 mb-4">
+                    <h2 className="text-2xl sm:text-xl text-gray-900 mb-4">
                       Instructions
                     </h2>
                     {activeSchema.recipeInstructions[0]["@type"] ===
@@ -656,7 +645,7 @@ export default function CookingMode({
                           activeSchema.recipeInstructions as HowToSection[]
                         ).map((section, i) => (
                           <div key={i}>
-                            <h3 className="text-sm sm:text-xs font-semibold uppercase tracking-widest text-orange-500 mb-3">
+                            <h3 className="font-sans text-sm sm:text-xs font-semibold uppercase tracking-widest text-brand mb-3">
                               {section.name}
                             </h3>
                             <ol className="space-y-3">
@@ -673,7 +662,7 @@ export default function CookingMode({
                                     aria-label={`Step ${j + 1}: ${done ? "completed" : "mark complete"}`}
                                   >
                                     <span
-                                      className={`shrink-0 w-8 h-8 sm:w-7 sm:h-7 rounded-full text-base sm:text-sm font-bold flex items-center justify-center transition-colors ${done ? "bg-green-500 text-white" : "bg-orange-500 text-white"}`}
+                                      className={`shrink-0 w-8 h-8 sm:w-7 sm:h-7 rounded-full text-base sm:text-sm font-bold flex items-center justify-center transition-colors ${done ? "bg-green-500 text-white" : "bg-secondary-foreground text-white"}`}
                                     >
                                       {done ? <CheckIcon size={14} /> : j + 1}
                                     </span>
@@ -705,7 +694,7 @@ export default function CookingMode({
                                 aria-label={`Step ${i + 1}: ${done ? "completed" : "mark complete"}`}
                               >
                                 <span
-                                  className={`shrink-0 w-8 h-8 sm:w-7 sm:h-7 rounded-full text-base sm:text-sm font-bold flex items-center justify-center transition-colors ${done ? "bg-green-500 text-white" : "bg-orange-500 text-white"}`}
+                                  className={`shrink-0 w-8 h-8 sm:w-7 sm:h-7 rounded-full text-base sm:text-sm font-bold flex items-center justify-center transition-colors ${done ? "bg-green-500 text-white" : "bg-secondary-foreground text-white"}`}
                                 >
                                   {done ? <CheckIcon size={14} /> : i + 1}
                                 </span>
@@ -727,7 +716,7 @@ export default function CookingMode({
             {/* Notes */}
             {activeSchema.notes && (
               <div className="mt-8">
-                <h2 className="text-2xl sm:text-xl font-semibold text-gray-900 mb-3">
+                <h2 className="text-2xl sm:text-xl text-gray-900 mb-3">
                   Notes
                 </h2>
                 <p className="text-xl sm:text-base text-gray-700 leading-relaxed whitespace-pre-line">
@@ -792,17 +781,6 @@ export default function CookingMode({
           onClose={() => setEditingTimer(null)}
         />
       )}
-    </div>
-  );
-}
-
-function Stat({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="text-center">
-      <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">
-        {label}
-      </p>
-      <p className="font-semibold text-gray-900">{value}</p>
     </div>
   );
 }

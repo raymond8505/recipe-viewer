@@ -58,7 +58,7 @@ export const Brand: Story = {
           "aria-label": "Reorder section Sauce",
           className: "items-center min-h-[40px]",
         })}
-        <span className="flex-1 min-w-0 text-sm font-semibold uppercase tracking-wide text-orange-600">
+        <span className="flex-1 min-w-0 text-sm font-semibold uppercase tracking-wide text-brand">
           Sauce
         </span>
       </>

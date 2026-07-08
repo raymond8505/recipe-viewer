@@ -17,6 +17,23 @@ export const Active: Story = { args: { active: true } };
 
 export const Inactive: Story = { args: { active: false } };
 
+/**
+ * Counts render as an internal dark badge (the StatusFilter pattern) —
+ * no brackets in the label.
+ */
+export const WithCount: Story = {
+  render: (args) => (
+    <div className="flex flex-wrap gap-1">
+      <SegmentButton {...args} active count={42}>
+        Published
+      </SegmentButton>
+      <SegmentButton {...args} active={false} count={7}>
+        Draft
+      </SegmentButton>
+    </div>
+  ),
+};
+
 // A segmented control row, the way SortBar/StatusFilter use it.
 export const Group: Story = {
   render: (args) => (

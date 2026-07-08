@@ -66,7 +66,7 @@ export default function TimerCard({
           <Button
             variant="outline"
             onClick={() => setConfirming(false)}
-            className="h-auto flex-1 rounded-xl py-3"
+            className="h-auto flex-1 py-3"
           >
             Cancel
           </Button>
@@ -76,7 +76,7 @@ export default function TimerCard({
               onRemove(timer.id);
               setConfirming(false);
             }}
-            className="h-auto flex-1 rounded-xl py-3"
+            className="h-auto flex-1 py-3"
           >
             Delete
           </Button>
@@ -143,7 +143,7 @@ export default function TimerCard({
 
   return (
     <div
-      className={`flex items-stretch rounded-xl border overflow-hidden ${outerBorder} ${isFinished ? "bg-gray-50" : "bg-white"}`}
+      className={`flex items-stretch rounded-xl border overflow-hidden ${outerBorder} ${isFinished ? "bg-gray-50" : "bg-card"}`}
     >
       {/* Left col: play/pause (top) + reset (bottom) */}
       <div className={`w-12 shrink-0 flex flex-col border-r ${dividerBg}`}>

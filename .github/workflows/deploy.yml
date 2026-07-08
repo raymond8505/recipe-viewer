@@ -12,11 +12,14 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      # corepack enable before setup-node so the yarn shim resolves to the
+      # packageManager-pinned Yarn 4 and setup-node's `cache: yarn` detects it.
+      - run: corepack enable
       - uses: actions/setup-node@v4
         with:
           node-version: '24.16.0'
           cache: 'yarn'
-      - run: yarn install --frozen-lockfile
+      - run: yarn install --immutable
       - run: yarn test:run
 
   build:

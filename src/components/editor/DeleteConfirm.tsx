@@ -27,7 +27,7 @@ export default function DeleteConfirm({
           type="button"
           variant="outline"
           onClick={onCancel}
-          className="h-auto min-h-[44px] flex-1 rounded-xl py-3"
+          className="h-auto min-h-[44px] flex-1 py-3"
         >
           Cancel
         </Button>
@@ -35,7 +35,7 @@ export default function DeleteConfirm({
           type="button"
           variant="destructive"
           onClick={onConfirm}
-          className="h-auto min-h-[44px] flex-1 rounded-xl py-3"
+          className="h-auto min-h-[44px] flex-1 py-3"
         >
           Delete
         </Button>

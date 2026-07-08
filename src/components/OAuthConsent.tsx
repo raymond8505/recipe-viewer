@@ -55,8 +55,8 @@ export default function OAuthConsent({
 
   if (!isLoggedIn) {
     return (
-      <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6">
-        <h2 className="text-lg font-semibold text-gray-900">Sign in to continue</h2>
+      <div className="bg-card rounded-2xl shadow-xl w-full max-w-sm p-6">
+        <h2 className="text-lg text-gray-900">Sign in to continue</h2>
         <p className="mt-1 text-sm text-gray-600">
           <span className="font-medium">{clientName}</span> wants to access your Recipe Viewer.
         </p>
@@ -66,7 +66,7 @@ export default function OAuthConsent({
             placeholder="Password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            className="w-full min-h-[44px] px-4 border border-gray-300 rounded-xl text-base focus:outline-hidden focus:ring-2 focus:ring-orange-400"
+            className="w-full min-h-[44px] px-4 rounded-none border-0 border-b border-gray-300 text-base focus:outline-hidden focus:border-brand"
             autoComplete="current-password"
             autoFocus
           />
@@ -74,7 +74,7 @@ export default function OAuthConsent({
           <PrimaryActionButton
             type="submit"
             disabled={loading || !password}
-            className="h-auto min-h-[44px] w-full rounded-xl"
+            className="h-auto min-h-[44px] w-full"
           >
             {loading ? "Signing in…" : "Sign in"}
           </PrimaryActionButton>
@@ -87,9 +87,9 @@ export default function OAuthConsent({
     <form
       method="POST"
       action="/api/oauth/authorize"
-      className="bg-white rounded-2xl shadow-xl w-full max-w-md p-8"
+      className="bg-card rounded-2xl shadow-xl w-full max-w-md p-8"
     >
-      <h1 className="text-xl font-semibold text-gray-900">Authorize {clientName}?</h1>
+      <h1 className="text-xl text-gray-900">Authorize {clientName}?</h1>
       <p className="mt-2 text-sm text-gray-600">
         This will let <span className="font-medium">{clientName}</span> read and modify your recipes via the
         MCP server. You can revoke access by deleting the client row in Supabase.
@@ -109,7 +109,7 @@ export default function OAuthConsent({
           name="action"
           value="deny"
           variant="outline"
-          className="h-auto min-h-[44px] flex-1 rounded-xl"
+          className="h-auto min-h-[44px] flex-1"
         >
           Deny
         </Button>
@@ -117,7 +117,7 @@ export default function OAuthConsent({
           type="submit"
           name="action"
           value="allow"
-          className="h-auto min-h-[44px] flex-1 rounded-xl"
+          className="h-auto min-h-[44px] flex-1"
         >
           Allow
         </PrimaryActionButton>

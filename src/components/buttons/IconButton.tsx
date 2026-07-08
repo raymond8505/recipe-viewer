@@ -18,7 +18,7 @@ export const IconButton = React.forwardRef<HTMLButtonElement, IconButtonProps>(
     <Button
       ref={ref}
       variant={variant}
-      className={cn("size-11 rounded-lg", className)}
+      className={cn("size-11", className)}
       {...props}
     />
   ),

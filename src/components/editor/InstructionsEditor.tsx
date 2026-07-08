@@ -57,7 +57,7 @@ export default function InstructionsEditor({
             disabled={disabled}
             placeholder="Describe this step…"
             aria-label="Step instructions"
-            className="min-h-[44px] text-sm leading-relaxed resize-none overflow-hidden"
+            className="font-medium"
           />
           <div className="flex flex-wrap items-end gap-2">
             <Label className="flex-1 min-w-32 flex-col items-stretch gap-0.5 text-xs font-normal text-muted-foreground">
@@ -90,7 +90,7 @@ export default function InstructionsEditor({
               onClick={requestDelete}
               disabled={disabled}
               aria-label="Delete this step?"
-              className="h-auto w-10 min-h-[40px] shrink-0 rounded-lg text-gray-300 hover:bg-destructive/10 hover:text-destructive disabled:opacity-40"
+              className="h-auto w-10 min-h-[40px] shrink-0 text-gray-300 hover:bg-destructive/10 hover:text-destructive disabled:opacity-40"
             >
               <TrashIcon />
             </Button>

@@ -66,7 +66,7 @@ export default function MealTabs({ recipes, activeIndex, onSelect, onRemove }: M
               className={cn(
                 "h-auto min-h-[44px] py-2.5 text-sm font-medium",
                 sharedBg,
-                hasClose ? "rounded-l-xl rounded-r-none pl-4 pr-3" : "rounded-xl px-4",
+                hasClose ? "rounded-l-full rounded-r-none pl-4 pr-3" : "px-4",
                 active
                   ? "hover:bg-brand hover:text-white active:bg-brand/90"
                   : "hover:bg-muted hover:text-gray-700 active:bg-gray-200",
@@ -85,7 +85,7 @@ export default function MealTabs({ recipes, activeIndex, onSelect, onRemove }: M
                 tabIndex={-1}
                 aria-label={`Remove ${recipe.metadata.schema.name} from meal`}
                 className={cn(
-                  "h-auto min-h-[44px] rounded-l-none rounded-r-xl border-l px-2.5 text-sm",
+                  "h-auto min-h-[44px] rounded-l-none rounded-r-full border-l px-2.5 text-sm",
                   sharedBg,
                   active
                     ? "border-brand/60 hover:bg-brand/90 hover:text-white active:bg-brand/80"

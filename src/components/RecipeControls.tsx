@@ -68,7 +68,7 @@ export default function RecipeControls({
 }: RecipeControlsProps) {
   return (
     <section aria-label="Recipe management" className="mb-8">
-      <h2 className="text-xs font-semibold uppercase tracking-widest text-gray-400 mb-4">
+      <h2 className="font-sans text-xs font-semibold uppercase tracking-widest text-gray-400 mb-4">
         Manage
       </h2>
       <div className="flex flex-wrap items-center gap-3">
@@ -101,14 +101,14 @@ export default function RecipeControls({
                 onChange={(e) => onUrlChange(e.target.value)}
                 disabled={editState === "saving"}
                 placeholder="https://example.com/recipe"
-                className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm text-gray-700 focus:outline-hidden focus:ring-2 focus:ring-orange-300 disabled:opacity-60"
+                className="w-full rounded-none border-0 border-b border-gray-200 px-3 py-2 text-sm text-gray-700 focus:outline-hidden focus:border-brand disabled:opacity-60"
               />
             </div>
             <select
               value={draftStatus}
               onChange={(e) => onStatusChange(e.target.value)}
               disabled={editState === "saving"}
-              className="px-3 py-2 text-sm font-medium rounded-lg border border-gray-200 text-gray-700 bg-white focus:outline-hidden focus:ring-2 focus:ring-orange-300 disabled:opacity-60"
+              className="px-3 py-2 text-sm font-medium rounded-none border-0 border-b border-gray-200 text-gray-700 bg-card focus:outline-hidden focus:border-brand disabled:opacity-60"
               aria-label="Recipe status"
             >
               <option value="published">Published</option>
@@ -118,7 +118,6 @@ export default function RecipeControls({
             <PrimaryActionButton
               onClick={onEditSave}
               disabled={editState === "saving" || !canSave}
-              className="rounded-lg"
             >
               {editState === "saving"
                 ? "Saving…"
@@ -130,7 +129,6 @@ export default function RecipeControls({
               variant="outline"
               onClick={onEditCancel}
               disabled={editState === "saving"}
-              className="rounded-lg"
             >
               Cancel
             </Button>
@@ -147,7 +145,7 @@ export default function RecipeControls({
           </>
         ) : (
           <>
-            <Button variant="outline" onClick={onEditStart} className="rounded-lg">
+            <Button variant="outline" onClick={onEditStart}>
               Edit
             </Button>
             {canRescrape && (
@@ -155,7 +153,6 @@ export default function RecipeControls({
                 variant="outline"
                 onClick={onRescrape}
                 disabled={rescrapeState === "loading"}
-                className="rounded-lg"
               >
                 {rescrapeState === "loading" ? "Re-scraping…" : "Re-scrape"}
               </Button>
@@ -172,7 +169,6 @@ export default function RecipeControls({
               variant="outline"
               onClick={onRegenImage}
               disabled={regenImageState === "loading"}
-              className="rounded-lg"
             >
               {regenImageState === "loading" ? "Generating…" : "Regen Image"}
             </Button>
@@ -181,7 +177,7 @@ export default function RecipeControls({
                 Image generation failed. Try again.
               </span>
             )}
-            <Button variant="outline" onClick={onUploadOpen} className="rounded-lg">
+            <Button variant="outline" onClick={onUploadOpen}>
               Upload Image
             </Button>
             <input

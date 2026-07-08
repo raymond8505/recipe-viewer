@@ -16,7 +16,7 @@ export const ResetTimersButton = React.forwardRef<
   <Button
     ref={ref}
     variant="outline"
-    className={cn("h-auto shrink-0 rounded-xl", className)}
+    className={cn("h-auto shrink-0", className)}
     {...props}
   >
     Reset All

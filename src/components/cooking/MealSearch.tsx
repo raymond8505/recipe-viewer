@@ -103,7 +103,7 @@ export default function MealSearch({ excludeIds, onAdd }: MealSearchProps) {
 
   return (
     <div ref={containerRef} className="relative">
-      <div className="flex items-center gap-2 px-3 py-2.5 rounded-xl border border-gray-200 bg-white focus-within:border-orange-400 focus-within:ring-1 focus-within:ring-orange-400 transition-colors">
+      <div className="flex items-center gap-2 px-3 py-2.5 rounded-none border-0 border-b border-gray-200 bg-card focus-within:border-brand transition-colors">
         <SearchIcon />
         <input
           ref={inputRef}
@@ -128,7 +128,7 @@ export default function MealSearch({ excludeIds, onAdd }: MealSearchProps) {
           id="meal-search-results"
           role="listbox"
           aria-label="Recipe search results"
-          className="absolute left-0 right-0 top-full mt-1 bg-white rounded-xl border border-gray-200 shadow-lg z-10 max-h-[240px] overflow-y-auto"
+          className="absolute left-0 right-0 top-full mt-1 bg-popover rounded-xl border border-gray-200 shadow-lg z-10 max-h-[240px] overflow-y-auto"
         >
           {loading && results.length === 0 ? (
             <p className="py-3 px-4 text-sm text-gray-400" role="status">Searching…</p>

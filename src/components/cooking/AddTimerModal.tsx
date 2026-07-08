@@ -128,10 +128,10 @@ export default function AddTimerModal({
         if (e.target === e.currentTarget) onClose();
       }}
     >
-      <div className="w-full sm:max-w-sm bg-white rounded-t-2xl sm:rounded-2xl shadow-2xl overflow-hidden max-h-[90dvh] flex flex-col">
+      <div className="w-full sm:max-w-sm bg-card rounded-t-2xl sm:rounded-2xl shadow-2xl overflow-hidden max-h-[90dvh] flex flex-col">
         {/* Header */}
         <div className="flex items-center justify-between px-6 pt-6 pb-4 shrink-0">
-          <h2 className="text-xl font-semibold text-gray-900">
+          <h2 className="text-xl text-gray-900">
             {isEditMode ? "Edit Timer" : "New Timer"}
           </h2>
           <CloseButton ref={closeButtonRef} onClick={onClose} />
@@ -152,7 +152,7 @@ export default function AddTimerModal({
               value={label}
               onChange={(e) => setLabel(e.target.value)}
               placeholder="e.g. Pasta, Sauce…"
-              className="w-full text-lg border border-gray-300 rounded-xl px-4 py-3 focus:outline-hidden focus:ring-2 focus:ring-orange-400 focus:border-transparent"
+              className="w-full text-lg rounded-none border-0 border-b border-gray-300 px-4 py-3 focus:outline-hidden focus:border-brand"
               onKeyDown={(e) => {
                 if (e.key === "Enter") handleSubmit();
               }}
@@ -171,7 +171,7 @@ export default function AddTimerModal({
                 <Button
                   variant="ghost"
                   onClick={() => setMinutes((m) => clampMin(m + 1))}
-                  className="size-14 rounded-xl bg-muted text-2xl font-bold text-gray-700 hover:bg-gray-200 active:bg-gray-300"
+                  className="size-14 bg-muted text-2xl font-bold text-gray-700 hover:bg-gray-200 active:bg-gray-300"
                   aria-label="Increase minutes"
                 >
                   +
@@ -184,7 +184,7 @@ export default function AddTimerModal({
                 <Button
                   variant="ghost"
                   onClick={() => setMinutes((m) => clampMin(m - 1))}
-                  className="size-14 rounded-xl bg-muted text-2xl font-bold text-gray-700 hover:bg-gray-200 active:bg-gray-300"
+                  className="size-14 bg-muted text-2xl font-bold text-gray-700 hover:bg-gray-200 active:bg-gray-300"
                   aria-label="Decrease minutes"
                 >
                   −
@@ -201,7 +201,7 @@ export default function AddTimerModal({
                 <Button
                   variant="ghost"
                   onClick={() => setSeconds((s) => clampSec(s + 15))}
-                  className="size-14 rounded-xl bg-muted text-2xl font-bold text-gray-700 hover:bg-gray-200 active:bg-gray-300"
+                  className="size-14 bg-muted text-2xl font-bold text-gray-700 hover:bg-gray-200 active:bg-gray-300"
                   aria-label="Increase seconds"
                 >
                   +
@@ -214,7 +214,7 @@ export default function AddTimerModal({
                 <Button
                   variant="ghost"
                   onClick={() => setSeconds((s) => clampSec(s - 15))}
-                  className="size-14 rounded-xl bg-muted text-2xl font-bold text-gray-700 hover:bg-gray-200 active:bg-gray-300"
+                  className="size-14 bg-muted text-2xl font-bold text-gray-700 hover:bg-gray-200 active:bg-gray-300"
                   aria-label="Decrease seconds"
                 >
                   −
@@ -235,7 +235,7 @@ export default function AddTimerModal({
                     setMinutes(m);
                     setSeconds(0);
                   }}
-                  className="h-auto shrink-0 snap-start rounded-lg bg-brand-subtle px-4 py-2 text-brand hover:bg-brand/15 hover:text-brand"
+                  className="h-auto shrink-0 snap-start bg-brand-subtle px-4 py-2 text-brand hover:bg-brand/15 hover:text-brand"
                 >
                   {m}m
                 </Button>
@@ -248,14 +248,14 @@ export default function AddTimerModal({
             <Button
               variant="outline"
               onClick={onClose}
-              className="h-auto flex-1 rounded-xl py-4 text-lg font-semibold"
+              className="h-auto flex-1 py-4 text-lg font-semibold"
             >
               Cancel
             </Button>
             <PrimaryActionButton
               onClick={handleSubmit}
               disabled={!canSubmit}
-              className="h-auto flex-1 rounded-xl py-4 text-lg font-semibold disabled:opacity-40"
+              className="h-auto flex-1 py-4 text-lg font-semibold disabled:opacity-40"
             >
               {isEditMode ? "Save" : "Start Timer"}
             </PrimaryActionButton>

@@ -31,7 +31,7 @@ type Story = StoryObj<typeof meta>;
 
 function Cell({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <div className="flex flex-col items-center gap-2 p-4 rounded-xl border border-gray-100 bg-white">
+    <div className="flex flex-col items-center gap-2 p-4 rounded-xl border border-gray-100 bg-card">
       <div className="flex items-center justify-center w-10 h-10 text-gray-700">
         {children}
       </div>

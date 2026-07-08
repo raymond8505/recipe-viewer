@@ -21,7 +21,7 @@ export default function AddRowButton({
       variant="ghost"
       onClick={onClick}
       disabled={disabled}
-      className="h-auto min-h-[44px] w-full justify-start gap-2 rounded-lg px-3 py-2 text-muted-foreground hover:bg-transparent hover:text-brand"
+      className="h-auto min-h-[44px] w-full justify-start gap-2 px-3 py-2 text-muted-foreground hover:bg-transparent hover:text-brand"
     >
       <SmallPlusIcon />
       {label}

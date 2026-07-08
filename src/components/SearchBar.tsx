@@ -39,7 +39,7 @@ export default function SearchBar({ defaultValue }: SearchBarProps) {
     <div className="relative">
       <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
         <svg
-          className={`w-5 h-5 ${isPending ? "text-orange-400 animate-pulse" : "text-gray-400"}`}
+          className={`w-5 h-5 ${isPending ? "text-brand animate-pulse" : "text-gray-400"}`}
           fill="none"
           stroke="currentColor"
           viewBox="0 0 24 24"
@@ -57,7 +57,7 @@ export default function SearchBar({ defaultValue }: SearchBarProps) {
         value={inputValue}
         onChange={(e) => handleChange(e.target.value)}
         placeholder="Search recipes…"
-        className="w-full pl-12 pr-4 py-3 rounded-xl border border-gray-200 bg-white text-gray-900 placeholder-gray-400 focus:outline-hidden focus:ring-2 focus:ring-orange-400 focus:border-transparent transition"
+        className="w-full pl-12 pr-4 py-3 rounded-none border-0 border-b border-gray-200 bg-card text-gray-900 placeholder-gray-400 focus:outline-hidden focus:border-brand transition"
       />
     </div>
   );

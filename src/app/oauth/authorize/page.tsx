@@ -20,8 +20,8 @@ interface AuthorizeParams {
 function ErrorPage({ title, detail }: { title: string; detail: string }) {
   return (
     <main className="min-h-screen bg-gray-50 flex items-center justify-center p-6">
-      <div className="max-w-md w-full bg-white rounded-2xl shadow-sm p-8">
-        <h1 className="text-xl font-semibold text-red-700">{title}</h1>
+      <div className="max-w-md w-full bg-card rounded-2xl shadow-sm p-8">
+        <h1 className="text-xl text-red-700">{title}</h1>
         <p className="mt-3 text-sm text-gray-700">{detail}</p>
       </div>
     </main>

@@ -4,8 +4,15 @@ import { fileURLToPath } from "url";
 import type { StorybookConfig } from "@storybook/nextjs-vite";
 
 const config: StorybookConfig = {
-  stories: ["../src/**/*.mdx", "../src/**/*.stories.@(js|jsx|mjs|ts|tsx)"],
-  addons: ["@storybook/addon-themes", "@storybook/addon-mcp"],
+  stories: [
+    "../src/**/*.mdx",
+    // Top-level component stories (directly under src/components)
+    "../src/components/*.stories.@(js|jsx|mjs|ts|tsx)",
+    // Nested component stories, excluding the hidden headsup / whats-for-dinner dirs.
+    // Their code stays; only the stories are dropped from the Storybook index.
+    "../src/components/!(headsup|whats-for-dinner)/**/*.stories.@(js|jsx|mjs|ts|tsx)",
+  ],
+  addons: ["@storybook/addon-themes", "@storybook/addon-mcp", "@storybook/addon-a11y"],
   framework: {
     name: "@storybook/nextjs-vite",
     options: {},
