@@ -68,17 +68,6 @@ export const ROUTE_POLICY = {
       "Anonymous recipe browse/search backs the public-facing UI (incl. cook-mode MealSearch). Visibility is filtered server-side: getRecipes returns published-only to anonymous callers, all statuses when logged in.",
   },
 
-  // ── Logged-in-only tools (paid LLM webhook proxies) ─────────────────────
-  "/api/whats-for-dinner": {
-    policy: "session",
-    rationale:
-      "Proxies a paid LLM decision webhook; a logged-in-only tool (the homepage only surfaces it when logged in).",
-  },
-  "/api/headsup/search": {
-    policy: "session",
-    rationale: "Proxies a paid LLM search webhook; a logged-in-only tool.",
-  },
-
   // ── Recipe mutations: session OR recipe-scoped capability token ─────────
   "/api/recipes/[id]/archive": {
     policy: "session-or-recipe-token",

@@ -17,5 +17,4 @@ export { ResetIcon } from "./ResetIcon";
 export { SearchIcon } from "./SearchIcon";
 export { SmallPlusIcon } from "./SmallPlusIcon";
 export { SpinnerIcon } from "./SpinnerIcon";
-export { StatIcon } from "./StatIcon";
 export { TrashIcon } from "./TrashIcon";
