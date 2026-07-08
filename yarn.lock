@@ -3048,6 +3048,18 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@storybook/addon-a11y@npm:10.3.3":
+  version: 10.3.3
+  resolution: "@storybook/addon-a11y@npm:10.3.3"
+  dependencies:
+    "@storybook/global": "npm:^5.0.0"
+    axe-core: "npm:^4.2.0"
+  peerDependencies:
+    storybook: ^10.3.3
+  checksum: 10c0/da83678c1fc351a3893bab7c4d04a81b11aeeb51112b03cff5c681fd5951b7c12f469410369eb0e02e7a91ce732b4f297077136855a73cdf5dd8ab3735dab3b6
+  languageName: node
+  linkType: hard
+
 "@storybook/addon-mcp@npm:^0.6.0":
   version: 0.6.0
   resolution: "@storybook/addon-mcp@npm:0.6.0"
@@ -4505,6 +4517,13 @@ __metadata:
   version: 4.11.4
   resolution: "axe-core@npm:4.11.4"
   checksum: 10c0/c4aa83fc3eac5f7a0d0cb1a28f9d073acf0c06ce8daacc38608faa278c57ce084c028c850746b98817ae4c101c30c1a32e95ea34748c4b4c7419b9b81221ef84
+  languageName: node
+  linkType: hard
+
+"axe-core@npm:^4.2.0":
+  version: 4.12.1
+  resolution: "axe-core@npm:4.12.1"
+  checksum: 10c0/03438bd98cef38ad57554feea0d8de21705001db2655c27e0c33ff55e16dd7d6f49c28fb420dc93f7532e68ff363c0953056a5836e6f47068f193eb1765c7db7
   languageName: node
   linkType: hard
 
@@ -8846,6 +8865,7 @@ __metadata:
     "@dnd-kit/sortable": "npm:^10.0.0"
     "@dnd-kit/utilities": "npm:^3.2.2"
     "@eslint/eslintrc": "npm:^3.3.5"
+    "@storybook/addon-a11y": "npm:10.3.3"
     "@storybook/addon-mcp": "npm:^0.6.0"
     "@storybook/addon-themes": "npm:^10.3.3"
     "@storybook/nextjs-vite": "npm:^10.3.3"

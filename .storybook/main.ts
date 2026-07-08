@@ -12,7 +12,7 @@ const config: StorybookConfig = {
     // Their code stays; only the stories are dropped from the Storybook index.
     "../src/components/!(headsup|whats-for-dinner)/**/*.stories.@(js|jsx|mjs|ts|tsx)",
   ],
-  addons: ["@storybook/addon-themes", "@storybook/addon-mcp"],
+  addons: ["@storybook/addon-themes", "@storybook/addon-mcp", "@storybook/addon-a11y"],
   framework: {
     name: "@storybook/nextjs-vite",
     options: {},

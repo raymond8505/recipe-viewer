@@ -43,6 +43,7 @@
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3.3.5",
+    "@storybook/addon-a11y": "10.3.3",
     "@storybook/addon-mcp": "^0.6.0",
     "@storybook/addon-themes": "^10.3.3",
     "@storybook/nextjs-vite": "^10.3.3",
