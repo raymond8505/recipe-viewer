@@ -12,7 +12,6 @@ function Demo({ initial }: { initial: string }) {
         onChange={(e) => setValue(e.target.value)}
         aria-label="Step instructions"
         placeholder="Describe this step…"
-        className="block w-full min-h-[44px] p-2 text-sm text-gray-700 leading-relaxed resize-none overflow-hidden"
       />
     </div>
   );
