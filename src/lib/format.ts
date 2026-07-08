@@ -82,7 +82,6 @@ import type {
   HowToSection,
   HowToStep,
   RecipeIngredient,
-  RecipeStat,
   SchemaRecipe,
 } from "@/types/recipe";
 import type {
@@ -227,48 +226,6 @@ export function normalizeRecipeInstructions(
   if (typeof raw === "string") return markdownToInstructions(raw);
   if (Array.isArray(raw)) return raw as Array<HowToStep | HowToSection>;
   return [raw as HowToStep | HowToSection];
-}
-
-/**
- * Extract key-value "stats" from a recipe schema for deck-builder card display.
- * Only includes stats where the source field is present and truthy.
- */
-export function extractRecipeStats(schema: SchemaRecipe): RecipeStat[] {
-  const stats: RecipeStat[] = [];
-
-  const time = formatDuration(schema.totalTime ?? schema.cookTime);
-  if (time) stats.push({ label: "Cook Time", value: time, icon: "clock" });
-
-  if (schema.nutrition?.calories) {
-    const raw = schema.nutrition.calories.replace(/\s*k?cal.*$/i, "").trim();
-    if (raw)
-      stats.push({ label: "Calories", value: `${raw} cal`, icon: "flame" });
-  }
-
-  const servings = toArray(schema.recipeYield)[0];
-  if (servings)
-    stats.push({ label: "Servings", value: servings, icon: "servings" });
-
-  if (schema.recipeIngredient?.length) {
-    stats.push({
-      label: "Ingredients",
-      value: `${schema.recipeIngredient.length} items`,
-      icon: "ingredients",
-    });
-  }
-
-  if (schema.recipeCuisine) {
-    stats.push({
-      label: "Cuisine",
-      value: schema.recipeCuisine,
-      icon: "globe",
-    });
-  }
-
-  const category = toArray(schema.recipeCategory)[0];
-  if (category) stats.push({ label: "Category", value: category, icon: "tag" });
-
-  return stats;
 }
 
 /**

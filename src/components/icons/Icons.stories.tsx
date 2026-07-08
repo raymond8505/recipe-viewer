@@ -17,7 +17,6 @@ import {
   SearchIcon,
   SmallPlusIcon,
   SpinnerIcon,
-  StatIcon,
   TrashIcon,
 } from "@/components/icons";
 
@@ -62,12 +61,6 @@ export const AllIcons: Story = {
       <Cell label="Search"><SearchIcon /></Cell>
       <Cell label="SmallPlus"><SmallPlusIcon /></Cell>
       <Cell label="Spinner"><SpinnerIcon /></Cell>
-      <Cell label="Stat: clock"><StatIcon icon="clock" /></Cell>
-      <Cell label="Stat: flame"><StatIcon icon="flame" /></Cell>
-      <Cell label="Stat: servings"><StatIcon icon="servings" /></Cell>
-      <Cell label="Stat: ingredients"><StatIcon icon="ingredients" /></Cell>
-      <Cell label="Stat: globe"><StatIcon icon="globe" /></Cell>
-      <Cell label="Stat: tag"><StatIcon icon="tag" /></Cell>
       <Cell label="Trash"><TrashIcon /></Cell>
     </div>
   ),

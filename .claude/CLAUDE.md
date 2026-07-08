@@ -179,8 +179,6 @@ All shared `RecipeRow` fixtures — used by both stories and tests — live in `
 
 - `Components/Cooking Mode/*` — all cooking session components
 - `Components/Recipes/*` — recipe display, filters, search, pagination, card, grid
-- `Components/HeadsUp/*` — heads-up game components
-- `Components/WhatsForDinner/*` — what's for dinner decision tool components
 - `Components/Icons` — icon library (stays at root)
 
 New stories must follow this structure. A story landing at root `Components/X` will look wrong in the sidebar.
@@ -234,20 +232,6 @@ All server-side env vars are validated at app startup via `src/env.ts` (`@t3-oss
 - **Env:** staging reuses **all** prod secrets and **shares the production Supabase** — reviewers can mutate real data. The only per-PR override is `MCP_PUBLIC_URL`, pointed at the staging host so OAuth/MCP callbacks resolve. **No new GitHub secret** — staging lives under the existing `VPS_DEPLOY_PATH/staging/`.
 - **`scripts/validate-deploy-env.sh` now validates BOTH `deploy.yml` and `staging.yml`** (loops over both; each must be self-consistent across the 3 rules). So adding a runtime var means wiring it through staging.yml's `env:`/`envs:`/`.env` heredoc too, not just deploy.yml. Workflow steps that write `$GITHUB_OUTPUT` must use `printf`, **not** the double-quoted `echo` form, or the validator misparses them as `.env` heredoc lines.
 - **A PR branched from main before staging.yml + docker-compose.staging.yml were merged won't have these files**, so its staging deploy fails until rebased onto an up-to-date main. Inherent to self-hosting the workflow in-repo.
-
-## What's for Dinner? Feature
-
-Decision tool at `/whats-for-dinner`. Winner-stays matchup; backend drives contender selection. Code lives in `src/components/whats-for-dinner/`, `src/hooks/useWFD.ts`, `src/types/whats-for-dinner.ts`, `src/app/api/whats-for-dinner/route.ts`.
-
-**Wire format boundary:** The webhook speaks `FlatRecipeRow` (flat `schema` field) in both directions. The hook flattens `state.choices` (RecipeRow[]) before the fetch; the API route promotes the response back to RecipeRow[] before returning. Everything inside the app is RecipeRow. Do not collapse this boundary.
-
-**Response shape:** `{ recipes: FlatRecipeRow[] }` — the API route also tolerates `[{ recipes }]` array wrapping. Validate on `r.schema?.name` (not `r.metadata?.schema?.name`).
-
-**Merge algorithm (CONTENDERS_LOADED reducer):** On initial load (`winnerIndex === null`) place the response directly. After a pick: winner = `state.choices[last]`, `pool = response.filter(r => r.id !== winner.id)`, fill non-winner slots left-to-right from pool. `winnerIndex` is set on PICK and must be cleared after merge.
-
-**Animation:** React key-based remounting — no imperative timers. Each slot wrapper is keyed by `recipe.id`. Key change → remount → `animate-wfd-slide-in` fires on mount. Outgoing card gets `animate-wfd-slide-out` via class change during loading (same id, no remount). `losingIndices` (all indices except winner's) is computed eagerly in the PICK reducer case before the fetch starts.
-
-**Never reuse recipe IDs across contender slots** — the animation won't fire if the key doesn't change.
 
 ## Test Performance — module loading
 

@@ -9,7 +9,6 @@ import SearchBar from "@/components/SearchBar";
 import SortBar from "@/components/SortBar";
 import StatusFilter from "@/components/StatusFilter";
 import Pagination from "@/components/Pagination";
-import WFDButton from "@/components/whats-for-dinner/WFDButton";
 
 const PAGE_SIZE = 24;
 const VALID_SORTS = new Set<SortOption>([
@@ -74,7 +73,6 @@ export default async function Home({ searchParams }: HomeProps) {
             {count} recipes in the collection
           </p>
         </div>
-        {/* {isLoggedIn && <WFDButton />} */}
       </div>
 
       <Suspense>
