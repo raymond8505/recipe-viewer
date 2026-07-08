@@ -17,16 +17,32 @@ vi.mock("@/lib/auth", () => ({
   getExpectedToken: () => "unused-in-test",
 }));
 
-// Lazy loaders for every route file. Keys are project-root-absolute posix paths
-// (e.g. "/src/app/api/recipes/[id]/archive/route.ts"), even on Windows.
-const routeModules = import.meta.glob("/src/app/api/**/route.ts");
+// Lazy loaders for every route file. The glob is written RELATIVE to this test
+// file (`../app/...`) on purpose. An absolute-root glob (`/src/app/...`) makes Vite
+// build each dynamic-import specifier as `posix.relative(importerDir, matchedFile)`,
+// where the two operands come from different origins: `importerDir` from the module
+// graph, `matchedFile` from crawling the project root. On Windows those origins can
+// disagree on drive-letter CASE — husky runs the pre-push hook through git-bash,
+// which lowercases cwd to `c:`, while the module graph keeps the on-disk `C:`. And
+// `posix.relative` across a case-mismatched drive emits a broken specifier like
+// `../../../../../c:/.../route.ts` that fails to resolve, so the whole file fails to
+// collect (intermittently, only from the hook). A relative glob resolves both
+// operands from this file's own id, so their case always matches — no drive letter
+// can ever leak into the specifier.
+const routeModules = import.meta.glob("../app/api/**/route.ts");
 
 function fileKeyToRoutePath(key: string): string {
-  // "/src/app/api/recipes/[id]/archive/route.ts" -> "/api/recipes/[id]/archive"
-  return key.replace(/^\/src\/app/, "").replace(/\/route\.ts$/, "");
+  // Keys are importer-relative posix paths ("../app/api/.../route.ts"). Anchor on
+  // "/api/" so route derivation is independent of the glob's base form.
+  return key.slice(key.indexOf("/api/")).replace(/\/route\.ts$/, "");
 }
 
-const discoveredRoutes = Object.keys(routeModules).map(fileKeyToRoutePath).sort();
+// route path ("/api/...") -> lazy module loader. Reused for both the coverage gate
+// and the behavioral loader lookup, so neither depends on the raw key format.
+const routeLoaderByPath = new Map(
+  Object.entries(routeModules).map(([key, loader]) => [fileKeyToRoutePath(key), loader]),
+);
+const discoveredRoutes = [...routeLoaderByPath.keys()].sort();
 const registeredRoutes = Object.keys(ROUTE_POLICY).sort();
 const protectedPaths = Object.entries(ROUTE_POLICY)
   .filter(([, entry]) => isProtectedPolicy(entry.policy))
@@ -65,10 +81,9 @@ describe("protected routes reject unauthenticated requests (behavioral gate)", (
   beforeAll(async () => {
     await Promise.all(
       protectedPaths.map(async (routePath) => {
-        const fileKey = `/src/app${routePath}/route.ts`;
-        const loader = routeModules[fileKey];
+        const loader = routeLoaderByPath.get(routePath);
         if (typeof loader !== "function") {
-          throw new Error(`no module loader for ${fileKey}`);
+          throw new Error(`no module loader for ${routePath}`);
         }
         const mod = (await loader()) as Record<string, unknown>;
         if (typeof mod.POST !== "function") {
