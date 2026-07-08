@@ -363,11 +363,11 @@
   --muted: var(--color-gray-100);
   --muted-foreground: var(--color-gray-500);
   --border: var(--color-gray-200);
-  --brand: #4E2929;
+  --brand: #b63a1b;
   --brand-subtle: color-mix(in oklch, var(--brand) 12%, white);
   --popover: oklch(99.4% 0.001 106.42);
   --popover-foreground: oklch(0.147 0.004 49.25);
-  --primary: oklch(0.216 0.006 56.043);
+  --primary: oklch(22.043% 0.01355 51.393);
   --primary-foreground: oklch(0.985 0.001 106.423);
   --secondary: oklch(0.97 0.001 106.424);
   --secondary-foreground: oklch(0.216 0.006 56.043);
