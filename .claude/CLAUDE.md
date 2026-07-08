@@ -257,3 +257,9 @@ Vitest's per-test timeout is 5s. **Don't cold-load a real (unmocked) module grap
 - The common `await import("@/lib/x")` to read a `vi.mock`'d module is **warm and fine** — the mock factory runs at file eval, so the import returns the cached mock instantly.
 - Statically importing the module-under-test at the top of the file is also fine: its graph loads during vitest's *collect* phase, which isn't bound by the per-test timeout.
 - Reference: `src/__tests__/route-auth-policy.test.ts` preloads every route handler in `beforeAll`, then each case just invokes the preloaded handler.
+
+## Vitest flake: drive letter in a glob import path (Windows)
+
+**Trigger — if you see this, read [.claude/troubleshooting/vite-glob-drive-letter.md](.claude/troubleshooting/vite-glob-drive-letter.md) BEFORE investigating:** a test file fails to *collect* (whole-file load error, not a test assertion) with `Failed to resolve import "../../../../../c:/…/route.ts"` — a **relative path (`../`) with an embedded drive letter** — most often intermittently from the husky **pre-push** hook, while the same suite passes when run directly. The failing run's vitest banner shows a lowercase `c:/…` root; passing runs show uppercase `C:/…`.
+
+One-line cause: an absolute-root `import.meta.glob("/src/…")` makes Vite relativize two paths (`importerDir` vs root-crawled `matchedFile`) that can disagree on drive-letter **case** on Windows (git-bash lowercases cwd for the hook). Durable fix is a **relative** glob (`../…`) so both operands share the importer origin. It's **known-flaky and usually clears on a re-push** — don't treat a single red pre-push with this exact signature as your change breaking. Full diagnosis, the fix pattern, a verify one-liner, and the weaker root-pin alternative are in the linked doc.
