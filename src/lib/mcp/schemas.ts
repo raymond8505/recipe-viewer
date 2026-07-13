@@ -25,7 +25,36 @@ const schemaRecipeJsonSchema = {
     cookTime: { type: "string", description: "ISO 8601 duration (e.g. PT30M)" },
     prepTime: { type: "string", description: "ISO 8601 duration" },
     totalTime: { type: "string", description: "ISO 8601 duration" },
-    recipeYield: { oneOf: [{ type: "string" }, { type: "array", items: { type: "string" } }] },
+    recipeYield: {
+      description:
+        'Recipe yield. PREFERRED: a QuantitativeValue object — value = serving count, unitText = its label (e.g. 4 / "kebabs"); optional valueReference = the recipe\'s raw weight/volume (value + unitText, e.g. 454 / "g"), which drives the per-serving nutrition basis shown in the app. A plain string like "4 servings" is still accepted but DEPRECATED — prefer the structured object.',
+      oneOf: [
+        {
+          type: "object",
+          description: "Preferred structured form (Schema.org/QuantitativeValue).",
+          properties: {
+            "@type": { type: "string", enum: ["QuantitativeValue"] },
+            value: { type: "number", description: "Serving count (the SSoT)" },
+            unitText: { type: "string", description: 'Serving label, e.g. "servings" or "kebabs"' },
+            valueReference: {
+              type: "object",
+              description: "Raw weight/volume of the whole recipe, used for per-serving nutrition.",
+              properties: {
+                "@type": { type: "string", enum: ["QuantitativeValue"] },
+                value: { type: "number", description: "Magnitude, e.g. 454" },
+                unitText: { type: "string", description: 'Unit, e.g. "g" or "ml"' },
+              },
+            },
+          },
+        },
+        { type: "string", description: "Deprecated: prefer the QuantitativeValue object." },
+        {
+          type: "array",
+          items: { type: "string" },
+          description: "Deprecated: prefer the QuantitativeValue object.",
+        },
+      ],
+    },
     recipeCuisine: { type: "string" },
     recipeCategory: { oneOf: [{ type: "string" }, { type: "array", items: { type: "string" } }] },
     recipeIngredient: {

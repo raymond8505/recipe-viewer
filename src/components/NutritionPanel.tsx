@@ -21,7 +21,9 @@ export default function NutritionPanel({ recipe, onSplitPortions }: NutritionPan
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-baseline gap-2">
           <h2 className="text-xl text-gray-900">Nutrition</h2>
-          <span className="text-sm text-gray-500">{recipe.nutritionLabel}</span>
+          <span className="text-sm text-gray-500">
+            {recipe.nutritionUnitLabel}
+          </span>
         </div>
         {canStep && (
           <div className="flex items-center gap-1">

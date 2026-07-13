@@ -1,5 +1,6 @@
 import ServingsControl from "@/components/ServingsControl";
 import type { SchemaRecipe } from "@/types/recipe";
+import { getYieldLabel, getYieldUnit } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
 interface TimeYieldStatsProps {
@@ -66,14 +67,10 @@ export default function TimeYieldStats({
             <ServingsControl
               servings={currentServings}
               onChange={onServingsChange}
+              unitLabel={getYieldUnit(recipeYield) ?? undefined}
             />
           ) : (
-            <Stat
-              label="Servings"
-              value={
-                Array.isArray(recipeYield) ? recipeYield[0] : recipeYield
-              }
-            />
+            <Stat label="Servings" value={getYieldLabel(recipeYield) ?? ""} />
           ))}
       </div>
     </section>

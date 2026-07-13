@@ -41,4 +41,18 @@ describe("TimeYieldStats", () => {
     await userEvent.click(screen.getByLabelText("Decrease servings"));
     expect(onServingsChange).toHaveBeenCalledWith(3);
   });
+
+  it("labels the stepper with the yield unitText for an object yield", () => {
+    render(
+      <TimeYieldStats
+        recipeYield={{ "@type": "QuantitativeValue", value: 4, unitText: "kebabs" }}
+        currentServings={4}
+        onServingsChange={vi.fn()}
+      />,
+    );
+    // "kebabs" surfaces as the stepper's label instead of the generic "Servings".
+    expect(screen.getByText("kebabs")).toBeInTheDocument();
+    expect(screen.getByText("4")).toBeInTheDocument();
+    expect(screen.queryByText("Servings")).not.toBeInTheDocument();
+  });
 });

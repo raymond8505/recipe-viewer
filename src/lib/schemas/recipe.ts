@@ -13,6 +13,20 @@ export const ingredientSchema = z.union([
   z.object({ name: z.string(), group: z.string().optional() }),
 ]);
 
+// Schema.org/QuantitativeValue — the structured form of recipeYield. Top level:
+// value = serving count, unitText = its label. valueReference nests the raw
+// weight/volume (value + unitText). One nesting level is enough for our use; a
+// deeper valueReference.valueReference is simply stripped.
+const quantitativeValueLeaf = z.object({
+  "@type": z.literal("QuantitativeValue").optional(),
+  value: z.number().optional(),
+  unitText: z.string().optional(),
+});
+
+export const quantitativeValueSchema = quantitativeValueLeaf.extend({
+  valueReference: quantitativeValueLeaf.optional(),
+});
+
 export const howToStepSchema = z.object({
   "@type": z.string().optional(),
   text: z.string(),
@@ -42,7 +56,9 @@ export const schemaRecipeSchema = z
     cookTime: z.string().optional(),
     prepTime: z.string().optional(),
     totalTime: z.string().optional(),
-    recipeYield: z.union([z.string(), z.array(z.string())]).optional(),
+    recipeYield: z
+      .union([z.string(), z.array(z.string()), quantitativeValueSchema])
+      .optional(),
     recipeCuisine: z.string().optional(),
     recipeCategory: z.union([z.string(), z.array(z.string())]).optional(),
     recipeIngredient: z.array(ingredientSchema).optional(),

@@ -81,6 +81,7 @@ import { nanoid } from "nanoid";
 import type {
   HowToSection,
   HowToStep,
+  QuantitativeValue,
   RecipeIngredient,
   SchemaRecipe,
 } from "@/types/recipe";
@@ -88,7 +89,9 @@ import type {
   EditableIngredients,
   EditableInstructions,
   EditableStep,
+  EditableYield,
 } from "@/types/editor";
+import { parseServings } from "./units";
 
 /**
  * Get the ingredient text from a string or RecipeIngredient object.
@@ -133,6 +136,62 @@ export function getFirstImage(
   if (!image) return null;
   if (Array.isArray(image)) return image[0]?.trimEnd() ?? null;
   return image.trimEnd();
+}
+
+/**
+ * Human-readable label for a `recipeYield` in any form: QuantitativeValue →
+ * "value unitText" ("4 kebabs"); string → itself; array → its first element.
+ * Returns null when there's nothing to show.
+ */
+export function getYieldLabel(
+  recipeYield: SchemaRecipe["recipeYield"],
+): string | null {
+  if (recipeYield == null) return null;
+  if (typeof recipeYield === "object" && !Array.isArray(recipeYield)) {
+    const parts = [recipeYield.value, recipeYield.unitText].filter(
+      (p) => p != null && p !== "",
+    );
+    return parts.length ? parts.join(" ") : null;
+  }
+  const raw = Array.isArray(recipeYield) ? recipeYield[0] : recipeYield;
+  return raw || null;
+}
+
+/**
+ * The raw weight/volume reference on an object-form `recipeYield`, or null for
+ * string/array/absent yields (which have no valueReference). Used to compute
+ * the per-serving weight shown in the nutrition panel.
+ */
+export function getYieldValueReference(
+  recipeYield: SchemaRecipe["recipeYield"],
+): QuantitativeValue | null {
+  if (
+    recipeYield != null &&
+    typeof recipeYield === "object" &&
+    !Array.isArray(recipeYield)
+  ) {
+    return recipeYield.valueReference ?? null;
+  }
+  return null;
+}
+
+/**
+ * The serving-unit label for a `recipeYield` — a QuantitativeValue's `unitText`
+ * (e.g. "kebabs"), used to label the servings stepper so the unit stays visible
+ * while scaling. null for string/array/absent yields (the stepper falls back to
+ * the generic "Servings").
+ */
+export function getYieldUnit(
+  recipeYield: SchemaRecipe["recipeYield"],
+): string | null {
+  if (
+    recipeYield != null &&
+    typeof recipeYield === "object" &&
+    !Array.isArray(recipeYield)
+  ) {
+    return recipeYield.unitText?.trim() || null;
+  }
+  return null;
 }
 
 /**
@@ -270,7 +329,7 @@ export function schemaToMarkdown(schema: SchemaRecipe): string {
   if (schema.description) blocks.push(schema.description);
 
   const meta: string[] = [];
-  const yieldValue = toArray(schema.recipeYield)[0];
+  const yieldValue = getYieldLabel(schema.recipeYield);
   if (yieldValue) meta.push(`Yield: ${yieldValue}`);
   const prep = formatDuration(schema.prepTime);
   if (prep) meta.push(`Prep: ${prep}`);
@@ -441,6 +500,64 @@ export function editableInstructionsToSchema(
     } else {
       result.push(...steps);
     }
+  }
+  return result;
+}
+
+/** Stored `recipeYield` (any form) → editor draft fields. Object → its four
+ *  parts; a legacy string/array → the leading number as `servings` and the
+ *  remainder as `unit` (or, for word-first strings like "Serves 4", the parsed
+ *  count with a blank unit). */
+export function schemaToEditableYield(
+  recipeYield: SchemaRecipe["recipeYield"],
+): EditableYield {
+  const empty: EditableYield = {
+    servings: "",
+    unit: "",
+    weight: "",
+    weightUnit: "",
+  };
+  if (recipeYield == null) return empty;
+  if (typeof recipeYield === "object" && !Array.isArray(recipeYield)) {
+    const vr = recipeYield.valueReference;
+    return {
+      servings: recipeYield.value != null ? String(recipeYield.value) : "",
+      unit: recipeYield.unitText ?? "",
+      weight: vr?.value != null ? String(vr.value) : "",
+      weightUnit: vr?.unitText ?? "",
+    };
+  }
+  const raw = (Array.isArray(recipeYield) ? recipeYield[0] : recipeYield) ?? "";
+  const count = parseServings(raw); // midpoint for ranges, consistent with scaling
+  const leading = raw.match(/^\s*[\d.,/\s-]*\d\s*(.*)$/); // remainder after a leading number
+  return {
+    ...empty,
+    servings: count != null ? String(count) : "",
+    unit: count != null ? (leading ? leading[1].trim() : "") : raw.trim(),
+  };
+}
+
+/** Editor draft fields → stored `recipeYield`. Returns a QuantitativeValue when
+ *  `servings` is numeric (migrating legacy strings to the object form on save),
+ *  else undefined (field dropped). A positive `weight` adds the valueReference;
+ *  blank/zero weight omits it. */
+export function editableYieldToSchema(
+  fields: EditableYield,
+): QuantitativeValue | undefined {
+  const value = parseFloat(fields.servings);
+  if (!Number.isFinite(value)) return undefined;
+  const result: QuantitativeValue = { "@type": "QuantitativeValue", value };
+  const unit = fields.unit.trim();
+  if (unit) result.unitText = unit;
+  const weight = parseFloat(fields.weight);
+  if (Number.isFinite(weight) && weight > 0) {
+    const ref: QuantitativeValue = {
+      "@type": "QuantitativeValue",
+      value: weight,
+    };
+    const weightUnit = fields.weightUnit.trim();
+    if (weightUnit) ref.unitText = weightUnit;
+    result.valueReference = ref;
   }
   return result;
 }

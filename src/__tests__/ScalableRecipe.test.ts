@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { ScalableRecipe } from "@/lib/ScalableRecipe";
-import { scalableBaseSchema as baseSchema } from "@/fixtures";
+import { scalableBaseSchema as baseSchema, quantitativeValueYield } from "@/fixtures";
 
 describe("ScalableRecipe — construction", () => {
   it("parses base servings from recipeYield", () => {
@@ -311,5 +311,46 @@ describe("ScalableRecipe — reset", () => {
   it("returns same instance when already at default", () => {
     const a = new ScalableRecipe(baseSchema);
     expect(a.reset()).toBe(a);
+  });
+});
+
+describe("ScalableRecipe — serving weight (yield valueReference)", () => {
+  // quantitativeValueYield: 4 kebabs from 454 g → 454/4 = 113.5 g per serving.
+  const schema = { ...baseSchema, recipeYield: quantitativeValueYield };
+
+  it("servingWeight is valueReference.value / baseServings at rest", () => {
+    const r = new ScalableRecipe(schema);
+    expect(r.baseServings).toBe(4);
+    expect(r.servingWeight).toEqual({ value: 113.5, unitText: "g" });
+  });
+
+  it("servingWeight stays constant when scaling servings (weight and count scale together)", () => {
+    expect(new ScalableRecipe(schema).scalePortionsTo(8).servingWeight?.value).toBe(
+      113.5,
+    );
+  });
+
+  it("servingWeight halves when split into twice as many portions", () => {
+    expect(new ScalableRecipe(schema).splitPortions(8).servingWeight?.value).toBe(
+      56.75,
+    );
+  });
+
+  it("servingWeight is null for a legacy string yield (no valueReference)", () => {
+    expect(new ScalableRecipe(baseSchema).servingWeight).toBeNull();
+  });
+
+  it("nutritionUnitLabel reads 'per <weight> serving' with a valueReference", () => {
+    expect(new ScalableRecipe(schema).nutritionUnitLabel).toBe("per 114 g serving");
+  });
+
+  it("nutritionUnitLabel switches the noun to 'portion' when split", () => {
+    expect(new ScalableRecipe(schema).splitPortions(8).nutritionUnitLabel).toBe(
+      "per 57 g portion",
+    );
+  });
+
+  it("nutritionUnitLabel falls back to the plain label without a valueReference", () => {
+    expect(new ScalableRecipe(baseSchema).nutritionUnitLabel).toBe("per serving");
   });
 });

@@ -261,6 +261,20 @@ describe("parseServings", () => {
   it("returns null when no number present", () => {
     expect(parseServings("a few servings")).toBeNull();
   });
+
+  it("reads value from a QuantitativeValue object", () => {
+    expect(
+      parseServings({ "@type": "QuantitativeValue", value: 4, unitText: "kebabs" }),
+    ).toBe(4);
+  });
+
+  it("keeps a fractional QuantitativeValue value unrounded", () => {
+    expect(parseServings({ value: 2.5 })).toBe(2.5);
+  });
+
+  it("returns null for a QuantitativeValue with no numeric value", () => {
+    expect(parseServings({ unitText: "kebabs" })).toBeNull();
+  });
 });
 
 describe("parseAmountToken", () => {

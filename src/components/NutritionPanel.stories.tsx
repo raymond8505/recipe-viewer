@@ -3,7 +3,7 @@ import { useState } from "react";
 import { userEvent, fn } from "storybook/test";
 import NutritionPanel from "./NutritionPanel";
 import { ScalableRecipe } from "@/lib/ScalableRecipe";
-import { makeScalableRecipe } from "@/fixtures";
+import { makeScalableRecipe, quantitativeValueYield } from "@/fixtures";
 import type { SchemaRecipe } from "@/types/recipe";
 
 type Nutrition = NonNullable<SchemaRecipe["nutrition"]>;
@@ -74,6 +74,20 @@ export const PartialData: Story = {
       recipeIngredient: undefined,
       recipeYield: "2 servings",
       nutrition: { calories: "350 kcal", proteinContent: "22 g" },
+    }),
+  },
+};
+
+/**
+ * A structured (QuantitativeValue) yield with a valueReference weight: the
+ * label reads the real per-serving basis — "per 114 g serving" (454 g / 4).
+ */
+export const WithYieldWeight: Story = {
+  args: {
+    initial: makeScalableRecipe({
+      recipeIngredient: undefined,
+      recipeYield: quantitativeValueYield,
+      nutrition: fullNutrition,
     }),
   },
 };

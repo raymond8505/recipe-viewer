@@ -467,6 +467,22 @@ describe("RecipeDetail — controls section", () => {
     expect(textarea.value).toBe("A hearty dish.");
   });
 
+  it("seeds the yield editor from recipeYield in edit mode", async () => {
+    render(
+      <RecipeDetail
+        recipe={makeRecipe({ recipeYield: "4 servings" })}
+        isLoggedIn={true}
+      />,
+    );
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /^edit$/i }));
+    });
+    expect((screen.getByLabelText("Servings") as HTMLInputElement).value).toBe("4");
+    expect(
+      (screen.getByLabelText("Serving unit") as HTMLInputElement).value,
+    ).toBe("servings");
+  });
+
   it("shows notes textarea in edit mode even when schema has no notes", async () => {
     render(<RecipeDetail recipe={makeRecipe()} isLoggedIn={true} />);
     expect(screen.queryByText("Notes")).toBeNull();

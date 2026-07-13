@@ -1,6 +1,8 @@
 // Volume base unit: ml
 // Weight base unit: g
 
+import type { QuantitativeValue } from "@/types/recipe";
+
 export type UnitGroup = "volume" | "weight";
 
 interface UnitDef {
@@ -250,9 +252,16 @@ export function parseIngredient(str: string): ParsedIngredient | null {
 
 /**
  * Extract the recipe yield as a single number.
- * Ranges collapse to their midpoint (e.g. "6-8 servings" → 7).
+ * - QuantitativeValue object → its `value` verbatim (authoritative, no rounding).
+ * - String/array → first numeric token; ranges collapse to their midpoint
+ *   (e.g. "6-8 servings" → 7).
  */
-export function parseServings(yld: string | string[] | undefined | null): number | null {
+export function parseServings(
+  yld: string | string[] | QuantitativeValue | undefined | null,
+): number | null {
+  if (yld && typeof yld === "object" && !Array.isArray(yld)) {
+    return typeof yld.value === "number" ? yld.value : null;
+  }
   const raw = Array.isArray(yld) ? yld[0] : yld;
   if (!raw) return null;
   const m = raw.match(

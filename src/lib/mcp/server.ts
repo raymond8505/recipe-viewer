@@ -63,14 +63,14 @@ export const TOOLS: ToolDefinition[] = [
   {
     name: "create_recipe",
     description:
-      "Insert a new recipe row. Requires source and a SchemaRecipe object; defaults status to 'draft'. url is OPTIONAL — when omitted it defaults to the recipe's own canonical page on this instance (<base-url>/recipes/<new-uuid>). cookingNotes is read-only for agents: if present it is ignored (the call still succeeds) and the response carries a 'warnings' note explaining why.",
+      "Insert a new recipe row. Requires source and a SchemaRecipe object; defaults status to 'draft'. url is OPTIONAL — when omitted it defaults to the recipe's own canonical page on this instance (<base-url>/recipes/<new-uuid>). Set recipeYield as a structured QuantitativeValue — value = serving count, unitText = its label, and valueReference = the recipe's raw weight/volume (value + unitText) when known, since it drives the per-serving nutrition; a plain-string yield is accepted but deprecated. cookingNotes is read-only for agents: if present it is ignored (the call still succeeds) and the response carries a 'warnings' note explaining why.",
     inputSchema: TOOL_SCHEMAS.create_recipe,
     call: (args) => createRecipe(recipeCreateInputSchema.parse(args)),
   },
   {
     name: "update_recipe",
     description:
-      "Patch fields on an existing recipe. The schema field is merged into existing metadata.schema (not replaced). cookingNotes is read-only for agents: if present it is ignored (the call still succeeds) and the response carries a 'warnings' note. Use clear_cooking_notes to clear it.",
+      "Patch fields on an existing recipe. The schema field is merged into existing metadata.schema (not replaced). Prefer a structured QuantitativeValue for recipeYield (value = serving count, unitText = its label, valueReference = raw weight/volume for per-serving nutrition); plain-string yields are accepted but deprecated. cookingNotes is read-only for agents: if present it is ignored (the call still succeeds) and the response carries a 'warnings' note. Use clear_cooking_notes to clear it.",
     inputSchema: TOOL_SCHEMAS.update_recipe,
     call: (args) => updateRecipe(recipeUpdateInputSchema.parse(args)),
   },

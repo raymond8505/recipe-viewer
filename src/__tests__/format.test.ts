@@ -16,6 +16,11 @@ import {
   editableIngredientsToSchema,
   schemaToEditableInstructions,
   editableInstructionsToSchema,
+  getYieldLabel,
+  getYieldValueReference,
+  getYieldUnit,
+  schemaToEditableYield,
+  editableYieldToSchema,
 } from "@/lib/format";
 import type {
   EditableIngredients,
@@ -123,6 +128,71 @@ describe("getFirstImage", () => {
 
   it("returns null for undefined", () => {
     expect(getFirstImage(undefined)).toBeNull();
+  });
+});
+
+describe("getYieldLabel", () => {
+  it("returns a plain string as-is", () => {
+    expect(getYieldLabel("4 servings")).toBe("4 servings");
+  });
+
+  it("returns the first element of an array", () => {
+    expect(getYieldLabel(["6 servings", "6"])).toBe("6 servings");
+  });
+
+  it("joins value and unitText for a QuantitativeValue", () => {
+    expect(
+      getYieldLabel({ "@type": "QuantitativeValue", value: 4, unitText: "kebabs" }),
+    ).toBe("4 kebabs");
+  });
+
+  it("returns just the value when a QuantitativeValue has no unit", () => {
+    expect(getYieldLabel({ value: 4 })).toBe("4");
+  });
+
+  it("returns null for a QuantitativeValue with nothing to show", () => {
+    expect(getYieldLabel({})).toBeNull();
+  });
+
+  it("returns null for undefined", () => {
+    expect(getYieldLabel(undefined)).toBeNull();
+  });
+});
+
+describe("getYieldValueReference", () => {
+  it("returns the valueReference of a QuantitativeValue", () => {
+    expect(
+      getYieldValueReference({
+        value: 4,
+        valueReference: { value: 454, unitText: "g" },
+      }),
+    ).toEqual({ value: 454, unitText: "g" });
+  });
+
+  it("returns null when a QuantitativeValue has no valueReference", () => {
+    expect(getYieldValueReference({ value: 4, unitText: "kebabs" })).toBeNull();
+  });
+
+  it("returns null for a string yield", () => {
+    expect(getYieldValueReference("4 servings")).toBeNull();
+  });
+
+  it("returns null for undefined", () => {
+    expect(getYieldValueReference(undefined)).toBeNull();
+  });
+});
+
+describe("getYieldUnit", () => {
+  it("returns the unitText of a QuantitativeValue", () => {
+    expect(getYieldUnit({ value: 4, unitText: "kebabs" })).toBe("kebabs");
+  });
+
+  it("returns null when a QuantitativeValue has no unitText", () => {
+    expect(getYieldUnit({ value: 4 })).toBeNull();
+  });
+
+  it("returns null for a string yield", () => {
+    expect(getYieldUnit("4 servings")).toBeNull();
   });
 });
 
@@ -354,6 +424,95 @@ describe("schemaToEditableInstructions / editableInstructionsToSchema", () => {
   });
 });
 
+describe("schemaToEditableYield / editableYieldToSchema", () => {
+  it("round-trips a QuantitativeValue with a valueReference", () => {
+    const original = {
+      "@type": "QuantitativeValue" as const,
+      value: 4,
+      unitText: "kebabs",
+      valueReference: {
+        "@type": "QuantitativeValue" as const,
+        value: 454,
+        unitText: "g",
+      },
+    };
+    const fields = schemaToEditableYield(original);
+    expect(fields).toEqual({
+      servings: "4",
+      unit: "kebabs",
+      weight: "454",
+      weightUnit: "g",
+    });
+    expect(editableYieldToSchema(fields)).toEqual(original);
+  });
+
+  it("seeds servings + unit from a legacy string", () => {
+    expect(schemaToEditableYield("4 servings")).toEqual({
+      servings: "4",
+      unit: "servings",
+      weight: "",
+      weightUnit: "",
+    });
+  });
+
+  it("collapses a legacy range to its midpoint (consistent with parseServings)", () => {
+    expect(schemaToEditableYield("6-8 servings").servings).toBe("7");
+  });
+
+  it("keeps the count but drops the word for a word-first string", () => {
+    expect(schemaToEditableYield("Serves 4")).toEqual({
+      servings: "4",
+      unit: "",
+      weight: "",
+      weightUnit: "",
+    });
+  });
+
+  it("returns all-blank fields for an absent yield", () => {
+    expect(schemaToEditableYield(undefined)).toEqual({
+      servings: "",
+      unit: "",
+      weight: "",
+      weightUnit: "",
+    });
+  });
+
+  it("migrates a legacy string to a QuantitativeValue object on build", () => {
+    expect(
+      editableYieldToSchema({
+        servings: "4",
+        unit: "servings",
+        weight: "",
+        weightUnit: "",
+      }),
+    ).toEqual({ "@type": "QuantitativeValue", value: 4, unitText: "servings" });
+  });
+
+  it("omits the valueReference when weight is blank or non-positive", () => {
+    expect(
+      editableYieldToSchema({ servings: "4", unit: "", weight: "", weightUnit: "" }),
+    ).toEqual({ "@type": "QuantitativeValue", value: 4 });
+    const zeroWeight = editableYieldToSchema({
+      servings: "4",
+      unit: "",
+      weight: "0",
+      weightUnit: "g",
+    });
+    expect(zeroWeight?.valueReference).toBeUndefined();
+  });
+
+  it("returns undefined when servings is blank/non-numeric (field dropped)", () => {
+    expect(
+      editableYieldToSchema({
+        servings: "",
+        unit: "kebabs",
+        weight: "",
+        weightUnit: "",
+      }),
+    ).toBeUndefined();
+  });
+});
+
 describe("toSchemaOrgJsonLd", () => {
   it("excludes notes from JSON-LD output", () => {
     const result = toSchemaOrgJsonLd({ name: "Pasta", notes: "use fresh herbs" }) as Record<string, unknown>;
@@ -382,6 +541,26 @@ describe("toSchemaOrgJsonLd", () => {
       recipeIngredient: [{ name: "2 cups flour", group: "Dough" }, "1 tsp salt"],
     }) as Record<string, unknown>;
     expect(result.recipeIngredient).toEqual(["2 cups flour", "1 tsp salt"]);
+  });
+
+  it("passes a QuantitativeValue recipeYield through unchanged", () => {
+    // All keys (@type/value/unitText/valueReference) are standard Schema.org,
+    // so no sanitization is needed — the object survives verbatim.
+    const recipeYield = {
+      "@type": "QuantitativeValue" as const,
+      value: 4,
+      unitText: "kebabs",
+      valueReference: {
+        "@type": "QuantitativeValue" as const,
+        value: 454,
+        unitText: "g",
+      },
+    };
+    const result = toSchemaOrgJsonLd({
+      name: "Kebabs",
+      recipeYield,
+    }) as Record<string, unknown>;
+    expect(result.recipeYield).toEqual(recipeYield);
   });
 });
 
