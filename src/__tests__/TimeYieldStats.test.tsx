@@ -106,6 +106,9 @@ describe("TimeYieldStats", () => {
     expect(screen.getByLabelText("Prep time")).toHaveValue("15 min");
     expect(screen.getByLabelText("Cook time")).toHaveValue("");
     expect(screen.getByLabelText("Total time")).toHaveValue("");
+    // Every editable time cell shows its format hint, not just servings/yield.
+    expect(screen.getByText("e.g. 15 min")).toBeInTheDocument();
+    expect(screen.getByText("e.g. 1 hr 30 min")).toBeInTheDocument();
   });
 
   it("calls onTimeChange with the field key as a time is edited", async () => {

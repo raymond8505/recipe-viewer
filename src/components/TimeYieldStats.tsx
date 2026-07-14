@@ -59,9 +59,14 @@ export default function TimeYieldStats({
     return null;
 
   const timeStats = [
-    { label: "Prep time", value: prepTime, field: "prep" },
-    { label: "Cook time", value: cookTime, field: "cook" },
-    { label: "Total time", value: totalTime, field: "total" },
+    { label: "Prep time", value: prepTime, field: "prep", hint: "e.g. 15 min" },
+    { label: "Cook time", value: cookTime, field: "cook", hint: "e.g. 45 min" },
+    {
+      label: "Total time",
+      value: totalTime,
+      field: "total",
+      hint: "e.g. 1 hr 30 min",
+    },
   ] as const;
 
   const weightLabel = getYieldWeightLabel(recipeYield);
@@ -75,7 +80,7 @@ export default function TimeYieldStats({
           for another ~7rem track, so a 5th cell (e.g. Total yield) sits inline
           on wide screens instead of forced onto its own row. */}
       <div className="max-w-3xl mx-auto grid grid-cols-[repeat(auto-fit,minmax(7rem,1fr))] gap-4 px-4 sm:px-6 py-4">
-        {timeStats.map(({ label, value, field }) =>
+        {timeStats.map(({ label, value, field, hint }) =>
           editing || value ? (
             <Stat
               key={field}
@@ -83,6 +88,7 @@ export default function TimeYieldStats({
               value={value ?? ""}
               editing={editing}
               onChange={editing ? (v) => onTimeChange?.(field, v) : undefined}
+              hint={editing ? hint : undefined}
             />
           ) : null,
         )}
@@ -102,7 +108,7 @@ export default function TimeYieldStats({
               value={yieldWeight ?? ""}
               editing
               onChange={(v) => onYieldChange?.("weight", v)}
-              hint="eg 50 g or 50 ml"
+              hint="e.g. 50 g or 50 ml"
             />
           </>
         ) : (
