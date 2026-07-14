@@ -12,7 +12,12 @@ const mockGetSupabaseClient = vi.hoisted(() => vi.fn());
 const mockGenerateEmbedding = vi.hoisted(() => vi.fn().mockResolvedValue(null));
 
 vi.mock("@/lib/features", () => ({ getFeatures: () => mockFeatures }));
-vi.mock("@/lib/supabase", () => ({ getSupabaseClient: mockGetSupabaseClient }));
+// importOriginal keeps toVectorLiteral real — the embedding tests assert the
+// actual bracketed pgvector literal the write paths produce.
+vi.mock("@/lib/supabase", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/supabase")>();
+  return { ...actual, getSupabaseClient: mockGetSupabaseClient };
+});
 vi.mock("@/lib/embedding", () => ({ generateEmbedding: mockGenerateEmbedding }));
 
 import {

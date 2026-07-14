@@ -10,3 +10,9 @@ export function getSupabaseAdminClient() {
     auth: { persistSession: false, autoRefreshToken: false },
   });
 }
+
+// Format a float array as a pgvector literal ("[v1,v2,...]"). supabase-js sends
+// values as JSON via PostgREST; a `vector` column accepts this bracketed string.
+export function toVectorLiteral(values: number[]): string {
+  return `[${values.join(",")}]`;
+}

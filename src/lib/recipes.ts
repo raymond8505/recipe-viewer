@@ -1,4 +1,4 @@
-import { getSupabaseClient } from "./supabase";
+import { getSupabaseClient, toVectorLiteral } from "./supabase";
 import { getFeatures } from "./features";
 import { normalizeRecipeInstructions, schemaToMarkdown } from "./format";
 import { generateEmbedding } from "./embedding";
@@ -19,12 +19,6 @@ export class RecipeRepoError extends Error {
 }
 
 const RECIPE_COLUMNS = "id, url, source, status, metadata";
-
-// Format a float array as a pgvector literal ("[v1,v2,...]"). supabase-js sends
-// values as JSON via PostgREST; a `vector` column accepts this bracketed string.
-function toVectorLiteral(values: number[]): string {
-  return `[${values.join(",")}]`;
-}
 
 export interface CreateRecipeInput {
   // Optional explicit primary key. When provided (e.g. so the caller can build

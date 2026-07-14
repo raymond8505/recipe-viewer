@@ -34,3 +34,50 @@ export function makeSupabaseClient({
     })),
   };
 }
+
+export interface SupabaseQueueResponse {
+  data?: unknown;
+  error?: { message?: string; code?: string } | null;
+  count?: number | null;
+}
+
+// Queue-based mock for repo tests whose query chains vary per call
+// (select/insert/update/delete/rpc with order/range/ilike modifiers — richer
+// than makeSupabaseClient covers). Every chain method returns the same builder;
+// awaiting the builder (Supabase builders are thenables) or calling .single()
+// resolves the NEXT queued response. Assert on chain calls via
+// client.from.mock.results[n].value.<method>.
+export function makeSupabaseQueue(responses: SupabaseQueueResponse[]) {
+  let i = 0;
+  const next = (): SupabaseQueueResponse =>
+    responses[i++] ?? { data: null, error: null };
+
+  const makeBuilder = () => {
+    const builder: Record<string, unknown> = {};
+    for (const method of [
+      "select",
+      "insert",
+      "update",
+      "delete",
+      "eq",
+      "or",
+      "ilike",
+      "order",
+      "range",
+      "limit",
+    ]) {
+      builder[method] = vi.fn(() => builder);
+    }
+    builder.single = vi.fn(() => Promise.resolve(next()));
+    builder.then = (
+      onFulfilled: (value: SupabaseQueueResponse) => unknown,
+      onRejected?: (reason: unknown) => unknown,
+    ) => Promise.resolve(next()).then(onFulfilled, onRejected);
+    return builder;
+  };
+
+  return {
+    from: vi.fn(() => makeBuilder()),
+    rpc: vi.fn(() => Promise.resolve(next())),
+  };
+}
