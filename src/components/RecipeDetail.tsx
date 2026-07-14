@@ -287,6 +287,15 @@ export default function RecipeDetail({
         onServingsChange={scalePortionsTo}
         editing={isEditing}
         onTimeChange={(field, value) => patch({ [`${field}Time`]: value })}
+        yieldServings={draft.yieldServings}
+        yieldWeight={draft.yieldWeight}
+        onYieldChange={(field, value) =>
+          patch(
+            field === "servings"
+              ? { yieldServings: value }
+              : { yieldWeight: value },
+          )
+        }
       />
 
       <div className="max-w-3xl lg:max-w-5xl mx-auto">

@@ -9,6 +9,8 @@ interface StatProps {
   editing?: boolean;
   /** Required in edit mode; receives the raw edited string. */
   onChange?: (value: string) => void;
+  /** Edit-mode placeholder, shown when the value is empty (e.g. "e.g. 4 servings"). */
+  placeholder?: string;
 }
 
 /**
@@ -19,7 +21,13 @@ interface StatProps {
  * height so cells share a vertical center and the band doesn't shift between
  * modes.
  */
-export default function Stat({ label, value, editing, onChange }: StatProps) {
+export default function Stat({
+  label,
+  value,
+  editing,
+  onChange,
+  placeholder,
+}: StatProps) {
   return (
     <div className="text-center">
       <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">
@@ -31,6 +39,7 @@ export default function Stat({ label, value, editing, onChange }: StatProps) {
             value={value}
             onChange={(e) => onChange?.(e.target.value)}
             aria-label={label}
+            placeholder={placeholder}
             className="text-center font-semibold text-gray-900"
           />
         </div>

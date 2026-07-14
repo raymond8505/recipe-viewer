@@ -1,7 +1,7 @@
 import ServingsControl from "@/components/ServingsControl";
 import Stat from "@/components/Stat";
 import type { SchemaRecipe } from "@/types/recipe";
-import { getYieldLabel, getYieldUnit } from "@/lib/format";
+import { getYieldLabel, getYieldUnit, getYieldWeightLabel } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
 interface TimeYieldStatsProps {
@@ -17,13 +17,18 @@ interface TimeYieldStatsProps {
   currentServings?: number | null;
   onServingsChange?: (n: number) => void;
   /**
-   * When true, the three time cells become editable text inputs (and are all
-   * shown even when blank, so a missing time can be added). The yield/servings
-   * cell is unchanged — its editing is a separate follow-up.
+   * When true, the time and yield cells become editable text inputs (all shown
+   * even when blank, so a missing time/yield can be added — including upgrading
+   * a string-only yield to a QuantitativeValue).
    */
   editing?: boolean;
   /** Receives the edited display string for a time cell. Required when editing. */
   onTimeChange?: (field: "prep" | "cook" | "total", value: string) => void;
+  /** Edit-mode yield labels: the serving count and the raw weight/volume. */
+  yieldServings?: string;
+  yieldWeight?: string;
+  /** Receives the edited yield display string. Required when editing. */
+  onYieldChange?: (field: "servings" | "weight", value: string) => void;
   className?: string;
 }
 
@@ -44,9 +49,12 @@ export default function TimeYieldStats({
   onServingsChange,
   editing,
   onTimeChange,
+  yieldServings,
+  yieldWeight,
+  onYieldChange,
   className,
 }: TimeYieldStatsProps) {
-  // While editing, the band always shows (empty time cells can be filled in).
+  // While editing, the band always shows (empty time/yield cells can be filled).
   if (!editing && !prepTime && !cookTime && !totalTime && !recipeYield)
     return null;
 
@@ -55,6 +63,8 @@ export default function TimeYieldStats({
     { label: "Cook time", value: cookTime, field: "cook" },
     { label: "Total time", value: totalTime, field: "total" },
   ] as const;
+
+  const weightLabel = getYieldWeightLabel(recipeYield);
 
   return (
     <section
@@ -75,16 +85,45 @@ export default function TimeYieldStats({
             />
           ) : null,
         )}
-        {recipeYield &&
-          (currentServings != null && onServingsChange ? (
-            <ServingsControl
-              servings={currentServings}
-              onChange={onServingsChange}
-              unitLabel={getYieldUnit(recipeYield) ?? undefined}
+        {editing ? (
+          <>
+            <Stat
+              label="Servings"
+              value={yieldServings ?? ""}
+              editing
+              onChange={(v) => onYieldChange?.("servings", v)}
+              placeholder="e.g. 4 servings"
             />
-          ) : (
-            <Stat label="Servings" value={getYieldLabel(recipeYield) ?? ""} />
-          ))}
+            {/* Always shown while editing so a string-only yield can be
+                upgraded to a QuantitativeValue with a weight/volume basis. */}
+            <Stat
+              label="Yield weight"
+              value={yieldWeight ?? ""}
+              editing
+              onChange={(v) => onYieldChange?.("weight", v)}
+              placeholder="e.g. 454 g"
+            />
+          </>
+        ) : (
+          <>
+            {recipeYield &&
+              (currentServings != null && onServingsChange ? (
+                <ServingsControl
+                  servings={currentServings}
+                  onChange={onServingsChange}
+                  unitLabel={getYieldUnit(recipeYield) ?? undefined}
+                />
+              ) : (
+                <Stat
+                  label="Servings"
+                  value={getYieldLabel(recipeYield) ?? ""}
+                />
+              ))}
+            {/* Read mode surfaces the weight only for an object yield that
+                actually carries a valueReference. */}
+            {weightLabel && <Stat label="Yield weight" value={weightLabel} />}
+          </>
+        )}
       </div>
     </section>
   );

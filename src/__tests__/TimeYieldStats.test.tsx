@@ -2,6 +2,7 @@ import { describe, it, expect, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import TimeYieldStats from "@/components/TimeYieldStats";
+import { quantitativeValueYield } from "@/fixtures";
 
 describe("TimeYieldStats", () => {
   it("renders nothing when there are no stats", () => {
@@ -40,6 +41,56 @@ describe("TimeYieldStats", () => {
     expect(onServingsChange).toHaveBeenCalledWith(5);
     await userEvent.click(screen.getByLabelText("Decrease servings"));
     expect(onServingsChange).toHaveBeenCalledWith(3);
+  });
+
+  it("shows a static Yield weight stat for an object yield with a valueReference", () => {
+    render(<TimeYieldStats recipeYield={quantitativeValueYield} />);
+    expect(screen.getByText("Yield weight")).toBeInTheDocument();
+    expect(screen.getByText("454 g")).toBeInTheDocument();
+  });
+
+  it("shows no Yield weight stat for a string yield", () => {
+    render(<TimeYieldStats recipeYield="4 servings" />);
+    expect(screen.queryByText("Yield weight")).not.toBeInTheDocument();
+  });
+
+  it("shows no Yield weight stat for an object yield without a valueReference", () => {
+    render(
+      <TimeYieldStats
+        recipeYield={{ "@type": "QuantitativeValue", value: 4, unitText: "kebabs" }}
+      />,
+    );
+    expect(screen.queryByText("Yield weight")).not.toBeInTheDocument();
+  });
+
+  it("renders editable servings + yield-weight inputs when editing", () => {
+    render(
+      <TimeYieldStats
+        recipeYield="4 servings"
+        editing
+        yieldServings="4 servings"
+        yieldWeight="454 g"
+        onYieldChange={vi.fn()}
+      />,
+    );
+    expect(screen.getByLabelText("Servings")).toHaveValue("4 servings");
+    expect(screen.getByLabelText("Yield weight")).toHaveValue("454 g");
+    // No scaling stepper while editing.
+    expect(screen.queryByLabelText("Increase servings")).not.toBeInTheDocument();
+  });
+
+  it("calls onYieldChange with the field key as the yield is edited", async () => {
+    const onYieldChange = vi.fn();
+    render(
+      <TimeYieldStats
+        editing
+        yieldServings=""
+        yieldWeight=""
+        onYieldChange={onYieldChange}
+      />,
+    );
+    await userEvent.type(screen.getByLabelText("Yield weight"), "5");
+    expect(onYieldChange).toHaveBeenCalledWith("weight", "5");
   });
 
   it("renders all three time cells as inputs when editing, including empty ones", () => {

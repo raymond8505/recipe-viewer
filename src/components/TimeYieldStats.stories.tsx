@@ -47,6 +47,23 @@ export const QuantitativeValueYield: Story = {
   },
 };
 
+/**
+ * An object yield carrying a `valueReference` also surfaces a static "Yield
+ * weight" stat (the raw weight that drives the nutrition per-serving basis).
+ */
+export const WithYieldWeight: Story = {
+  args: {
+    recipeYield: {
+      "@type": "QuantitativeValue",
+      value: 4,
+      unitText: "kebabs",
+      valueReference: { "@type": "QuantitativeValue", value: 454, unitText: "g" },
+    },
+    currentServings: 4,
+    onServingsChange: fn(),
+  },
+};
+
 /** Missing stats are skipped — the grid simply has fewer cells. */
 export const TimesOnly: Story = {
   args: {
@@ -54,30 +71,38 @@ export const TimesOnly: Story = {
   },
 };
 
-/** Controlled wrapper so the editable time inputs are live. */
+/** Controlled wrapper so the editable time + yield inputs are live. */
 function EditingDemo() {
   const [times, setTimes] = useState({
     prep: "15 min",
     cook: "45 min",
     total: "1 hr",
   });
+  const [yieldFields, setYield] = useState({
+    servings: "4 servings",
+    weight: "454 g",
+  });
   return (
     <TimeYieldStats
       prepTime={times.prep}
       cookTime={times.cook}
       totalTime={times.total}
-      recipeYield="4 servings"
       editing
       onTimeChange={(field, value) =>
         setTimes((t) => ({ ...t, [field]: value }))
+      }
+      yieldServings={yieldFields.servings}
+      yieldWeight={yieldFields.weight}
+      onYieldChange={(field, value) =>
+        setYield((y) => ({ ...y, [field]: value }))
       }
     />
   );
 }
 
 /**
- * In edit mode all three time cells become text inputs (blank ones included,
- * so a missing time can be added). The servings cell is unchanged.
+ * In edit mode every time and yield cell becomes a text input (blank ones
+ * included, so a missing time or a string-only yield can be added/upgraded).
  */
 export const Editing: Story = {
   render: () => <EditingDemo />,
