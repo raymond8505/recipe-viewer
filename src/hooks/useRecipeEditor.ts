@@ -7,7 +7,10 @@ import type {
 import {
   editableIngredientsToSchema,
   editableInstructionsToSchema,
+  editableYieldToSchema,
   formatDuration,
+  getYieldLabel,
+  getYieldWeightLabel,
   parseDuration,
   schemaToEditableIngredients,
   schemaToEditableInstructions,
@@ -28,6 +31,11 @@ export interface EditDraft {
   prepTime: string;
   cookTime: string;
   totalTime: string;
+  /** Yield display labels: the serving count ("4 servings") and the optional
+   *  raw weight/volume ("454 g"). editableYieldToSchema converts the pair to a
+   *  QuantitativeValue recipeYield on save (always the object form). */
+  yieldServings: string;
+  yieldWeight: string;
   notes: string;
   status: string;
 }
@@ -41,6 +49,8 @@ const EMPTY_DRAFT: EditDraft = {
   prepTime: "",
   cookTime: "",
   totalTime: "",
+  yieldServings: "",
+  yieldWeight: "",
   notes: "",
   status: "",
 };
@@ -117,6 +127,8 @@ export function useRecipeEditor(): UseRecipeEditor {
         prepTime: formatDuration(schema.prepTime) ?? "",
         cookTime: formatDuration(schema.cookTime) ?? "",
         totalTime: formatDuration(schema.totalTime) ?? "",
+        yieldServings: getYieldLabel(schema.recipeYield) ?? "",
+        yieldWeight: getYieldWeightLabel(schema.recipeYield) ?? "",
         notes: schema.notes ?? "",
         status,
       });
@@ -137,6 +149,8 @@ export function useRecipeEditor(): UseRecipeEditor {
       prepTime: parseDuration(draft.prepTime) ?? undefined,
       cookTime: parseDuration(draft.cookTime) ?? undefined,
       totalTime: parseDuration(draft.totalTime) ?? undefined,
+      // Always the QuantitativeValue form (or dropped when cleared).
+      recipeYield: editableYieldToSchema(draft.yieldServings, draft.yieldWeight),
       notes: draft.notes || undefined,
     }),
     [draft],

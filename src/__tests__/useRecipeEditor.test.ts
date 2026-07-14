@@ -10,6 +10,12 @@ const schema: SchemaRecipe = {
   recipeInstructions: [{ "@type": "HowToStep", text: "Mix" }],
   prepTime: "PT15M",
   cookTime: "PT1H30M",
+  recipeYield: {
+    "@type": "QuantitativeValue",
+    value: 4,
+    unitText: "servings",
+    valueReference: { "@type": "QuantitativeValue", value: 454, unitText: "g" },
+  },
   notes: "Use buttermilk.",
 };
 
@@ -64,6 +70,47 @@ describe("useRecipeEditor", () => {
     act(() => result.current.patch({ prepTime: "" }));
     const built = result.current.buildSchema(schema);
     expect(built.prepTime).toBeUndefined();
+  });
+
+  it("begin seeds the yield servings + weight labels", () => {
+    const { result } = renderHook(() => useRecipeEditor());
+    act(() => result.current.begin(schema, "draft", ""));
+    expect(result.current.draft.yieldServings).toBe("4 servings");
+    expect(result.current.draft.yieldWeight).toBe("454 g");
+  });
+
+  it("buildSchema always saves recipeYield as a QuantitativeValue", () => {
+    const { result } = renderHook(() => useRecipeEditor());
+    // A legacy string yield migrates to the object form on save.
+    act(() => result.current.begin({ ...schema, recipeYield: "6 cookies" }, "draft", ""));
+    const built = result.current.buildSchema(schema);
+    expect(built.recipeYield).toEqual({
+      "@type": "QuantitativeValue",
+      value: 6,
+      unitText: "cookies",
+    });
+  });
+
+  it("buildSchema keeps the object form even with the weight cleared", () => {
+    const { result } = renderHook(() => useRecipeEditor());
+    act(() => result.current.begin(schema, "draft", ""));
+    act(() => result.current.patch({ yieldWeight: "" }));
+    const built = result.current.buildSchema(schema);
+    const yield_ = built.recipeYield;
+    expect(yield_).toMatchObject({ "@type": "QuantitativeValue", value: 4 });
+    expect(
+      typeof yield_ === "object" && !Array.isArray(yield_)
+        ? yield_.valueReference
+        : undefined,
+    ).toBeUndefined();
+  });
+
+  it("buildSchema drops recipeYield when the servings field is cleared", () => {
+    const { result } = renderHook(() => useRecipeEditor());
+    act(() => result.current.begin(schema, "draft", ""));
+    act(() => result.current.patch({ yieldServings: "" }));
+    const built = result.current.buildSchema(schema);
+    expect(built.recipeYield).toBeUndefined();
   });
 
   it("patch shallow-merges the draft", () => {
