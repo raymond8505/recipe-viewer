@@ -26,11 +26,20 @@ export const CompoundValue: Story = {
 /** Controlled wrapper so the edit input is live (edit state lives in the
  *  parent, so a stateful wrapper — not a play() test — is the right demo). */
 function EditingDemo() {
-  const [value, setValue] = useState("15 min");
-  return <Stat label="Prep time" value={value} editing onChange={setValue} />;
+  const [value, setValue] = useState("");
+  return (
+    <Stat
+      label="Total yield"
+      value={value}
+      editing
+      onChange={setValue}
+      hint="eg 50 g or 50 ml"
+    />
+  );
 }
 
-/** In edit mode the value becomes an underline text input. */
+/** In edit mode the value becomes an underline text input, with the optional
+ *  `hint` shown as small text directly below it. */
 export const Editing: Story = {
   render: () => <EditingDemo />,
 };

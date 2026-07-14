@@ -82,9 +82,7 @@ export default function TimeYieldStats({
               label={label}
               value={value ?? ""}
               editing={editing}
-              onChange={
-                editing ? (v) => onTimeChange?.(field, v) : undefined
-              }
+              onChange={editing ? (v) => onTimeChange?.(field, v) : undefined}
             />
           ) : null,
         )}
@@ -95,7 +93,7 @@ export default function TimeYieldStats({
               value={yieldServings ?? ""}
               editing
               onChange={(v) => onYieldChange?.("servings", v)}
-              placeholder="e.g. 4 servings"
+              hint="e.g. 4 servings"
             />
             {/* Always shown while editing so a string-only yield can be
                 upgraded to a QuantitativeValue with a weight/volume basis. */}
@@ -104,7 +102,7 @@ export default function TimeYieldStats({
               value={yieldWeight ?? ""}
               editing
               onChange={(v) => onYieldChange?.("weight", v)}
-              placeholder="e.g. 454 g or 500 ml"
+              hint="eg 50 g or 50 ml"
             />
           </>
         ) : (

@@ -26,4 +26,22 @@ describe("Stat", () => {
     await userEvent.type(screen.getByLabelText("Prep time"), "5");
     expect(onChange).toHaveBeenCalledWith("5");
   });
+
+  it("shows the hint below the input in edit mode", () => {
+    render(
+      <Stat
+        label="Total yield"
+        value=""
+        editing
+        onChange={vi.fn()}
+        hint="eg 50 g or 50 ml"
+      />,
+    );
+    expect(screen.getByText("eg 50 g or 50 ml")).toBeInTheDocument();
+  });
+
+  it("does not render the hint in read mode", () => {
+    render(<Stat label="Total yield" value="454 g" hint="eg 50 g or 50 ml" />);
+    expect(screen.queryByText("eg 50 g or 50 ml")).not.toBeInTheDocument();
+  });
 });
