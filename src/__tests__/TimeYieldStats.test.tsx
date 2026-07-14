@@ -43,27 +43,27 @@ describe("TimeYieldStats", () => {
     expect(onServingsChange).toHaveBeenCalledWith(3);
   });
 
-  it("shows a static Yield weight stat for an object yield with a valueReference", () => {
+  it("shows a static Total yield stat for an object yield with a valueReference", () => {
     render(<TimeYieldStats recipeYield={quantitativeValueYield} />);
-    expect(screen.getByText("Yield weight")).toBeInTheDocument();
+    expect(screen.getByText("Total yield")).toBeInTheDocument();
     expect(screen.getByText("454 g")).toBeInTheDocument();
   });
 
-  it("shows no Yield weight stat for a string yield", () => {
+  it("shows no Total yield stat for a string yield", () => {
     render(<TimeYieldStats recipeYield="4 servings" />);
-    expect(screen.queryByText("Yield weight")).not.toBeInTheDocument();
+    expect(screen.queryByText("Total yield")).not.toBeInTheDocument();
   });
 
-  it("shows no Yield weight stat for an object yield without a valueReference", () => {
+  it("shows no Total yield stat for an object yield without a valueReference", () => {
     render(
       <TimeYieldStats
         recipeYield={{ "@type": "QuantitativeValue", value: 4, unitText: "kebabs" }}
       />,
     );
-    expect(screen.queryByText("Yield weight")).not.toBeInTheDocument();
+    expect(screen.queryByText("Total yield")).not.toBeInTheDocument();
   });
 
-  it("renders editable servings + yield-weight inputs when editing", () => {
+  it("renders editable servings + total-yield inputs when editing", () => {
     render(
       <TimeYieldStats
         recipeYield="4 servings"
@@ -74,7 +74,7 @@ describe("TimeYieldStats", () => {
       />,
     );
     expect(screen.getByLabelText("Servings")).toHaveValue("4 servings");
-    expect(screen.getByLabelText("Yield weight")).toHaveValue("454 g");
+    expect(screen.getByLabelText("Total yield")).toHaveValue("454 g");
     // No scaling stepper while editing.
     expect(screen.queryByLabelText("Increase servings")).not.toBeInTheDocument();
   });
@@ -89,7 +89,7 @@ describe("TimeYieldStats", () => {
         onYieldChange={onYieldChange}
       />,
     );
-    await userEvent.type(screen.getByLabelText("Yield weight"), "5");
+    await userEvent.type(screen.getByLabelText("Total yield"), "5");
     expect(onYieldChange).toHaveBeenCalledWith("weight", "5");
   });
 

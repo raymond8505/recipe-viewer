@@ -71,7 +71,10 @@ export default function TimeYieldStats({
       aria-label="Time and yield"
       className={cn("border-y border-border mb-8", className)}
     >
-      <div className="max-w-3xl mx-auto grid grid-cols-2 sm:grid-cols-4 gap-4 px-4 sm:px-6 py-4">
+      {/* Fluid columns: cells fill the row and only wrap when there isn't room
+          for another ~7rem track, so a 5th cell (e.g. Total yield) sits inline
+          on wide screens instead of forced onto its own row. */}
+      <div className="max-w-3xl mx-auto grid grid-cols-[repeat(auto-fit,minmax(7rem,1fr))] gap-4 px-4 sm:px-6 py-4">
         {timeStats.map(({ label, value, field }) =>
           editing || value ? (
             <Stat
@@ -97,11 +100,11 @@ export default function TimeYieldStats({
             {/* Always shown while editing so a string-only yield can be
                 upgraded to a QuantitativeValue with a weight/volume basis. */}
             <Stat
-              label="Yield weight"
+              label="Total yield"
               value={yieldWeight ?? ""}
               editing
               onChange={(v) => onYieldChange?.("weight", v)}
-              placeholder="e.g. 454 g"
+              placeholder="e.g. 454 g or 500 ml"
             />
           </>
         ) : (
@@ -119,9 +122,9 @@ export default function TimeYieldStats({
                   value={getYieldLabel(recipeYield) ?? ""}
                 />
               ))}
-            {/* Read mode surfaces the weight only for an object yield that
-                actually carries a valueReference. */}
-            {weightLabel && <Stat label="Yield weight" value={weightLabel} />}
+            {/* Read mode surfaces the total (weight/volume) only for an object
+                yield that actually carries a valueReference. */}
+            {weightLabel && <Stat label="Total yield" value={weightLabel} />}
           </>
         )}
       </div>

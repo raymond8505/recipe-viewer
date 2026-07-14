@@ -227,7 +227,7 @@ export function getYieldUnit(
 /**
  * Human-readable label for a `recipeYield`'s valueReference (the raw
  * weight/volume, e.g. "454 g"), or null when there's no object-form
- * valueReference to show. The read-mode counterpart of the "Yield weight" edit
+ * valueReference to show. The read-mode counterpart of the "Total yield" edit
  * cell; `getYieldLabel` is the same idea for the top-level serving count.
  */
 export function getYieldWeightLabel(

@@ -48,10 +48,11 @@ export const QuantitativeValueYield: Story = {
 };
 
 /**
- * An object yield carrying a `valueReference` also surfaces a static "Yield
- * weight" stat (the raw weight that drives the nutrition per-serving basis).
+ * An object yield carrying a `valueReference` also surfaces a static "Total
+ * yield" stat — the raw weight or volume that drives the nutrition per-serving
+ * basis.
  */
-export const WithYieldWeight: Story = {
+export const WithTotalYield: Story = {
   args: {
     recipeYield: {
       "@type": "QuantitativeValue",
