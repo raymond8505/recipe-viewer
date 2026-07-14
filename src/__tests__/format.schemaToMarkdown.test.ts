@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { schemaToMarkdown } from "@/lib/format";
 import type { SchemaRecipe } from "@/types/recipe";
+import { quantitativeValueYield } from "@/fixtures";
 
 describe("schemaToMarkdown", () => {
   it("renders a minimal name-only schema as a single heading", () => {
@@ -25,7 +26,7 @@ describe("schemaToMarkdown", () => {
   it("renders an object-form (QuantitativeValue) yield as its label", () => {
     const md = schemaToMarkdown({
       name: "Kebabs",
-      recipeYield: { "@type": "QuantitativeValue", value: 4, unitText: "kebabs" },
+      recipeYield: quantitativeValueYield,
     });
     expect(md).toContain("Yield: 4 kebabs");
   });

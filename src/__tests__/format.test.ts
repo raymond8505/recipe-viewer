@@ -24,6 +24,7 @@ import type {
   EditableIngredients,
   EditableInstructions,
 } from "@/types/editor";
+import { quantitativeValueYield } from "@/fixtures";
 
 describe("formatDuration", () => {
   it("formats hours and minutes", () => {
@@ -159,12 +160,9 @@ describe("getYieldLabel", () => {
 
 describe("getYieldValueReference", () => {
   it("returns the valueReference of a QuantitativeValue", () => {
-    expect(
-      getYieldValueReference({
-        value: 4,
-        valueReference: { value: 454, unitText: "g" },
-      }),
-    ).toEqual({ value: 454, unitText: "g" });
+    expect(getYieldValueReference(quantitativeValueYield)).toEqual(
+      quantitativeValueYield.valueReference,
+    );
   });
 
   it("returns null when a QuantitativeValue has no valueReference", () => {
@@ -455,21 +453,11 @@ describe("toSchemaOrgJsonLd", () => {
   it("passes a QuantitativeValue recipeYield through unchanged", () => {
     // All keys (@type/value/unitText/valueReference) are standard Schema.org,
     // so no sanitization is needed — the object survives verbatim.
-    const recipeYield = {
-      "@type": "QuantitativeValue" as const,
-      value: 4,
-      unitText: "kebabs",
-      valueReference: {
-        "@type": "QuantitativeValue" as const,
-        value: 454,
-        unitText: "g",
-      },
-    };
     const result = toSchemaOrgJsonLd({
       name: "Kebabs",
-      recipeYield,
+      recipeYield: quantitativeValueYield,
     }) as Record<string, unknown>;
-    expect(result.recipeYield).toEqual(recipeYield);
+    expect(result.recipeYield).toEqual(quantitativeValueYield);
   });
 });
 
