@@ -1,4 +1,4 @@
-import { getSupabaseClient, toVectorLiteral } from "./supabase";
+import { getSupabaseClient, selectColumns, toVectorLiteral } from "./supabase";
 import { getFeatures } from "./features";
 import { normalizeRecipeInstructions, schemaToMarkdown } from "./format";
 import { generateEmbedding } from "./embedding";
@@ -18,7 +18,15 @@ export class RecipeRepoError extends Error {
   }
 }
 
-const RECIPE_COLUMNS = "id, url, source, status, metadata";
+// `content` and `embedding` are write-only (derived on create/update), so they
+// are not on RecipeRow — selectColumns rejects them here at compile time.
+const RECIPE_COLUMNS = selectColumns<RecipeRow>()([
+  "id",
+  "url",
+  "source",
+  "status",
+  "metadata",
+]);
 
 export interface CreateRecipeInput {
   // Optional explicit primary key. When provided (e.g. so the caller can build

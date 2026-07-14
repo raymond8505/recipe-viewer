@@ -1,4 +1,4 @@
-import { getSupabaseAdminClient, toVectorLiteral } from "./supabase";
+import { getSupabaseAdminClient, selectColumns, toVectorLiteral } from "./supabase";
 import type {
   IngredientMatch,
   IngredientNutrition,
@@ -35,12 +35,35 @@ export class IngredientRepoError extends Error {
 const PG_UNIQUE_VIOLATION = "23505";
 
 // `embedding` is write-only (queried via the match_ingredients RPC), so it is
-// not read back onto IngredientRow — mirrors RECIPE_COLUMNS.
-const INGREDIENT_COLUMNS =
-  "id, name, aliases, fdc_id, fdc_data_type, nutrition, density_g_per_ml, food_portions, source, created_at, updated_at";
+// not on IngredientRow — which means selectColumns rejects it here at compile
+// time, same as any other column drift.
+const INGREDIENT_COLUMNS = selectColumns<IngredientRow>()([
+  "id",
+  "name",
+  "aliases",
+  "fdc_id",
+  "fdc_data_type",
+  "nutrition",
+  "density_g_per_ml",
+  "food_portions",
+  "source",
+  "created_at",
+  "updated_at",
+]);
 
-const RECIPE_INGREDIENT_COLUMNS =
-  "id, recipe_id, ingredient_id, raw_text, quantity, unit, name_text, note, match_status, confidence, position";
+const RECIPE_INGREDIENT_COLUMNS = selectColumns<RecipeIngredientRow>()([
+  "id",
+  "recipe_id",
+  "ingredient_id",
+  "raw_text",
+  "quantity",
+  "unit",
+  "name_text",
+  "note",
+  "match_status",
+  "confidence",
+  "position",
+]);
 
 const PAGE_SIZE = 50;
 
