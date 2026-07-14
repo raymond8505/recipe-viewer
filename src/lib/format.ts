@@ -89,9 +89,7 @@ import type {
   EditableIngredients,
   EditableInstructions,
   EditableStep,
-  EditableYield,
 } from "@/types/editor";
-import { parseServings } from "./units";
 
 /**
  * Get the ingredient text from a string or RecipeIngredient object.
@@ -500,64 +498,6 @@ export function editableInstructionsToSchema(
     } else {
       result.push(...steps);
     }
-  }
-  return result;
-}
-
-/** Stored `recipeYield` (any form) → editor draft fields. Object → its four
- *  parts; a legacy string/array → the leading number as `servings` and the
- *  remainder as `unit` (or, for word-first strings like "Serves 4", the parsed
- *  count with a blank unit). */
-export function schemaToEditableYield(
-  recipeYield: SchemaRecipe["recipeYield"],
-): EditableYield {
-  const empty: EditableYield = {
-    servings: "",
-    unit: "",
-    weight: "",
-    weightUnit: "",
-  };
-  if (recipeYield == null) return empty;
-  if (typeof recipeYield === "object" && !Array.isArray(recipeYield)) {
-    const vr = recipeYield.valueReference;
-    return {
-      servings: recipeYield.value != null ? String(recipeYield.value) : "",
-      unit: recipeYield.unitText ?? "",
-      weight: vr?.value != null ? String(vr.value) : "",
-      weightUnit: vr?.unitText ?? "",
-    };
-  }
-  const raw = (Array.isArray(recipeYield) ? recipeYield[0] : recipeYield) ?? "";
-  const count = parseServings(raw); // midpoint for ranges, consistent with scaling
-  const leading = raw.match(/^\s*[\d.,/\s-]*\d\s*(.*)$/); // remainder after a leading number
-  return {
-    ...empty,
-    servings: count != null ? String(count) : "",
-    unit: count != null ? (leading ? leading[1].trim() : "") : raw.trim(),
-  };
-}
-
-/** Editor draft fields → stored `recipeYield`. Returns a QuantitativeValue when
- *  `servings` is numeric (migrating legacy strings to the object form on save),
- *  else undefined (field dropped). A positive `weight` adds the valueReference;
- *  blank/zero weight omits it. */
-export function editableYieldToSchema(
-  fields: EditableYield,
-): QuantitativeValue | undefined {
-  const value = parseFloat(fields.servings);
-  if (!Number.isFinite(value)) return undefined;
-  const result: QuantitativeValue = { "@type": "QuantitativeValue", value };
-  const unit = fields.unit.trim();
-  if (unit) result.unitText = unit;
-  const weight = parseFloat(fields.weight);
-  if (Number.isFinite(weight) && weight > 0) {
-    const ref: QuantitativeValue = {
-      "@type": "QuantitativeValue",
-      value: weight,
-    };
-    const weightUnit = fields.weightUnit.trim();
-    if (weightUnit) ref.unitText = weightUnit;
-    result.valueReference = ref;
   }
   return result;
 }

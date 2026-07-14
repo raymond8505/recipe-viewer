@@ -45,19 +45,3 @@ export interface EditableGroup<T> {
 
 export type EditableIngredients = EditableGroup<EditableIngredient>[];
 export type EditableInstructions = EditableGroup<EditableStep>[];
-
-/**
- * UI-only editable form of `recipeYield`. All fields are raw input strings;
- * `src/lib/format.ts`'s `schemaToEditableYield` / `editableYieldToSchema`
- * translate to/from the stored `QuantitativeValue`. `servings` + `unit` are the
- * serving count and its label (e.g. "4" + "kebabs"); `weight` + `weightUnit`
- * are the optional raw weight/volume (→ `valueReference`, e.g. "454" + "g")
- * that drives the per-serving basis in the nutrition panel. Blank `servings`
- * means no yield.
- */
-export interface EditableYield {
-  servings: string;
-  unit: string;
-  weight: string;
-  weightUnit: string;
-}

@@ -26,7 +26,6 @@ import RecipeControls from "./RecipeControls";
 import { CopyShoppingListButton } from "@/components/buttons";
 import IngredientsEditor from "./editor/IngredientsEditor";
 import InstructionsEditor from "./editor/InstructionsEditor";
-import YieldEditor from "./editor/YieldEditor";
 import IngredientItem from "./IngredientItem";
 import TimeYieldStats from "./TimeYieldStats";
 import NutritionPanel from "./NutritionPanel";
@@ -251,16 +250,6 @@ export default function RecipeDetail({
                 {schema.description}
               </p>
             )
-          )}
-
-          {isEditing && (
-            <div className="mt-6">
-              <YieldEditor
-                value={draft.yieldFields}
-                onChange={(yieldFields) => patch({ yieldFields })}
-                disabled={editState === "saving"}
-              />
-            </div>
           )}
 
           <div className="flex flex-wrap items-center gap-x-6 gap-y-2 mt-4 text-sm text-gray-500">

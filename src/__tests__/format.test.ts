@@ -19,8 +19,6 @@ import {
   getYieldLabel,
   getYieldValueReference,
   getYieldUnit,
-  schemaToEditableYield,
-  editableYieldToSchema,
 } from "@/lib/format";
 import type {
   EditableIngredients,
@@ -421,95 +419,6 @@ describe("schemaToEditableInstructions / editableInstructionsToSchema", () => {
       { id: "g1", heading: "Empty", items: [] },
     ];
     expect(editableInstructionsToSchema(editable)).toEqual([]);
-  });
-});
-
-describe("schemaToEditableYield / editableYieldToSchema", () => {
-  it("round-trips a QuantitativeValue with a valueReference", () => {
-    const original = {
-      "@type": "QuantitativeValue" as const,
-      value: 4,
-      unitText: "kebabs",
-      valueReference: {
-        "@type": "QuantitativeValue" as const,
-        value: 454,
-        unitText: "g",
-      },
-    };
-    const fields = schemaToEditableYield(original);
-    expect(fields).toEqual({
-      servings: "4",
-      unit: "kebabs",
-      weight: "454",
-      weightUnit: "g",
-    });
-    expect(editableYieldToSchema(fields)).toEqual(original);
-  });
-
-  it("seeds servings + unit from a legacy string", () => {
-    expect(schemaToEditableYield("4 servings")).toEqual({
-      servings: "4",
-      unit: "servings",
-      weight: "",
-      weightUnit: "",
-    });
-  });
-
-  it("collapses a legacy range to its midpoint (consistent with parseServings)", () => {
-    expect(schemaToEditableYield("6-8 servings").servings).toBe("7");
-  });
-
-  it("keeps the count but drops the word for a word-first string", () => {
-    expect(schemaToEditableYield("Serves 4")).toEqual({
-      servings: "4",
-      unit: "",
-      weight: "",
-      weightUnit: "",
-    });
-  });
-
-  it("returns all-blank fields for an absent yield", () => {
-    expect(schemaToEditableYield(undefined)).toEqual({
-      servings: "",
-      unit: "",
-      weight: "",
-      weightUnit: "",
-    });
-  });
-
-  it("migrates a legacy string to a QuantitativeValue object on build", () => {
-    expect(
-      editableYieldToSchema({
-        servings: "4",
-        unit: "servings",
-        weight: "",
-        weightUnit: "",
-      }),
-    ).toEqual({ "@type": "QuantitativeValue", value: 4, unitText: "servings" });
-  });
-
-  it("omits the valueReference when weight is blank or non-positive", () => {
-    expect(
-      editableYieldToSchema({ servings: "4", unit: "", weight: "", weightUnit: "" }),
-    ).toEqual({ "@type": "QuantitativeValue", value: 4 });
-    const zeroWeight = editableYieldToSchema({
-      servings: "4",
-      unit: "",
-      weight: "0",
-      weightUnit: "g",
-    });
-    expect(zeroWeight?.valueReference).toBeUndefined();
-  });
-
-  it("returns undefined when servings is blank/non-numeric (field dropped)", () => {
-    expect(
-      editableYieldToSchema({
-        servings: "",
-        unit: "kebabs",
-        weight: "",
-        weightUnit: "",
-      }),
-    ).toBeUndefined();
   });
 });
 

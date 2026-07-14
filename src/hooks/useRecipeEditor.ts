@@ -3,15 +3,12 @@ import type { SchemaRecipe } from "@/types/recipe";
 import type {
   EditableIngredients,
   EditableInstructions,
-  EditableYield,
 } from "@/types/editor";
 import {
   editableIngredientsToSchema,
   editableInstructionsToSchema,
-  editableYieldToSchema,
   schemaToEditableIngredients,
   schemaToEditableInstructions,
-  schemaToEditableYield,
 } from "@/lib/format";
 
 export type EditState = "idle" | "editing" | "saving" | "error";
@@ -24,9 +21,6 @@ export interface EditDraft {
   description: string;
   ingredients: EditableIngredients;
   instructions: EditableInstructions;
-  /** Serving count + unit and optional raw weight/volume; converted to/from a
-   *  `QuantitativeValue` recipeYield by format.ts. */
-  yieldFields: EditableYield;
   notes: string;
   status: string;
 }
@@ -37,7 +31,6 @@ const EMPTY_DRAFT: EditDraft = {
   description: "",
   ingredients: [],
   instructions: [],
-  yieldFields: { servings: "", unit: "", weight: "", weightUnit: "" },
   notes: "",
   status: "",
 };
@@ -111,7 +104,6 @@ export function useRecipeEditor(): UseRecipeEditor {
         instructions: schemaToEditableInstructions(
           schema.recipeInstructions ?? [],
         ),
-        yieldFields: schemaToEditableYield(schema.recipeYield),
         notes: schema.notes ?? "",
         status,
       });
@@ -129,7 +121,6 @@ export function useRecipeEditor(): UseRecipeEditor {
       description: draft.description || undefined,
       recipeIngredient: editableIngredientsToSchema(draft.ingredients),
       recipeInstructions: editableInstructionsToSchema(draft.instructions),
-      recipeYield: editableYieldToSchema(draft.yieldFields),
       notes: draft.notes || undefined,
     }),
     [draft],
