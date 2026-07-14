@@ -1,6 +1,6 @@
 // @vitest-environment node
 import { afterEach, describe, it, expect, vi } from "vitest";
-import { uploadRecipeImageFile } from "@/lib/api/recipes";
+import { normalizeRecipe, uploadRecipeImageFile } from "@/lib/api/recipes";
 
 function mockFetchOnce(status: number, body: object) {
   const mock = vi.fn().mockResolvedValue(
@@ -60,5 +60,23 @@ describe("uploadRecipeImageFile", () => {
     await expect(uploadRecipeImageFile("recipe-1", file)).rejects.toThrow(
       /no image URL/,
     );
+  });
+});
+
+describe("normalizeRecipe", () => {
+  it("POSTs to the normalize route", async () => {
+    const mock = mockFetchOnce(200, { status: "queued" });
+
+    await normalizeRecipe("recipe-1");
+
+    const [requestUrl, init] = mock.mock.calls[0];
+    expect(requestUrl).toBe("/api/recipes/recipe-1/normalize");
+    expect(init.method).toBe("POST");
+  });
+
+  it("throws when the response is not ok", async () => {
+    mockFetchOnce(500, { error: "boom" });
+
+    await expect(normalizeRecipe("recipe-1")).rejects.toThrow(/500/);
   });
 });
