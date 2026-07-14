@@ -279,12 +279,14 @@ export default function RecipeDetail({
       {/* Time / Yield stats — full-width band; -mx cancels layout <main>'s padding */}
       <TimeYieldStats
         className="-mx-4 sm:-mx-6"
-        prepTime={prepTime}
-        cookTime={cookTime}
-        totalTime={totalTime}
+        prepTime={isEditing ? draft.prepTime : prepTime}
+        cookTime={isEditing ? draft.cookTime : cookTime}
+        totalTime={isEditing ? draft.totalTime : totalTime}
         recipeYield={schema.recipeYield}
         currentServings={scalable.currentServings}
         onServingsChange={scalePortionsTo}
+        editing={isEditing}
+        onTimeChange={(field, value) => patch({ [`${field}Time`]: value })}
       />
 
       <div className="max-w-3xl lg:max-w-5xl mx-auto">

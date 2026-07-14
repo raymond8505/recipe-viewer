@@ -16,6 +16,14 @@ interface TimeYieldStatsProps {
    */
   currentServings?: number | null;
   onServingsChange?: (n: number) => void;
+  /**
+   * When true, the three time cells become editable text inputs (and are all
+   * shown even when blank, so a missing time can be added). The yield/servings
+   * cell is unchanged — its editing is a separate follow-up.
+   */
+  editing?: boolean;
+  /** Receives the edited display string for a time cell. Required when editing. */
+  onTimeChange?: (field: "prep" | "cook" | "total", value: string) => void;
   className?: string;
 }
 
@@ -34,9 +42,19 @@ export default function TimeYieldStats({
   recipeYield,
   currentServings,
   onServingsChange,
+  editing,
+  onTimeChange,
   className,
 }: TimeYieldStatsProps) {
-  if (!prepTime && !cookTime && !totalTime && !recipeYield) return null;
+  // While editing, the band always shows (empty time cells can be filled in).
+  if (!editing && !prepTime && !cookTime && !totalTime && !recipeYield)
+    return null;
+
+  const timeStats = [
+    { label: "Prep time", value: prepTime, field: "prep" },
+    { label: "Cook time", value: cookTime, field: "cook" },
+    { label: "Total time", value: totalTime, field: "total" },
+  ] as const;
 
   return (
     <section
@@ -44,9 +62,19 @@ export default function TimeYieldStats({
       className={cn("border-y border-border mb-8", className)}
     >
       <div className="max-w-3xl mx-auto grid grid-cols-2 sm:grid-cols-4 gap-4 px-4 sm:px-6 py-4">
-        {prepTime && <Stat label="Prep time" value={prepTime} />}
-        {cookTime && <Stat label="Cook time" value={cookTime} />}
-        {totalTime && <Stat label="Total time" value={totalTime} />}
+        {timeStats.map(({ label, value, field }) =>
+          editing || value ? (
+            <Stat
+              key={field}
+              label={label}
+              value={value ?? ""}
+              editing={editing}
+              onChange={
+                editing ? (v) => onTimeChange?.(field, v) : undefined
+              }
+            />
+          ) : null,
+        )}
         {recipeYield &&
           (currentServings != null && onServingsChange ? (
             <ServingsControl

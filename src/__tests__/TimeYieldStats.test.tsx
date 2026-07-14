@@ -42,6 +42,36 @@ describe("TimeYieldStats", () => {
     expect(onServingsChange).toHaveBeenCalledWith(3);
   });
 
+  it("renders all three time cells as inputs when editing, including empty ones", () => {
+    render(
+      <TimeYieldStats
+        prepTime="15 min"
+        cookTime={null}
+        totalTime={null}
+        editing
+        onTimeChange={vi.fn()}
+      />,
+    );
+    expect(screen.getByLabelText("Prep time")).toHaveValue("15 min");
+    expect(screen.getByLabelText("Cook time")).toHaveValue("");
+    expect(screen.getByLabelText("Total time")).toHaveValue("");
+  });
+
+  it("calls onTimeChange with the field key as a time is edited", async () => {
+    const onTimeChange = vi.fn();
+    render(
+      <TimeYieldStats
+        prepTime={null}
+        cookTime={null}
+        totalTime={null}
+        editing
+        onTimeChange={onTimeChange}
+      />,
+    );
+    await userEvent.type(screen.getByLabelText("Cook time"), "5");
+    expect(onTimeChange).toHaveBeenCalledWith("cook", "5");
+  });
+
   it("labels the stepper with the yield unitText for an object yield", () => {
     render(
       <TimeYieldStats

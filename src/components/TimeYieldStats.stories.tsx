@@ -1,5 +1,6 @@
 import type { Meta, StoryObj } from "@storybook/nextjs-vite";
 import { fn } from "storybook/test";
+import { useState } from "react";
 import TimeYieldStats from "./TimeYieldStats";
 
 const meta: Meta<typeof TimeYieldStats> = {
@@ -51,4 +52,33 @@ export const TimesOnly: Story = {
   args: {
     recipeYield: undefined,
   },
+};
+
+/** Controlled wrapper so the editable time inputs are live. */
+function EditingDemo() {
+  const [times, setTimes] = useState({
+    prep: "15 min",
+    cook: "45 min",
+    total: "1 hr",
+  });
+  return (
+    <TimeYieldStats
+      prepTime={times.prep}
+      cookTime={times.cook}
+      totalTime={times.total}
+      recipeYield="4 servings"
+      editing
+      onTimeChange={(field, value) =>
+        setTimes((t) => ({ ...t, [field]: value }))
+      }
+    />
+  );
+}
+
+/**
+ * In edit mode all three time cells become text inputs (blank ones included,
+ * so a missing time can be added). The servings cell is unchanged.
+ */
+export const Editing: Story = {
+  render: () => <EditingDemo />,
 };
