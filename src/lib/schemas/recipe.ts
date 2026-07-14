@@ -7,6 +7,7 @@
 // here.
 
 import { z } from "zod";
+import { METRIC_YIELD_UNITS } from "@/lib/units";
 
 export const ingredientSchema = z.union([
   z.string(),
@@ -14,17 +15,26 @@ export const ingredientSchema = z.union([
 ]);
 
 // Schema.org/QuantitativeValue — the structured form of recipeYield. Top level:
-// value = serving count, unitText = its label. valueReference nests the raw
-// weight/volume (value + unitText). One nesting level is enough for our use; a
-// deeper valueReference.valueReference is simply stripped.
-const quantitativeValueLeaf = z.object({
+// value = serving count, unitText = its (free-text) label e.g. "kebabs".
+// valueReference nests the raw weight/volume (value + unitText) — its unitText
+// is restricted to METRIC units only, since it's the nutrition per-serving basis
+// and is rendered verbatim. One nesting level is enough for our use; a deeper
+// valueReference.valueReference is simply stripped.
+const quantitativeValueBase = {
   "@type": z.literal("QuantitativeValue").optional(),
   value: z.number().optional(),
-  unitText: z.string().optional(),
+};
+
+// valueReference — the recipe's raw weight/volume; metric units only.
+const metricQuantitativeValue = z.object({
+  ...quantitativeValueBase,
+  unitText: z.enum(METRIC_YIELD_UNITS).optional(),
 });
 
-export const quantitativeValueSchema = quantitativeValueLeaf.extend({
-  valueReference: quantitativeValueLeaf.optional(),
+export const quantitativeValueSchema = z.object({
+  ...quantitativeValueBase,
+  unitText: z.string().optional(), // serving label: free text ("kebabs")
+  valueReference: metricQuantitativeValue.optional(),
 });
 
 export const howToStepSchema = z.object({

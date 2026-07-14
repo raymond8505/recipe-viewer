@@ -28,6 +28,14 @@ const UNIT_DEFS: Record<string, UnitDef> = {
   kg:      { group: "weight", display: "kg",    toBase: 1000,     aliases: ["kilograms", "kilogram", "kg"] },
 };
 
+/**
+ * Metric weight/volume units accepted for a recipeYield `valueReference` — the
+ * metric subset of UNIT_DEFS keys (weight: g/kg, volume: ml/l). Canonical
+ * symbols, rendered verbatim in the nutrition per-serving label. Consumed by the
+ * zod validator and the MCP JSON schema so both agree on the allowed set.
+ */
+export const METRIC_YIELD_UNITS = ["g", "kg", "ml", "l"] as const;
+
 const VOLUME_ORDER = ["tsp", "tbsp", "cup", "fl oz", "pt", "qt", "gal", "ml", "l"];
 const WEIGHT_ORDER = ["oz", "lb", "g", "kg"];
 
