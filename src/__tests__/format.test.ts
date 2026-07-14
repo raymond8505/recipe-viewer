@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   formatDuration,
+  parseDuration,
   formatMS,
   parseMS,
   formatDate,
@@ -57,6 +58,47 @@ describe("formatDuration", () => {
 
   it("handles multi-digit hours and minutes", () => {
     expect(formatDuration("PT12H45M")).toBe("12 hr 45 min");
+  });
+});
+
+describe("parseDuration", () => {
+  it("parses hours and minutes", () => {
+    expect(parseDuration("1 hr 30 min")).toBe("PT1H30M");
+  });
+
+  it("parses minutes only", () => {
+    expect(parseDuration("45 min")).toBe("PT45M");
+  });
+
+  it("parses hours only", () => {
+    expect(parseDuration("2 hr")).toBe("PT2H");
+  });
+
+  it("round-trips with formatDuration", () => {
+    expect(parseDuration(formatDuration("PT1H30M"))).toBe("PT1H30M");
+  });
+
+  it("reads a bare number as minutes", () => {
+    expect(parseDuration("15")).toBe("PT15M");
+  });
+
+  it("normalizes overflow minutes into hours", () => {
+    expect(parseDuration("90 min")).toBe("PT1H30M");
+  });
+
+  it("returns null for blank input", () => {
+    expect(parseDuration("")).toBeNull();
+    expect(parseDuration("   ")).toBeNull();
+    expect(parseDuration(undefined)).toBeNull();
+    expect(parseDuration(null)).toBeNull();
+  });
+
+  it("returns null for unparseable input", () => {
+    expect(parseDuration("soon")).toBeNull();
+  });
+
+  it("returns null for a zero duration", () => {
+    expect(parseDuration("0 min")).toBeNull();
   });
 });
 

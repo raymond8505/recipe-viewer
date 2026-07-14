@@ -21,6 +21,38 @@ export function formatDuration(iso: string | undefined | null): string | null {
 }
 
 /**
+ * Inverse of formatDuration: a human display string → ISO 8601 duration.
+ * "1 hr 30 min" → "PT1H30M", "45 min" → "PT45M", "2 hr" → "PT2H". A bare
+ * number with no unit is read as minutes ("15" → "PT15M"). Returns null for
+ * blank or unparseable input, so a cleared field omits the schema key on save.
+ *
+ * Lossy by design: formatDuration drops seconds, so a display round-trip
+ * normalizes any sub-minute component away — acceptable for prep/cook/total.
+ */
+export function parseDuration(
+  display: string | undefined | null,
+): string | null {
+  if (!display) return null;
+  const text = display.trim();
+  if (!text) return null;
+
+  const hourMatch = text.match(/(\d+)\s*h/i);
+  const minMatch = text.match(/(\d+)\s*m/i);
+  const hours = hourMatch ? parseInt(hourMatch[1], 10) : 0;
+  let minutes = minMatch ? parseInt(minMatch[1], 10) : 0;
+
+  // A bare number with no unit is read as minutes (so deleting " min" while
+  // editing doesn't silently drop the value on save).
+  if (!hourMatch && !minMatch) {
+    const bare = text.match(/^\d+$/);
+    if (!bare) return null;
+    minutes = parseInt(bare[0], 10);
+  }
+
+  return msToIsoDuration(hours * 60 + minutes, 0) ?? null;
+}
+
+/**
  * Parse an ISO 8601 duration string into total seconds.
  * e.g. "PT30M" → 1800, "PT1H30M" → 5400, "PT45S" → 45
  */
