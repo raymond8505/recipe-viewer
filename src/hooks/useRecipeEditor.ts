@@ -7,6 +7,8 @@ import type {
 import {
   editableIngredientsToSchema,
   editableInstructionsToSchema,
+  formatDuration,
+  parseDuration,
   schemaToEditableIngredients,
   schemaToEditableInstructions,
 } from "@/lib/format";
@@ -21,6 +23,11 @@ export interface EditDraft {
   description: string;
   ingredients: EditableIngredients;
   instructions: EditableInstructions;
+  /** Prep/cook/total times as display strings (e.g. "1 hr 30 min"); converted
+   *  to/from ISO 8601 durations by format.ts at the schema boundary. */
+  prepTime: string;
+  cookTime: string;
+  totalTime: string;
   notes: string;
   status: string;
 }
@@ -31,6 +38,9 @@ const EMPTY_DRAFT: EditDraft = {
   description: "",
   ingredients: [],
   instructions: [],
+  prepTime: "",
+  cookTime: "",
+  totalTime: "",
   notes: "",
   status: "",
 };
@@ -104,6 +114,9 @@ export function useRecipeEditor(): UseRecipeEditor {
         instructions: schemaToEditableInstructions(
           schema.recipeInstructions ?? [],
         ),
+        prepTime: formatDuration(schema.prepTime) ?? "",
+        cookTime: formatDuration(schema.cookTime) ?? "",
+        totalTime: formatDuration(schema.totalTime) ?? "",
         notes: schema.notes ?? "",
         status,
       });
@@ -121,6 +134,9 @@ export function useRecipeEditor(): UseRecipeEditor {
       description: draft.description || undefined,
       recipeIngredient: editableIngredientsToSchema(draft.ingredients),
       recipeInstructions: editableInstructionsToSchema(draft.instructions),
+      prepTime: parseDuration(draft.prepTime) ?? undefined,
+      cookTime: parseDuration(draft.cookTime) ?? undefined,
+      totalTime: parseDuration(draft.totalTime) ?? undefined,
       notes: draft.notes || undefined,
     }),
     [draft],

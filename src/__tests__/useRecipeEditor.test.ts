@@ -8,6 +8,8 @@ const schema: SchemaRecipe = {
   description: "Fluffy.",
   recipeIngredient: ["2 cups flour", "1 egg"],
   recipeInstructions: [{ "@type": "HowToStep", text: "Mix" }],
+  prepTime: "PT15M",
+  cookTime: "PT1H30M",
   notes: "Use buttermilk.",
 };
 
@@ -35,6 +37,33 @@ describe("useRecipeEditor", () => {
       ["2 cups flour", "1 egg"],
     );
     expect(result.current.draft.instructions[0].items[0].text).toBe("Mix");
+  });
+
+  it("begin seeds prep/cook/total times as display strings", () => {
+    const { result } = renderHook(() => useRecipeEditor());
+    act(() => result.current.begin(schema, "draft", ""));
+    expect(result.current.draft.prepTime).toBe("15 min");
+    expect(result.current.draft.cookTime).toBe("1 hr 30 min");
+    // totalTime is unset on the schema → blank draft field.
+    expect(result.current.draft.totalTime).toBe("");
+  });
+
+  it("buildSchema converts time display strings back to ISO durations", () => {
+    const { result } = renderHook(() => useRecipeEditor());
+    act(() => result.current.begin(schema, "draft", ""));
+    act(() => result.current.patch({ totalTime: "45 min" }));
+    const built = result.current.buildSchema(schema);
+    expect(built.prepTime).toBe("PT15M");
+    expect(built.cookTime).toBe("PT1H30M");
+    expect(built.totalTime).toBe("PT45M");
+  });
+
+  it("buildSchema omits a time key when its field is cleared", () => {
+    const { result } = renderHook(() => useRecipeEditor());
+    act(() => result.current.begin(schema, "draft", ""));
+    act(() => result.current.patch({ prepTime: "" }));
+    const built = result.current.buildSchema(schema);
+    expect(built.prepTime).toBeUndefined();
   });
 
   it("patch shallow-merges the draft", () => {
