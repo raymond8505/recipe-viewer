@@ -80,7 +80,10 @@ export interface CreateIngredientInput {
   density_g_per_ml?: number | null;
   food_portions?: UsdaFoodPortion[] | null;
   source?: IngredientSource;
-  embedding?: number[] | null;
+  // Required: the embedding is what makes an ingredient matchable via
+  // match_ingredients() — an embedding-less row would be invisible to
+  // matching. The column is NOT NULL (db/migrations/0006).
+  embedding: number[];
 }
 
 export interface UpdateIngredientPatch {
@@ -92,7 +95,9 @@ export interface UpdateIngredientPatch {
   density_g_per_ml?: number | null;
   food_portions?: UsdaFoodPortion[] | null;
   source?: IngredientSource;
-  embedding?: number[] | null;
+  // No `| null`: the column is NOT NULL — an embedding can be replaced but
+  // never cleared.
+  embedding?: number[];
 }
 
 export async function getIngredients(opts?: {
@@ -157,7 +162,7 @@ export async function createIngredientRow(
     .insert({
       ...fields,
       source: input.source ?? "usda",
-      ...(embedding ? { embedding: toVectorLiteral(embedding) } : {}),
+      embedding: toVectorLiteral(embedding),
     })
     .select(INGREDIENT_COLUMNS)
     .single();

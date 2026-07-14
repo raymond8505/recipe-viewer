@@ -138,21 +138,13 @@ describe("createIngredientRow", () => {
     );
   });
 
-  it("omits the embedding column when no embedding is provided", async () => {
-    useQueue([{ data: makeIngredient("ing-1", "cumin seed") }]);
-
-    await createIngredientRow({ name: "cumin seed" });
-
-    const inserted = builderAt(0).insert.mock.calls[0][0] as object;
-    expect(inserted).not.toHaveProperty("embedding");
-  });
-
   it("throws conflict on a unique-violation (23505)", async () => {
     useQueue([{ data: null, error: { message: "dup", code: "23505" } }]);
 
-    const err = await createIngredientRow({ name: "cumin seed" }).catch(
-      (e: unknown) => e,
-    );
+    const err = await createIngredientRow({
+      name: "cumin seed",
+      embedding: [0.1],
+    }).catch((e: unknown) => e);
 
     expect(err).toBeInstanceOf(IngredientRepoError);
     expect((err as IngredientRepoError).kind).toBe("conflict");
@@ -161,9 +153,10 @@ describe("createIngredientRow", () => {
   it("throws insert_failed on any other supabase failure", async () => {
     useQueue([{ data: null, error: { message: "RLS violation" } }]);
 
-    const err = await createIngredientRow({ name: "cumin seed" }).catch(
-      (e: unknown) => e,
-    );
+    const err = await createIngredientRow({
+      name: "cumin seed",
+      embedding: [0.1],
+    }).catch((e: unknown) => e);
 
     expect(err).toBeInstanceOf(IngredientRepoError);
     expect((err as IngredientRepoError).kind).toBe("insert_failed");
