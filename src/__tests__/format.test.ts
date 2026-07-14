@@ -16,11 +16,15 @@ import {
   editableIngredientsToSchema,
   schemaToEditableInstructions,
   editableInstructionsToSchema,
+  getYieldLabel,
+  getYieldValueReference,
+  getYieldUnit,
 } from "@/lib/format";
 import type {
   EditableIngredients,
   EditableInstructions,
 } from "@/types/editor";
+import { quantitativeValueYield } from "@/fixtures";
 
 describe("formatDuration", () => {
   it("formats hours and minutes", () => {
@@ -123,6 +127,68 @@ describe("getFirstImage", () => {
 
   it("returns null for undefined", () => {
     expect(getFirstImage(undefined)).toBeNull();
+  });
+});
+
+describe("getYieldLabel", () => {
+  it("returns a plain string as-is", () => {
+    expect(getYieldLabel("4 servings")).toBe("4 servings");
+  });
+
+  it("returns the first element of an array", () => {
+    expect(getYieldLabel(["6 servings", "6"])).toBe("6 servings");
+  });
+
+  it("joins value and unitText for a QuantitativeValue", () => {
+    expect(
+      getYieldLabel({ "@type": "QuantitativeValue", value: 4, unitText: "kebabs" }),
+    ).toBe("4 kebabs");
+  });
+
+  it("returns just the value when a QuantitativeValue has no unit", () => {
+    expect(getYieldLabel({ value: 4 })).toBe("4");
+  });
+
+  it("returns null for a QuantitativeValue with nothing to show", () => {
+    expect(getYieldLabel({})).toBeNull();
+  });
+
+  it("returns null for undefined", () => {
+    expect(getYieldLabel(undefined)).toBeNull();
+  });
+});
+
+describe("getYieldValueReference", () => {
+  it("returns the valueReference of a QuantitativeValue", () => {
+    expect(getYieldValueReference(quantitativeValueYield)).toEqual(
+      quantitativeValueYield.valueReference,
+    );
+  });
+
+  it("returns null when a QuantitativeValue has no valueReference", () => {
+    expect(getYieldValueReference({ value: 4, unitText: "kebabs" })).toBeNull();
+  });
+
+  it("returns null for a string yield", () => {
+    expect(getYieldValueReference("4 servings")).toBeNull();
+  });
+
+  it("returns null for undefined", () => {
+    expect(getYieldValueReference(undefined)).toBeNull();
+  });
+});
+
+describe("getYieldUnit", () => {
+  it("returns the unitText of a QuantitativeValue", () => {
+    expect(getYieldUnit({ value: 4, unitText: "kebabs" })).toBe("kebabs");
+  });
+
+  it("returns null when a QuantitativeValue has no unitText", () => {
+    expect(getYieldUnit({ value: 4 })).toBeNull();
+  });
+
+  it("returns null for a string yield", () => {
+    expect(getYieldUnit("4 servings")).toBeNull();
   });
 });
 
@@ -382,6 +448,16 @@ describe("toSchemaOrgJsonLd", () => {
       recipeIngredient: [{ name: "2 cups flour", group: "Dough" }, "1 tsp salt"],
     }) as Record<string, unknown>;
     expect(result.recipeIngredient).toEqual(["2 cups flour", "1 tsp salt"]);
+  });
+
+  it("passes a QuantitativeValue recipeYield through unchanged", () => {
+    // All keys (@type/value/unitText/valueReference) are standard Schema.org,
+    // so no sanitization is needed — the object survives verbatim.
+    const result = toSchemaOrgJsonLd({
+      name: "Kebabs",
+      recipeYield: quantitativeValueYield,
+    }) as Record<string, unknown>;
+    expect(result.recipeYield).toEqual(quantitativeValueYield);
   });
 });
 

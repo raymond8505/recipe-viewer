@@ -3,7 +3,19 @@ import {
   type ScaledIngredient,
   type ScalableRecipeState,
 } from "@/lib/ScalableRecipe";
-import type { SchemaRecipe } from "@/types/recipe";
+import type { QuantitativeValue, SchemaRecipe } from "@/types/recipe";
+
+/**
+ * Structured QuantitativeValue yield: 4 kebabs made from 454 g of raw
+ * ingredients → per-serving weight 454/4 = 113.5 → "per 114 g serving". Shared
+ * by the nutrition + yield tests/stories that exercise the new object form.
+ */
+export const quantitativeValueYield: QuantitativeValue = {
+  "@type": "QuantitativeValue",
+  value: 4,
+  unitText: "kebabs",
+  valueReference: { "@type": "QuantitativeValue", value: 454, unitText: "g" },
+};
 
 export const scalableBaseSchema: SchemaRecipe = {
   name: "Test Recipe",

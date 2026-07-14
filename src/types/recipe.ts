@@ -24,6 +24,22 @@ export interface HowToSection {
   itemListElement: HowToStep[];
 }
 
+/**
+ * Schema.org/QuantitativeValue — the structured form of `recipeYield`.
+ * At the top level: `value` is the serving count (SSoT) and `unitText` its
+ * label (e.g. 4 + "kebabs"). `valueReference` nests a second QuantitativeValue
+ * holding the recipe's raw weight/volume (e.g. 454 + "g"), which drives the
+ * per-serving basis shown in the nutrition panel (valueReference.value / value).
+ * A plain-string `recipeYield` remains valid (legacy/deprecated); an object
+ * signals the new system.
+ */
+export interface QuantitativeValue {
+  "@type"?: "QuantitativeValue";
+  value?: number;
+  unitText?: string;
+  valueReference?: QuantitativeValue;
+}
+
 export interface SchemaRecipe {
   "@context"?: string;
   "@type"?: "Recipe";
@@ -34,7 +50,7 @@ export interface SchemaRecipe {
   cookTime?: string;
   prepTime?: string;
   totalTime?: string;
-  recipeYield?: string | string[];
+  recipeYield?: string | string[] | QuantitativeValue;
   recipeCuisine?: string;
   recipeCategory?: string | string[];
   recipeIngredient?: Array<string | RecipeIngredient>;

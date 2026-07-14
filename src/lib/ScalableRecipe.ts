@@ -5,6 +5,7 @@ import {
   type ParsedAmount,
   type ParsedIngredient,
 } from "./units";
+import { getYieldValueReference } from "./format";
 
 export interface ScalableRecipeState {
   /** Multiplier on every ingredient amount. 1 = base. */
@@ -276,6 +277,41 @@ export class ScalableRecipe {
     const dp = this.displayPortions;
     if (dp <= 0) return 1;
     return cur / dp;
+  }
+
+  /**
+   * Raw weight/volume of one displayed portion, from the yield's
+   * `valueReference` (the whole-recipe weight at base). Scales with
+   * `ingredientScale` and divides by `displayPortions`, so at rest it equals
+   * valueReference.value / baseServings (e.g. 454 g / 4 = 113.5). null when the
+   * yield carries no valueReference (legacy/string yields) or the numbers can't
+   * support the division.
+   */
+  get servingWeight(): { value: number; unitText: string } | null {
+    const vr = getYieldValueReference(this.schema.recipeYield);
+    if (!vr || typeof vr.value !== "number" || vr.value <= 0) return null;
+    if (this.baseServings == null || this.baseServings <= 0) return null;
+    const dp = this.displayPortions;
+    if (dp <= 0) return null;
+    return {
+      value: (vr.value * this.state.ingredientScale) / dp,
+      unitText: vr.unitText ?? "",
+    };
+  }
+
+  /**
+   * The nutrition panel's unit label. With a yield valueReference present it
+   * reads e.g. "per 114 g serving" (weight rounded to a whole unit); otherwise
+   * it falls back to the plain "per serving" / "per portion" from
+   * `nutritionLabel`. The noun follows the split state.
+   */
+  get nutritionUnitLabel(): string {
+    const w = this.servingWeight;
+    if (!w) return this.nutritionLabel;
+    const noun = this.nutritionLabel === "per portion" ? "portion" : "serving";
+    return ["per", String(Math.round(w.value)), w.unitText, noun]
+      .filter(Boolean)
+      .join(" ");
   }
 
   get hasNutrition(): boolean {

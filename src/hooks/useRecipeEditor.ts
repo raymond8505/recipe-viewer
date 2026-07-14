@@ -1,6 +1,9 @@
 import { useCallback, useMemo, useState } from "react";
 import type { SchemaRecipe } from "@/types/recipe";
-import type { EditableIngredients, EditableInstructions } from "@/types/editor";
+import type {
+  EditableIngredients,
+  EditableInstructions,
+} from "@/types/editor";
 import {
   editableIngredientsToSchema,
   editableInstructionsToSchema,

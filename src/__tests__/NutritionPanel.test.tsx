@@ -3,7 +3,7 @@ import { useState } from "react";
 import { render, screen, fireEvent } from "@testing-library/react";
 import NutritionPanel, { scaleNutrientValue } from "@/components/NutritionPanel";
 import { ScalableRecipe } from "@/lib/ScalableRecipe";
-import { makeScalableRecipe } from "@/fixtures";
+import { makeScalableRecipe, quantitativeValueYield } from "@/fixtures";
 
 /** Stateful wrapper so the stepper can actually update via onSplitPortions. */
 function Harness({ initial }: { initial: ScalableRecipe }) {
@@ -141,5 +141,16 @@ describe("NutritionPanel", () => {
     expect(screen.queryByRole("button", { name: /larger portion size/i })).toBeNull();
     expect(screen.queryByRole("button", { name: /smaller portion size/i })).toBeNull();
     expect(screen.getByText("per serving")).toBeTruthy();
+  });
+
+  it("shows the per-serving weight when the yield carries a valueReference", () => {
+    // 4 kebabs from 454 g → 454/4 = 113.5 → "per 114 g serving".
+    const r = makeScalableRecipe({
+      recipeIngredient: undefined,
+      recipeYield: quantitativeValueYield,
+      nutrition: { calories: "350 kcal" },
+    });
+    render(<Harness initial={r} />);
+    expect(screen.getByText("per 114 g serving")).toBeTruthy();
   });
 });

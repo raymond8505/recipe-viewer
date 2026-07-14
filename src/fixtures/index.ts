@@ -3,6 +3,7 @@ export { rescrapeFixture } from "./rescrape";
 export { makeTimer } from "./timers";
 export {
   scalableBaseSchema,
+  quantitativeValueYield,
   makeSchemaRecipe,
   makeScalableRecipe,
   makeScaledIngredient,

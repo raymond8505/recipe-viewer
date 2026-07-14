@@ -1,6 +1,8 @@
 // Volume base unit: ml
 // Weight base unit: g
 
+import type { QuantitativeValue } from "@/types/recipe";
+
 export type UnitGroup = "volume" | "weight";
 
 interface UnitDef {
@@ -25,6 +27,14 @@ const UNIT_DEFS: Record<string, UnitDef> = {
   g:       { group: "weight", display: "g",     toBase: 1,        aliases: ["grams", "gram", "g"] },
   kg:      { group: "weight", display: "kg",    toBase: 1000,     aliases: ["kilograms", "kilogram", "kg"] },
 };
+
+/**
+ * Metric weight/volume units accepted for a recipeYield `valueReference` — the
+ * metric subset of UNIT_DEFS keys (weight: g/kg, volume: ml/l). Canonical
+ * symbols, rendered verbatim in the nutrition per-serving label. Consumed by the
+ * zod validator and the MCP JSON schema so both agree on the allowed set.
+ */
+export const METRIC_YIELD_UNITS = ["g", "kg", "ml", "l"] as const;
 
 const VOLUME_ORDER = ["tsp", "tbsp", "cup", "fl oz", "pt", "qt", "gal", "ml", "l"];
 const WEIGHT_ORDER = ["oz", "lb", "g", "kg"];
@@ -250,9 +260,16 @@ export function parseIngredient(str: string): ParsedIngredient | null {
 
 /**
  * Extract the recipe yield as a single number.
- * Ranges collapse to their midpoint (e.g. "6-8 servings" → 7).
+ * - QuantitativeValue object → its `value` verbatim (authoritative, no rounding).
+ * - String/array → first numeric token; ranges collapse to their midpoint
+ *   (e.g. "6-8 servings" → 7).
  */
-export function parseServings(yld: string | string[] | undefined | null): number | null {
+export function parseServings(
+  yld: string | string[] | QuantitativeValue | undefined | null,
+): number | null {
+  if (yld && typeof yld === "object" && !Array.isArray(yld)) {
+    return typeof yld.value === "number" ? yld.value : null;
+  }
   const raw = Array.isArray(yld) ? yld[0] : yld;
   if (!raw) return null;
   const m = raw.match(

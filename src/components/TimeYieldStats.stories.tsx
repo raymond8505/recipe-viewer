@@ -34,6 +34,18 @@ export const WithServingsControl: Story = {
   },
 };
 
+/**
+ * An object-form (QuantitativeValue) yield: the scalable stepper is labeled
+ * with the yield's own unit ("kebabs") instead of the generic "Servings".
+ */
+export const QuantitativeValueYield: Story = {
+  args: {
+    recipeYield: { "@type": "QuantitativeValue", value: 4, unitText: "kebabs" },
+    currentServings: 4,
+    onServingsChange: fn(),
+  },
+};
+
 /** Missing stats are skipped — the grid simply has fewer cells. */
 export const TimesOnly: Story = {
   args: {
