@@ -1,6 +1,7 @@
 "use client";
 
 import { Input } from "@/components/ui/input";
+import { cn } from "@/lib/utils";
 
 interface StatProps {
   label: string;
@@ -12,6 +13,8 @@ interface StatProps {
   /** Edit-mode hint shown as small text directly below the input (e.g. a format
    *  example like "e.g. 4 servings"). Read mode ignores it. */
   hint?: string;
+  /** Extra classes for the cell root (e.g. a fixed column width). */
+  className?: string;
 }
 
 /**
@@ -28,9 +31,10 @@ export default function Stat({
   editing,
   onChange,
   hint,
+  className,
 }: StatProps) {
   return (
-    <div className="text-center">
+    <div className={cn("text-center", className)}>
       <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">
         {label}
       </p>

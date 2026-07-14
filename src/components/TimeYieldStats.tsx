@@ -76,61 +76,71 @@ export default function TimeYieldStats({
       aria-label="Time and yield"
       className={cn("border-y border-border mb-8", className)}
     >
-      {/* Fluid columns: cells fill the row and only wrap when there isn't room
-          for another ~7rem track, so a 5th cell (e.g. Total yield) sits inline
-          on wide screens instead of forced onto its own row. */}
-      <div className="max-w-3xl mx-auto grid grid-cols-[repeat(auto-fit,minmax(7rem,1fr))] gap-4 px-4 sm:px-6 py-4">
-        {timeStats.map(({ label, value, field, hint }) =>
-          editing || value ? (
-            <Stat
-              key={field}
-              label={label}
-              value={value ?? ""}
-              editing={editing}
-              onChange={editing ? (v) => onTimeChange?.(field, v) : undefined}
-              hint={editing ? hint : undefined}
-            />
-          ) : null,
-        )}
-        {editing ? (
-          <>
-            <Stat
-              label="Servings"
-              value={yieldServings ?? ""}
-              editing
-              onChange={(v) => onYieldChange?.("servings", v)}
-              hint="e.g. 4 servings"
-            />
-            {/* Always shown while editing so a string-only yield can be
-                upgraded to a QuantitativeValue with a weight/volume basis. */}
-            <Stat
-              label="Total yield"
-              value={yieldWeight ?? ""}
-              editing
-              onChange={(v) => onYieldChange?.("weight", v)}
-              hint="e.g. 50 g or 50 ml"
-            />
-          </>
-        ) : (
-          <>
-            {recipeYield &&
-              (currentServings != null && onServingsChange ? (
-                <ServingsControl
-                  servings={currentServings}
-                  onChange={onServingsChange}
-                  unitLabel={getYieldUnit(recipeYield) ?? undefined}
-                />
-              ) : (
-                <Stat
-                  label="Servings"
-                  value={getYieldLabel(recipeYield) ?? ""}
-                />
-              ))}
-            {/* Read mode surfaces the total (weight/volume) only for an object
-                yield that actually carries a valueReference. */}
-            {weightLabel && <Stat label="Total yield" value={weightLabel} />}
-          </>
-        )}
+      {/* px here (not on the centered row) recreates the parent's padding that
+          the caller's -mx breakout cancels, so the max-w row lines up with the
+          page's normal content column. Fixed-width cells in a centered
+          flex-wrap keep the columns aligned and center each row (including a
+          wrapped final row) instead of left-packing. */}
+      <div className="px-4 sm:px-6 py-4">
+        <div className="mx-auto flex max-w-3xl flex-wrap justify-center gap-x-6 gap-y-4">
+          {timeStats.map(({ label, value, field, hint }) =>
+            editing || value ? (
+              <Stat
+                key={field}
+                className="w-28"
+                label={label}
+                value={value ?? ""}
+                editing={editing}
+                onChange={editing ? (v) => onTimeChange?.(field, v) : undefined}
+                hint={editing ? hint : undefined}
+              />
+            ) : null,
+          )}
+          {editing ? (
+            <>
+              <Stat
+                className="w-28"
+                label="Servings"
+                value={yieldServings ?? ""}
+                editing
+                onChange={(v) => onYieldChange?.("servings", v)}
+                hint="e.g. 4 servings"
+              />
+              {/* Always shown while editing so a string-only yield can be
+                  upgraded to a QuantitativeValue with a weight/volume basis. */}
+              <Stat
+                className="w-28"
+                label="Total yield"
+                value={yieldWeight ?? ""}
+                editing
+                onChange={(v) => onYieldChange?.("weight", v)}
+                hint="e.g. 50 g or 50 ml"
+              />
+            </>
+          ) : (
+            <>
+              {recipeYield &&
+                (currentServings != null && onServingsChange ? (
+                  <ServingsControl
+                    servings={currentServings}
+                    onChange={onServingsChange}
+                    unitLabel={getYieldUnit(recipeYield) ?? undefined}
+                  />
+                ) : (
+                  <Stat
+                    className="w-28"
+                    label="Servings"
+                    value={getYieldLabel(recipeYield) ?? ""}
+                  />
+                ))}
+              {/* Read mode surfaces the total (weight/volume) only for an object
+                  yield that actually carries a valueReference. */}
+              {weightLabel && (
+                <Stat className="w-28" label="Total yield" value={weightLabel} />
+              )}
+            </>
+          )}
+        </div>
       </div>
     </section>
   );
