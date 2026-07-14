@@ -10,7 +10,32 @@ import {
   roundDecimal,
   getDefaultVolumeUnit,
   closestCommonFraction,
+  unitKeyForAlias,
 } from "@/lib/units";
+
+describe("unitKeyForAlias", () => {
+  it("resolves canonical keys and their aliases", () => {
+    expect(unitKeyForAlias("tbsp")).toBe("tbsp");
+    expect(unitKeyForAlias("tablespoons")).toBe("tbsp");
+    expect(unitKeyForAlias("cup")).toBe("cup");
+    expect(unitKeyForAlias("fluid ounces")).toBe("fl oz");
+  });
+
+  it("is case-insensitive and trims whitespace", () => {
+    expect(unitKeyForAlias("  Cup ")).toBe("cup");
+    expect(unitKeyForAlias("TSP")).toBe("tsp");
+  });
+
+  it("requires the whole token to be a unit (no prefix matching)", () => {
+    expect(unitKeyForAlias("tsp, whole")).toBeNull();
+    expect(unitKeyForAlias("cupcake")).toBeNull();
+  });
+
+  it("returns null for unknown text", () => {
+    expect(unitKeyForAlias("undetermined")).toBeNull();
+    expect(unitKeyForAlias("")).toBeNull();
+  });
+});
 
 describe("convert", () => {
   it("converts tbsp to tsp (1 tbsp = 3 tsp)", () => {
