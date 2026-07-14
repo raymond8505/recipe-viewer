@@ -69,14 +69,22 @@ describe("route auth policy registry", () => {
 
 type RouteHandler = (req: Request, ctx?: unknown) => Promise<Response>;
 
+const HTTP_METHODS = ["GET", "POST", "PUT", "PATCH", "DELETE"] as const;
+type HttpMethod = (typeof HTTP_METHODS)[number];
+
 describe("protected routes reject unauthenticated requests (behavioral gate)", () => {
-  // Load every protected route's POST handler ONCE, up front. Importing a route
+  // Load every protected route's handlers ONCE, up front. Importing a route
   // module is a cold dynamic import that pulls a sizeable graph (e.g. mcp/server,
   // or upload-image → storage → node:net); doing it inside each timed `it` case
   // occasionally blew the 5s per-test timeout under full-suite parallel load.
   // Hoisting it into beforeAll (one-time, with its own generous timeout) keeps
   // each case to a fast invoke + assert.
-  const handlers = new Map<string, RouteHandler>();
+  //
+  // EVERY exported HTTP method is exercised, not just POST — a GET-only or
+  // PATCH/DELETE route is as much a part of the protected surface as a POST
+  // one. A protected route exporting no recognizable method at all is a
+  // classification error and fails loudly here.
+  const handlersByPath = new Map<string, Map<HttpMethod, RouteHandler>>();
 
   beforeAll(async () => {
     await Promise.all(
@@ -86,28 +94,42 @@ describe("protected routes reject unauthenticated requests (behavioral gate)", (
           throw new Error(`no module loader for ${routePath}`);
         }
         const mod = (await loader()) as Record<string, unknown>;
-        if (typeof mod.POST !== "function") {
-          throw new Error(`${routePath} must export a POST handler`);
+        const handlers = new Map<HttpMethod, RouteHandler>();
+        for (const method of HTTP_METHODS) {
+          if (typeof mod[method] === "function") {
+            handlers.set(method, mod[method] as RouteHandler);
+          }
         }
-        handlers.set(routePath, mod.POST as RouteHandler);
+        if (handlers.size === 0) {
+          throw new Error(`${routePath} exports no HTTP method handlers`);
+        }
+        handlersByPath.set(routePath, handlers);
       }),
     );
   }, 30000);
 
   it.each(protectedPaths)(
-    "POST %s with no credentials → 401/403",
+    "%s with no credentials → 401/403 on every exported method",
     async (routePath) => {
-      const handler = handlers.get(routePath);
-      expect(handler, `${routePath} handler was not preloaded`).toBeTypeOf("function");
+      const handlers = handlersByPath.get(routePath);
+      expect(handlers, `${routePath} handlers were not preloaded`).toBeDefined();
 
       const url = `http://localhost${routePath.replace("[id]", "test-id")}`;
-      const req = new Request(url, { method: "POST" });
       const ctx = routePath.includes("[id]")
         ? { params: Promise.resolve({ id: "test-id" }) }
         : undefined;
 
-      const res = await handler!(req, ctx);
-      expect([401, 403]).toContain(res.status);
+      // 405 is accepted alongside 401/403: some routes export spec-required
+      // stub methods that unconditionally answer Method Not Allowed (e.g. the
+      // MCP Streamable-HTTP transport's GET/DELETE). A method that refuses to
+      // exist performs no work for anyone — anonymous callers included.
+      for (const [method, handler] of handlers!) {
+        const res = await handler(new Request(url, { method }), ctx);
+        expect(
+          [401, 403, 405],
+          `${method} ${routePath} must reject unauthenticated requests`,
+        ).toContain(res.status);
+      }
     },
   );
 });
