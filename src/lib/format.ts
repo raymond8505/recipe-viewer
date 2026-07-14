@@ -225,6 +225,61 @@ export function getYieldUnit(
 }
 
 /**
+ * Human-readable label for a `recipeYield`'s valueReference (the raw
+ * weight/volume, e.g. "454 g"), or null when there's no object-form
+ * valueReference to show. The read-mode counterpart of the "Yield weight" edit
+ * cell; `getYieldLabel` is the same idea for the top-level serving count.
+ */
+export function getYieldWeightLabel(
+  recipeYield: SchemaRecipe["recipeYield"],
+): string | null {
+  const vr = getYieldValueReference(recipeYield);
+  if (!vr) return null;
+  const parts = [vr.value, vr.unitText].filter((p) => p != null && p !== "");
+  return parts.length ? parts.join(" ") : null;
+}
+
+/** A yield display label ("4 servings", "500 g", or "1.5 kg") → its numeric
+ *  value and remaining unit text. A label with no leading number is treated as
+ *  a pure unit ("Serves a crowd" → { unitText: "Serves a crowd" }). */
+function parseYieldLabel(label: string): { value?: number; unitText?: string } {
+  const text = label.trim();
+  if (!text) return {};
+  const num = parseFloat(text);
+  if (!Number.isFinite(num)) return { unitText: text };
+  const unit = text.replace(/^[\d.,/\s-]*\d[\d.,/\s-]*/, "").trim();
+  return { value: num, unitText: unit || undefined };
+}
+
+/**
+ * Editable yield labels → the stored `QuantitativeValue` recipeYield. The
+ * editor always persists the object form (migrating legacy string yields on
+ * save): a non-empty `servingsLabel` yields a QuantitativeValue even when
+ * `weightLabel` is blank. A numeric `weightLabel` adds the `valueReference`
+ * (weight/volume that drives the nutrition per-serving basis); a blank or
+ * unit-only weight omits it. Both labels blank → undefined (no yield).
+ */
+export function editableYieldToSchema(
+  servingsLabel: string,
+  weightLabel: string,
+): QuantitativeValue | undefined {
+  const s = parseYieldLabel(servingsLabel);
+  if (s.value == null && !s.unitText) return undefined;
+
+  const result: QuantitativeValue = { "@type": "QuantitativeValue" };
+  if (s.value != null) result.value = s.value;
+  if (s.unitText) result.unitText = s.unitText;
+
+  const w = parseYieldLabel(weightLabel);
+  if (w.value != null) {
+    const ref: QuantitativeValue = { "@type": "QuantitativeValue", value: w.value };
+    if (w.unitText) ref.unitText = w.unitText;
+    result.valueReference = ref;
+  }
+  return result;
+}
+
+/**
  * Return a Schema.org-compliant JSON-LD object for a recipe.
  * Strips custom extensions (notes, cookingNotes, ingredient group objects) so
  * external tools that validate against the spec can parse the output cleanly.

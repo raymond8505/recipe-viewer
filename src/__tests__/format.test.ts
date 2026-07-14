@@ -20,6 +20,8 @@ import {
   getYieldLabel,
   getYieldValueReference,
   getYieldUnit,
+  getYieldWeightLabel,
+  editableYieldToSchema,
 } from "@/lib/format";
 import type {
   EditableIngredients,
@@ -231,6 +233,77 @@ describe("getYieldUnit", () => {
 
   it("returns null for a string yield", () => {
     expect(getYieldUnit("4 servings")).toBeNull();
+  });
+});
+
+describe("getYieldWeightLabel", () => {
+  it("formats the valueReference of a QuantitativeValue", () => {
+    expect(getYieldWeightLabel(quantitativeValueYield)).toBe("454 g");
+  });
+
+  it("returns null when a QuantitativeValue has no valueReference", () => {
+    expect(getYieldWeightLabel({ value: 4, unitText: "kebabs" })).toBeNull();
+  });
+
+  it("returns null for a string yield", () => {
+    expect(getYieldWeightLabel("4 servings")).toBeNull();
+  });
+});
+
+describe("editableYieldToSchema", () => {
+  it("migrates a string-form label to a QuantitativeValue", () => {
+    expect(editableYieldToSchema("4 servings", "")).toEqual({
+      "@type": "QuantitativeValue",
+      value: 4,
+      unitText: "servings",
+    });
+  });
+
+  it("keeps a custom serving unit", () => {
+    expect(editableYieldToSchema("4 kebabs", "")).toEqual({
+      "@type": "QuantitativeValue",
+      value: 4,
+      unitText: "kebabs",
+    });
+  });
+
+  it("adds a valueReference from a numeric weight label", () => {
+    expect(editableYieldToSchema("4 kebabs", "454 g")).toEqual({
+      "@type": "QuantitativeValue",
+      value: 4,
+      unitText: "kebabs",
+      valueReference: { "@type": "QuantitativeValue", value: 454, unitText: "g" },
+    });
+  });
+
+  it("stays a QuantitativeValue when the weight is left blank", () => {
+    const result = editableYieldToSchema("4 servings", "");
+    expect(result?.["@type"]).toBe("QuantitativeValue");
+    expect(result?.valueReference).toBeUndefined();
+  });
+
+  it("omits the valueReference when the weight has no number", () => {
+    expect(editableYieldToSchema("4 servings", "grams")?.valueReference).toBeUndefined();
+  });
+
+  it("preserves decimal weights without rounding", () => {
+    expect(editableYieldToSchema("4 servings", "1.5 kg")?.valueReference).toEqual({
+      "@type": "QuantitativeValue",
+      value: 1.5,
+      unitText: "kg",
+    });
+  });
+
+  it("treats a number-only servings label as value with no unit", () => {
+    expect(editableYieldToSchema("6", "")).toEqual({
+      "@type": "QuantitativeValue",
+      value: 6,
+    });
+  });
+
+  it("returns undefined when both labels are blank", () => {
+    expect(editableYieldToSchema("", "")).toBeUndefined();
+    expect(editableYieldToSchema("  ", "  ")).toBeUndefined();
   });
 });
 
