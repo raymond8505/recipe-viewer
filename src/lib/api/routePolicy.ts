@@ -73,6 +73,11 @@ export const ROUTE_POLICY = {
     policy: "session-or-recipe-token",
     rationale: "Mutates a recipe (archive); browser session or recipe-scoped token.",
   },
+  "/api/recipes/[id]/normalize": {
+    policy: "session-or-recipe-token",
+    rationale:
+      "Manually re-runs ingredient normalization for a recipe (recovery after USDA/Gemini outages or threshold tuning); browser session or recipe-scoped token.",
+  },
   "/api/recipes/[id]/notes": {
     policy: "session-or-recipe-token",
     rationale: "Mutates a recipe (cooking notes); browser session or recipe-scoped token.",
