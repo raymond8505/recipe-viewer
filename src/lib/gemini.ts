@@ -1,4 +1,5 @@
 import { env } from "@/env";
+import { fetchWithRetry } from "./retry";
 
 // Gemini text generation with structured (JSON-schema-constrained) output.
 // Raw fetch like src/lib/embedding.ts — no SDK. Flash-Lite is the default:
@@ -37,7 +38,7 @@ export async function generateStructured<T>(
   const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
 
   try {
-    const res = await fetch(endpoint, {
+    const res = await fetchWithRetry(endpoint, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",

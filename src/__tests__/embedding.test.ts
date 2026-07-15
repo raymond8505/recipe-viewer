@@ -50,8 +50,8 @@ describe("generateEmbedding", () => {
     expect(result).toEqual([3, 4]);
   });
 
-  it("returns null on a non-200 response", async () => {
-    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("nope", { status: 429 })));
+  it("returns null on a non-retryable non-200 (400)", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("nope", { status: 400 })));
 
     expect(await generateEmbedding("text")).toBeNull();
   });
@@ -68,9 +68,46 @@ describe("generateEmbedding", () => {
     expect(await generateEmbedding("text")).toBeNull();
   });
 
-  it("returns null (never throws) on a network error", async () => {
-    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("ECONNRESET")));
+  // Transient failures now go through fetchWithRetry. Fake timers drive the
+  // backoff so these don't actually wait.
+  describe("retry behavior", () => {
+    beforeEach(() => vi.useFakeTimers());
+    afterEach(() => vi.useRealTimers());
 
-    await expect(generateEmbedding("text")).resolves.toBeNull();
+    it("retries then returns null when the API keeps returning 429", async () => {
+      const fetchSpy = vi.fn().mockResolvedValue(new Response("nope", { status: 429 }));
+      vi.stubGlobal("fetch", fetchSpy);
+
+      const p = generateEmbedding("text");
+      await vi.advanceTimersByTimeAsync(60_000);
+
+      expect(await p).toBeNull();
+      expect(fetchSpy).toHaveBeenCalledTimes(3); // 1 attempt + 2 retries
+    });
+
+    it("retries then returns null (never throws) on a persistent network error", async () => {
+      const fetchSpy = vi.fn().mockRejectedValue(new Error("ECONNRESET"));
+      vi.stubGlobal("fetch", fetchSpy);
+
+      const p = generateEmbedding("text");
+      await vi.advanceTimersByTimeAsync(60_000);
+
+      expect(await p).toBeNull();
+      expect(fetchSpy).toHaveBeenCalledTimes(3);
+    });
+
+    it("recovers when a transient 503 is followed by success", async () => {
+      const fetchSpy = vi
+        .fn()
+        .mockResolvedValueOnce(new Response("unavailable", { status: 503 }))
+        .mockResolvedValueOnce(jsonResponse({ embedding: { values: [3, 4] } }));
+      vi.stubGlobal("fetch", fetchSpy);
+
+      const p = generateEmbedding("text");
+      await vi.advanceTimersByTimeAsync(60_000);
+
+      expect(await p).toEqual([3, 4]);
+      expect(fetchSpy).toHaveBeenCalledTimes(2);
+    });
   });
 });

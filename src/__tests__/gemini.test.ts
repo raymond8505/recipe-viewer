@@ -74,9 +74,9 @@ describe("generateStructured", () => {
     );
   });
 
-  it("returns null on non-200", async () => {
+  it("returns null on a non-retryable non-200", async () => {
     mockFetch.mockResolvedValueOnce(
-      new Response("quota exceeded", { status: 429 }),
+      new Response("bad request", { status: 400 }),
     );
 
     expect(
@@ -102,11 +102,45 @@ describe("generateStructured", () => {
     ).toBeNull();
   });
 
-  it("returns null when the request throws", async () => {
-    mockFetch.mockRejectedValueOnce(new TypeError("fetch failed"));
+  // Transient failures now go through fetchWithRetry. Fake timers drive the
+  // backoff so these don't actually wait.
+  describe("retry behavior", () => {
+    beforeEach(() => vi.useFakeTimers());
+    afterEach(() => vi.useRealTimers());
 
-    expect(
-      await generateStructured({ prompt: "p", responseSchema: SCHEMA }),
-    ).toBeNull();
+    it("retries then returns null (never throws) on a persistent network error", async () => {
+      mockFetch.mockRejectedValue(new TypeError("fetch failed"));
+
+      const p = generateStructured({ prompt: "p", responseSchema: SCHEMA });
+      await vi.advanceTimersByTimeAsync(60_000);
+
+      expect(await p).toBeNull();
+      expect(mockFetch).toHaveBeenCalledTimes(3);
+    });
+
+    it("retries then returns null when the API keeps returning 429", async () => {
+      mockFetch.mockResolvedValue(new Response("quota exceeded", { status: 429 }));
+
+      const p = generateStructured({ prompt: "p", responseSchema: SCHEMA });
+      await vi.advanceTimersByTimeAsync(60_000);
+
+      expect(await p).toBeNull();
+      expect(mockFetch).toHaveBeenCalledTimes(3); // 1 attempt + 2 retries
+    });
+
+    it("recovers when a transient 503 is followed by success", async () => {
+      mockFetch
+        .mockResolvedValueOnce(new Response("unavailable", { status: 503 }))
+        .mockResolvedValueOnce(candidateResponse('{"name":"cumin"}'));
+
+      const p = generateStructured<{ name: string }>({
+        prompt: "p",
+        responseSchema: SCHEMA,
+      });
+      await vi.advanceTimersByTimeAsync(60_000);
+
+      expect(await p).toEqual({ name: "cumin" });
+      expect(mockFetch).toHaveBeenCalledTimes(2);
+    });
   });
 });

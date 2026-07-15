@@ -1,4 +1,5 @@
 import { env } from "@/env";
+import { fetchWithRetry } from "./retry";
 import { convert, isVolumeUnit, unitKeyForAlias } from "./units";
 import type { IngredientNutrition, UsdaFoodPortion } from "@/types/ingredient";
 
@@ -58,7 +59,7 @@ export interface UsdaFoodDetail {
 async function fetchJson<T>(url: URL, context: string): Promise<T> {
   let res: Response;
   try {
-    res = await fetch(url);
+    res = await fetchWithRetry(url);
   } catch (err) {
     throw new UsdaError(null, `${context} request failed: ${String(err)}`);
   }

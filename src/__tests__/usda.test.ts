@@ -80,22 +80,57 @@ describe("searchFoods", () => {
     expect(await searchFoods("xyzzy")).toEqual([]);
   });
 
-  it("throws UsdaError with the status on non-200", async () => {
-    mockFetch.mockResolvedValueOnce(jsonResponse({ error: "over limit" }, 429));
+  it("throws UsdaError with the status on a non-retryable non-200", async () => {
+    mockFetch.mockResolvedValueOnce(jsonResponse({ error: "not found" }, 404));
 
     const err = await searchFoods("cumin").catch((e: unknown) => e);
 
     expect(err).toBeInstanceOf(UsdaError);
-    expect((err as UsdaError).status).toBe(429);
+    expect((err as UsdaError).status).toBe(404);
   });
 
-  it("wraps network failures in UsdaError with null status", async () => {
-    mockFetch.mockRejectedValueOnce(new TypeError("fetch failed"));
+  // Transient failures now go through fetchWithRetry (in fetchJson). Fake timers
+  // drive the backoff so these don't actually wait.
+  describe("retry behavior", () => {
+    beforeEach(() => vi.useFakeTimers());
+    afterEach(() => vi.useRealTimers());
 
-    const err = await searchFoods("cumin").catch((e: unknown) => e);
+    it("retries then throws UsdaError with the status on a persistent 429", async () => {
+      mockFetch.mockResolvedValue(jsonResponse({ error: "over limit" }, 429));
 
-    expect(err).toBeInstanceOf(UsdaError);
-    expect((err as UsdaError).status).toBeNull();
+      const outcome = searchFoods("cumin").catch((e: unknown) => e);
+      await vi.advanceTimersByTimeAsync(60_000);
+      const err = await outcome;
+
+      expect(err).toBeInstanceOf(UsdaError);
+      expect((err as UsdaError).status).toBe(429);
+      expect(mockFetch).toHaveBeenCalledTimes(3); // 1 attempt + 2 retries
+    });
+
+    it("retries then wraps a persistent network failure in UsdaError (null status)", async () => {
+      mockFetch.mockRejectedValue(new TypeError("fetch failed"));
+
+      const outcome = searchFoods("cumin").catch((e: unknown) => e);
+      await vi.advanceTimersByTimeAsync(60_000);
+      const err = await outcome;
+
+      expect(err).toBeInstanceOf(UsdaError);
+      expect((err as UsdaError).status).toBeNull();
+      expect(mockFetch).toHaveBeenCalledTimes(3);
+    });
+
+    it("recovers when a transient 503 is followed by success", async () => {
+      mockFetch
+        .mockResolvedValueOnce(jsonResponse({ error: "unavailable" }, 503))
+        .mockResolvedValueOnce(jsonResponse(cuminSearchResponse));
+
+      const p = searchFoods("cumin seed");
+      await vi.advanceTimersByTimeAsync(60_000);
+      const foods = await p;
+
+      expect(foods).toHaveLength(2);
+      expect(mockFetch).toHaveBeenCalledTimes(2);
+    });
   });
 });
 
