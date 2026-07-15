@@ -386,12 +386,12 @@ describe("createRecipeRow", () => {
     await createRecipeRow({
       url: "https://example.com",
       source: "example.com",
-      schema: schema as never,
+      schema,
     });
 
     expect(inserts[0]).toMatchObject({
       name: "Soup",
-      content: schemaToMarkdown(schema as never),
+      content: schemaToMarkdown(schema),
       url: "https://example.com",
       source: "example.com",
       status: "draft",
@@ -407,7 +407,7 @@ describe("createRecipeRow", () => {
     await createRecipeRow({
       url: "https://example.com",
       source: "example.com",
-      schema: { name: "Vec" } as never,
+      schema: { name: "Vec" },
     });
 
     expect(inserts[0]).toMatchObject({ embedding: "[0.1,0.2,0.3]" });
@@ -422,7 +422,7 @@ describe("createRecipeRow", () => {
     await createRecipeRow({
       url: "https://example.com",
       source: "example.com",
-      schema: { name: "NoVec" } as never,
+      schema: { name: "NoVec" },
     });
 
     expect(inserts[0]).not.toHaveProperty("embedding");
@@ -435,7 +435,7 @@ describe("createRecipeRow", () => {
       createRecipeRow({
         url: "https://example.com",
         source: "example.com",
-        schema: { name: "X" } as never,
+        schema: { name: "X" },
       }),
     ).rejects.toBeInstanceOf(RecipeRepoError);
   });
@@ -449,7 +449,7 @@ describe("createRecipeRow", () => {
     await createRecipeRow({
       url: "https://example.com",
       source: "example.com",
-      schema: { name: "Soup", recipeIngredient: ["1 tsp cumin"] } as never,
+      schema: { name: "Soup", recipeIngredient: ["1 tsp cumin"] },
     });
 
     expect(mockScheduleNormalization).toHaveBeenCalledWith("new-id");
@@ -464,7 +464,7 @@ describe("createRecipeRow", () => {
     await createRecipeRow({
       url: "https://example.com",
       source: "example.com",
-      schema: { name: "Soup" } as never,
+      schema: { name: "Soup" },
     });
 
     expect(mockScheduleNormalization).not.toHaveBeenCalled();
@@ -490,7 +490,7 @@ describe("updateRecipeRow", () => {
       updateSingle: { data: existing, error: null },
     });
 
-    await updateRecipeRow("r1", { schema: { name: "Renamed" } } as never);
+    await updateRecipeRow("r1", { schema: { name: "Renamed" } });
 
     expect(updates[0]).toMatchObject({ name: "Renamed" });
     // metadata.schema should still be merged
@@ -503,10 +503,10 @@ describe("updateRecipeRow", () => {
       updateSingle: { data: existing, error: null },
     });
 
-    await updateRecipeRow("r1", { schema: { description: "Fresh blurb" } } as never);
+    await updateRecipeRow("r1", { schema: { description: "Fresh blurb" } });
 
     const mergedSchema = { name: "Original", description: "Fresh blurb" };
-    expect(updates[0]).toMatchObject({ content: schemaToMarkdown(mergedSchema as never) });
+    expect(updates[0]).toMatchObject({ content: schemaToMarkdown(mergedSchema) });
   });
 
   it("sets the embedding from the merged schema when generation succeeds", async () => {
@@ -516,7 +516,7 @@ describe("updateRecipeRow", () => {
       updateSingle: { data: existing, error: null },
     });
 
-    await updateRecipeRow("r1", { schema: { description: "Fresh blurb" } } as never);
+    await updateRecipeRow("r1", { schema: { description: "Fresh blurb" } });
 
     expect(updates[0]).toMatchObject({ embedding: "[0.5,0.5]" });
   });
@@ -528,7 +528,7 @@ describe("updateRecipeRow", () => {
       updateSingle: { data: existing, error: null },
     });
 
-    await updateRecipeRow("r1", { schema: { description: "Fresh blurb" } } as never);
+    await updateRecipeRow("r1", { schema: { description: "Fresh blurb" } });
 
     expect(updates[0]).not.toHaveProperty("embedding");
   });
@@ -563,7 +563,7 @@ describe("updateRecipeRow", () => {
 
     await updateRecipeRow("r1", {
       schema: { recipeIngredient: ["2 tsp cumin"] },
-    } as never);
+    });
 
     expect(mockScheduleNormalization).toHaveBeenCalledWith("r1");
   });
@@ -575,7 +575,7 @@ describe("updateRecipeRow", () => {
       updateSingle: { data: existing, error: null },
     });
 
-    await updateRecipeRow("r1", { schema: { description: "Fresh blurb" } } as never);
+    await updateRecipeRow("r1", { schema: { description: "Fresh blurb" } });
 
     expect(mockScheduleNormalization).not.toHaveBeenCalled();
   });
@@ -599,7 +599,7 @@ describe("updateRecipeRow", () => {
     // regrouping alone must not re-run normalization.
     await updateRecipeRow("r1", {
       schema: { recipeIngredient: ["1 tsp cumin"] },
-    } as never);
+    });
 
     expect(mockScheduleNormalization).not.toHaveBeenCalled();
   });
