@@ -8,6 +8,11 @@ import { fetchWithRetry } from "./retry";
 // latency/cost). Callers can override per call if a task needs headroom.
 export const DEFAULT_STRUCTURED_MODEL = "gemini-2.5-flash-lite";
 
+/** The `generateContent` REST endpoint for a given Gemini model. */
+export function generateContentUrl(model: string): string {
+  return `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
+}
+
 interface GenerateContentResponse {
   candidates?: Array<{
     content?: { parts?: Array<{ text?: string }> };
@@ -34,8 +39,7 @@ export interface GenerateStructuredOptions {
 export async function generateStructured<T>(
   opts: GenerateStructuredOptions,
 ): Promise<T | null> {
-  const model = opts.model ?? DEFAULT_STRUCTURED_MODEL;
-  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
+  const endpoint = generateContentUrl(opts.model ?? DEFAULT_STRUCTURED_MODEL);
 
   try {
     const res = await fetchWithRetry(endpoint, {

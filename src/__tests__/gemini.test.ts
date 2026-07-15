@@ -2,6 +2,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   DEFAULT_STRUCTURED_MODEL,
+  generateContentUrl,
   generateStructured,
 } from "@/lib/gemini";
 
@@ -46,9 +47,7 @@ describe("generateStructured", () => {
 
     expect(result).toEqual({ name: "cumin" });
     const [endpoint, init] = mockFetch.mock.calls[0] as [string, RequestInit];
-    expect(endpoint).toBe(
-      `https://generativelanguage.googleapis.com/v1beta/models/${DEFAULT_STRUCTURED_MODEL}:generateContent`,
-    );
+    expect(endpoint).toBe(generateContentUrl(DEFAULT_STRUCTURED_MODEL));
     const body = JSON.parse(init.body as string);
     expect(body.generationConfig).toEqual({
       responseMimeType: "application/json",
