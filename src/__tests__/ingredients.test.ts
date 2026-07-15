@@ -265,38 +265,46 @@ describe("deleteIngredientRow", () => {
 });
 
 describe("matchIngredients", () => {
-  it("invokes the RPC with a bracketed literal and passes params through", async () => {
+  it("invokes the hybrid RPC with the query text and a bracketed literal", async () => {
     const matches = [
-      { id: "ing-1", name: "cumin seed", nutrition: null, density_g_per_ml: null, similarity: 0.91 },
+      {
+        id: "ing-1",
+        name: "cumin seed",
+        nutrition: null,
+        density_g_per_ml: null,
+        semantic_similarity: 0.91,
+        keyword_similarity: 1,
+        score: 0.039,
+      },
     ];
     useQueue([{ data: matches }]);
 
-    const result = await matchIngredients([0.5, 0.25], 3, 0.6);
+    const result = await matchIngredients("cumin seed", [0.5, 0.25], 3);
 
     expect(result).toEqual(matches);
     expect(client.rpc).toHaveBeenCalledWith("match_ingredients", {
+      query_text: "cumin seed",
       query_embedding: "[0.5,0.25]",
       match_count: 3,
-      min_similarity: 0.6,
     });
   });
 
-  it("defaults to top-5 with no similarity floor", async () => {
+  it("defaults to top-5", async () => {
     useQueue([{ data: [] }]);
 
-    await matchIngredients([1]);
+    await matchIngredients("cumin", [1]);
 
     expect(client.rpc).toHaveBeenCalledWith("match_ingredients", {
+      query_text: "cumin",
       query_embedding: "[1]",
       match_count: 5,
-      min_similarity: 0,
     });
   });
 
   it("throws match_failed on RPC error — callers must not read that as 'no matches'", async () => {
     useQueue([{ data: null, error: { message: "function missing" } }]);
 
-    const err = await matchIngredients([1]).catch((e: unknown) => e);
+    const err = await matchIngredients("cumin", [1]).catch((e: unknown) => e);
 
     expect(err).toBeInstanceOf(IngredientRepoError);
     expect((err as IngredientRepoError).kind).toBe("match_failed");

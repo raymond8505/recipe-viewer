@@ -245,20 +245,24 @@ export async function deleteIngredientRow(id: string): Promise<void> {
   }
 }
 
-// Cosine-similarity search over the catalog via the match_ingredients RPC
-// (db/migrations/0005). Throws ("match_failed") on RPC failure — callers must
-// treat that as "matching unavailable", never as "no matches".
+// Hybrid keyword + semantic search over the catalog via the match_ingredients
+// RPC (db/migrations/0007): pg_trgm trigram similarity on name/aliases fused
+// with pgvector cosine similarity by reciprocal rank. queryText is the parsed
+// ingredient name (e.g. "unsalted butter"), embedding its vector. rrf_k and
+// the signal weights stay at the SQL defaults until a caller needs knobs.
+// Throws ("match_failed") on RPC failure — callers must treat that as
+// "matching unavailable", never as "no matches".
 export async function matchIngredients(
+  queryText: string,
   embedding: number[],
   count = 5,
-  minSimilarity = 0,
 ): Promise<IngredientMatch[]> {
   const supabase = getSupabaseAdminClient();
 
   const { data, error } = await supabase.rpc("match_ingredients", {
+    query_text: queryText,
     query_embedding: toVectorLiteral(embedding),
     match_count: count,
-    min_similarity: minSimilarity,
   });
 
   if (error) {

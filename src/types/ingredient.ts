@@ -69,13 +69,21 @@ export interface RecipeIngredientRow {
   position: number;
 }
 
-// A match_ingredients RPC result row. similarity = 1 - cosine distance.
+// A match_ingredients RPC result row (hybrid keyword + semantic search,
+// db/migrations/0007).
 export interface IngredientMatch {
   id: string;
   name: string;
   nutrition: IngredientNutrition | null;
   density_g_per_ml: number | null;
-  similarity: number;
+  // Raw cosine similarity of the query embedding (1 - cosine distance).
+  semantic_similarity: number;
+  // Best pg_trgm trigram similarity of the query text across name + aliases;
+  // ~1.0 means a near-exact name or alias match.
+  keyword_similarity: number;
+  // Reciprocal-rank-fusion score of the two signals. Ranking only — not a
+  // similarity, so never threshold on it; threshold on the raw similarities.
+  score: number;
 }
 
 export interface IngredientsResult {
