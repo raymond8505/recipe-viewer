@@ -129,6 +129,16 @@ When a handler calls a state setter with data from `fetch` or a webhook response
 - Embeddings are stored **raw (un-normalized)**: they're queried with pgvector cosine distance (`<=>`), which is scale-invariant, so normalizing would be a no-op and would also split the column's scale from the older n8n-written rows.
 - Neither column is in `RECIPE_COLUMNS`, so both are **write-only** — not read back onto `RecipeRow`.
 
+## Ingredient Catalog & Matching (PR #40)
+
+**PostgREST select lists go through `selectColumns<Row>()`** (`src/lib/supabase.ts`) — never hand-write a comma-delimited column string. It compile-checks the list against the row type in both directions (unknown column rejected; missing column named in the error) and enforces write-only columns (`embedding`, `content`) by their absence from the Row type. Its return type is the joined string **literal** (template-literal `Join`) — this is load-bearing: supabase-js infers result row types by parsing the select string's literal type, and a plain `string` degrades results to `GenericStringError`, breaking single-cast `data as Row` sites.
+
+**`ingredients.embedding` is NOT NULL** (migration 0006): `CreateIngredientInput.embedding` is required and `UpdateIngredientPatch.embedding` can replace but never clear. Rationale: an embedding-less row is invisible to matching → every line resolving to it would be misclassified as novel.
+
+**`match_ingredients` is hybrid keyword + semantic** (migration 0007): pg_trgm trigram similarity over `name` + each alias (best-of), fused with pgvector cosine via Reciprocal Rank Fusion (`rrf_k=50`, per-signal weights, all defaulted in SQL). Returns `semantic_similarity`, `keyword_similarity`, `score`. **Never threshold on `score`** — RRF is rank-only; threshold on the raw similarities (keyword ~1.0 = near-exact name/alias hit). Trigram was chosen over tsvector deliberately: ingredient names are 1–4 words where `ts_rank_cd` is meaningless and stemmed FTS misses typos. The single scored-CTE seq scan is intentional at catalog scale; the Supabase docs' two-limited-CTE + trgm/hnsw-index shape is the upgrade path if the catalog grows large.
+
+**Migration records in `db/migrations/` are applied out-of-band** via Supabase MCP `apply_migration` (project `xonkmdhnjpjkapnsmltu`); 0006+ show up in the project's migrations table, 0002–0005 predate that and don't — check `information_schema` for actual state, not the migrations list.
+
 ## Styling Layer — Keep It Centralized
 
 The styling layer has **single sources of truth**. Do not re-declare style decisions at call sites — thread them back to these homes so the site and Storybook (and every component) stay in sync.
