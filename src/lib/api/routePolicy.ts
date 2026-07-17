@@ -100,6 +100,18 @@ export const ROUTE_POLICY = {
       "Multipart image upload; browser session or single-use recipe-scoped token. This is the agent curl path the get_token MCP tool directs to.",
   },
 
+  // ── Ingredient catalog (logged-in manager UI) ───────────────────────────
+  "/api/ingredients": {
+    policy: "session",
+    rationale:
+      "Ingredient catalog list/create backs the logged-in /ingredients manager UI; no anonymous or agent-token use case (agents get the search_ingredients MCP tool).",
+  },
+  "/api/ingredients/[id]": {
+    policy: "session",
+    rationale:
+      "Ingredient catalog update/delete backs the logged-in /ingredients manager UI. Recipe-scoped tokens don't apply — they authorize one recipe, not the shared catalog.",
+  },
+
   // ── MCP transport ───────────────────────────────────────────────────────
   "/api/mcp/server": {
     policy: "mcp-oauth",

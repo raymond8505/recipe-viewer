@@ -1,0 +1,70 @@
+// Client-side wrappers for the /api/ingredients routes (pattern:
+// src/lib/api/recipes.ts). UI components import from here instead of calling
+// `fetch` directly so the network shape stays in one place and tests/stories
+// can mock a single module.
+
+import type { IngredientRow, IngredientsResult } from "@/types/ingredient";
+import type {
+  IngredientCreateInput,
+  IngredientUpdateInput,
+} from "@/lib/schemas/ingredient";
+
+export async function fetchIngredients(opts?: {
+  q?: string;
+  page?: number;
+  limit?: number;
+}): Promise<IngredientsResult> {
+  const params = new URLSearchParams();
+  if (opts?.q) params.set("q", opts.q);
+  if (opts?.page) params.set("page", String(opts.page));
+  if (opts?.limit) params.set("limit", String(opts.limit));
+  const qs = params.toString();
+
+  const res = await fetch(`/api/ingredients${qs ? `?${qs}` : ""}`);
+  if (!res.ok) {
+    throw new Error(`Ingredient list failed with status ${res.status}`);
+  }
+  return res.json();
+}
+
+export async function createIngredient(
+  input: IngredientCreateInput,
+): Promise<IngredientRow> {
+  const res = await fetch("/api/ingredients", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  if (res.status === 409) {
+    throw new Error("An ingredient with that name already exists");
+  }
+  if (!res.ok) {
+    throw new Error(`Ingredient create failed with status ${res.status}`);
+  }
+  return res.json();
+}
+
+export async function updateIngredient(
+  id: string,
+  patch: IngredientUpdateInput,
+): Promise<IngredientRow> {
+  const res = await fetch(`/api/ingredients/${id}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(patch),
+  });
+  if (res.status === 409) {
+    throw new Error("An ingredient with that name already exists");
+  }
+  if (!res.ok) {
+    throw new Error(`Ingredient update failed with status ${res.status}`);
+  }
+  return res.json();
+}
+
+export async function deleteIngredient(id: string): Promise<void> {
+  const res = await fetch(`/api/ingredients/${id}`, { method: "DELETE" });
+  if (!res.ok) {
+    throw new Error(`Ingredient delete failed with status ${res.status}`);
+  }
+}
