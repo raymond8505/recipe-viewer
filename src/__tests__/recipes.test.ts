@@ -10,6 +10,11 @@ const mockGetSupabaseClient = vi.hoisted(() => vi.fn());
 // Embedding generation hits the network; mock it. Default: no embedding
 // available (null), so write paths don't set the column unless a test opts in.
 const mockGenerateEmbedding = vi.hoisted(() => vi.fn().mockResolvedValue(null));
+// The write paths schedule post-response ingredient normalization; mock the
+// trigger so repo tests never start detached LangGraph runs. The fingerprint
+// module stays REAL — the should-normalize tests exercise the actual
+// ingredient-text comparison.
+const mockScheduleNormalization = vi.hoisted(() => vi.fn());
 
 vi.mock("@/lib/features", () => ({ getFeatures: () => mockFeatures }));
 // importOriginal keeps toVectorLiteral real — the embedding tests assert the
@@ -19,6 +24,9 @@ vi.mock("@/lib/supabase", async (importOriginal) => {
   return { ...actual, getSupabaseClient: mockGetSupabaseClient };
 });
 vi.mock("@/lib/embedding", () => ({ generateEmbedding: mockGenerateEmbedding }));
+vi.mock("@/lib/normalization/trigger", () => ({
+  scheduleNormalization: mockScheduleNormalization,
+}));
 
 import {
   createRecipeRow,
@@ -378,12 +386,12 @@ describe("createRecipeRow", () => {
     await createRecipeRow({
       url: "https://example.com",
       source: "example.com",
-      schema: schema as never,
+      schema,
     });
 
     expect(inserts[0]).toMatchObject({
       name: "Soup",
-      content: schemaToMarkdown(schema as never),
+      content: schemaToMarkdown(schema),
       url: "https://example.com",
       source: "example.com",
       status: "draft",
@@ -399,7 +407,7 @@ describe("createRecipeRow", () => {
     await createRecipeRow({
       url: "https://example.com",
       source: "example.com",
-      schema: { name: "Vec" } as never,
+      schema: { name: "Vec" },
     });
 
     expect(inserts[0]).toMatchObject({ embedding: "[0.1,0.2,0.3]" });
@@ -414,7 +422,7 @@ describe("createRecipeRow", () => {
     await createRecipeRow({
       url: "https://example.com",
       source: "example.com",
-      schema: { name: "NoVec" } as never,
+      schema: { name: "NoVec" },
     });
 
     expect(inserts[0]).not.toHaveProperty("embedding");
@@ -427,9 +435,39 @@ describe("createRecipeRow", () => {
       createRecipeRow({
         url: "https://example.com",
         source: "example.com",
-        schema: { name: "X" } as never,
+        schema: { name: "X" },
       }),
     ).rejects.toBeInstanceOf(RecipeRepoError);
+  });
+
+  it("schedules normalization for the inserted row when the schema has ingredients", async () => {
+    mockScheduleNormalization.mockClear();
+    makeWriteSupabaseMock({
+      insertSingle: { data: { id: "new-id" }, error: null },
+    });
+
+    await createRecipeRow({
+      url: "https://example.com",
+      source: "example.com",
+      schema: { name: "Soup", recipeIngredient: ["1 tsp cumin"] },
+    });
+
+    expect(mockScheduleNormalization).toHaveBeenCalledWith("new-id");
+  });
+
+  it("does not schedule normalization when the schema has no ingredients", async () => {
+    mockScheduleNormalization.mockClear();
+    makeWriteSupabaseMock({
+      insertSingle: { data: { id: "new-id" }, error: null },
+    });
+
+    await createRecipeRow({
+      url: "https://example.com",
+      source: "example.com",
+      schema: { name: "Soup" },
+    });
+
+    expect(mockScheduleNormalization).not.toHaveBeenCalled();
   });
 });
 
@@ -452,7 +490,7 @@ describe("updateRecipeRow", () => {
       updateSingle: { data: existing, error: null },
     });
 
-    await updateRecipeRow("r1", { schema: { name: "Renamed" } } as never);
+    await updateRecipeRow("r1", { schema: { name: "Renamed" } });
 
     expect(updates[0]).toMatchObject({ name: "Renamed" });
     // metadata.schema should still be merged
@@ -465,10 +503,10 @@ describe("updateRecipeRow", () => {
       updateSingle: { data: existing, error: null },
     });
 
-    await updateRecipeRow("r1", { schema: { description: "Fresh blurb" } } as never);
+    await updateRecipeRow("r1", { schema: { description: "Fresh blurb" } });
 
     const mergedSchema = { name: "Original", description: "Fresh blurb" };
-    expect(updates[0]).toMatchObject({ content: schemaToMarkdown(mergedSchema as never) });
+    expect(updates[0]).toMatchObject({ content: schemaToMarkdown(mergedSchema) });
   });
 
   it("sets the embedding from the merged schema when generation succeeds", async () => {
@@ -478,7 +516,7 @@ describe("updateRecipeRow", () => {
       updateSingle: { data: existing, error: null },
     });
 
-    await updateRecipeRow("r1", { schema: { description: "Fresh blurb" } } as never);
+    await updateRecipeRow("r1", { schema: { description: "Fresh blurb" } });
 
     expect(updates[0]).toMatchObject({ embedding: "[0.5,0.5]" });
   });
@@ -490,7 +528,7 @@ describe("updateRecipeRow", () => {
       updateSingle: { data: existing, error: null },
     });
 
-    await updateRecipeRow("r1", { schema: { description: "Fresh blurb" } } as never);
+    await updateRecipeRow("r1", { schema: { description: "Fresh blurb" } });
 
     expect(updates[0]).not.toHaveProperty("embedding");
   });
@@ -508,5 +546,61 @@ describe("updateRecipeRow", () => {
     expect(updates[0]).not.toHaveProperty("embedding");
     expect(updates[0]).toMatchObject({ status: "archived" });
     expect(mockGenerateEmbedding).not.toHaveBeenCalled();
+  });
+
+  it("schedules normalization when the patch changes the ingredient text set", async () => {
+    mockScheduleNormalization.mockClear();
+    makeWriteSupabaseMock({
+      selectSingle: {
+        data: {
+          ...existing,
+          metadata: { schema: { name: "Original", recipeIngredient: ["1 tsp cumin"] } },
+        },
+        error: null,
+      },
+      updateSingle: { data: existing, error: null },
+    });
+
+    await updateRecipeRow("r1", {
+      schema: { recipeIngredient: ["2 tsp cumin"] },
+    });
+
+    expect(mockScheduleNormalization).toHaveBeenCalledWith("r1");
+  });
+
+  it("does not schedule normalization when the patch omits recipeIngredient", async () => {
+    mockScheduleNormalization.mockClear();
+    makeWriteSupabaseMock({
+      selectSingle: { data: existing, error: null },
+      updateSingle: { data: existing, error: null },
+    });
+
+    await updateRecipeRow("r1", { schema: { description: "Fresh blurb" } });
+
+    expect(mockScheduleNormalization).not.toHaveBeenCalled();
+  });
+
+  it("does not schedule normalization when the ingredient text is unchanged", async () => {
+    mockScheduleNormalization.mockClear();
+    makeWriteSupabaseMock({
+      selectSingle: {
+        data: {
+          ...existing,
+          metadata: {
+            schema: { name: "Original", recipeIngredient: [{ name: "1 tsp cumin", group: "Spices" }] },
+          },
+        },
+        error: null,
+      },
+      updateSingle: { data: existing, error: null },
+    });
+
+    // Same ingredient TEXT (getIngredientText), different representation —
+    // regrouping alone must not re-run normalization.
+    await updateRecipeRow("r1", {
+      schema: { recipeIngredient: ["1 tsp cumin"] },
+    });
+
+    expect(mockScheduleNormalization).not.toHaveBeenCalled();
   });
 });

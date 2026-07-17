@@ -2,6 +2,8 @@ import { getSupabaseClient, selectColumns, toVectorLiteral } from "./supabase";
 import { getFeatures } from "./features";
 import { normalizeRecipeInstructions, schemaToMarkdown } from "./format";
 import { generateEmbedding } from "./embedding";
+import { ingredientFingerprint } from "./normalization/fingerprint";
+import { scheduleNormalization } from "./normalization/trigger";
 import type { RecipeRow, RecipesResult, SchemaRecipe } from "@/types/recipe";
 
 export type RecipeStatus = "published" | "archived" | "draft";
@@ -191,7 +193,14 @@ export async function createRecipeRow(input: CreateRecipeInput): Promise<RecipeR
   if (error || !data) {
     throw new RecipeRepoError("insert_failed", error?.message ?? "Insert returned no row");
   }
-  return data as RecipeRow;
+  const row = data as RecipeRow;
+  // Post-response ingredient normalization (see src/lib/normalization/).
+  // scheduleNormalization never throws — a normalization problem must not
+  // fail the insert that just succeeded.
+  if ((input.schema.recipeIngredient ?? []).length > 0) {
+    scheduleNormalization(row.id);
+  }
+  return row;
 }
 
 // Patch fields on an existing recipe. The `schema` field is merged into the
@@ -230,11 +239,19 @@ export async function updateRecipeRow(
   if (patch.url !== undefined) writePatch.url = patch.url;
   if (patch.source !== undefined) writePatch.source = patch.source;
   if (patch.status !== undefined) writePatch.status = patch.status;
+  // Re-normalize only when the patch actually changes the ingredient TEXT set
+  // — this naturally skips the notes/upload-image/clear-notes callers and
+  // no-op ingredient patches.
+  let shouldNormalize = false;
   if (patch.schema !== undefined) {
     const mergedSchema = {
       ...current.metadata.schema,
       ...patch.schema,
     } as SchemaRecipe;
+    shouldNormalize =
+      patch.schema.recipeIngredient !== undefined &&
+      ingredientFingerprint(current.metadata.schema) !==
+        ingredientFingerprint(mergedSchema);
     writePatch.metadata = { ...current.metadata, schema: mergedSchema };
     // Keep the top-level name in sync when the schema patch touches it —
     // otherwise list/search views keep showing the old value.
@@ -259,6 +276,9 @@ export async function updateRecipeRow(
 
   if (error || !data) {
     throw new RecipeRepoError("update_failed", error?.message ?? "Update returned no row");
+  }
+  if (shouldNormalize) {
+    scheduleNormalization(id);
   }
   return data as RecipeRow;
 }
