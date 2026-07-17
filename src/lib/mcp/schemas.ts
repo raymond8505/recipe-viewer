@@ -103,6 +103,17 @@ export const TOOL_SCHEMAS = {
       page: { type: "integer", minimum: 1, default: 1 },
     },
   },
+  search_ingredients: {
+    type: "object",
+    required: ["query"],
+    properties: {
+      query: {
+        type: "string",
+        description: 'Ingredient name to search for (e.g. "cumin seed")',
+      },
+      limit: { type: "integer", minimum: 1, maximum: 10, default: 5 },
+    },
+  },
   get_recipe: {
     type: "object",
     required: ["id"],

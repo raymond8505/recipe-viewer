@@ -6,6 +6,8 @@ import {
   RecipeRepoError,
   updateRecipeRow,
 } from "@/lib/recipes";
+import { IngredientRepoError, matchIngredients } from "@/lib/ingredients";
+import { generateEmbedding } from "@/lib/embedding";
 import { RECIPE_TOKEN_TTL_SECONDS, signRecipeToken } from "./recipeToken";
 import { env } from "@/env";
 import {
@@ -21,6 +23,8 @@ import type {
   RecipeSearchInput,
   RecipeUpdateInput,
 } from "@/lib/schemas/recipe";
+import type { IngredientSearchInput } from "@/lib/schemas/ingredient";
+import type { IngredientMatch } from "@/types/ingredient";
 
 // All five tools are thin wrappers over `@/lib/recipes` helpers. They handle
 // argument typing + translate RecipeRepoError into ToolError so the MCP
@@ -59,6 +63,31 @@ export async function searchRecipes(
     })),
     count,
   };
+}
+
+// Semantic search over the ingredient catalog: embed the query with the same
+// model that embedded the catalog names, then cosine-match via the
+// match_ingredients RPC. IngredientMatch already carries everything an agent
+// needs (per-100g nutrition + density) — no follow-up fetch tool required.
+export async function searchIngredients(
+  args: IngredientSearchInput,
+): Promise<{ data: IngredientMatch[] }> {
+  const embedding = await generateEmbedding(args.query);
+  if (!embedding) {
+    throw new ToolError(
+      "embedding_unavailable",
+      "Semantic ingredient search is temporarily unavailable (embedding generation failed) — retry shortly.",
+    );
+  }
+
+  try {
+    return { data: await matchIngredients(embedding, args.limit, 0) };
+  } catch (err) {
+    if (err instanceof IngredientRepoError) {
+      throw new ToolError("search_failed", err.detail);
+    }
+    throw err;
+  }
 }
 
 export async function getRecipe(args: RecipeIdInput): Promise<RecipeRow> {

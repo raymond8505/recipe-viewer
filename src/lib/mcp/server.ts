@@ -7,12 +7,14 @@ import {
   recipeSearchInputSchema,
   recipeUpdateInputSchema,
 } from "@/lib/schemas/recipe";
+import { ingredientSearchInputSchema } from "@/lib/schemas/ingredient";
 import {
   clearCookingNotes,
   createRecipe,
   deleteRecipe,
   getRecipe,
   getToken,
+  searchIngredients,
   searchRecipes,
   ToolError,
   updateRecipe,
@@ -46,6 +48,13 @@ export const TOOLS: ToolDefinition[] = [
       "Search recipes by name, source, or status. Returns a paginated list with total count; each result is trimmed to { id, url, name, description } — call get_recipe with an id for the full schema. Use this before get_recipe when you only have a name.",
     inputSchema: TOOL_SCHEMAS.search_recipes,
     call: (args) => searchRecipes(recipeSearchInputSchema.parse(args)),
+  },
+  {
+    name: "search_ingredients",
+    description:
+      "Semantic search over the known-ingredient catalog. Returns up to `limit` ingredients ranked by similarity (1.0 = identical), each with per-100g nutrition (calories_kcal, protein_g, fat_g, saturated_fat_g, carbs_g, fiber_g, sugars_g, sodium_mg, cholesterol_mg, calcium_mg, iron_mg, potassium_mg) and density_g_per_ml. Density converts volume↔weight: grams = ml × density_g_per_ml (e.g. 1 tbsp = 14.79 ml). Data is USDA FoodData Central or manually curated; null fields mean not yet known.",
+    inputSchema: TOOL_SCHEMAS.search_ingredients,
+    call: (args) => searchIngredients(ingredientSearchInputSchema.parse(args)),
   },
   {
     name: "get_recipe",

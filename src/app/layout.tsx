@@ -39,7 +39,17 @@ export default async function RootLayout({
             >
               RECIPES
             </Link>
-            <AuthButton isLoggedIn={isLoggedIn} />
+            <div className="flex items-center gap-4">
+              {isLoggedIn && (
+                <Link
+                  href="/ingredients"
+                  className="text-sm text-muted-foreground hover:text-foreground transition"
+                >
+                  Ingredients
+                </Link>
+              )}
+              <AuthButton isLoggedIn={isLoggedIn} />
+            </div>
           </div>
         </header>
         <WindowApiProvider />

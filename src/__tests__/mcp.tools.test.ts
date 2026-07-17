@@ -35,12 +35,25 @@ vi.mock("@/lib/storage", () => ({
   },
 }));
 
+vi.mock("@/lib/ingredients", () => ({
+  matchIngredients: vi.fn(),
+  IngredientRepoError: class IngredientRepoError extends Error {
+    constructor(public kind: string, public detail: string) {
+      super(`${kind}: ${detail}`);
+      this.name = "IngredientRepoError";
+    }
+  },
+}));
+
+vi.mock("@/lib/embedding", () => ({ generateEmbedding: vi.fn() }));
+
 import {
   clearCookingNotes,
   createRecipe,
   deleteRecipe,
   getRecipe,
   getToken,
+  searchIngredients,
   searchRecipes,
   ToolError,
   updateRecipe,
@@ -49,6 +62,58 @@ import {
 import { verifyRecipeToken } from "@/lib/mcp/recipeToken";
 import { RecipeRepoError } from "@/lib/recipes";
 import { StorageUploadError } from "@/lib/storage";
+import { IngredientRepoError, matchIngredients } from "@/lib/ingredients";
+import { generateEmbedding } from "@/lib/embedding";
+
+describe("searchIngredients", () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it("embeds the query and returns the RPC matches", async () => {
+    vi.mocked(generateEmbedding).mockResolvedValueOnce([0.1, 0.2]);
+    const matches = [
+      {
+        id: "ing-1",
+        name: "cumin seed",
+        nutrition: { calories_kcal: 375 },
+        density_g_per_ml: 0.42,
+        similarity: 0.91,
+      },
+    ];
+    vi.mocked(matchIngredients).mockResolvedValueOnce(matches);
+
+    const out = await searchIngredients({ query: "cumin", limit: 3 });
+
+    expect(generateEmbedding).toHaveBeenCalledWith("cumin");
+    expect(matchIngredients).toHaveBeenCalledWith([0.1, 0.2], 3, 0);
+    expect(out).toEqual({ data: matches });
+  });
+
+  it("throws ToolError(embedding_unavailable) when embedding fails", async () => {
+    vi.mocked(generateEmbedding).mockResolvedValueOnce(null);
+
+    const err = await searchIngredients({ query: "cumin", limit: 5 }).catch(
+      (e: unknown) => e,
+    );
+
+    expect(err).toBeInstanceOf(ToolError);
+    expect((err as ToolError).code).toBe("embedding_unavailable");
+    expect(matchIngredients).not.toHaveBeenCalled();
+  });
+
+  it("translates IngredientRepoError into ToolError(search_failed)", async () => {
+    vi.mocked(generateEmbedding).mockResolvedValueOnce([0.1]);
+    vi.mocked(matchIngredients).mockRejectedValueOnce(
+      new IngredientRepoError("match_failed", "function missing"),
+    );
+
+    const err = await searchIngredients({ query: "cumin", limit: 5 }).catch(
+      (e: unknown) => e,
+    );
+
+    expect(err).toBeInstanceOf(ToolError);
+    expect((err as ToolError).code).toBe("search_failed");
+  });
+});
 
 describe("searchRecipes", () => {
   beforeEach(() => vi.clearAllMocks());
