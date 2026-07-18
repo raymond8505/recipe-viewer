@@ -121,16 +121,42 @@ const NUTRIENT_FIELD_BY_USDA_ID: Record<number, keyof IngredientNutrition> = {
   1092: "potassium_mg",
 };
 
+// Energy is the one nutrient whose id differs by data type. SR Legacy reports
+// kcal under 1008 (in the map above), but Foundation foods OMIT 1008 and carry
+// only the calculated Atwater energies — 2048 (specific factors, food-tuned and
+// closest to the SR Legacy basis) and 2047 (general factors, the fallback).
+// Verified against a real payload (Foundation "chicken breast" fdcId 2646170:
+// 2047=106, 2048=112, no 1008). Without this every Foundation food persists
+// calorie-less. Prefer specific, then general; 1008 is handled by the main map.
+const ENERGY_KCAL_IDS_BY_PRIORITY = [2048, 2047];
+
 /** Map a detail payload's nested nutrients onto the core label set. */
 export function extractNutrition(detail: UsdaFoodDetail): IngredientNutrition {
-  const nutrition: IngredientNutrition = {};
+  const amountByNutrientId = new Map<number, number>();
   for (const entry of detail.foodNutrients ?? []) {
     const id = entry.nutrient?.id;
     // Category-header rows ("Proximates", "Minerals", ...) have no amount.
     if (id === undefined || typeof entry.amount !== "number") continue;
-    const field = NUTRIENT_FIELD_BY_USDA_ID[id];
-    if (field) nutrition[field] = entry.amount;
+    if (!amountByNutrientId.has(id)) amountByNutrientId.set(id, entry.amount);
   }
+
+  const nutrition: IngredientNutrition = {};
+  for (const [idStr, field] of Object.entries(NUTRIENT_FIELD_BY_USDA_ID)) {
+    const amount = amountByNutrientId.get(Number(idStr));
+    if (amount !== undefined) nutrition[field] = amount;
+  }
+
+  // Foundation-food energy fallback (see ENERGY_KCAL_IDS_BY_PRIORITY).
+  if (nutrition.calories_kcal === undefined) {
+    for (const id of ENERGY_KCAL_IDS_BY_PRIORITY) {
+      const amount = amountByNutrientId.get(id);
+      if (amount !== undefined) {
+        nutrition.calories_kcal = amount;
+        break;
+      }
+    }
+  }
+
   return nutrition;
 }
 

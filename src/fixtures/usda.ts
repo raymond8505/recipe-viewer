@@ -78,6 +78,27 @@ export const cuminDetailResponse: UsdaFoodDetail = {
   ],
 };
 
+// Foundation food (chicken breast, fdcId 2646170, pulled 2026-07-18 with
+// DEMO_KEY, trimmed). The energy quirk: Foundation foods OMIT the SR Legacy
+// Energy id (1008) and carry only the Atwater energies — 2048 (specific
+// factors) and 2047 (general). extractNutrition must fall back to these or the
+// row persists with no calories. Chicken has no dietary fiber, so there is no
+// 1079 row — a blank fiber cell is correct here, not a mapping gap.
+export const chickenBreastDetailResponse: UsdaFoodDetail = {
+  fdcId: 2646170,
+  description: "Chicken, broilers or fryers, breast, skinless, boneless, meat only, raw",
+  dataType: "Foundation",
+  foodNutrients: [
+    { nutrient: { id: 2047, name: "Energy (Atwater General Factors)", unitName: "kcal" }, amount: 106.034 },
+    { nutrient: { id: 2048, name: "Energy (Atwater Specific Factors)", unitName: "kcal" }, amount: 112.20227 },
+    { nutrient: { id: 1003, name: "Protein", unitName: "g" }, amount: 22.525 },
+    { nutrient: { id: 1004, name: "Total lipid (fat)", unitName: "g" }, amount: 1.934 },
+    { nutrient: { id: 1258, name: "Fatty acids, total saturated", unitName: "g" }, amount: 0.3488 },
+    { nutrient: { id: 1005, name: "Carbohydrate, by difference", unitName: "g" }, amount: 0 },
+    { nutrient: { id: 1093, name: "Sodium, Na", unitName: "mg" }, amount: 65.75 },
+  ],
+};
+
 // The exact core-label-set extraction of cuminDetailResponse.
 export const cuminExpectedNutrition = {
   calories_kcal: 375.0,

@@ -8,6 +8,7 @@ import {
   searchFoods,
 } from "@/lib/usda";
 import {
+  chickenBreastDetailResponse,
   cuminDetailResponse,
   cuminExpectedNutrition,
   cuminSearchResponse,
@@ -186,6 +187,30 @@ describe("extractNutrition", () => {
     expect(
       extractNutrition({ fdcId: 1, description: "x", dataType: "SR Legacy" }),
     ).toEqual({});
+  });
+
+  it("falls back to Atwater energy for Foundation foods that omit id 1008", () => {
+    // Foundation chicken breast carries only 2047/2048, no 1008 — without the
+    // fallback its calories would be dropped (the real bug that left 12 catalog
+    // rows calorie-less). Prefer the specific-factors value (2048).
+    const nutrition = extractNutrition(chickenBreastDetailResponse);
+    expect(nutrition.calories_kcal).toBe(112.20227);
+    expect(nutrition.protein_g).toBe(22.525);
+    // No dietary-fiber nutrient in the payload → fiber stays absent (correct).
+    expect(nutrition.fiber_g).toBeUndefined();
+  });
+
+  it("prefers the SR Legacy Energy id (1008) over Atwater factors when both exist", () => {
+    const nutrition = extractNutrition({
+      fdcId: 1,
+      description: "x",
+      dataType: "SR Legacy",
+      foodNutrients: [
+        { nutrient: { id: 1008, name: "Energy", unitName: "kcal" }, amount: 200 },
+        { nutrient: { id: 2048, name: "Energy (Atwater Specific Factors)", unitName: "kcal" }, amount: 999 },
+      ],
+    });
+    expect(nutrition.calories_kcal).toBe(200);
   });
 });
 
