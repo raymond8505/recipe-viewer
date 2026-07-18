@@ -23,7 +23,8 @@ const DELAY_MS = 3_000;
 interface BackfillRow {
   id: string;
   normalized_fingerprint: string | null;
-  metadata: { schema: SchemaRecipe };
+  // schema is absent on legacy/malformed rows — guarded before use.
+  metadata: { schema?: SchemaRecipe } | null;
 }
 
 function parseLimit(): number {
@@ -52,10 +53,24 @@ async function main() {
   }
 
   const rows = (data as unknown as BackfillRow[]) ?? [];
-  const pending = rows.filter(
-    (row) =>
-      row.normalized_fingerprint !== ingredientFingerprint(row.metadata.schema),
-  );
+
+  // Legacy/malformed rows carry no metadata.schema — they can't be
+  // fingerprinted or normalized, so skip them loudly instead of crashing the
+  // whole pass on one bad row.
+  const skipped = rows.filter((row) => !row.metadata?.schema);
+  if (skipped.length > 0) {
+    console.warn(
+      `Skipping ${skipped.length} recipe(s) with no metadata.schema: ${skipped
+        .map((row) => row.id)
+        .join(", ")}`,
+    );
+  }
+
+  const pending = rows.filter((row) => {
+    const schema = row.metadata?.schema;
+    if (!schema) return false;
+    return row.normalized_fingerprint !== ingredientFingerprint(schema);
+  });
   const target = Math.min(pending.length, limit);
 
   console.log(
