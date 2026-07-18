@@ -6,7 +6,11 @@ import { useIngredientRowEditor } from "@/hooks/useIngredientRowEditor";
 import type { IngredientRow } from "@/types/ingredient";
 import IngredientSourceBadge from "./IngredientSourceBadge";
 import { NUTRITION_COLUMNS } from "./nutritionColumns";
-import { STICKY_ALIASES_CELL, STICKY_NAME_CELL } from "./tableStyles";
+import {
+  STICKY_ACTIONS_CELL,
+  STICKY_ALIASES_CELL,
+  STICKY_NAME_CELL,
+} from "./tableStyles";
 
 // One editable catalog row. All cells are draft-local until Save, which
 // PATCHes only the fields that changed. The parent keys this component by
@@ -39,8 +43,8 @@ export default function IngredientRowEditor({
   } = useIngredientRowEditor(ingredient, onSaved, onDeleted);
 
   return (
-    <TableRow className="group">
-      <TableCell className={`${STICKY_NAME_CELL} group-hover:bg-muted/50`}>
+    <TableRow className="group hover:bg-muted">
+      <TableCell className={`${STICKY_NAME_CELL} group-hover:bg-muted`}>
         <input
           aria-label={`Name for ${ingredient.name}`}
           value={draft.name}
@@ -48,7 +52,7 @@ export default function IngredientRowEditor({
           className="w-full bg-transparent text-sm rounded-none border-0 border-b border-transparent focus:border-orange-400 focus:outline-none"
         />
       </TableCell>
-      <TableCell className={`${STICKY_ALIASES_CELL} group-hover:bg-muted/50`}>
+      <TableCell className={`${STICKY_ALIASES_CELL} group-hover:bg-muted`}>
         <input
           aria-label={`Aliases for ${ingredient.name}`}
           value={draft.aliases}
@@ -89,7 +93,9 @@ export default function IngredientRowEditor({
       <TableCell>
         <IngredientSourceBadge source={ingredient.source} fdcId={ingredient.fdc_id} />
       </TableCell>
-      <TableCell className="whitespace-nowrap text-right">
+      <TableCell
+        className={`${STICKY_ACTIONS_CELL} whitespace-nowrap text-right group-hover:bg-muted`}
+      >
         {error && (
           <span role="alert" className="text-xs text-red-600 mr-2">
             {error}

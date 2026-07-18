@@ -17,7 +17,12 @@ import { useIngredientsTable } from "@/hooks/useIngredientsTable";
 import type { IngredientRow } from "@/types/ingredient";
 import IngredientRowEditor from "./IngredientRowEditor";
 import { NUTRITION_COLUMNS } from "./nutritionColumns";
-import { STICKY_ALIASES_CELL, STICKY_NAME_CELL } from "./tableStyles";
+import {
+  STICKY_ACTIONS_HEAD,
+  STICKY_ALIASES_HEAD,
+  STICKY_HEAD,
+  STICKY_NAME_HEAD,
+} from "./tableStyles";
 
 /**
  * The ingredient manager: a flat, editable view of the whole catalog. The
@@ -142,22 +147,39 @@ export default function IngredientsTable({
         (grams = ml × g/ml).
       </p>
 
-      <div className="overflow-x-auto">
+      {/* Single scroll box (both axes). Capped at ~73vh so the chrome, heading,
+          and search/add row above it fit without forcing a page-level (body)
+          scrollbar. The header sticks to the top and the Name/Aliases/Actions
+          columns stick to the sides — so the shadcn Table's own overflow
+          wrapper must be neutralized, or it would become the scrollport and
+          break the sticky. */}
+      <div className="max-h-[73vh] overflow-auto [&_[data-slot=table-container]]:overflow-visible">
         <Table>
           <TableHeader>
-            <TableRow>
-              <TableHead className={STICKY_NAME_CELL}>Name</TableHead>
-              <TableHead className={STICKY_ALIASES_CELL}>Aliases</TableHead>
+            <TableRow className="hover:bg-transparent">
+              <TableHead className={STICKY_NAME_HEAD}>Name</TableHead>
+              <TableHead className={STICKY_ALIASES_HEAD}>Aliases</TableHead>
               {NUTRITION_COLUMNS.map((col) => (
-                <TableHead key={col.key} title={col.title} className="text-right">
+                <TableHead
+                  key={col.key}
+                  title={col.title}
+                  className={`${STICKY_HEAD} text-right`}
+                >
                   {col.label}
+                  {col.unit && (
+                    <span className="ml-0.5 font-normal text-muted-foreground">
+                      ({col.unit})
+                    </span>
+                  )}
                 </TableHead>
               ))}
-              <TableHead title="Density (g/ml)" className="text-right">
+              <TableHead title="Density (g/ml)" className={`${STICKY_HEAD} text-right`}>
                 g/ml
               </TableHead>
-              <TableHead>Source</TableHead>
-              <TableHead className="text-right">Actions</TableHead>
+              <TableHead className={STICKY_HEAD}>Source</TableHead>
+              <TableHead className={`${STICKY_ACTIONS_HEAD} text-right`}>
+                Actions
+              </TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
