@@ -23,7 +23,12 @@ vi.mock("@/lib/recipes", () => ({
     }
   },
 }));
-vi.mock("@/lib/supabase", () => ({ getSupabaseClient: vi.fn() }));
+vi.mock("@/lib/supabase", () => ({
+  getSupabaseClient: vi.fn(),
+  // ingredients.ts builds INGREDIENT_COLUMNS at module load via selectColumns;
+  // mirror the real join so importing the tool graph doesn't throw here.
+  selectColumns: () => (cols: readonly string[]) => cols.join(", "),
+}));
 
 import { POST, GET, DELETE } from "@/app/api/mcp/server/route";
 import { signAccessToken } from "@/lib/mcp/oauth";
