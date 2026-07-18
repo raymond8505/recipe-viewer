@@ -39,10 +39,14 @@ const TOTAL_COLUMNS = PRIMARY_NUTRITION_COLUMNS.length + 5;
 
 export default function IngredientRowEditor({
   ingredient,
+  detailWidth,
   onSaved,
   onDeleted,
 }: {
   ingredient: IngredientRow;
+  /** Visible viewport width of the scroll container, so the expanded detail
+   *  panel can pin itself to it and keep every field on-screen. */
+  detailWidth?: number;
   onSaved: (row: IngredientRow) => void;
   onDeleted: (id: string) => void;
 }) {
@@ -99,8 +103,14 @@ export default function IngredientRowEditor({
             />
           </TableCell>
         ))}
-        <TableCell className="text-right text-sm text-muted-foreground whitespace-nowrap">
-          {servingSize ?? "—"}
+        <TableCell className="align-top text-right text-sm text-muted-foreground">
+          {/* Inner div caps the width reliably (a td's own max-width isn't
+              honored under table-layout:auto), so long portions — e.g. cooking
+              spray's "1 spray (1/3 second)…" — wrap instead of widening the
+              column. */}
+          <div className="ml-auto max-w-40 whitespace-normal break-words">
+            {servingSize ?? "—"}
+          </div>
         </TableCell>
         <TableCell>
           <IngredientSourceBadge
@@ -176,8 +186,14 @@ export default function IngredientRowEditor({
 
       {expanded && (
         <TableRow className="bg-muted/40 hover:bg-muted/40">
-          <TableCell colSpan={TOTAL_COLUMNS} className="py-4">
-            <div className="space-y-4">
+          <TableCell colSpan={TOTAL_COLUMNS} className="px-0 py-4">
+            {/* Pinned to the scroll viewport's left edge and sized to its width
+                so every field stays visible without horizontal scrolling, even
+                though the cell spans the (wider) full table. */}
+            <div
+              className="sticky left-0 space-y-4 px-4"
+              style={detailWidth ? { width: detailWidth } : undefined}
+            >
               <div>
                 <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2">
                   All nutrition (per 100 g)

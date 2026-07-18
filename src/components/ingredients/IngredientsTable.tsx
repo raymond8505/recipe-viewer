@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -60,6 +61,23 @@ export default function IngredientsTable({
     totalPages,
     load,
   } = useIngredientsTable(initialIngredients, initialCount);
+
+  // The table is wider than its scroll viewport (frozen + primary columns), so
+  // an expanded detail row's full-width cell would push its fields off-screen.
+  // Measure the visible viewport width and hand it to each row so the detail
+  // panel can pin itself to it (sticky) and keep every field in view.
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const [viewportWidth, setViewportWidth] = useState<number>();
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const measure = () => setViewportWidth(el.clientWidth);
+    measure();
+    if (typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(measure);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
 
   function handleSearch(e: React.FormEvent) {
     e.preventDefault();
@@ -153,7 +171,10 @@ export default function IngredientsTable({
           columns stick to the sides — so the shadcn Table's own overflow
           wrapper must be neutralized, or it would become the scrollport and
           break the sticky. */}
-      <div className="max-h-[73vh] overflow-auto [&_[data-slot=table-container]]:overflow-visible">
+      <div
+        ref={scrollRef}
+        className="max-h-[73vh] overflow-auto [&_[data-slot=table-container]]:overflow-visible"
+      >
         <Table>
           <TableHeader>
             <TableRow className="hover:bg-transparent">
@@ -175,7 +196,7 @@ export default function IngredientsTable({
               ))}
               <TableHead
                 title="Representative serving from USDA food portions"
-                className={`${STICKY_HEAD} text-right`}
+                className={`${STICKY_HEAD} max-w-40 text-right`}
               >
                 Serving
               </TableHead>
@@ -204,6 +225,7 @@ export default function IngredientsTable({
                   // after each successful save.
                   key={`${row.id}-${row.updated_at}`}
                   ingredient={row}
+                  detailWidth={viewportWidth}
                   onSaved={handleSaved}
                   onDeleted={handleDeleted}
                 />
