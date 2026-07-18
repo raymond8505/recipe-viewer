@@ -32,7 +32,7 @@ const numericCellClass =
   "w-16 bg-transparent text-right text-sm rounded-none border-0 border-b border-transparent focus:border-orange-400 focus:outline-none";
 
 const detailInputClass =
-  "w-20 bg-transparent text-right text-sm rounded-none border-0 border-b border-muted-foreground/30 focus:border-orange-400 focus:outline-none";
+  "w-14 shrink-0 bg-transparent text-right text-sm rounded-none border-0 border-b border-muted-foreground/30 focus:border-orange-400 focus:outline-none";
 
 // Name, Aliases, primary nutrition, Serving, Source, Actions.
 const TOTAL_COLUMNS = PRIMARY_NUTRITION_COLUMNS.length + 5;
@@ -182,13 +182,15 @@ export default function IngredientRowEditor({
                 <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2">
                   All nutrition (per 100 g)
                 </h3>
-                <div className="grid grid-cols-2 gap-x-8 gap-y-2 sm:grid-cols-3 lg:grid-cols-4">
+                <div className="grid grid-cols-2 gap-x-4 gap-y-2 sm:grid-cols-3 lg:grid-cols-4">
                   {NUTRITION_COLUMNS.map((col) => (
                     <label
                       key={col.key}
-                      className="flex items-center justify-between gap-2 text-sm"
+                      className="flex min-w-0 items-center justify-between gap-2 text-sm"
                     >
-                      <span className="text-muted-foreground">{col.title}</span>
+                      <span className="min-w-0 text-muted-foreground">
+                        {col.title}
+                      </span>
                       <input
                         type="number"
                         step="any"
@@ -208,8 +210,10 @@ export default function IngredientRowEditor({
                       />
                     </label>
                   ))}
-                  <label className="flex items-center justify-between gap-2 text-sm">
-                    <span className="text-muted-foreground">Density (g/ml)</span>
+                  <label className="flex min-w-0 items-center justify-between gap-2 text-sm">
+                    <span className="min-w-0 text-muted-foreground">
+                      Density (g/ml)
+                    </span>
                     <input
                       type="number"
                       step="any"
