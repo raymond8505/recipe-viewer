@@ -18,7 +18,7 @@
 create or replace function public.match_ingredients(
   query_embedding vector(768),
   match_count int default 5,
-  min_similarity float default 0
+  min_similarity float default .6
 )
 returns table (
   id uuid,

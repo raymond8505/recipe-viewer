@@ -2,6 +2,20 @@
 // here instead of calling `fetch` directly so the network shape stays in one
 // place and tests/stories can mock a single module.
 
+/**
+ * Queue an ingredient-normalization re-run for a recipe (the recovery path
+ * after a failed run, or after threshold/catalog changes). The work itself
+ * happens post-response — a 200 means "queued", not "done".
+ */
+export async function normalizeRecipe(recipeId: string): Promise<void> {
+  const res = await fetch(`/api/recipes/${recipeId}/normalize`, {
+    method: "POST",
+  });
+  if (!res.ok) {
+    throw new Error(`Normalization request failed with status ${res.status}`);
+  }
+}
+
 // Named ...File to stay distinct from the server-side uploadRecipeImage in
 // @/lib/storage and the MCP tool of the same name.
 export async function uploadRecipeImageFile(

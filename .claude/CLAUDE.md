@@ -243,6 +243,27 @@ All server-side env vars are validated at app startup via `src/env.ts` (`@t3-oss
 - **`scripts/validate-deploy-env.sh` now validates BOTH `deploy.yml` and `staging.yml`** (loops over both; each must be self-consistent across the 3 rules). So adding a runtime var means wiring it through staging.yml's `env:`/`envs:`/`.env` heredoc too, not just deploy.yml. Workflow steps that write `$GITHUB_OUTPUT` must use `printf`, **not** the double-quoted `echo` form, or the validator misparses them as `.env` heredoc lines.
 - **A PR branched from main before staging.yml + docker-compose.staging.yml were merged won't have these files**, so its staging deploy fails until rebased onto an up-to-date main. Inherent to self-hosting the workflow in-repo.
 
+## Ingredient Manager
+
+Recipes' free-text ingredient lines get a derived structured layer: `recipe_ingredients` rows linking to a canonical `ingredients` catalog (per-100g nutrition + `density_g_per_ml` for volume↔weight conversion, USDA FoodData Central-sourced).
+
+**Parallel-layer invariant:** `SchemaRecipe.recipeIngredient` stays the display source of truth. Normalization NEVER rewrites recipe text — it only derives `recipe_ingredients` rows. Nothing may feed catalog data back into the schema.
+
+**Data layer:**
+- DDL records: `db/migrations/0002`–`0005` (numbering continues the better-auth branch's `0001`) — applied out-of-band via Supabase MCP `apply_migration`; the files are review records, there is no runner.
+- `ingredients` / `recipe_ingredients` are **RLS-locked with no policies** (service-role-only, like `users`). All access goes through `src/lib/ingredients.ts` on `getSupabaseAdminClient()` — the anon client sees nothing. `ingredients.embedding` is write-only (queried via the `match_ingredients` RPC; similarity = 1 − cosine distance).
+- `IngredientRepoError` kinds worth respecting: `conflict` = lower(name) unique-index collision (re-match, don't duplicate); `match_failed` = the RPC broke — **never** treat it as "no matches" (that would classify every line as novel and mint duplicate catalog rows).
+
+**Normalization workflow** (`src/lib/normalization/graph.ts`, LangGraph; nodes are plain async fns over the raw-fetch Gemini/USDA clients — no LangChain model wrappers):
+- parse (Flash-Lite structured output; deterministic `parseIngredient` fallback) → embed+match (pgvector top-5; `SIM_AUTO_ACCEPT`/`SIM_NOVEL_FLOOR` exported constants — tune there, nowhere else) → adjudicate ambiguous (Flash-Lite; no verdict → unmatched, never a guessed match) → fetch novel from USDA (catalog name = the PARSED name; USDA description kept as an alias) → persist.
+- Failure asymmetry: Gemini fails → degrade; USDA fails → line unmatched but the run completes; `match_failed` → run fails **without persisting**.
+- Trigger: `scheduleNormalization` via Next `after()` from `createRecipeRow`/`updateRecipeRow` — only when the ingredient TEXT fingerprint changes (`src/lib/normalization/fingerprint.ts`). The graph module loads via dynamic import inside the callback: route modules must not pull `@langchain/langgraph` statically (the auth-gate test cold-loads every route graph). Two rapid saves resolve deterministically: persist aborts if the recipe's fingerprint moved mid-run.
+- Recovery: `POST /api/recipes/[id]/normalize` (session-or-recipe-token) re-runs for the current schema; `yarn backfill:normalization [--limit=N]` processes every recipe whose stored fingerprint is stale (resumable — completed rows self-skip via the fingerprint).
+
+**USDA client** (`src/lib/usda.ts`): the detail endpoint's nutrients are NESTED (`nutrient.id` + optional `amount` — category-header rows have none) unlike search's flat shape; SR Legacy hides portion units in `modifier` ("tsp, whole") with `measureUnit` "undetermined". Density = median g/ml over volume portions via `UNIT_DEFS` factors. Real payload fixtures in `src/fixtures/usda.ts` lock this in. Data types pinned to `Foundation,SR Legacy` (per-100g analytical; Branded/FNDDS are label/serving-based). Requires `USDA_API_KEY` (free data.gov key, 1,000 req/hr — the app crashes at startup without it per the env-enforcement design).
+
+**Known follow-up:** normalization status (`recipes.normalization_status` etc., migration 0004) is not yet read into `RECIPE_COLUMNS`/`RecipeRow` or surfaced in RecipeDetail — the planned status chip + "Re-normalize" button. The client wrapper (`normalizeRecipe` in `src/lib/api/recipes.ts`) already exists.
+
 ## Test Performance — module loading
 
 Vitest's per-test timeout is 5s. **Don't cold-load a real (unmocked) module graph inside a timed `it`/`it.each` body** — e.g. invoking `import.meta.glob` loaders, or `await import()` of a module that isn't `vi.mock`'d or statically imported at the top of the file. That triggers a cold transform + load of the whole dependency graph inside the timed case, which under full-suite parallel load can exceed 5s and surface as a flaky `Test timed out in 5000ms` (the failure is reported at the `it.each` call site, which makes it look like a different test).
