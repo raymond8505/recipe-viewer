@@ -61,6 +61,26 @@ export function parseMS(raw: string): { minutes: number; seconds: number } {
   return { minutes: Math.max(0, parseInt(text, 10) || 0), seconds: 0 };
 }
 
+// "" → null (clear the value); anything unparseable → undefined (field
+// dropped from a patch rather than sent as garbage).
+export function parseNumeric(raw: string): number | null | undefined {
+  const trimmed = raw.trim();
+  if (trimmed === "") return null;
+  const value = Number(trimmed);
+  return Number.isFinite(value) ? value : undefined;
+}
+
+/** Pick the singular or plural form of a noun for a count. Returns the word
+ *  only — callers render the count separately. Defaults the plural to the
+ *  singular + "s"; pass an explicit plural for irregular nouns. */
+export function pluralize(
+  count: number,
+  singular: string,
+  plural = `${singular}s`,
+): string {
+  return count === 1 ? singular : plural;
+}
+
 /**
  * Format an ISO 8601 date string to a human-readable date.
  * e.g. "2026-02-25" → "February 25, 2026"

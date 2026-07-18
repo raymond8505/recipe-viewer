@@ -3,6 +3,8 @@ import {
   formatDuration,
   formatMS,
   parseMS,
+  parseNumeric,
+  pluralize,
   formatDate,
   getFirstImage,
   toArray,
@@ -87,6 +89,36 @@ describe("parseMS", () => {
   it("treats blank/garbage as zero", () => {
     expect(parseMS("")).toEqual({ minutes: 0, seconds: 0 });
     expect(parseMS("abc")).toEqual({ minutes: 0, seconds: 0 });
+  });
+});
+
+describe("parseNumeric", () => {
+  it("returns null for an empty (or whitespace-only) string", () => {
+    expect(parseNumeric("")).toBeNull();
+    expect(parseNumeric("   ")).toBeNull();
+  });
+  it("parses integers and decimals", () => {
+    expect(parseNumeric("3.5")).toBe(3.5);
+    expect(parseNumeric(" 42 ")).toBe(42);
+    expect(parseNumeric("0")).toBe(0);
+  });
+  it("returns undefined for unparseable input", () => {
+    expect(parseNumeric("abc")).toBeUndefined();
+    expect(parseNumeric("1.2.3")).toBeUndefined();
+  });
+});
+
+describe("pluralize", () => {
+  it("returns the singular for a count of 1", () => {
+    expect(pluralize(1, "ingredient")).toBe("ingredient");
+  });
+  it("returns the plural for 0 and other counts", () => {
+    expect(pluralize(0, "item")).toBe("items");
+    expect(pluralize(2, "item")).toBe("items");
+  });
+  it("uses an explicit plural when given", () => {
+    expect(pluralize(1, "berry", "berries")).toBe("berry");
+    expect(pluralize(3, "berry", "berries")).toBe("berries");
   });
 });
 
