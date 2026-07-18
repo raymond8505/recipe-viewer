@@ -50,6 +50,23 @@ export const EditingARow: Story = {
 };
 
 /**
+ * Expanding a row (chevron in Actions) reveals the full nutrition set — the six
+ * columns hidden from the main table plus density — all editable, with the USDA
+ * provenance beneath. `expanded` is internal row state, so the click genuinely
+ * changes what's shown.
+ */
+export const ExpandedDetail: Story = {
+  args: {
+    initialIngredients: ingredientFixtures.slice(0, 2),
+    initialCount: 2,
+  },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await userEvent.click(canvas.getByLabelText("Details for cumin seed"));
+  },
+};
+
+/**
  * Long catalogs paginate 50 at a time; the pager only renders past one page.
  */
 export const Paginated: Story = {

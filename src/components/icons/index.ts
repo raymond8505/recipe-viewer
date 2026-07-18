@@ -1,6 +1,7 @@
 export { ChatBubbleIcon } from "./ChatBubbleIcon";
 export { ChefHatIcon } from "./ChefHatIcon";
 export { CheckIcon } from "./CheckIcon";
+export { ChevronDownIcon } from "./ChevronDownIcon";
 export { ClockIcon } from "./ClockIcon";
 export { CloseIcon } from "./CloseIcon";
 export { CloseSmallIcon } from "./CloseSmallIcon";

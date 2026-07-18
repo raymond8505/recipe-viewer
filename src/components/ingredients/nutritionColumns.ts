@@ -28,3 +28,21 @@ export const NUTRITION_COLUMNS: NutritionColumn[] = [
   { key: "iron_mg", label: "Fe", unit: "mg", title: "Iron (mg)" },
   { key: "potassium_mg", label: "K", unit: "mg", title: "Potassium (mg)" },
 ];
+
+// The subset shown as always-visible columns in the manager table (the rest
+// live in the expandable detail row). Ordered as the user reads a label:
+// calories, protein, carbs, fat, fiber, sodium — note carbs before fat, which
+// differs from NUTRITION_COLUMNS' USDA-derived order.
+export const PRIMARY_NUTRITION_KEYS = [
+  "calories_kcal",
+  "protein_g",
+  "carbs_g",
+  "fat_g",
+  "fiber_g",
+  "sodium_mg",
+] as const satisfies readonly (keyof IngredientNutrition)[];
+
+export const PRIMARY_NUTRITION_COLUMNS: NutritionColumn[] =
+  PRIMARY_NUTRITION_KEYS.map(
+    (key) => NUTRITION_COLUMNS.find((col) => col.key === key)!,
+  );

@@ -16,7 +16,7 @@ import { pluralize } from "@/lib/format";
 import { useIngredientsTable } from "@/hooks/useIngredientsTable";
 import type { IngredientRow } from "@/types/ingredient";
 import IngredientRowEditor from "./IngredientRowEditor";
-import { NUTRITION_COLUMNS } from "./nutritionColumns";
+import { PRIMARY_NUTRITION_COLUMNS } from "./nutritionColumns";
 import {
   STICKY_ACTIONS_HEAD,
   STICKY_ALIASES_HEAD,
@@ -159,7 +159,7 @@ export default function IngredientsTable({
             <TableRow className="hover:bg-transparent">
               <TableHead className={STICKY_NAME_HEAD}>Name</TableHead>
               <TableHead className={STICKY_ALIASES_HEAD}>Aliases</TableHead>
-              {NUTRITION_COLUMNS.map((col) => (
+              {PRIMARY_NUTRITION_COLUMNS.map((col) => (
                 <TableHead
                   key={col.key}
                   title={col.title}
@@ -173,8 +173,11 @@ export default function IngredientsTable({
                   )}
                 </TableHead>
               ))}
-              <TableHead title="Density (g/ml)" className={`${STICKY_HEAD} text-right`}>
-                g/ml
+              <TableHead
+                title="Representative serving from USDA food portions"
+                className={`${STICKY_HEAD} text-right`}
+              >
+                Serving
               </TableHead>
               <TableHead className={STICKY_HEAD}>Source</TableHead>
               <TableHead className={`${STICKY_ACTIONS_HEAD} text-right`}>
@@ -186,7 +189,7 @@ export default function IngredientsTable({
             {rows.length === 0 ? (
               <TableRow>
                 <TableCell
-                  colSpan={NUTRITION_COLUMNS.length + 5}
+                  colSpan={PRIMARY_NUTRITION_COLUMNS.length + 5}
                   className="text-center text-muted-foreground py-8"
                 >
                   {loading
