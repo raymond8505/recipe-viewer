@@ -57,7 +57,17 @@ function makeTestRecipe(
 const CUMIN_PARSE = [{ quantity: 1, unit: "tsp", name: "cumin seed", note: null }];
 
 function candidate(id: string, name: string, similarity: number): IngredientMatch {
-  return { id, name, nutrition: null, density_g_per_ml: null, similarity };
+  // `similarity` drives the semantic score the matcher thresholds on; the
+  // keyword/fusion signals are irrelevant to these graph tests.
+  return {
+    id,
+    name,
+    nutrition: null,
+    density_g_per_ml: null,
+    semantic_similarity: similarity,
+    keyword_similarity: similarity,
+    score: similarity,
+  };
 }
 
 function persistedRows() {
@@ -216,6 +226,31 @@ describe("runNormalization — novel ingredients", () => {
       ingredient_id: "new-1",
       match_status: "novel",
     });
+  });
+
+  it("skips novel creation (line unmatched) when the new ingredient's embedding fails", async () => {
+    vi.mocked(generateStructured)
+      .mockResolvedValueOnce(CUMIN_PARSE) // parse
+      .mockResolvedValueOnce({ fdcId: 170923 }); // pick
+    vi.mocked(searchFoods).mockResolvedValue([
+      { fdcId: 170923, description: "Spices, cumin seed", dataType: "SR Legacy" },
+    ]);
+    vi.mocked(getFoodDetail).mockResolvedValue(cuminDetailResponse);
+    // First embed (for matching) succeeds; the novel-create embed fails. The
+    // embedding column is NOT NULL, so the row is skipped rather than inserted.
+    vi.mocked(generateEmbedding)
+      .mockResolvedValueOnce([0.1, 0.2])
+      .mockResolvedValueOnce(null);
+
+    await runNormalization("r-1");
+
+    expect(createIngredientRow).not.toHaveBeenCalled();
+    expect(persistedRows()?.[0]).toMatchObject({
+      ingredient_id: null,
+      match_status: "unmatched",
+    });
+    const completed = statusWrites().find((w) => w.status === "completed");
+    expect(completed?.error).toContain("skipped");
   });
 
   it("leaves the line unmatched when USDA has no results", async () => {

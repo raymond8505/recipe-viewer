@@ -81,7 +81,7 @@ export async function searchIngredients(
   }
 
   try {
-    return { data: await matchIngredients(embedding, args.limit, 0) };
+    return { data: await matchIngredients(args.query, embedding, args.limit) };
   } catch (err) {
     if (err instanceof IngredientRepoError) {
       throw new ToolError("search_failed", err.detail);

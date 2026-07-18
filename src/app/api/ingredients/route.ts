@@ -34,9 +34,16 @@ export const POST = requireSession(async (req: Request) => {
     return NextResponse.json({ error: "Invalid ingredient" }, { status: 400 });
   }
 
-  // Manual entries get an embedding too (best-effort — null just means the
-  // row won't be reachable by semantic matching until the name is re-saved).
+  // Manual entries need an embedding to be matchable, and the column is NOT
+  // NULL (db/migrations/0006), so a failed embedding can't produce a row.
+  // Surface it as a transient failure the client can retry rather than a 500.
   const embedding = await generateEmbedding(parsed.data.name);
+  if (!embedding) {
+    return NextResponse.json(
+      { error: "Could not generate an embedding for this ingredient — try again shortly." },
+      { status: 503 },
+    );
+  }
 
   try {
     const row = await createIngredientRow({ ...parsed.data, embedding });

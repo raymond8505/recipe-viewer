@@ -203,7 +203,7 @@ async function embedAndMatch(state: State): Promise<Partial<State>> {
       continue;
     }
     // IngredientRepoError("match_failed") propagates — see failure philosophy.
-    candidatesByName.set(name, await matchIngredients(embedding, 5, 0));
+    candidatesByName.set(name, await matchIngredients(name, embedding, 5));
   }
 
   const matches: LineMatch[] = state.parsed.map((line) => {
@@ -212,15 +212,15 @@ async function embedAndMatch(state: State): Promise<Partial<State>> {
     }
     const candidates = candidatesByName.get(line.name) ?? [];
     const top = candidates[0];
-    if (top && top.similarity >= SIM_AUTO_ACCEPT) {
+    if (top && top.semantic_similarity >= SIM_AUTO_ACCEPT) {
       return {
         position: line.position,
         status: "matched",
         ingredientId: top.id,
-        confidence: top.similarity,
+        confidence: top.semantic_similarity,
       };
     }
-    if (!top || top.similarity < SIM_NOVEL_FLOOR) {
+    if (!top || top.semantic_similarity < SIM_NOVEL_FLOOR) {
       return { position: line.position, status: "novel" };
     }
     return { position: line.position, status: "ambiguous", candidates };
@@ -254,7 +254,7 @@ function adjudicatePrompt(
       (item) =>
         `position ${item.position}: "${item.name}"\n` +
         item.candidates
-          .map((c) => `  - id: ${c.id} | name: "${c.name}" | similarity: ${c.similarity.toFixed(3)}`)
+          .map((c) => `  - id: ${c.id} | name: "${c.name}" | similarity: ${c.semantic_similarity.toFixed(3)}`)
           .join("\n"),
     )
     .join("\n\n");
@@ -300,7 +300,7 @@ async function adjudicate(state: State): Promise<Partial<State>> {
         position: match.position,
         status: "matched",
         ingredientId: candidate.id,
-        confidence: candidate.similarity,
+        confidence: candidate.semantic_similarity,
       };
     }
     errors.push(`adjudication returned no usable verdict for position ${match.position}`);
@@ -361,7 +361,11 @@ async function createFromUsda(name: string, errors: string[]): Promise<string | 
   // an alias for provenance.
   const embedding = await generateEmbedding(name);
   if (!embedding) {
-    errors.push(`embedding unavailable for new ingredient "${name}" — it won't match until re-embedded`);
+    // The embedding column is NOT NULL (db/migrations/0006), so a row can't be
+    // created without one. Skip rather than abort the run — the line persists
+    // as unmatched and re-normalizing once embedding is back picks it up.
+    errors.push(`embedding unavailable for new ingredient "${name}" — skipped (retry once embedding is available)`);
+    return null;
   }
 
   try {

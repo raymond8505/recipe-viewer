@@ -38,7 +38,10 @@ export const PATCH = requireSession(
     // must re-embed. Best-effort: on null the repo keeps the old vector, which
     // still points at the previous name — re-saving the name retries.
     if (parsed.data.name !== undefined) {
-      patch.embedding = await generateEmbedding(parsed.data.name);
+      // null (embedding failed) → omit, so the repo keeps the old vector; the
+      // column is NOT NULL and can never be cleared. UpdateIngredientPatch's
+      // embedding is `number[] | undefined`, so coalesce null away.
+      patch.embedding = (await generateEmbedding(parsed.data.name)) ?? undefined;
     }
 
     try {

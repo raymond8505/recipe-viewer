@@ -76,7 +76,9 @@ describe("searchIngredients", () => {
         name: "cumin seed",
         nutrition: { calories_kcal: 375 },
         density_g_per_ml: 0.42,
-        similarity: 0.91,
+        semantic_similarity: 0.91,
+        keyword_similarity: 1,
+        score: 0.91,
       },
     ];
     vi.mocked(matchIngredients).mockResolvedValueOnce(matches);
@@ -84,7 +86,7 @@ describe("searchIngredients", () => {
     const out = await searchIngredients({ query: "cumin", limit: 3 });
 
     expect(generateEmbedding).toHaveBeenCalledWith("cumin");
-    expect(matchIngredients).toHaveBeenCalledWith([0.1, 0.2], 3, 0);
+    expect(matchIngredients).toHaveBeenCalledWith("cumin", [0.1, 0.2], 3);
     expect(out).toEqual({ data: matches });
   });
 

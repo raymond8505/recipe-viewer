@@ -100,6 +100,16 @@ describe("POST /api/ingredients", () => {
     expect(createIngredientRow).not.toHaveBeenCalled();
   });
 
+  it("returns 503 without creating when embedding generation fails", async () => {
+    // The embedding column is NOT NULL, so a null embedding can't be inserted.
+    vi.mocked(generateEmbedding).mockResolvedValueOnce(null);
+
+    const res = await POST(makeJsonRequest({ name: "kosher salt" }));
+
+    expect(res.status).toBe(503);
+    expect(createIngredientRow).not.toHaveBeenCalled();
+  });
+
   it("rejects malformed JSON with 400", async () => {
     const res = await POST(
       makeJsonRequest(undefined, { body: "not json{{" }),
