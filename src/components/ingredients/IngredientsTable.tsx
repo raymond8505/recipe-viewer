@@ -1,6 +1,5 @@
 "use client";
 
-import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -11,20 +10,20 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { createIngredient, fetchIngredients } from "@/lib/api/ingredients";
+import { createIngredient } from "@/lib/api/ingredients";
 import { pluralize } from "@/lib/format";
+import { useIngredientsTable } from "@/hooks/useIngredientsTable";
 import type { IngredientRow } from "@/types/ingredient";
 import IngredientRowEditor from "./IngredientRowEditor";
 import { NUTRITION_COLUMNS } from "./nutritionColumns";
-
-const PAGE_SIZE = 50;
 
 /**
  * The ingredient manager: a flat, editable view of the whole catalog. The
  * server page hands over the first page; searching and paging re-fetch
  * client-side through src/lib/api/ingredients.ts. Rows save/delete themselves
  * (IngredientRowEditor) and report back so the list stays in sync without a
- * refetch.
+ * refetch. The data layer (state + fetch) lives in useIngredientsTable; the
+ * event handlers stay here next to the JSX.
  *
  * @summary editable admin table over the ingredient catalog
  */
@@ -35,34 +34,25 @@ export default function IngredientsTable({
   initialIngredients: IngredientRow[];
   initialCount: number;
 }) {
-  const [rows, setRows] = useState(initialIngredients);
-  const [count, setCount] = useState(initialCount);
-  const [query, setQuery] = useState("");
-  const [page, setPage] = useState(1);
-  const [loading, setLoading] = useState(false);
-  const [newName, setNewName] = useState("");
-  const [busyAdding, setBusyAdding] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  const totalPages = Math.max(1, Math.ceil(count / PAGE_SIZE));
-
-  async function load(q: string, p: number) {
-    setLoading(true);
-    setError(null);
-    try {
-      const result = await fetchIngredients({
-        q: q.trim() || undefined,
-        page: p,
-        limit: PAGE_SIZE,
-      });
-      setRows(result.data);
-      setCount(result.count);
-    } catch {
-      setError("Failed to load ingredients");
-    } finally {
-      setLoading(false);
-    }
-  }
+  const {
+    rows,
+    setRows,
+    count,
+    setCount,
+    query,
+    setQuery,
+    page,
+    setPage,
+    loading,
+    newName,
+    setNewName,
+    busyAdding,
+    setBusyAdding,
+    error,
+    setError,
+    totalPages,
+    load,
+  } = useIngredientsTable(initialIngredients, initialCount);
 
   function handleSearch(e: React.FormEvent) {
     e.preventDefault();
