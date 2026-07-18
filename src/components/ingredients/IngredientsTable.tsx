@@ -10,12 +10,14 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { SpinnerIcon } from "@/components/icons";
 import { createIngredient } from "@/lib/api/ingredients";
 import { pluralize } from "@/lib/format";
 import { useIngredientsTable } from "@/hooks/useIngredientsTable";
 import type { IngredientRow } from "@/types/ingredient";
 import IngredientRowEditor from "./IngredientRowEditor";
 import { NUTRITION_COLUMNS } from "./nutritionColumns";
+import { STICKY_ALIASES_CELL, STICKY_NAME_CELL } from "./tableStyles";
 
 /**
  * The ingredient manager: a flat, editable view of the whole catalog. The
@@ -105,8 +107,14 @@ export default function IngredientsTable({
             onChange={(e) => setQuery(e.target.value)}
             className="w-64"
           />
-          <Button type="submit" variant="secondary" size="sm" disabled={loading}>
-            Search
+          <Button
+            type="submit"
+            variant="secondary"
+            size="sm"
+            disabled={loading}
+            aria-label="Search"
+          >
+            {loading ? <SpinnerIcon className="animate-spin" /> : "Search"}
           </Button>
         </form>
         <form onSubmit={handleAdd} className="flex items-end gap-2">
@@ -138,8 +146,8 @@ export default function IngredientsTable({
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Name</TableHead>
-              <TableHead>Aliases</TableHead>
+              <TableHead className={STICKY_NAME_CELL}>Name</TableHead>
+              <TableHead className={STICKY_ALIASES_CELL}>Aliases</TableHead>
               {NUTRITION_COLUMNS.map((col) => (
                 <TableHead key={col.key} title={col.title} className="text-right">
                   {col.label}

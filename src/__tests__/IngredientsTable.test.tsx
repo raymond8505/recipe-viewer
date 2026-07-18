@@ -8,6 +8,7 @@ import {
   updateIngredient,
 } from "@/lib/api/ingredients";
 import { ingredientFixtures, makeIngredient } from "@/fixtures";
+import type { IngredientRow } from "@/types/ingredient";
 
 vi.mock("@/lib/api/ingredients", () => ({
   fetchIngredients: vi.fn(),
@@ -171,5 +172,29 @@ describe("IngredientsTable", () => {
     });
     expect(screen.queryByLabelText("Name for cumin seed")).not.toBeInTheDocument();
     expect(screen.getByLabelText("Name for all-purpose flour")).toBeInTheDocument();
+  });
+
+  it("shows a spinner in the Search button while a search is in flight", async () => {
+    let resolveFetch: (value: { data: IngredientRow[]; count: number }) => void;
+    vi.mocked(fetchIngredients).mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolveFetch = resolve;
+      }),
+    );
+    renderTable();
+
+    const button = screen.getByRole("button", { name: "Search" });
+    expect(button).toHaveTextContent("Search");
+
+    fireEvent.click(button);
+
+    // In flight: the label is stable (aria-label) but the text is swapped for
+    // the spinner, and the button is disabled.
+    await waitFor(() => expect(button).toBeDisabled());
+    expect(button).not.toHaveTextContent("Search");
+
+    resolveFetch!({ data: [ingredientFixtures[1]], count: 1 });
+    await waitFor(() => expect(button).toBeEnabled());
+    expect(button).toHaveTextContent("Search");
   });
 });

@@ -6,6 +6,7 @@ import { useIngredientRowEditor } from "@/hooks/useIngredientRowEditor";
 import type { IngredientRow } from "@/types/ingredient";
 import IngredientSourceBadge from "./IngredientSourceBadge";
 import { NUTRITION_COLUMNS } from "./nutritionColumns";
+import { STICKY_ALIASES_CELL, STICKY_NAME_CELL } from "./tableStyles";
 
 // One editable catalog row. All cells are draft-local until Save, which
 // PATCHes only the fields that changed. The parent keys this component by
@@ -38,8 +39,8 @@ export default function IngredientRowEditor({
   } = useIngredientRowEditor(ingredient, onSaved, onDeleted);
 
   return (
-    <TableRow>
-      <TableCell className="min-w-40">
+    <TableRow className="group">
+      <TableCell className={`${STICKY_NAME_CELL} group-hover:bg-muted/50`}>
         <input
           aria-label={`Name for ${ingredient.name}`}
           value={draft.name}
@@ -47,7 +48,7 @@ export default function IngredientRowEditor({
           className="w-full bg-transparent text-sm rounded-none border-0 border-b border-transparent focus:border-orange-400 focus:outline-none"
         />
       </TableCell>
-      <TableCell className="min-w-40">
+      <TableCell className={`${STICKY_ALIASES_CELL} group-hover:bg-muted/50`}>
         <input
           aria-label={`Aliases for ${ingredient.name}`}
           value={draft.aliases}
