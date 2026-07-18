@@ -1,57 +1,17 @@
 "use client";
 
-import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { TableCell, TableRow } from "@/components/ui/table";
-import { deleteIngredient, updateIngredient } from "@/lib/api/ingredients";
-import type { IngredientUpdateInput } from "@/lib/schemas/ingredient";
-import type { IngredientNutrition, IngredientRow } from "@/types/ingredient";
+import { useIngredientRowEditor } from "@/hooks/useIngredientRowEditor";
+import type { IngredientRow } from "@/types/ingredient";
 import IngredientSourceBadge from "./IngredientSourceBadge";
 import { NUTRITION_COLUMNS } from "./nutritionColumns";
 
 // One editable catalog row. All cells are draft-local until Save, which
 // PATCHes only the fields that changed. The parent keys this component by
 // `${id}-${updated_at}` so a successful save remounts it with a fresh draft.
-
-interface Draft {
-  name: string;
-  aliases: string;
-  density: string;
-  nutrition: Record<string, string>;
-}
-
-function toDraft(ingredient: IngredientRow): Draft {
-  const nutrition: Record<string, string> = {};
-  for (const col of NUTRITION_COLUMNS) {
-    const value = ingredient.nutrition?.[col.key];
-    nutrition[col.key] = value !== undefined && value !== null ? String(value) : "";
-  }
-  return {
-    name: ingredient.name,
-    aliases: ingredient.aliases.join(", "),
-    density:
-      ingredient.density_g_per_ml !== null ? String(ingredient.density_g_per_ml) : "",
-    nutrition,
-  };
-}
-
-function draftsEqual(a: Draft, b: Draft): boolean {
-  return (
-    a.name === b.name &&
-    a.aliases === b.aliases &&
-    a.density === b.density &&
-    NUTRITION_COLUMNS.every((col) => a.nutrition[col.key] === b.nutrition[col.key])
-  );
-}
-
-// "" → null (clear the value); anything unparseable → undefined (field
-// dropped from the patch rather than sent as garbage).
-function parseNumeric(raw: string): number | null | undefined {
-  const trimmed = raw.trim();
-  if (trimmed === "") return null;
-  const value = Number(trimmed);
-  return Number.isFinite(value) ? value : undefined;
-}
+// The edit buffer + save/delete lifecycle live in useIngredientRowEditor; this
+// component is presentation and input wiring only.
 
 const numericCellClass =
   "w-16 bg-transparent text-right text-sm rounded-none border-0 border-b border-transparent focus:border-orange-400 focus:outline-none";
@@ -65,70 +25,17 @@ export default function IngredientRowEditor({
   onSaved: (row: IngredientRow) => void;
   onDeleted: (id: string) => void;
 }) {
-  const [initial] = useState(() => toDraft(ingredient));
-  const [draft, setDraft] = useState(initial);
-  const [busy, setBusy] = useState(false);
-  const [confirmingDelete, setConfirmingDelete] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  const dirty = !draftsEqual(draft, initial);
-
-  function buildPatch(): IngredientUpdateInput {
-    const patch: IngredientUpdateInput = {};
-    if (draft.name !== initial.name && draft.name.trim()) {
-      patch.name = draft.name.trim();
-    }
-    if (draft.aliases !== initial.aliases) {
-      patch.aliases = draft.aliases
-        .split(",")
-        .map((alias) => alias.trim())
-        .filter(Boolean);
-    }
-    if (draft.density !== initial.density) {
-      const density = parseNumeric(draft.density);
-      if (density !== undefined) patch.density_g_per_ml = density;
-    }
-    const nutritionChanged = NUTRITION_COLUMNS.some(
-      (col) => draft.nutrition[col.key] !== initial.nutrition[col.key],
-    );
-    if (nutritionChanged) {
-      // The nutrition jsonb is replaced whole, so send every non-empty field —
-      // not just the edited ones — or untouched values would be dropped.
-      const nutrition: IngredientNutrition = {};
-      for (const col of NUTRITION_COLUMNS) {
-        const value = parseNumeric(draft.nutrition[col.key]);
-        if (typeof value === "number") nutrition[col.key] = value;
-      }
-      patch.nutrition = nutrition;
-    }
-    return patch;
-  }
-
-  async function handleSave() {
-    const patch = buildPatch();
-    if (Object.keys(patch).length === 0) return;
-    setBusy(true);
-    setError(null);
-    try {
-      onSaved(await updateIngredient(ingredient.id, patch));
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Save failed");
-      setBusy(false);
-    }
-  }
-
-  async function handleDelete() {
-    setBusy(true);
-    setError(null);
-    try {
-      await deleteIngredient(ingredient.id);
-      onDeleted(ingredient.id);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Delete failed");
-      setBusy(false);
-      setConfirmingDelete(false);
-    }
-  }
+  const {
+    draft,
+    setDraft,
+    dirty,
+    busy,
+    error,
+    confirmingDelete,
+    setConfirmingDelete,
+    handleSave,
+    handleDelete,
+  } = useIngredientRowEditor(ingredient, onSaved, onDeleted);
 
   return (
     <TableRow>
