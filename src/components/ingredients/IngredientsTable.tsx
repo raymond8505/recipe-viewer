@@ -12,6 +12,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { createIngredient, fetchIngredients } from "@/lib/api/ingredients";
+import { pluralize } from "@/lib/format";
 import type { IngredientRow } from "@/types/ingredient";
 import IngredientRowEditor from "./IngredientRowEditor";
 import { NUTRITION_COLUMNS } from "./nutritionColumns";
@@ -191,7 +192,7 @@ export default function IngredientsTable({
 
       <div className="flex items-center justify-between text-sm text-muted-foreground">
         <span>
-          {count} ingredient{count === 1 ? "" : "s"}
+          {count} {pluralize(count, "ingredient")}
         </span>
         {totalPages > 1 && (
           <span className="inline-flex items-center gap-2">
