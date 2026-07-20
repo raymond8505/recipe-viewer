@@ -10,6 +10,7 @@ import IngredientSourceBadge from "./IngredientSourceBadge";
 import {
   NUTRITION_COLUMNS,
   PRIMARY_NUTRITION_COLUMNS,
+  nutritionLabel,
 } from "./nutritionColumns";
 import { formatServingSize } from "./servingSize";
 import {
@@ -91,7 +92,7 @@ export default function IngredientRowEditor({
               type="number"
               step="any"
               min="0"
-              aria-label={`${col.title} for ${ingredient.name}`}
+              aria-label={`${nutritionLabel(col)} for ${ingredient.name}`}
               value={draft.nutrition[col.key]}
               onChange={(e) =>
                 setDraft({
@@ -205,13 +206,13 @@ export default function IngredientRowEditor({
                       className="flex min-w-0 items-center justify-between gap-2 text-sm"
                     >
                       <span className="min-w-0 text-muted-foreground">
-                        {col.title}
+                        {nutritionLabel(col)}
                       </span>
                       <input
                         type="number"
                         step="any"
                         min="0"
-                        aria-label={`${col.title} for ${ingredient.name}`}
+                        aria-label={`${nutritionLabel(col)} for ${ingredient.name}`}
                         value={draft.nutrition[col.key]}
                         onChange={(e) =>
                           setDraft({

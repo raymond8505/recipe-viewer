@@ -17,7 +17,7 @@ import { pluralize } from "@/lib/format";
 import { useIngredientsTable } from "@/hooks/useIngredientsTable";
 import type { IngredientRow } from "@/types/ingredient";
 import IngredientRowEditor from "./IngredientRowEditor";
-import { PRIMARY_NUTRITION_COLUMNS } from "./nutritionColumns";
+import { PRIMARY_NUTRITION_COLUMNS, nutritionLabel } from "./nutritionColumns";
 import {
   STICKY_ACTIONS_HEAD,
   STICKY_ALIASES_HEAD,
@@ -148,7 +148,11 @@ export default function IngredientsTable({
             onChange={(e) => setNewName(e.target.value)}
             className="w-64"
           />
-          <Button type="submit" size="sm" disabled={busyAdding || !newName.trim()}>
+          <Button
+            type="submit"
+            size="sm"
+            disabled={busyAdding || !newName.trim()}
+          >
             Add
           </Button>
         </form>
@@ -161,8 +165,8 @@ export default function IngredientsTable({
       )}
 
       <p className="text-xs text-muted-foreground">
-        Nutrition values are per 100 g. Density converts volume to weight
-        (grams = ml × g/ml).
+        Nutrition values are per 100 g. Density converts volume to weight (grams
+        = ml × g/ml).
       </p>
 
       {/* Single scroll box (both axes). Capped at ~73vh so the chrome, heading,
@@ -183,20 +187,18 @@ export default function IngredientsTable({
               {PRIMARY_NUTRITION_COLUMNS.map((col) => (
                 <TableHead
                   key={col.key}
-                  title={col.title}
+                  title={nutritionLabel(col)}
                   className={`${STICKY_HEAD} text-right`}
                 >
-                  {col.label}
-                  {col.unit && (
-                    <span className="ml-0.5 font-normal text-muted-foreground">
-                      ({col.unit})
-                    </span>
-                  )}
+                  {col.name}
+                  <span className="ml-0.5 font-normal text-muted-foreground">
+                    ({col.unit})
+                  </span>
                 </TableHead>
               ))}
               <TableHead
                 title="Representative serving from USDA food portions"
-                className={`${STICKY_HEAD} max-w-40 text-right`}
+                className={`${STICKY_HEAD} max-w-50 text-right`}
               >
                 Serving
               </TableHead>

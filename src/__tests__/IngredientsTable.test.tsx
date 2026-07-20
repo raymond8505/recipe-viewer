@@ -147,6 +147,19 @@ describe("IngredientsTable", () => {
     });
   });
 
+  it("names fiber consistently as 'Fiber' — in the row and the drawer", () => {
+    renderTable();
+    fireEvent.click(screen.getByLabelText("Details for cumin seed"));
+
+    // The verbose USDA name must never surface in the UI.
+    expect(screen.queryByText(/Dietary fiber/)).not.toBeInTheDocument();
+    // Fiber is a primary column, so once expanded it exists in both the main
+    // row and the drawer — both under the consistent "Fiber (g)" name.
+    expect(
+      screen.getAllByLabelText("Fiber (g) for cumin seed"),
+    ).toHaveLength(2);
+  });
+
   it("deletes only after confirmation and removes the row", async () => {
     vi.mocked(deleteIngredient).mockResolvedValueOnce(undefined);
     renderTable();
