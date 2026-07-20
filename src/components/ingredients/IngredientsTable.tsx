@@ -17,7 +17,11 @@ import { pluralize } from "@/lib/format";
 import { useIngredientsTable } from "@/hooks/useIngredientsTable";
 import type { IngredientRow } from "@/types/ingredient";
 import IngredientRowEditor from "./IngredientRowEditor";
-import { PRIMARY_NUTRITION_COLUMNS, nutritionLabel } from "./nutritionColumns";
+import {
+  NUTRITION_BASIS_LABEL,
+  PRIMARY_NUTRITION_COLUMNS,
+  nutritionLabel,
+} from "./nutritionColumns";
 import {
   STICKY_ACTIONS_HEAD,
   STICKY_ALIASES_HEAD,
@@ -165,8 +169,8 @@ export default function IngredientsTable({
       )}
 
       <p className="text-xs text-muted-foreground">
-        Nutrition values are per 100 g. Density converts volume to weight (grams
-        = ml × g/ml).
+        Nutrition values are {NUTRITION_BASIS_LABEL}. Density converts volume to
+        weight (grams = ml × g/ml).
       </p>
 
       {/* Single scroll box (both axes). Capped at ~73vh so the chrome, heading,

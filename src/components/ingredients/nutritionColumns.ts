@@ -1,5 +1,12 @@
 import type { IngredientNutrition } from "@/types/ingredient";
 
+// Catalog nutrition is stored on a fixed per-100 g basis (USDA analytical
+// values). This is the single source for that basis so every label that states
+// it — the manager caption, the detail-drawer heading — can never drift from
+// the actual stored scale.
+export const NUTRITION_BASIS_GRAMS = 100;
+export const NUTRITION_BASIS_LABEL = `per ${NUTRITION_BASIS_GRAMS} g`;
+
 // Column order + naming for the editable nutrition cells (IngredientsTable
 // headers and IngredientRowEditor inputs iterate this same list, so the two
 // can never disagree on order or naming). `name` is the single canonical label

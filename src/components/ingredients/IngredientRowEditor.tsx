@@ -1,13 +1,14 @@
 "use client";
 
 import { useState } from "react";
+import { ChevronDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { TableCell, TableRow } from "@/components/ui/table";
-import { ChevronDownIcon } from "@/components/icons";
 import { useIngredientRowEditor } from "@/hooks/useIngredientRowEditor";
 import type { IngredientRow } from "@/types/ingredient";
 import IngredientSourceBadge from "./IngredientSourceBadge";
 import {
+  NUTRITION_BASIS_LABEL,
   NUTRITION_COLUMNS,
   PRIMARY_NUTRITION_COLUMNS,
   nutritionLabel,
@@ -135,7 +136,9 @@ export default function IngredientRowEditor({
             aria-expanded={expanded}
             className="mr-1 text-muted-foreground"
           >
-            <ChevronDownIcon
+            <ChevronDown
+              size={18}
+              aria-hidden
               className={`transition-transform ${expanded ? "rotate-180" : ""}`}
             />
           </Button>
@@ -197,7 +200,7 @@ export default function IngredientRowEditor({
             >
               <div>
                 <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2">
-                  All nutrition (per 100 g)
+                  All nutrition ({NUTRITION_BASIS_LABEL})
                 </h3>
                 <div className="grid grid-cols-2 gap-x-4 gap-y-2 sm:grid-cols-3 lg:grid-cols-4">
                   {NUTRITION_COLUMNS.map((col) => (
