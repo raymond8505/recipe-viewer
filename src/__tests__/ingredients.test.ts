@@ -9,6 +9,7 @@ import {
   getRecipeIngredients,
   matchIngredients,
   replaceRecipeIngredients,
+  searchIngredientsKeyword,
   setRecipeNormalization,
   updateIngredientRow,
 } from "@/lib/ingredients";
@@ -305,6 +306,50 @@ describe("matchIngredients", () => {
     useQueue([{ data: null, error: { message: "function missing" } }]);
 
     const err = await matchIngredients("cumin", [1]).catch((e: unknown) => e);
+
+    expect(err).toBeInstanceOf(IngredientRepoError);
+    expect((err as IngredientRepoError).kind).toBe("match_failed");
+  });
+});
+
+describe("searchIngredientsKeyword", () => {
+  it("invokes the keyword RPC with the query text and count", async () => {
+    const matches = [
+      {
+        id: "ing-1",
+        name: "cumin seed",
+        aliases: ["cumin"],
+        nutrition: null,
+        density_g_per_ml: null,
+        similarity: 0.87,
+      },
+    ];
+    useQueue([{ data: matches }]);
+
+    const result = await searchIngredientsKeyword("cumin sed", 3);
+
+    expect(result).toEqual(matches);
+    expect(client.rpc).toHaveBeenCalledWith("search_ingredients_keyword", {
+      query_text: "cumin sed",
+      match_count: 3,
+    });
+  });
+
+  it("defaults to top-8", async () => {
+    useQueue([{ data: [] }]);
+
+    await searchIngredientsKeyword("cumin");
+
+    expect(client.rpc).toHaveBeenCalledWith("search_ingredients_keyword", {
+      query_text: "cumin",
+      match_count: 8,
+    });
+  });
+
+  it("throws match_failed on RPC error — callers must not read that as 'no matches'", async () => {
+    useQueue([{ data: null, error: { message: "function missing" } }]);
+
+    const err = await searchIngredientsKeyword("cumin").catch((e: unknown) => e);
 
     expect(err).toBeInstanceOf(IngredientRepoError);
     expect((err as IngredientRepoError).kind).toBe("match_failed");

@@ -1,5 +1,6 @@
 import { getSupabaseAdminClient, selectColumns, toVectorLiteral } from "./supabase";
 import type {
+  IngredientKeywordMatch,
   IngredientMatch,
   IngredientNutrition,
   IngredientRow,
@@ -269,6 +270,28 @@ export async function matchIngredients(
     throw new IngredientRepoError("match_failed", error.message);
   }
   return (data as IngredientMatch[]) ?? [];
+}
+
+// Keyword-only trigram search via the search_ingredients_keyword RPC
+// (db/migrations/0008) — the NutritionDetail autocomplete path. No embedding
+// call, so it's cheap enough for per-keystroke use. Throws ("match_failed")
+// on RPC failure — callers must treat that as "search unavailable", never as
+// "no matches".
+export async function searchIngredientsKeyword(
+  queryText: string,
+  count = 8,
+): Promise<IngredientKeywordMatch[]> {
+  const supabase = getSupabaseAdminClient();
+
+  const { data, error } = await supabase.rpc("search_ingredients_keyword", {
+    query_text: queryText,
+    match_count: count,
+  });
+
+  if (error) {
+    throw new IngredientRepoError("match_failed", error.message);
+  }
+  return (data as IngredientKeywordMatch[]) ?? [];
 }
 
 export async function getRecipeIngredients(

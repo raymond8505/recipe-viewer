@@ -86,6 +86,21 @@ export interface IngredientMatch {
   score: number;
 }
 
+// A search_ingredients_keyword RPC result row (keyword-only trigram search,
+// db/migrations/0008) — the NutritionDetail autocomplete path. Unlike
+// IngredientMatch there is no embedding involved, so `similarity` is a raw
+// trigram score and IS safe to threshold or display.
+export interface IngredientKeywordMatch {
+  id: string;
+  name: string;
+  aliases: string[];
+  nutrition: IngredientNutrition | null;
+  density_g_per_ml: number | null;
+  // Best pg_trgm trigram similarity of the query text across name + aliases;
+  // ~1.0 means a near-exact name or alias match.
+  similarity: number;
+}
+
 export interface IngredientsResult {
   data: IngredientRow[];
   count: number;
