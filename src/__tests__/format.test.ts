@@ -9,6 +9,7 @@ import {
   getFirstImage,
   toArray,
   groupIngredients,
+  groupIngredientsWithIndex,
   getIngredientText,
   markdownToInstructions,
   normalizeRecipeInstructions,
@@ -293,6 +294,46 @@ describe("groupIngredients", () => {
     expect(result).toHaveLength(2);
     expect(result[0].heading).toBeNull();
     expect(result[1].heading).toBe("Sauce");
+  });
+});
+
+describe("groupIngredientsWithIndex", () => {
+  it("carries original array indices through flat lists", () => {
+    const result = groupIngredientsWithIndex(["2 cups flour", "1 cup sugar"]);
+    expect(result).toHaveLength(1);
+    expect(result[0].items).toEqual([
+      { ingredient: "2 cups flour", index: 0 },
+      { ingredient: "1 cup sugar", index: 1 },
+    ]);
+  });
+
+  it("preserves original indices when interleaved groups are reordered", () => {
+    const ingredients = [
+      { name: "2 cups flour", group: "Cake" },
+      { name: "1 tsp vanilla", group: "Frosting" },
+      { name: "1 cup sugar", group: "Cake" },
+    ];
+    const result = groupIngredientsWithIndex(ingredients);
+    expect(result.map((g) => g.heading)).toEqual(["Cake", "Frosting"]);
+    // "1 cup sugar" moved into the Cake bucket but keeps index 2 — the join
+    // key back to recipe_ingredients.position.
+    expect(result[0].items.map((i) => i.index)).toEqual([0, 2]);
+    expect(result[1].items.map((i) => i.index)).toEqual([1]);
+  });
+
+  it("stays structurally equivalent to groupIngredients", () => {
+    const ingredients = [
+      "plain string",
+      { name: "grouped", group: "Sauce" },
+      { name: "also grouped", group: "Sauce" },
+    ];
+    const indexed = groupIngredientsWithIndex(ingredients);
+    expect(
+      indexed.map(({ heading, items }) => ({
+        heading,
+        items: items.map((i) => i.ingredient),
+      })),
+    ).toEqual(groupIngredients(ingredients));
   });
 });
 
