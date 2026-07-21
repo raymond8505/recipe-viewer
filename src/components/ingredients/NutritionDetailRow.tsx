@@ -1,0 +1,99 @@
+"use client";
+
+import { TableCell, TableRow } from "@/components/ui/table";
+import { SpinnerIcon, WarningIcon } from "@/components/icons";
+import { formatAmount } from "@/lib/units";
+import type { NutritionDetailLine } from "@/hooks/useNutritionDetail";
+import type { ExclusionReason } from "@/lib/nutritionMath";
+import type { IngredientKeywordMatch } from "@/types/ingredient";
+import type { IngredientAutocompleteSearch } from "@/hooks/useIngredientAutocomplete";
+import IngredientAutocomplete from "./IngredientAutocomplete";
+import { NUTRITION_COLUMNS } from "./nutritionColumns";
+import { STICKY_ALIASES_CELL, STICKY_NAME_CELL } from "./tableStyles";
+
+const EXCLUSION_TITLES: Record<ExclusionReason, string> = {
+  unmatched: "Not matched to the catalog — pick an ingredient to include it",
+  no_nutrition: "Matched ingredient has no nutrition data",
+  no_quantity: "No parsed amount — can't convert to grams",
+  no_unit: "No unit (count line) — can't convert to grams",
+  no_density: "Volume unit but the ingredient has no density",
+  stale: "Line changed since normalization — re-run normalization",
+};
+
+/**
+ * One recipe line in the NutritionDetail table: frozen recipe text (with an
+ * exclusion flag when the line can't contribute to totals), the frozen
+ * normalized-ingredient autocomplete, then read-only grams + nutrition cells.
+ *
+ * @summary read-only nutrition row with an editable match cell
+ */
+export default function NutritionDetailRow({
+  line,
+  saving,
+  search,
+  onSelect,
+}: {
+  line: NutritionDetailLine;
+  saving: boolean;
+  search?: IngredientAutocompleteSearch;
+  onSelect: (rowId: string, match: IngredientKeywordMatch | null) => void;
+}) {
+  const { row, ingredient, computation } = line;
+  const excluded = computation.kind === "excluded";
+
+  return (
+    <TableRow className="group">
+      <TableCell
+        className={`${STICKY_NAME_CELL} ${excluded ? "text-muted-foreground" : ""}`}
+      >
+        <span className="flex items-center gap-1.5">
+          <span className="truncate" title={line.text}>
+            {line.text}
+          </span>
+          {excluded && (
+            <span title={EXCLUSION_TITLES[computation.reason]}>
+              <WarningIcon className="size-4 shrink-0 text-amber-500" />
+            </span>
+          )}
+        </span>
+      </TableCell>
+      <TableCell className={STICKY_ALIASES_CELL}>
+        {row ? (
+          <span className="flex items-center gap-1.5">
+            <span className="min-w-0 flex-1">
+              <IngredientAutocomplete
+                value={
+                  row.ingredient_id
+                    ? {
+                        id: row.ingredient_id,
+                        name: ingredient?.name ?? "(unknown ingredient)",
+                      }
+                    : null
+                }
+                onSelect={(match) => onSelect(row.id, match)}
+                ariaLabel={`Change match for ${line.text}`}
+                disabled={saving}
+                search={search}
+              />
+            </span>
+            {saving && <SpinnerIcon />}
+          </span>
+        ) : (
+          <span className="text-muted-foreground">—</span>
+        )}
+      </TableCell>
+      <TableCell className="text-right tabular-nums">
+        {computation.kind === "ok" ? formatAmount(computation.grams) : "—"}
+      </TableCell>
+      {NUTRITION_COLUMNS.map((col) => {
+        const value =
+          computation.kind === "ok" ? computation.nutrition[col.key] : undefined;
+        return (
+          <TableCell key={col.key} className="text-right tabular-nums">
+            {value != null ? formatAmount(value) : "—"}
+          </TableCell>
+        );
+      })}
+    </TableRow>
+  );
+}

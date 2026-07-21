@@ -1,0 +1,164 @@
+"use client";
+
+import { useMemo, useState } from "react";
+import { getIngredientText, groupIngredientsWithIndex } from "@/lib/format";
+import {
+  computeLineNutrition,
+  perPortionNutrition,
+  sumNutrition,
+  type LineComputation,
+} from "@/lib/nutritionMath";
+import { parseServings } from "@/lib/units";
+import { updateRecipeIngredientAssociation } from "@/lib/api/recipes";
+import type { QuantitativeValue, RecipeIngredient } from "@/types/recipe";
+import type {
+  IngredientKeywordMatch,
+  IngredientNutrition,
+  IngredientRow,
+  RecipeIngredientRow,
+} from "@/types/ingredient";
+
+// Everything the math and display need from a catalog row — a keyword match
+// carries exactly this much, so an association change can update the map
+// without refetching the full IngredientRow.
+export type CatalogIngredientSummary = Pick<
+  IngredientRow,
+  "id" | "name" | "nutrition" | "density_g_per_ml"
+>;
+
+export interface NutritionDetailLine {
+  /** Original index into schemaIngredients — also recipe_ingredients.position. */
+  index: number;
+  /** The recipe's display text for this line (the source of truth). */
+  text: string;
+  row: RecipeIngredientRow | null;
+  ingredient: CatalogIngredientSummary | null;
+  computation: LineComputation;
+}
+
+export interface NutritionDetailGroup {
+  heading: string | null;
+  lines: NutritionDetailLine[];
+}
+
+// State + derived math for the NutritionDetail screen. Rows join to schema
+// lines by position index; a line whose stored raw_text no longer equals the
+// schema text is "stale" (the recipe was edited after the last normalization
+// run) and is excluded from totals. Association changes are non-optimistic:
+// await the PATCH, then update local state — totals recompute via useMemo.
+export function useNutritionDetail(
+  recipeId: string,
+  schemaIngredients: Array<string | RecipeIngredient>,
+  recipeYield: string | string[] | QuantitativeValue | undefined,
+  initialRows: RecipeIngredientRow[],
+  initialIngredients: IngredientRow[],
+) {
+  const [rows, setRows] = useState(initialRows);
+  const [ingredientsById, setIngredientsById] = useState<
+    Map<string, CatalogIngredientSummary>
+  >(() => new Map(initialIngredients.map((ing) => [ing.id, ing])));
+  const [savingRowId, setSavingRowId] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const groups = useMemo<NutritionDetailGroup[]>(() => {
+    const rowsByPosition = new Map(rows.map((row) => [row.position, row]));
+    return groupIngredientsWithIndex(schemaIngredients).map(
+      ({ heading, items }) => ({
+        heading,
+        lines: items.map(({ ingredient: schemaIngredient, index }) => {
+          const text = getIngredientText(schemaIngredient);
+          const row = rowsByPosition.get(index) ?? null;
+          if (!row || row.raw_text !== text) {
+            return { index, text, row, ingredient: null, computation: { kind: "excluded" as const, reason: "stale" as const } };
+          }
+          const ingredient = row.ingredient_id
+            ? (ingredientsById.get(row.ingredient_id) ?? null)
+            : null;
+          return {
+            index,
+            text,
+            row,
+            ingredient,
+            computation: computeLineNutrition(row, ingredient),
+          };
+        }),
+      }),
+    );
+  }, [rows, ingredientsById, schemaIngredients]);
+
+  const lines = useMemo(() => groups.flatMap((g) => g.lines), [groups]);
+
+  const totals = useMemo<IngredientNutrition>(
+    () =>
+      sumNutrition(
+        lines
+          .map((l) => l.computation)
+          .filter((c): c is Extract<LineComputation, { kind: "ok" }> => c.kind === "ok")
+          .map((c) => c.nutrition),
+      ),
+    [lines],
+  );
+
+  const totalGrams = useMemo(
+    () =>
+      lines.reduce(
+        (sum, l) => (l.computation.kind === "ok" ? sum + l.computation.grams : sum),
+        0,
+      ),
+    [lines],
+  );
+
+  const servings = useMemo(() => parseServings(recipeYield), [recipeYield]);
+  const perPortion = useMemo(
+    () => (servings != null && servings > 0 ? perPortionNutrition(totals, servings) : null),
+    [totals, servings],
+  );
+
+  const excludedCount = lines.filter((l) => l.computation.kind === "excluded").length;
+  const hasStaleLines = lines.some(
+    (l) => l.computation.kind === "excluded" && l.computation.reason === "stale",
+  );
+
+  async function selectIngredient(
+    rowId: string,
+    match: IngredientKeywordMatch | null,
+  ) {
+    setSavingRowId(rowId);
+    setError(null);
+    try {
+      const updated = await updateRecipeIngredientAssociation(
+        recipeId,
+        rowId,
+        match?.id ?? null,
+      );
+      setRows((current) => current.map((r) => (r.id === rowId ? updated : r)));
+      if (match) {
+        setIngredientsById((current) =>
+          new Map(current).set(match.id, {
+            id: match.id,
+            name: match.name,
+            nutrition: match.nutrition,
+            density_g_per_ml: match.density_g_per_ml,
+          }),
+        );
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to update match");
+    } finally {
+      setSavingRowId(null);
+    }
+  }
+
+  return {
+    groups,
+    totals,
+    totalGrams,
+    perPortion,
+    servings,
+    excludedCount,
+    hasStaleLines,
+    savingRowId,
+    error,
+    selectIngredient,
+  };
+}
