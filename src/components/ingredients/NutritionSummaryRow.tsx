@@ -3,7 +3,7 @@
 import { TableCell, TableRow } from "@/components/ui/table";
 import { formatAmount } from "@/lib/units";
 import type { IngredientNutrition } from "@/types/ingredient";
-import { NUTRITION_COLUMNS } from "./nutritionColumns";
+import { NUTRITION_DETAIL_COLUMNS } from "./nutritionColumns";
 import { STICKY_ALIASES_CELL, STICKY_NAME_CELL } from "./tableStyles";
 
 /**
@@ -15,12 +15,10 @@ import { STICKY_ALIASES_CELL, STICKY_NAME_CELL } from "./tableStyles";
  */
 export default function NutritionSummaryRow({
   label,
-  grams,
   nutrition,
   missingTitle,
 }: {
   label: string;
-  grams: number | null;
   nutrition: IngredientNutrition | null;
   missingTitle?: string;
 }) {
@@ -33,10 +31,7 @@ export default function NutritionSummaryRow({
         {label}
       </TableCell>
       <TableCell className={STICKY_ALIASES_CELL} />
-      <TableCell className="text-right tabular-nums">
-        {nutrition != null && grams != null ? formatAmount(grams) : "—"}
-      </TableCell>
-      {NUTRITION_COLUMNS.map((col) => {
+      {NUTRITION_DETAIL_COLUMNS.map((col) => {
         const value = nutrition?.[col.key];
         return (
           <TableCell key={col.key} className="text-right tabular-nums">

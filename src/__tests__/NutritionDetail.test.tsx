@@ -126,10 +126,34 @@ describe("NutritionDetail", () => {
 
     // 100 g butter → 717 kcal, 81 g fat.
     expect(rowFor("100 g butter")).toHaveTextContent("717");
-    // 1 tsp cumin → 4.92892 ml × 0.42 g/ml = 2.07 g → 7.76 kcal.
-    const cuminRow = rowFor("1 tsp cumin");
-    expect(cuminRow).toHaveTextContent("2.07");
-    expect(cuminRow).toHaveTextContent("7.76");
+    // 1 tsp cumin → 4.92892 ml × 0.42 g/ml = 2.07 g → ×375/100 = 7.76 kcal.
+    expect(rowFor("1 tsp cumin")).toHaveTextContent("7.76");
+  });
+
+  it("orders nutrition headers panel-first with full titles", () => {
+    renderDetail();
+
+    const headers = screen
+      .getAllByRole("columnheader")
+      .map((h) => h.textContent ?? "");
+    expect(headers).toEqual([
+      "Ingredient",
+      "Normalized",
+      // The NutritionPanel six, in its display order…
+      "Calories (kcal)",
+      "Protein (g)",
+      "Carbohydrate (g)",
+      "Total fat (g)",
+      "Dietary fiber (g)",
+      "Sodium (mg)",
+      // …then the rest. No computed-grams column.
+      "Saturated fat (g)",
+      "Sugars (g)",
+      "Cholesterol (mg)",
+      "Calcium (mg)",
+      "Iron (mg)",
+      "Potassium (mg)",
+    ]);
   });
 
   it("flags excluded lines with the reason and em-dash cells", () => {
@@ -155,10 +179,8 @@ describe("NutritionDetail", () => {
   it("sums totals over convertible lines and divides per portion by servings", () => {
     renderDetail();
 
-    // 717 (butter) + 7.7630 (cumin) = 724.76; grams 100 + 2.07 = 102.07.
-    const total = rowFor("Recipe total");
-    expect(total).toHaveTextContent("724.76");
-    expect(total).toHaveTextContent("102.07");
+    // 717 (butter) + 7.7630 (cumin) = 724.76 kcal.
+    expect(rowFor("Recipe total")).toHaveTextContent("724.76");
 
     const perPortion = rowFor("Per portion (÷4)");
     expect(perPortion).toHaveTextContent("181.19");

@@ -99,15 +99,6 @@ export function useNutritionDetail(
     [lines],
   );
 
-  const totalGrams = useMemo(
-    () =>
-      lines.reduce(
-        (sum, l) => (l.computation.kind === "ok" ? sum + l.computation.grams : sum),
-        0,
-      ),
-    [lines],
-  );
-
   const servings = useMemo(() => parseServings(recipeYield), [recipeYield]);
   const perPortion = useMemo(
     () => (servings != null && servings > 0 ? perPortionNutrition(totals, servings) : null),
@@ -152,7 +143,6 @@ export function useNutritionDetail(
   return {
     groups,
     totals,
-    totalGrams,
     perPortion,
     servings,
     excludedCount,

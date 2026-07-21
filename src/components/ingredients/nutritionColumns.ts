@@ -28,3 +28,23 @@ export const NUTRITION_COLUMNS: NutritionColumn[] = [
   { key: "iron_mg", label: "Fe", unit: "mg", title: "Iron (mg)" },
   { key: "potassium_mg", label: "K", unit: "mg", title: "Potassium (mg)" },
 ];
+
+// The six nutrients NutritionPanel surfaces, in its display order — the ones
+// a reader compares first.
+const PANEL_KEYS: (keyof IngredientNutrition)[] = [
+  "calories_kcal",
+  "protein_g",
+  "carbs_g",
+  "fat_g",
+  "fiber_g",
+  "sodium_mg",
+];
+
+// Column order for the NutritionDetail table: the NutritionPanel six first,
+// then the remaining nutrients in catalog order. Same column objects as
+// NUTRITION_COLUMNS (only the order differs), so the two tables can never
+// disagree on labels or titles.
+export const NUTRITION_DETAIL_COLUMNS: NutritionColumn[] = [
+  ...PANEL_KEYS.map((key) => NUTRITION_COLUMNS.find((col) => col.key === key)!),
+  ...NUTRITION_COLUMNS.filter((col) => !PANEL_KEYS.includes(col.key)),
+];

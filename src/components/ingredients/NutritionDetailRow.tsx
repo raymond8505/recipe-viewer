@@ -1,14 +1,16 @@
 "use client";
 
+import { useState } from "react";
 import { TableCell, TableRow } from "@/components/ui/table";
 import { SpinnerIcon, WarningIcon } from "@/components/icons";
+import { cn } from "@/lib/utils";
 import { formatAmount } from "@/lib/units";
 import type { NutritionDetailLine } from "@/hooks/useNutritionDetail";
 import type { ExclusionReason } from "@/lib/nutritionMath";
 import type { IngredientKeywordMatch } from "@/types/ingredient";
 import type { IngredientAutocompleteSearch } from "@/hooks/useIngredientAutocomplete";
 import IngredientAutocomplete from "./IngredientAutocomplete";
-import { NUTRITION_COLUMNS } from "./nutritionColumns";
+import { NUTRITION_DETAIL_COLUMNS } from "./nutritionColumns";
 import { STICKY_ALIASES_CELL, STICKY_NAME_CELL } from "./tableStyles";
 
 const EXCLUSION_TITLES: Record<ExclusionReason, string> = {
@@ -23,7 +25,7 @@ const EXCLUSION_TITLES: Record<ExclusionReason, string> = {
 /**
  * One recipe line in the NutritionDetail table: frozen recipe text (with an
  * exclusion flag when the line can't contribute to totals), the frozen
- * normalized-ingredient autocomplete, then read-only grams + nutrition cells.
+ * normalized-ingredient autocomplete, then read-only nutrition cells.
  *
  * @summary read-only nutrition row with an editable match cell
  */
@@ -40,14 +42,18 @@ export default function NutritionDetailRow({
 }) {
   const { row, ingredient, computation } = line;
   const excluded = computation.kind === "excluded";
+  // The sticky cell is its own stacking context (z-10), so the dropdown's
+  // internal z-index can't beat sibling rows' sticky cells — the whole cell
+  // is raised above them (but below the z-30 header corners) while open.
+  const [autocompleteOpen, setAutocompleteOpen] = useState(false);
 
   return (
     <TableRow className="group">
       <TableCell
-        className={`${STICKY_NAME_CELL} ${excluded ? "text-muted-foreground" : ""}`}
+        className={cn(STICKY_NAME_CELL, excluded && "text-muted-foreground")}
       >
-        <span className="flex items-center gap-1.5">
-          <span className="truncate" title={line.text}>
+        <span className="flex w-full min-w-0 items-center gap-1.5">
+          <span className="min-w-0 truncate" title={line.text}>
             {line.text}
           </span>
           {excluded && (
@@ -57,9 +63,9 @@ export default function NutritionDetailRow({
           )}
         </span>
       </TableCell>
-      <TableCell className={STICKY_ALIASES_CELL}>
+      <TableCell className={cn(STICKY_ALIASES_CELL, autocompleteOpen && "z-20")}>
         {row ? (
-          <span className="flex items-center gap-1.5">
+          <span className="flex w-full min-w-0 items-center gap-1.5">
             <span className="min-w-0 flex-1">
               <IngredientAutocomplete
                 value={
@@ -74,6 +80,7 @@ export default function NutritionDetailRow({
                 ariaLabel={`Change match for ${line.text}`}
                 disabled={saving}
                 search={search}
+                onOpenChange={setAutocompleteOpen}
               />
             </span>
             {saving && <SpinnerIcon />}
@@ -82,10 +89,7 @@ export default function NutritionDetailRow({
           <span className="text-muted-foreground">—</span>
         )}
       </TableCell>
-      <TableCell className="text-right tabular-nums">
-        {computation.kind === "ok" ? formatAmount(computation.grams) : "—"}
-      </TableCell>
-      {NUTRITION_COLUMNS.map((col) => {
+      {NUTRITION_DETAIL_COLUMNS.map((col) => {
         const value =
           computation.kind === "ok" ? computation.nutrition[col.key] : undefined;
         return (

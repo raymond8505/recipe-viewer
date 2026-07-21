@@ -22,6 +22,12 @@ interface IngredientAutocompleteProps {
   disabled?: boolean;
   /** DI seam so stories/tests run without a backend; defaults to the api wrapper. */
   search?: IngredientAutocompleteSearch;
+  /**
+   * Fires when the editor opens/closes. The host table cell is a sticky
+   * stacking context, so the parent must raise its z-index while the
+   * dropdown is open — the dropdown's own z-index can't beat sibling cells.
+   */
+  onOpenChange?: (open: boolean) => void;
 }
 
 // Combobox for re-pointing a recipe line at a catalog ingredient. The input
@@ -33,6 +39,7 @@ export default function IngredientAutocomplete({
   ariaLabel,
   disabled,
   search,
+  onOpenChange,
 }: IngredientAutocompleteProps) {
   const listboxId = useId();
   const [open, setOpen] = useState(false);
@@ -51,6 +58,7 @@ export default function IngredientAutocomplete({
   const close = () => {
     setOpen(false);
     reset();
+    onOpenChange?.(false);
   };
 
   useEffect(() => {
@@ -67,6 +75,7 @@ export default function IngredientAutocomplete({
 
   const openEditor = () => {
     setOpen(true);
+    onOpenChange?.(true);
     // Pre-fill with the current name so a small correction is one keystroke
     // away; selecting the text keeps "type a new name" equally cheap.
     setQuery(value?.name ?? "");

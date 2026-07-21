@@ -20,12 +20,12 @@ import type { IngredientRow, RecipeIngredientRow } from "@/types/ingredient";
 import type { IngredientAutocompleteSearch } from "@/hooks/useIngredientAutocomplete";
 import NutritionDetailRow from "./NutritionDetailRow";
 import NutritionSummaryRow from "./NutritionSummaryRow";
-import { NUTRITION_COLUMNS } from "./nutritionColumns";
+import { NUTRITION_DETAIL_COLUMNS } from "./nutritionColumns";
 import { STICKY_ALIASES_HEAD, STICKY_HEAD, STICKY_NAME_HEAD } from "./tableStyles";
 
-// Recipe text + autocomplete are the frozen columns; grams + the 12 nutrition
-// columns scroll. 2 frozen + grams + 12 = 15.
-const COLUMN_COUNT = NUTRITION_COLUMNS.length + 3;
+// Recipe text + autocomplete are the frozen columns; the 12 nutrition
+// columns scroll.
+const COLUMN_COUNT = NUTRITION_DETAIL_COLUMNS.length + 2;
 
 interface NutritionDetailProps {
   recipeId: string;
@@ -62,7 +62,6 @@ export default function NutritionDetail({
   const {
     groups,
     totals,
-    totalGrams,
     perPortion,
     servings,
     excludedCount,
@@ -133,21 +132,12 @@ export default function NutritionDetail({
             <TableRow className="hover:bg-transparent">
               <TableHead className={STICKY_NAME_HEAD}>Ingredient</TableHead>
               <TableHead className={STICKY_ALIASES_HEAD}>Normalized</TableHead>
-              <TableHead title="Computed grams" className={`${STICKY_HEAD} text-right`}>
-                g
-              </TableHead>
-              {NUTRITION_COLUMNS.map((col) => (
+              {NUTRITION_DETAIL_COLUMNS.map((col) => (
                 <TableHead
                   key={col.key}
-                  title={col.title}
-                  className={`${STICKY_HEAD} text-right`}
+                  className={`${STICKY_HEAD} text-right whitespace-nowrap`}
                 >
-                  {col.label}
-                  {col.unit && (
-                    <span className="ml-0.5 font-normal text-muted-foreground">
-                      ({col.unit})
-                    </span>
-                  )}
+                  {col.title}
                 </TableHead>
               ))}
             </TableRow>
@@ -166,13 +156,16 @@ export default function NutritionDetail({
               groups.map((group, gi) => (
                 <Fragment key={group.heading ?? `ungrouped-${gi}`}>
                   {group.heading != null && (
-                    <TableRow className="hover:bg-transparent">
+                    // Distinct band; the heading cell freezes left so the
+                    // group name stays visible during horizontal scroll.
+                    <TableRow className="bg-muted hover:bg-muted">
                       <TableCell
-                        colSpan={COLUMN_COUNT}
-                        className="pt-4 font-sans text-xs font-semibold uppercase tracking-widest text-muted-foreground"
+                        colSpan={2}
+                        className="sticky left-0 z-10 bg-muted font-sans text-xs font-semibold uppercase tracking-widest text-muted-foreground"
                       >
                         {group.heading}
                       </TableCell>
+                      <TableCell colSpan={COLUMN_COUNT - 2} />
                     </TableRow>
                   )}
                   {group.lines.map((line) => (
@@ -187,14 +180,9 @@ export default function NutritionDetail({
                 </Fragment>
               ))
             )}
-            <NutritionSummaryRow
-              label="Recipe total"
-              grams={totalGrams}
-              nutrition={totals}
-            />
+            <NutritionSummaryRow label="Recipe total" nutrition={totals} />
             <NutritionSummaryRow
               label={servings != null ? `Per portion (÷${servings})` : "Per portion"}
-              grams={servings != null && servings > 0 ? totalGrams / servings : null}
               nutrition={perPortion}
               missingTitle="Servings unknown — recipeYield has no number"
             />

@@ -157,6 +157,28 @@ describe("IngredientAutocomplete", () => {
     expect(screen.getByRole("option", { name: /red onion/ })).toBeInTheDocument();
   });
 
+  it("reports open/close through onOpenChange so the host cell can restack", async () => {
+    const user = userEvent.setup();
+    const onOpenChange = vi.fn();
+    render(
+      <IngredientAutocomplete
+        value={null}
+        onSelect={onSelect}
+        ariaLabel="Change match for 1 tsp cumin"
+        search={search}
+        onOpenChange={onOpenChange}
+      />,
+    );
+
+    await user.click(screen.getByLabelText("Change match for 1 tsp cumin"));
+    expect(onOpenChange).toHaveBeenLastCalledWith(true);
+
+    // Focus moves to the input on a rAF after the click, so target it
+    // directly rather than relying on document focus.
+    await user.type(screen.getByRole("combobox"), "{Escape}");
+    expect(onOpenChange).toHaveBeenLastCalledWith(false);
+  });
+
   it("shows 'Search unavailable' on a failed search, never 'No matches'", async () => {
     const user = userEvent.setup();
     search.mockRejectedValue(new Error("500"));
