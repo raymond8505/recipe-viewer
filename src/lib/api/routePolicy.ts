@@ -101,6 +101,21 @@ export const ROUTE_POLICY = {
   },
 
   // ── Ingredient catalog (logged-in manager UI) ───────────────────────────
+  "/api/ingredients/search": {
+    policy: "session",
+    rationale:
+      "Trigram autocomplete backing the logged-in NutritionDetail screen; no anonymous or agent-token use case (agents get the search_ingredients MCP tool).",
+  },
+  "/api/recipes/[id]/ingredients": {
+    policy: "session",
+    rationale:
+      "Reads a recipe's normalized ingredient rows + catalog joins for the logged-in NutritionDetail screen; normalized-layer curation is a manager surface, not part of the public recipe view.",
+  },
+  "/api/recipes/[id]/ingredients/[riId]": {
+    policy: "session",
+    rationale:
+      "Manually re-associates one parsed line to a catalog ingredient (match_status → manual); logged-in curation surface only. Recipe-scoped tokens don't apply — agents curate via MCP tools, not this UI path.",
+  },
   "/api/ingredients": {
     policy: "session",
     rationale:

@@ -3,7 +3,11 @@
 // `fetch` directly so the network shape stays in one place and tests/stories
 // can mock a single module.
 
-import type { IngredientRow, IngredientsResult } from "@/types/ingredient";
+import type {
+  IngredientKeywordMatch,
+  IngredientRow,
+  IngredientsResult,
+} from "@/types/ingredient";
 import type {
   IngredientCreateInput,
   IngredientUpdateInput,
@@ -25,6 +29,28 @@ export async function fetchIngredients(opts?: {
     throw new Error(`Ingredient list failed with status ${res.status}`);
   }
   return res.json();
+}
+
+/**
+ * Keyword-only trigram search over the catalog — the NutritionDetail
+ * autocomplete path. Cheap per-keystroke (no embedding on the server side).
+ */
+export async function searchIngredientsKeyword(
+  q: string,
+  limit?: number,
+): Promise<IngredientKeywordMatch[]> {
+  const params = new URLSearchParams({ q });
+  if (limit) params.set("limit", String(limit));
+
+  const res = await fetch(`/api/ingredients/search?${params}`);
+  if (!res.ok) {
+    throw new Error(`Ingredient search failed with status ${res.status}`);
+  }
+  const body = await res.json();
+  if (!Array.isArray(body.data)) {
+    throw new Error("Ingredient search returned no data");
+  }
+  return body.data;
 }
 
 export async function createIngredient(

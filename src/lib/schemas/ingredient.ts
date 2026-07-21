@@ -49,6 +49,19 @@ export const ingredientSearchInputSchema = z.object({
   limit: z.number().int().positive().max(10).default(5),
 });
 
+// GET /api/ingredients/search — the keyword-only trigram autocomplete.
+// Coerced numbers because the values arrive as URL query strings.
+export const ingredientKeywordSearchQuerySchema = z.object({
+  q: z.string().min(1).max(200),
+  limit: z.coerce.number().int().positive().max(20).default(8),
+});
+
+// PATCH /api/recipes/[id]/ingredients/[riId] — manual association change.
+// null clears the association (line becomes "unmatched").
+export const recipeIngredientPatchSchema = z.object({
+  ingredient_id: z.uuid().nullable(),
+});
+
 export type IngredientCreateInput = z.infer<typeof ingredientCreateInputSchema>;
 export type IngredientUpdateInput = z.infer<typeof ingredientUpdateInputSchema>;
 export type IngredientSearchInput = z.infer<typeof ingredientSearchInputSchema>;
