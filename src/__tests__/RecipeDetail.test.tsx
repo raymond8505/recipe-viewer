@@ -274,6 +274,19 @@ describe("RecipeDetail — controls section", () => {
     expect(screen.getByRole("button", { name: /re-scrape/i })).toBeTruthy();
   });
 
+  it("links to the nutrition breakdown only when logged in", () => {
+    const { unmount } = render(
+      <RecipeDetail recipe={makeRecipe()} isLoggedIn={true} />,
+    );
+    expect(
+      screen.getByRole("link", { name: "Ingredient breakdown" }),
+    ).toHaveAttribute("href", "/recipes/1/ingredients");
+    unmount();
+
+    render(<RecipeDetail recipe={makeRecipe()} isLoggedIn={false} />);
+    expect(screen.queryByRole("link", { name: "Ingredient breakdown" })).toBeNull();
+  });
+
   it("shows loading state while re-scraping", async () => {
     let resolve: (value: Response) => void;
     const pending = new Promise<Response>((res) => { resolve = res; });

@@ -454,7 +454,11 @@ export default function RecipeDetail({
         )}
 
         {/* Nutrition */}
-        <NutritionPanel recipe={scalable} onSplitPortions={splitPortions} />
+        <NutritionPanel
+          recipe={scalable}
+          onSplitPortions={splitPortions}
+          ingredientsHref={isLoggedIn ? `/recipes/${recipe.id}/ingredients` : undefined}
+        />
 
         {/* JSON-LD — Schema.org-compliant only; escape </script> sequences to prevent tag injection */}
         <script
