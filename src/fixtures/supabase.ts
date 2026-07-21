@@ -60,6 +60,7 @@ export function makeSupabaseQueue(responses: SupabaseQueueResponse[]) {
       "update",
       "delete",
       "eq",
+      "in",
       "or",
       "ilike",
       "order",
