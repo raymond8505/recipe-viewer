@@ -62,6 +62,18 @@ export const recipeIngredientPatchSchema = z.object({
   ingredient_id: z.uuid().nullable(),
 });
 
+// GET /api/usda/search — USDA candidates for the manual-import flow.
+export const usdaSearchQuerySchema = z.object({
+  q: z.string().min(1).max(200),
+});
+
+// POST /api/ingredients/import-usda — mint a catalog row from a picked USDA
+// food. `name` is the recipe-language canonical name for the new ingredient.
+export const usdaImportInputSchema = z.object({
+  fdcId: z.number().int().positive(),
+  name: z.string().min(1).max(200),
+});
+
 export type IngredientCreateInput = z.infer<typeof ingredientCreateInputSchema>;
 export type IngredientUpdateInput = z.infer<typeof ingredientUpdateInputSchema>;
 export type IngredientSearchInput = z.infer<typeof ingredientSearchInputSchema>;
