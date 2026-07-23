@@ -8,7 +8,11 @@ import { formatAmount } from "@/lib/units";
 import type { NutritionDetailLine } from "@/hooks/useNutritionDetail";
 import type { ExclusionReason } from "@/lib/nutritionMath";
 import type { IngredientKeywordMatch } from "@/types/ingredient";
-import type { IngredientAutocompleteSearch } from "@/hooks/useIngredientAutocomplete";
+import type { UsdaSearchFood } from "@/lib/usda";
+import type {
+  IngredientAutocompleteSearch,
+  UsdaFoodSearch,
+} from "@/hooks/useIngredientAutocomplete";
 import IngredientAutocomplete from "./IngredientAutocomplete";
 import { NUTRITION_DETAIL_COLUMNS } from "./nutritionColumns";
 import { STICKY_ALIASES_CELL, STICKY_NAME_CELL } from "./tableStyles";
@@ -33,12 +37,16 @@ export default function NutritionDetailRow({
   line,
   saving,
   search,
+  usdaSearch,
   onSelect,
+  onImportUsda,
 }: {
   line: NutritionDetailLine;
   saving: boolean;
   search?: IngredientAutocompleteSearch;
+  usdaSearch?: UsdaFoodSearch;
   onSelect: (rowId: string, match: IngredientKeywordMatch | null) => void;
+  onImportUsda: (rowId: string, food: UsdaSearchFood) => void;
 }) {
   const { row, ingredient, computation } = line;
   const excluded = computation.kind === "excluded";
@@ -77,9 +85,11 @@ export default function NutritionDetailRow({
                     : null
                 }
                 onSelect={(match) => onSelect(row.id, match)}
+                onImportUsda={(food) => onImportUsda(row.id, food)}
                 ariaLabel={`Change match for ${line.text}`}
                 disabled={saving}
                 search={search}
+                usdaSearch={usdaSearch}
                 onOpenChange={setAutocompleteOpen}
               />
             </span>

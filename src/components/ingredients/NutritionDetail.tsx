@@ -17,7 +17,10 @@ import { pluralize } from "@/lib/format";
 import { useNutritionDetail } from "@/hooks/useNutritionDetail";
 import type { QuantitativeValue, RecipeIngredient } from "@/types/recipe";
 import type { IngredientRow, RecipeIngredientRow } from "@/types/ingredient";
-import type { IngredientAutocompleteSearch } from "@/hooks/useIngredientAutocomplete";
+import type {
+  IngredientAutocompleteSearch,
+  UsdaFoodSearch,
+} from "@/hooks/useIngredientAutocomplete";
 import NutritionDetailRow from "./NutritionDetailRow";
 import NutritionSummaryRow from "./NutritionSummaryRow";
 import { NUTRITION_DETAIL_COLUMNS } from "./nutritionColumns";
@@ -35,6 +38,8 @@ interface NutritionDetailProps {
   initialIngredients: IngredientRow[];
   /** DI seam for the autocomplete so stories/tests run without a backend. */
   search?: IngredientAutocompleteSearch;
+  /** DI seam for the autocomplete's USDA fallback search. */
+  usdaSearch?: UsdaFoodSearch;
 }
 
 /**
@@ -54,6 +59,7 @@ export default function NutritionDetail({
   initialRows,
   initialIngredients,
   search,
+  usdaSearch,
 }: NutritionDetailProps) {
   const router = useRouter();
   const [normalizeState, setNormalizeState] = useState<"idle" | "queueing" | "queued">(
@@ -69,6 +75,7 @@ export default function NutritionDetail({
     savingRowId,
     error,
     selectIngredient,
+    importUsda,
   } = useNutritionDetail(
     recipeId,
     schemaIngredients,
@@ -174,7 +181,9 @@ export default function NutritionDetail({
                       line={line}
                       saving={savingRowId != null && savingRowId === line.row?.id}
                       search={search}
+                      usdaSearch={usdaSearch}
                       onSelect={selectIngredient}
+                      onImportUsda={importUsda}
                     />
                   ))}
                 </Fragment>

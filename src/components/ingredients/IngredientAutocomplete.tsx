@@ -2,11 +2,22 @@
 
 import { useEffect, useId, useRef, useState } from "react";
 import type { IngredientKeywordMatch } from "@/types/ingredient";
+import type { UsdaSearchFood } from "@/lib/usda";
 import { SpinnerIcon } from "@/components/icons";
 import {
   useIngredientAutocomplete,
   type IngredientAutocompleteSearch,
+  type UsdaFoodSearch,
 } from "@/hooks/useIngredientAutocomplete";
+
+// One keyboard-navigable entry in the dropdown. Catalog matches, the
+// "Search USDA" action, USDA foods, and "Clear match" share a single
+// options array so ArrowDown/Up walk everything the mouse can reach.
+type AutocompleteOption =
+  | { kind: "catalog"; match: IngredientKeywordMatch }
+  | { kind: "usda-search" }
+  | { kind: "usda"; food: UsdaSearchFood }
+  | { kind: "clear" };
 
 interface IngredientAutocompleteProps {
   /** Current association; null renders the "unmatched" trigger. */
@@ -22,6 +33,13 @@ interface IngredientAutocompleteProps {
   disabled?: boolean;
   /** DI seam so stories/tests run without a backend; defaults to the api wrapper. */
   search?: IngredientAutocompleteSearch;
+  /** DI seam for the USDA candidate search; defaults to the api wrapper. */
+  usdaSearch?: UsdaFoodSearch;
+  /**
+   * Import a picked USDA food (parent mints the catalog row + persists the
+   * association). The USDA affordance only renders when this is provided.
+   */
+  onImportUsda?: (food: UsdaSearchFood) => void;
   /**
    * Fires when the editor opens/closes. The host table cell is a sticky
    * stacking context, so the parent must raise its z-index while the
@@ -33,12 +51,16 @@ interface IngredientAutocompleteProps {
 // Combobox for re-pointing a recipe line at a catalog ingredient. The input
 // keeps focus while ArrowDown/ArrowUp move a highlight through the options
 // (wrapping), Enter selects, Escape/click-outside close without change.
+// When the catalog comes up short, a "Search USDA" action pulls FoodData
+// Central candidates (Branded included) for one-click import.
 export default function IngredientAutocomplete({
   value,
   onSelect,
   ariaLabel,
   disabled,
   search,
+  usdaSearch,
+  onImportUsda,
   onOpenChange,
 }: IngredientAutocompleteProps) {
   const listboxId = useId();
@@ -46,14 +68,39 @@ export default function IngredientAutocomplete({
   const [highlight, setHighlight] = useState(0);
   const containerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
-  const { query, setQuery, results, loading, error, reset } = useIngredientAutocomplete(search);
+  const {
+    query,
+    setQuery,
+    results,
+    loading,
+    error,
+    usdaResults,
+    usdaLoading,
+    usdaError,
+    runUsdaSearch,
+    reset,
+  } = useIngredientAutocomplete(search, usdaSearch);
 
-  // The "Clear match" item sits after the results in the keyboard cycle.
-  const optionCount = results.length + (value ? 1 : 0);
+  const queryReady = query.trim().length >= 2;
+  const showUsdaAction =
+    onImportUsda != null &&
+    queryReady &&
+    usdaResults == null &&
+    !usdaLoading &&
+    usdaError == null;
+
+  const options: AutocompleteOption[] = [
+    ...results.map((match): AutocompleteOption => ({ kind: "catalog", match })),
+    ...(showUsdaAction ? [{ kind: "usda-search" } as const] : []),
+    ...(usdaResults ?? []).map(
+      (food): AutocompleteOption => ({ kind: "usda", food }),
+    ),
+    ...(value ? [{ kind: "clear" } as const] : []),
+  ];
 
   useEffect(() => {
     setHighlight(0);
-  }, [results]);
+  }, [results, usdaResults]);
 
   const close = () => {
     setOpen(false);
@@ -85,25 +132,38 @@ export default function IngredientAutocomplete({
     });
   };
 
-  const select = (index: number) => {
-    if (index < results.length) {
-      onSelect(results[index]);
-    } else if (value) {
-      onSelect(null);
+  const select = (option: AutocompleteOption | undefined) => {
+    if (!option) return;
+    switch (option.kind) {
+      case "catalog":
+        onSelect(option.match);
+        close();
+        break;
+      case "usda-search":
+        // Stays open: the USDA results replace this action in the list.
+        void runUsdaSearch();
+        break;
+      case "usda":
+        onImportUsda?.(option.food);
+        close();
+        break;
+      case "clear":
+        onSelect(null);
+        close();
+        break;
     }
-    close();
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === "ArrowDown" && optionCount > 0) {
+    if (e.key === "ArrowDown" && options.length > 0) {
       e.preventDefault();
-      setHighlight((h) => (h + 1) % optionCount);
-    } else if (e.key === "ArrowUp" && optionCount > 0) {
+      setHighlight((h) => (h + 1) % options.length);
+    } else if (e.key === "ArrowUp" && options.length > 0) {
       e.preventDefault();
-      setHighlight((h) => (h - 1 + optionCount) % optionCount);
+      setHighlight((h) => (h - 1 + options.length) % options.length);
     } else if (e.key === "Enter") {
       e.preventDefault();
-      if (optionCount > 0) select(highlight);
+      select(options[highlight]);
     } else if (e.key === "Escape") {
       e.preventDefault();
       close();
@@ -128,6 +188,9 @@ export default function IngredientAutocomplete({
     );
   }
 
+  const optionClass = (index: number, extra = "") =>
+    `w-full px-3 py-2 text-left text-sm ${index === highlight ? "bg-brand-subtle" : ""} ${extra}`;
+
   return (
     <div ref={containerRef} className="relative">
       <div className="flex items-center gap-2">
@@ -145,11 +208,11 @@ export default function IngredientAutocomplete({
           aria-expanded={true}
           aria-controls={listboxId}
           aria-activedescendant={
-            optionCount > 0 ? `${listboxId}-opt-${highlight}` : undefined
+            options.length > 0 ? `${listboxId}-opt-${highlight}` : undefined
           }
           className="w-full min-w-0 bg-transparent text-sm rounded-none border-0 border-b border-border outline-hidden focus:border-orange-400"
         />
-        {loading && <SpinnerIcon />}
+        {(loading || usdaLoading) && <SpinnerIcon />}
       </div>
 
       <div
@@ -158,58 +221,109 @@ export default function IngredientAutocomplete({
         aria-label="Ingredient matches"
         className="absolute left-0 right-0 top-full z-30 mt-1 max-h-60 overflow-y-auto rounded-xl border border-border bg-popover shadow-lg"
       >
-        {error ? (
+        {error && (
           <p className="px-3 py-2 text-sm text-muted-foreground" role="status">
             {error}
           </p>
-        ) : results.length === 0 && !loading ? (
-          <p className="px-3 py-2 text-sm text-muted-foreground" role="status">
-            {query.trim().length < 2 ? "Type to search…" : "No matches"}
-          </p>
-        ) : (
-          results.map((match, i) => (
-            <button
-              key={match.id}
-              id={`${listboxId}-opt-${i}`}
-              type="button"
-              role="option"
-              aria-selected={i === highlight}
-              tabIndex={-1}
-              onClick={() => select(i)}
-              onPointerEnter={() => setHighlight(i)}
-              className={`flex w-full items-baseline justify-between gap-2 px-3 py-2 text-left text-sm ${
-                i === highlight ? "bg-brand-subtle" : ""
-              }`}
-            >
-              <span className="min-w-0">
-                <span className="block truncate">{match.name}</span>
-                <MatchedAlias match={match} query={query} />
-              </span>
-              <span className="shrink-0 text-xs tabular-nums text-muted-foreground">
-                {Math.round(match.similarity * 100)}%
-              </span>
-            </button>
-          ))
         )}
-        {value && !error && (
+        {!error && results.length === 0 && !loading && (
+          <p className="px-3 py-2 text-sm text-muted-foreground" role="status">
+            {queryReady ? "No catalog matches" : "Type to search…"}
+          </p>
+        )}
+        {usdaLoading && (
+          <p className="px-3 py-2 text-sm text-muted-foreground" role="status">
+            Searching USDA…
+          </p>
+        )}
+        {usdaError && (
+          <p className="px-3 py-2 text-sm text-muted-foreground" role="status">
+            {usdaError}
+          </p>
+        )}
+        {usdaResults?.length === 0 && (
+          <p className="px-3 py-2 text-sm text-muted-foreground" role="status">
+            No USDA results
+          </p>
+        )}
+        {options.map((option, i) => (
           <button
-            id={`${listboxId}-opt-${results.length}`}
+            key={optionKey(option)}
+            id={`${listboxId}-opt-${i}`}
             type="button"
             role="option"
-            aria-selected={highlight === results.length}
+            aria-selected={i === highlight}
             tabIndex={-1}
-            onClick={() => select(results.length)}
-            onPointerEnter={() => setHighlight(results.length)}
-            className={`w-full border-t border-border px-3 py-2 text-left text-sm text-muted-foreground ${
-              highlight === results.length ? "bg-brand-subtle" : ""
-            }`}
+            onClick={() => select(option)}
+            onPointerEnter={() => setHighlight(i)}
+            className={optionClass(i, optionExtraClass(option))}
           >
-            Clear match
+            <OptionContent option={option} query={query} />
           </button>
-        )}
+        ))}
       </div>
     </div>
   );
+}
+
+function optionKey(option: AutocompleteOption): string {
+  switch (option.kind) {
+    case "catalog":
+      return `catalog-${option.match.id}`;
+    case "usda":
+      return `usda-${option.food.fdcId}`;
+    default:
+      return option.kind;
+  }
+}
+
+function optionExtraClass(option: AutocompleteOption): string {
+  switch (option.kind) {
+    case "usda-search":
+      return "border-t border-border text-brand";
+    case "clear":
+      return "border-t border-border text-muted-foreground";
+    default:
+      return "";
+  }
+}
+
+// Row content per option kind. Catalog rows show name + alias hint +
+// similarity; USDA rows show the FDC description + data-type provenance.
+function OptionContent({
+  option,
+  query,
+}: {
+  option: AutocompleteOption;
+  query: string;
+}) {
+  switch (option.kind) {
+    case "catalog":
+      return (
+        <span className="flex items-baseline justify-between gap-2">
+          <span className="min-w-0">
+            <span className="block truncate">{option.match.name}</span>
+            <MatchedAlias match={option.match} query={query} />
+          </span>
+          <span className="shrink-0 text-xs tabular-nums text-muted-foreground">
+            {Math.round(option.match.similarity * 100)}%
+          </span>
+        </span>
+      );
+    case "usda-search":
+      return <>Search USDA for “{query.trim()}”</>;
+    case "usda":
+      return (
+        <span className="flex items-baseline justify-between gap-2">
+          <span className="min-w-0 truncate">{option.food.description}</span>
+          <span className="shrink-0 text-xs text-muted-foreground">
+            {option.food.dataType}
+          </span>
+        </span>
+      );
+    case "clear":
+      return <>Clear match</>;
+  }
 }
 
 // The RPC scores best-of over name + aliases but doesn't say which won, so

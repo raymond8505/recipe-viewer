@@ -6,8 +6,10 @@ import {
   normalizeRecipe,
   updateRecipeIngredientAssociation,
 } from "@/lib/api/recipes";
+import { importUsdaIngredient } from "@/lib/api/ingredients";
 import { makeIngredient, makeRecipeIngredient } from "@/fixtures";
 import type { IngredientKeywordMatch, RecipeIngredientRow } from "@/types/ingredient";
+import type { UsdaSearchFood } from "@/lib/usda";
 import type { RecipeIngredient } from "@/types/recipe";
 
 vi.mock("@/lib/api/recipes", () => ({
@@ -15,7 +17,14 @@ vi.mock("@/lib/api/recipes", () => ({
   updateRecipeIngredientAssociation: vi.fn(),
 }));
 
+vi.mock("@/lib/api/ingredients", () => ({
+  importUsdaIngredient: vi.fn(),
+  searchIngredientsKeyword: vi.fn(),
+  searchUsdaFoods: vi.fn(),
+}));
+
 const search = vi.fn<(q: string) => Promise<IngredientKeywordMatch[]>>();
+const usdaSearch = vi.fn<(q: string) => Promise<UsdaSearchFood[]>>();
 
 // Interleaved groups: Cake (indices 0 + 2), Frosting (1), ungrouped (3).
 // Grouping reorders these, so passing tests prove position-index alignment.
@@ -68,6 +77,7 @@ function makeRows(): RecipeIngredientRow[] {
       raw_text: "5 g magic dust",
       quantity: 5,
       unit: "g",
+      name_text: "magic dust",
       ingredient_id: null,
       match_status: "unmatched",
     }),
@@ -86,6 +96,7 @@ function renderDetail(overrides?: {
       initialRows={overrides?.rows ?? makeRows()}
       initialIngredients={[butter, eggs, cumin]}
       search={search}
+      usdaSearch={usdaSearch}
     />,
   );
 }
@@ -100,6 +111,7 @@ function rowFor(text: string): HTMLElement {
 beforeEach(() => {
   vi.clearAllMocks();
   search.mockResolvedValue([]);
+  usdaSearch.mockResolvedValue([]);
 });
 
 describe("NutritionDetail", () => {
@@ -257,5 +269,52 @@ describe("NutritionDetail", () => {
     await waitFor(() => expect(rowFor("Recipe total")).toHaveTextContent("729.76"));
     expect(screen.getByText("magic dust")).toBeInTheDocument();
     expect(screen.getByText(/Totals exclude 1 flagged line/)).toBeInTheDocument();
+  });
+
+  it("imports a USDA food for a line the catalog can't match and recomputes", async () => {
+    const user = userEvent.setup();
+    const gochujang: UsdaSearchFood = {
+      fdcId: 123,
+      description: "MAGIC DUST SEASONING",
+      dataType: "Branded",
+    };
+    usdaSearch.mockResolvedValue([gochujang]);
+    vi.mocked(importUsdaIngredient).mockResolvedValue(
+      makeIngredient("ing-magic", "magic dust", {
+        nutrition: { calories_kcal: 100 },
+        density_g_per_ml: 1,
+        fdc_data_type: "Branded",
+      }),
+    );
+    vi.mocked(updateRecipeIngredientAssociation).mockResolvedValue(
+      makeRecipeIngredient("r-1", 3, {
+        id: "ri-3",
+        raw_text: "5 g magic dust",
+        quantity: 5,
+        unit: "g",
+        name_text: "magic dust",
+        ingredient_id: "ing-magic",
+        match_status: "manual",
+      }),
+    );
+    renderDetail();
+
+    await user.click(screen.getByLabelText("Change match for 5 g magic dust"));
+    await user.type(screen.getByRole("combobox"), "magic dust");
+    await user.click(await screen.findByRole("option", { name: /Search USDA for/ }));
+    await user.click(
+      await screen.findByRole("option", { name: /MAGIC DUST SEASONING/ }),
+    );
+
+    // Canonical name = the line's parsed name, not USDA's description.
+    expect(importUsdaIngredient).toHaveBeenCalledWith(123, "magic dust");
+    expect(updateRecipeIngredientAssociation).toHaveBeenCalledWith(
+      "r-1",
+      "ri-3",
+      "ing-magic",
+    );
+    // The imported nutrition joins the totals: 724.76 + 5 = 729.76.
+    await waitFor(() => expect(rowFor("Recipe total")).toHaveTextContent("729.76"));
+    expect(screen.getByText("magic dust")).toBeInTheDocument();
   });
 });

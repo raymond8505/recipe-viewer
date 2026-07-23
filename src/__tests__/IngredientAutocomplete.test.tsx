@@ -3,6 +3,7 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import IngredientAutocomplete from "@/components/ingredients/IngredientAutocomplete";
 import type { IngredientKeywordMatch } from "@/types/ingredient";
+import type { UsdaSearchFood } from "@/lib/usda";
 
 function makeMatch(id: string, name: string, overrides?: Partial<IngredientKeywordMatch>) {
   return {
@@ -188,5 +189,132 @@ describe("IngredientAutocomplete", () => {
 
     expect(await screen.findByText("Search unavailable")).toBeInTheDocument();
     expect(screen.queryByText("No matches")).not.toBeInTheDocument();
+  });
+});
+
+describe("IngredientAutocomplete — USDA fallback", () => {
+  const usdaSearch = vi.fn<(q: string) => Promise<UsdaSearchFood[]>>();
+  const onImportUsda = vi.fn();
+  const gochujang: UsdaSearchFood = {
+    fdcId: 123,
+    description: "GOCHUJANG PASTE",
+    dataType: "Branded",
+    score: 500,
+  };
+
+  function renderWithUsda() {
+    return render(
+      <IngredientAutocomplete
+        value={null}
+        onSelect={onSelect}
+        ariaLabel="Change match for 1 tbsp gochujang"
+        search={search}
+        usdaSearch={usdaSearch}
+        onImportUsda={onImportUsda}
+      />,
+    );
+  }
+
+  async function openTypeAndSearchUsda(user: ReturnType<typeof userEvent.setup>) {
+    await user.click(screen.getByLabelText("Change match for 1 tbsp gochujang"));
+    await user.type(screen.getByRole("combobox"), "gochujang");
+    await user.click(
+      await screen.findByRole("option", { name: /Search USDA for/ }),
+    );
+  }
+
+  beforeEach(() => {
+    usdaSearch.mockResolvedValue([gochujang]);
+  });
+
+  it("offers a 'Search USDA' action when the catalog comes up empty", async () => {
+    const user = userEvent.setup();
+    search.mockResolvedValue([]);
+    renderWithUsda();
+
+    await user.click(screen.getByLabelText("Change match for 1 tbsp gochujang"));
+    await user.type(screen.getByRole("combobox"), "gochujang");
+
+    expect(await screen.findByText("No catalog matches")).toBeInTheDocument();
+    expect(
+      screen.getByRole("option", { name: 'Search USDA for “gochujang”' }),
+    ).toBeInTheDocument();
+  });
+
+  it("lists USDA candidates with provenance and imports the picked one", async () => {
+    const user = userEvent.setup();
+    search.mockResolvedValue([]);
+    renderWithUsda();
+
+    await openTypeAndSearchUsda(user);
+
+    expect(usdaSearch).toHaveBeenCalledWith("gochujang");
+    const usdaOption = await screen.findByRole("option", {
+      name: /GOCHUJANG PASTE/,
+    });
+    expect(usdaOption).toHaveTextContent("Branded");
+
+    await user.click(usdaOption);
+    expect(onImportUsda).toHaveBeenCalledWith(gochujang);
+    expect(screen.queryByRole("combobox")).not.toBeInTheDocument();
+  });
+
+  it("reaches the USDA action and results by keyboard", async () => {
+    const user = userEvent.setup();
+    search.mockResolvedValue([]);
+    renderWithUsda();
+
+    await user.click(screen.getByLabelText("Change match for 1 tbsp gochujang"));
+    await user.type(screen.getByRole("combobox"), "gochujang");
+    await screen.findByRole("option", { name: /Search USDA for/ });
+
+    // The action is the only option — Enter runs the search…
+    await user.keyboard("{Enter}");
+    await screen.findByRole("option", { name: /GOCHUJANG PASTE/ });
+    // …and its results take its place in the same keyboard cycle.
+    await user.keyboard("{Enter}");
+    expect(onImportUsda).toHaveBeenCalledWith(gochujang);
+  });
+
+  it("shows 'USDA search unavailable' when the proxy fails", async () => {
+    const user = userEvent.setup();
+    search.mockResolvedValue([]);
+    usdaSearch.mockRejectedValue(new Error("502"));
+    renderWithUsda();
+
+    await openTypeAndSearchUsda(user);
+
+    expect(await screen.findByText("USDA search unavailable")).toBeInTheDocument();
+  });
+
+  it("discards USDA results when the query changes", async () => {
+    const user = userEvent.setup();
+    search.mockResolvedValue([]);
+    renderWithUsda();
+
+    await openTypeAndSearchUsda(user);
+    await screen.findByRole("option", { name: /GOCHUJANG PASTE/ });
+
+    await user.type(screen.getByRole("combobox"), "x");
+
+    expect(
+      screen.queryByRole("option", { name: /GOCHUJANG PASTE/ }),
+    ).not.toBeInTheDocument();
+    expect(
+      await screen.findByRole("option", { name: /Search USDA for/ }),
+    ).toBeInTheDocument();
+  });
+
+  it("renders no USDA affordance without an onImportUsda handler", async () => {
+    const user = userEvent.setup();
+    search.mockResolvedValue([]);
+    renderClosed();
+
+    await openAndType(user, "gochujang");
+
+    expect(await screen.findByText("No catalog matches")).toBeInTheDocument();
+    expect(
+      screen.queryByRole("option", { name: /Search USDA/ }),
+    ).not.toBeInTheDocument();
   });
 });

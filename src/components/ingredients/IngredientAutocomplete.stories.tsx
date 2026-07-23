@@ -2,6 +2,7 @@ import type { Meta, StoryObj } from "@storybook/nextjs-vite";
 import { userEvent, fn, within } from "storybook/test";
 import { ingredientFixtures } from "@/fixtures";
 import type { IngredientKeywordMatch } from "@/types/ingredient";
+import type { UsdaSearchFood } from "@/lib/usda";
 import IngredientAutocomplete from "./IngredientAutocomplete";
 
 // In-memory stand-in for the trigram search route (the component's DI seam).
@@ -23,6 +24,15 @@ async function fixtureSearch(q: string): Promise<IngredientKeywordMatch[]> {
     }));
 }
 
+// USDA candidates for the fallback flow, shaped like the /api/usda/search
+// proxy's response (Branded included — the human picks).
+async function fixtureUsdaSearch(q: string): Promise<UsdaSearchFood[]> {
+  return [
+    { fdcId: 2710101, description: `${q.toUpperCase()}, TRADITIONAL`, dataType: "Branded" },
+    { fdcId: 173460, description: `Sauce, ${q}, ready-to-serve`, dataType: "SR Legacy" },
+  ];
+}
+
 const meta: Meta<typeof IngredientAutocomplete> = {
   component: IngredientAutocomplete,
   title: "Components/Ingredients/IngredientAutocomplete",
@@ -37,7 +47,9 @@ const meta: Meta<typeof IngredientAutocomplete> = {
   args: {
     ariaLabel: "Change match for 1 tsp cumin",
     onSelect: fn(),
+    onImportUsda: fn(),
     search: fixtureSearch,
+    usdaSearch: fixtureUsdaSearch,
   },
 };
 
@@ -71,5 +83,23 @@ export const OpenWithResults: Story = {
     const input = canvas.getByRole("combobox");
     await userEvent.clear(input);
     await userEvent.type(input, "onion");
+  },
+};
+
+/**
+ * The USDA fallback for an ingredient the catalog doesn't know: the query
+ * finds no catalog matches, so the "Search USDA" action runs the FoodData
+ * Central search and lists candidates with their data-type provenance
+ * (Branded included — the human picks).
+ */
+export const UsdaFallback: Story = {
+  args: { value: null },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await userEvent.click(canvas.getByLabelText("Change match for 1 tsp cumin"));
+    await userEvent.type(canvas.getByRole("combobox"), "gochujang");
+    const action = await canvas.findByRole("option", { name: /Search USDA for/ });
+    await userEvent.click(action);
+    await canvas.findByRole("option", { name: /GOCHUJANG, TRADITIONAL/ });
   },
 };

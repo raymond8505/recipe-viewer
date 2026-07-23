@@ -10,6 +10,8 @@ import {
 } from "@/lib/nutritionMath";
 import { parseServings } from "@/lib/units";
 import { updateRecipeIngredientAssociation } from "@/lib/api/recipes";
+import { importUsdaIngredient } from "@/lib/api/ingredients";
+import type { UsdaSearchFood } from "@/lib/usda";
 import type { QuantitativeValue, RecipeIngredient } from "@/types/recipe";
 import type {
   IngredientKeywordMatch,
@@ -140,6 +142,40 @@ export function useNutritionDetail(
     }
   }
 
+  // Mint a catalog row from a user-picked USDA food, then associate the line
+  // with it. Canonical name = the line's PARSED name (recipe language, e.g.
+  // "gochujang"), per the normalization convention — the USDA description
+  // lands as an alias server-side.
+  async function importUsda(rowId: string, food: UsdaSearchFood) {
+    const row = rows.find((r) => r.id === rowId);
+    if (!row) return;
+    setSavingRowId(rowId);
+    setError(null);
+    try {
+      const ingredient = await importUsdaIngredient(food.fdcId, row.name_text);
+      const updated = await updateRecipeIngredientAssociation(
+        recipeId,
+        rowId,
+        ingredient.id,
+      );
+      setRows((current) => current.map((r) => (r.id === rowId ? updated : r)));
+      setIngredientsById((current) =>
+        new Map(current).set(ingredient.id, {
+          id: ingredient.id,
+          name: ingredient.name,
+          nutrition: ingredient.nutrition,
+          density_g_per_ml: ingredient.density_g_per_ml,
+        }),
+      );
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : "Failed to import from USDA",
+      );
+    } finally {
+      setSavingRowId(null);
+    }
+  }
+
   return {
     groups,
     totals,
@@ -150,5 +186,6 @@ export function useNutritionDetail(
     savingRowId,
     error,
     selectIngredient,
+    importUsda,
   };
 }

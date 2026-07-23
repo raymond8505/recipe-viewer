@@ -2,6 +2,7 @@ import type { Meta, StoryObj } from "@storybook/nextjs-vite";
 import { userEvent, within } from "storybook/test";
 import { ingredientFixtures, makeRecipeIngredient } from "@/fixtures";
 import type { IngredientKeywordMatch } from "@/types/ingredient";
+import type { UsdaSearchFood } from "@/lib/usda";
 import NutritionDetail from "./NutritionDetail";
 
 // In-memory stand-in for the trigram search route (DI seam on the component)
@@ -24,6 +25,16 @@ async function fixtureSearch(q: string): Promise<IngredientKeywordMatch[]> {
     }));
 }
 
+// USDA candidates for the autocomplete's fallback flow (no backend in
+// stories; picking one would hit the real import wrapper, so stories only
+// demonstrate the list).
+async function fixtureUsdaSearch(q: string): Promise<UsdaSearchFood[]> {
+  return [
+    { fdcId: 2710101, description: `${q.toUpperCase()}, TRADITIONAL`, dataType: "Branded" },
+    { fdcId: 173460, description: `Sauce, ${q}, ready-to-serve`, dataType: "SR Legacy" },
+  ];
+}
+
 const [cumin, flour, oliveOil, salt, onion] = ingredientFixtures;
 
 const meta: Meta<typeof NutritionDetail> = {
@@ -33,6 +44,7 @@ const meta: Meta<typeof NutritionDetail> = {
   args: {
     recipeId: "story-recipe",
     search: fixtureSearch,
+    usdaSearch: fixtureUsdaSearch,
   },
 };
 
