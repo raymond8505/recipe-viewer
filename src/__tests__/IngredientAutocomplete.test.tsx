@@ -241,6 +241,27 @@ describe("IngredientAutocomplete — USDA fallback", () => {
     ).toBeInTheDocument();
   });
 
+  it("keeps the USDA action available below catalog matches — DB matches can be wrong", async () => {
+    const user = userEvent.setup();
+    search.mockResolvedValue([makeMatch("ing-1", "gochugaru", { similarity: 0.62 })]);
+    renderWithUsda();
+
+    await user.click(screen.getByLabelText("Change match for 1 tbsp gochujang"));
+    await user.type(screen.getByRole("combobox"), "gochujang");
+
+    // A (wrong-ish) catalog match AND the USDA escape hatch coexist.
+    await screen.findByRole("option", { name: /gochugaru/ });
+    await user.click(
+      screen.getByRole("option", { name: 'Search USDA for “gochujang”' }),
+    );
+
+    const options = await screen.findAllByRole("option");
+    expect(options.map((o) => o.textContent)).toEqual([
+      "gochugaru62%",
+      "GOCHUJANG PASTEBranded",
+    ]);
+  });
+
   it("lists USDA candidates with provenance and imports the picked one", async () => {
     const user = userEvent.setup();
     search.mockResolvedValue([]);
