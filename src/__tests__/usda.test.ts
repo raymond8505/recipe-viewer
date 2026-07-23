@@ -54,6 +54,16 @@ describe("searchFoods", () => {
     expect(url.searchParams.get("pageSize")).toBe("5");
   });
 
+  it("widens to Branded and a custom page size only when asked", async () => {
+    mockFetch.mockResolvedValueOnce(jsonResponse(cuminSearchResponse));
+
+    await searchFoods("gochujang", { includeBranded: true, pageSize: 8 });
+
+    const url = mockFetch.mock.calls[0][0] as URL;
+    expect(url.searchParams.get("dataType")).toBe("Foundation,SR Legacy,Branded");
+    expect(url.searchParams.get("pageSize")).toBe("8");
+  });
+
   it("trims results to fdcId/description/dataType/score", async () => {
     mockFetch.mockResolvedValueOnce(jsonResponse(cuminSearchResponse));
 

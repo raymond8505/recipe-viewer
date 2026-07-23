@@ -4,22 +4,15 @@ import { generateStructured } from "@/lib/gemini";
 import { getIngredientText } from "@/lib/format";
 import {
   IngredientRepoError,
-  createIngredientRow,
-  getIngredients,
   matchIngredients,
   replaceRecipeIngredients,
   setRecipeNormalization,
   type RecipeIngredientInsert,
 } from "@/lib/ingredients";
+import { importUsdaIngredient } from "@/lib/ingredientImport";
 import { getRecipeById } from "@/lib/recipes";
 import { parseIngredient, unitKeyForAlias } from "@/lib/units";
-import {
-  UsdaError,
-  deriveDensity,
-  extractNutrition,
-  getFoodDetail,
-  searchFoods,
-} from "@/lib/usda";
+import { UsdaError, searchFoods } from "@/lib/usda";
 import type { IngredientMatch, MatchStatus } from "@/types/ingredient";
 import { ingredientFingerprint } from "./fingerprint";
 
@@ -334,7 +327,9 @@ function pickPrompt(name: string, foods: Array<{ fdcId: number; description: str
 
 // Create one catalog ingredient from USDA. Returns the new (or, after losing a
 // unique-name race, existing) ingredient id — or null when USDA has nothing
-// usable (the line stays unmatched).
+// usable (the line stays unmatched). The food → catalog-row conversion lives
+// in importUsdaIngredient (shared with the NutritionDetail manual import);
+// this wrapper owns the automated parts: analytical-only search + LLM pick.
 async function createFromUsda(name: string, errors: string[]): Promise<string | null> {
   const foods = await searchFoods(name);
   if (foods.length === 0) {
@@ -354,39 +349,21 @@ async function createFromUsda(name: string, errors: string[]): Promise<string | 
   const fdcId =
     pick?.fdcId && foods.some((f) => f.fdcId === pick.fdcId) ? pick.fdcId : foods[0].fdcId;
 
-  const detail = await getFoodDetail(fdcId);
-  // The catalog's canonical name is the PARSED name ("cumin seed"), not USDA's
-  // description ("Spices, cumin seed") — future matching embeds recipe
-  // language, so the catalog should speak it. The USDA description is kept as
-  // an alias for provenance.
-  const embedding = await generateEmbedding(name);
-  if (!embedding) {
-    // The embedding column is NOT NULL (db/migrations/0006), so a row can't be
-    // created without one. Skip rather than abort the run — the line persists
-    // as unmatched and re-normalizing once embedding is back picks it up.
-    errors.push(`embedding unavailable for new ingredient "${name}" — skipped (retry once embedding is available)`);
-    return null;
-  }
-
   try {
-    const row = await createIngredientRow({
-      name,
-      aliases: [detail.description],
-      fdc_id: detail.fdcId,
-      fdc_data_type: detail.dataType,
-      nutrition: extractNutrition(detail),
-      density_g_per_ml: deriveDensity(detail.foodPortions),
-      food_portions: detail.foodPortions ?? null,
-      source: "usda",
-      embedding,
-    });
+    const row = await importUsdaIngredient(name, fdcId);
+    if (!row) {
+      // The embedding column is NOT NULL (db/migrations/0006), so a row can't
+      // be created without one. Skip rather than abort the run — the line
+      // persists as unmatched and re-normalizing once embedding is back picks
+      // it up.
+      errors.push(`embedding unavailable for new ingredient "${name}" — skipped (retry once embedding is available)`);
+      return null;
+    }
     return row.id;
   } catch (err) {
     if (err instanceof IngredientRepoError && err.kind === "conflict") {
-      // A concurrent run won the lower(name) unique index — use theirs.
-      const { data } = await getIngredients({ query: name, limit: 10 });
-      const existing = data.find((i) => i.name.toLowerCase() === name.toLowerCase());
-      if (existing) return existing.id;
+      // importUsdaIngredient already tried to resolve the race to the
+      // winner's row; a conflict surfacing here means no such row was found.
       errors.push(`conflict creating "${name}" but no existing row found`);
       return null;
     }
