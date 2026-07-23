@@ -4,6 +4,7 @@ import { useEffect, useId, useRef, useState } from "react";
 import type { IngredientKeywordMatch } from "@/types/ingredient";
 import type { UsdaSearchFood } from "@/lib/usda";
 import { SpinnerIcon } from "@/components/icons";
+import { cn } from "@/lib/utils";
 import {
   useIngredientAutocomplete,
   type IngredientAutocompleteSearch,
@@ -82,20 +83,19 @@ export default function IngredientAutocomplete({
   } = useIngredientAutocomplete(search, usdaSearch);
 
   const queryReady = query.trim().length >= 2;
-  const showUsdaAction =
-    onImportUsda != null &&
-    queryReady &&
-    usdaResults == null &&
-    !usdaLoading &&
-    usdaError == null;
+  const usdaActionEnabled = queryReady && !usdaLoading;
 
+  // The USDA action is ALWAYS the last option while the editor is open (a
+  // pinned footer, never buried under scrolling results — DB matches can be
+  // wrong, so the escape hatch must stay visible next to them). It's merely
+  // disabled until a query is typed, and doubles as retry/re-run afterwards.
   const options: AutocompleteOption[] = [
     ...results.map((match): AutocompleteOption => ({ kind: "catalog", match })),
-    ...(showUsdaAction ? [{ kind: "usda-search" } as const] : []),
     ...(usdaResults ?? []).map(
       (food): AutocompleteOption => ({ kind: "usda", food }),
     ),
     ...(value ? [{ kind: "clear" } as const] : []),
+    ...(onImportUsda ? [{ kind: "usda-search" } as const] : []),
   ];
 
   useEffect(() => {
@@ -140,7 +140,8 @@ export default function IngredientAutocomplete({
         close();
         break;
       case "usda-search":
-        // Stays open: the USDA results replace this action in the list.
+        if (!usdaActionEnabled) return;
+        // Stays open: the USDA results append above this pinned action.
         void runUsdaSearch();
         break;
       case "usda":
@@ -188,8 +189,13 @@ export default function IngredientAutocomplete({
     );
   }
 
+  // cn/twMerge: the highlight bg must beat the sticky footer's own bg-popover.
   const optionClass = (index: number, extra = "") =>
-    `w-full px-3 py-2 text-left text-sm ${index === highlight ? "bg-brand-subtle" : ""} ${extra}`;
+    cn(
+      "w-full px-3 py-2 text-left text-sm",
+      extra,
+      index === highlight && "bg-brand-subtle",
+    );
 
   return (
     <div ref={containerRef} className="relative">
@@ -254,6 +260,7 @@ export default function IngredientAutocomplete({
             role="option"
             aria-selected={i === highlight}
             tabIndex={-1}
+            disabled={option.kind === "usda-search" && !usdaActionEnabled}
             onClick={() => select(option)}
             onPointerEnter={() => setHighlight(i)}
             className={optionClass(i, optionExtraClass(option))}
@@ -280,7 +287,9 @@ function optionKey(option: AutocompleteOption): string {
 function optionExtraClass(option: AutocompleteOption): string {
   switch (option.kind) {
     case "usda-search":
-      return "border-t border-border text-brand";
+      // Pinned to the scrollbox's visible bottom so results can never push
+      // it out of view; opaque bg covers content scrolling beneath it.
+      return "sticky bottom-0 border-t border-border bg-popover text-brand disabled:text-muted-foreground";
     case "clear":
       return "border-t border-border text-muted-foreground";
     default:
@@ -310,8 +319,10 @@ function OptionContent({
           </span>
         </span>
       );
-    case "usda-search":
-      return <>Search USDA for “{query.trim()}”</>;
+    case "usda-search": {
+      const q = query.trim();
+      return q.length >= 2 ? <>Search USDA for “{q}”</> : <>Search USDA…</>;
+    }
     case "usda":
       return (
         <span className="flex items-baseline justify-between gap-2">

@@ -255,11 +255,29 @@ describe("IngredientAutocomplete — USDA fallback", () => {
       screen.getByRole("option", { name: 'Search USDA for “gochujang”' }),
     );
 
+    // The pinned action survives the results — never displaced by them.
     const options = await screen.findAllByRole("option");
     expect(options.map((o) => o.textContent)).toEqual([
       "gochugaru62%",
       "GOCHUJANG PASTEBranded",
+      "Search USDA for “gochujang”",
     ]);
+  });
+
+  it("keeps the action pinned in the list before any query is typed (disabled)", async () => {
+    const user = userEvent.setup();
+    search.mockResolvedValue([]);
+    renderWithUsda();
+
+    await user.click(screen.getByLabelText("Change match for 1 tbsp gochujang"));
+
+    const action = screen.getByRole("option", { name: "Search USDA…" });
+    expect(action).toBeDisabled();
+
+    await user.type(screen.getByRole("combobox"), "go");
+    expect(
+      await screen.findByRole("option", { name: 'Search USDA for “go”' }),
+    ).toBeEnabled();
   });
 
   it("lists USDA candidates with provenance and imports the picked one", async () => {
