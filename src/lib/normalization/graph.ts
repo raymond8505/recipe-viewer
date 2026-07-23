@@ -4,6 +4,7 @@ import { generateStructured } from "@/lib/gemini";
 import { getIngredientText } from "@/lib/format";
 import {
   IngredientRepoError,
+  getRecipeIngredients,
   matchIngredients,
   replaceRecipeIngredients,
   setRecipeNormalization,
@@ -423,8 +424,33 @@ async function persist(state: State): Promise<Partial<State>> {
     return {};
   }
 
+  // Manual associations are human decisions — they beat whatever the
+  // automated matcher concluded this run. Carried forward by raw_text (the
+  // stable key across the delete-then-insert replace) so re-normalizing to
+  // fill in unmatched lines never wipes curation on unchanged ones.
+  const existingRows = await getRecipeIngredients(state.recipeId);
+  const manualIdByRawText = new Map(
+    existingRows
+      .filter((row) => row.match_status === "manual" && row.ingredient_id != null)
+      .map((row) => [row.raw_text, row.ingredient_id!]),
+  );
+
   const matchByPosition = new Map(state.matches.map((m) => [m.position, m]));
   const rows: RecipeIngredientInsert[] = state.parsed.map((line) => {
+    const manualId = manualIdByRawText.get(line.rawText);
+    if (manualId) {
+      return {
+        ingredient_id: manualId,
+        raw_text: line.rawText,
+        quantity: line.quantity,
+        unit: line.unit,
+        name_text: line.name,
+        note: line.note,
+        match_status: "manual" as MatchStatus,
+        confidence: null,
+        position: line.position,
+      };
+    }
     const match = matchByPosition.get(line.position);
     const status: MatchStatus =
       !match || match.status === "ambiguous" ? "unmatched" : match.status;

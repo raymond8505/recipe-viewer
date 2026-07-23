@@ -204,8 +204,8 @@ export const Flat: Story = {
 /**
  * The recipe text was edited after the last normalization run: the first
  * line's stored row no longer matches ("2 tsp" vs "1 tsp") and the second
- * has no row at all. Both are flagged stale and a banner offers a re-run —
- * with the warning that re-running discards manual matches.
+ * has no row at all. Both are flagged stale, and the ever-present Normalize
+ * button (manual matches survive re-runs) rebuilds them.
  */
 export const StaleNormalization: Story = {
   args: {

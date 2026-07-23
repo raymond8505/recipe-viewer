@@ -208,11 +208,23 @@ describe("NutritionDetail", () => {
     expect(perPortion).toHaveTextContent("—");
   });
 
-  it("marks edited lines stale, excludes them, and offers re-normalization", async () => {
+  it("always offers a Normalize button, flipping to a refresh affordance once queued", async () => {
     const user = userEvent.setup();
+    vi.mocked(normalizeRecipe).mockResolvedValue(undefined);
+    renderDetail();
+
+    // Present even with nothing stale — it exists to fill in unmatched lines.
+    await user.click(screen.getByRole("button", { name: "Normalize" }));
+    expect(normalizeRecipe).toHaveBeenCalledWith("r-1");
+    // A 200 means queued, not done — the button flips to a refresh affordance.
+    expect(
+      await screen.findByRole("button", { name: "Queued — check again" }),
+    ).toBeInTheDocument();
+  });
+
+  it("marks edited lines stale and excludes them from totals", () => {
     const rows = makeRows();
     rows[0] = { ...rows[0], raw_text: "200 g butter, softened" };
-    vi.mocked(normalizeRecipe).mockResolvedValue(undefined);
     renderDetail({ rows });
 
     const butterRow = rowFor("100 g butter");
@@ -224,12 +236,8 @@ describe("NutritionDetail", () => {
     // The stale line's contribution is out of the totals.
     expect(rowFor("Recipe total")).toHaveTextContent("7.76");
     expect(rowFor("Recipe total")).not.toHaveTextContent("724.76");
-
-    await user.click(screen.getByRole("button", { name: "Re-run normalization" }));
-    expect(normalizeRecipe).toHaveBeenCalledWith("r-1");
-    // A 200 means queued, not done — the button flips to a refresh affordance.
     expect(
-      await screen.findByRole("button", { name: "Queued — check again" }),
+      screen.getByText(/changed since the last normalization run/),
     ).toBeInTheDocument();
   });
 

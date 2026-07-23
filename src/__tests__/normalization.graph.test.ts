@@ -8,13 +8,14 @@ import {
   IngredientRepoError,
   createIngredientRow,
   getIngredients,
+  getRecipeIngredients,
   matchIngredients,
   replaceRecipeIngredients,
   setRecipeNormalization,
 } from "@/lib/ingredients";
 import { getRecipeById } from "@/lib/recipes";
 import { UsdaError, getFoodDetail, searchFoods } from "@/lib/usda";
-import { makeIngredient, makeRecipe } from "@/fixtures";
+import { makeIngredient, makeRecipe, makeRecipeIngredient } from "@/fixtures";
 import { cuminDetailResponse, cuminExpectedNutrition } from "@/fixtures/usda";
 import type { IngredientMatch } from "@/types/ingredient";
 import type { RecipeRow, SchemaRecipe } from "@/types/recipe";
@@ -34,6 +35,7 @@ vi.mock("@/lib/ingredients", async (importOriginal) => {
     ...actual,
     createIngredientRow: vi.fn(),
     getIngredients: vi.fn(),
+    getRecipeIngredients: vi.fn(),
     matchIngredients: vi.fn(),
     replaceRecipeIngredients: vi.fn(),
     setRecipeNormalization: vi.fn(),
@@ -86,6 +88,7 @@ beforeEach(() => {
   vi.mocked(generateEmbedding).mockResolvedValue([0.1, 0.2]);
   vi.mocked(generateStructured).mockResolvedValue(CUMIN_PARSE);
   vi.mocked(matchIngredients).mockResolvedValue([]);
+  vi.mocked(getRecipeIngredients).mockResolvedValue([]);
   vi.mocked(replaceRecipeIngredients).mockResolvedValue(undefined);
   vi.mocked(setRecipeNormalization).mockResolvedValue(undefined);
 });
@@ -119,6 +122,54 @@ describe("runNormalization — matching", () => {
         normalizedAt: expect.any(String),
         fingerprint: ingredientFingerprint(recipe.metadata.schema),
       },
+    ]);
+  });
+
+  it("carries forward manual associations by raw_text over the automated match", async () => {
+    // The user curated this line; a re-run's own matcher would pick ing-auto.
+    vi.mocked(getRecipeIngredients).mockResolvedValue([
+      makeRecipeIngredient("r-1", 0, {
+        raw_text: "1 tsp cumin seed",
+        ingredient_id: "ing-manual",
+        match_status: "manual",
+      }),
+    ]);
+    vi.mocked(matchIngredients).mockResolvedValue([
+      candidate("ing-auto", "cumin seed", 0.9),
+    ]);
+
+    await runNormalization("r-1");
+
+    expect(persistedRows()).toEqual([
+      expect.objectContaining({
+        ingredient_id: "ing-manual",
+        raw_text: "1 tsp cumin seed",
+        match_status: "manual",
+        confidence: null,
+      }),
+    ]);
+  });
+
+  it("does not carry a manual association onto a line whose text changed", async () => {
+    // The manual match was for different text — the automated result wins.
+    vi.mocked(getRecipeIngredients).mockResolvedValue([
+      makeRecipeIngredient("r-1", 0, {
+        raw_text: "1 tsp ground cumin",
+        ingredient_id: "ing-manual",
+        match_status: "manual",
+      }),
+    ]);
+    vi.mocked(matchIngredients).mockResolvedValue([
+      candidate("ing-auto", "cumin seed", 0.9),
+    ]);
+
+    await runNormalization("r-1");
+
+    expect(persistedRows()).toEqual([
+      expect.objectContaining({
+        ingredient_id: "ing-auto",
+        match_status: "matched",
+      }),
     ]);
   });
 

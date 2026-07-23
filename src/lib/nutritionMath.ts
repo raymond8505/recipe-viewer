@@ -68,19 +68,23 @@ const AMOUNT_UNIT_RE = /^\s*(\d+(?:\.\d+)?)\s*([a-z]+(?:\s[a-z]+)?)\s*$/i;
 
 /**
  * Extract an explicit weight annotation from a recipe line's text — the
- * "(45g)" in "3 tablespoons gochujang paste (45g)". Only parenthesized,
- * weight-unit amounts count: volume parentheticals still need a density,
- * and bare amounts outside parentheses are the parser's job. Returns grams,
- * or null when no parenthetical converts.
+ * "(45g)" in "3 tablespoons gochujang paste (45g)" or the "15g" in
+ * "3 garlic cloves (minced, 15g)". Parentheticals are split on commas and
+ * semicolons so the weight is found among prep notes. Only weight-unit
+ * amounts count: volume parentheticals still need a density, and bare
+ * amounts outside parentheses are the parser's job. Returns grams, or null
+ * when no parenthetical converts.
  */
 export function explicitWeightGrams(text: string): number | null {
   for (const [, inner] of text.matchAll(PAREN_RE)) {
-    const match = inner.match(AMOUNT_UNIT_RE);
-    if (!match) continue;
-    const unitKey = unitKeyForAlias(match[2]);
-    if (!unitKey || isVolumeUnit(unitKey)) continue;
-    const grams = convert(parseFloat(match[1]), unitKey, "g");
-    if (grams > 0) return grams;
+    for (const segment of inner.split(/[,;]/)) {
+      const match = segment.match(AMOUNT_UNIT_RE);
+      if (!match) continue;
+      const unitKey = unitKeyForAlias(match[2]);
+      if (!unitKey || isVolumeUnit(unitKey)) continue;
+      const grams = convert(parseFloat(match[1]), unitKey, "g");
+      if (grams > 0) return grams;
+    }
   }
   return null;
 }

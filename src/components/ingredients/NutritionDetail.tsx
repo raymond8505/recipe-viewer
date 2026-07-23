@@ -96,32 +96,34 @@ export default function NutritionDetail({
 
   return (
     <div className="space-y-4">
-      {hasStaleLines && (
-        <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm">
-          <WarningIcon />
-          <span className="flex-1">
-            Some lines changed since the last normalization run and are excluded
-            from totals. Re-running rebuilds every line and discards manual
-            matches.
-          </span>
-          {normalizeState === "queued" ? (
-            // A 200 from the normalize route means "queued", not "done" — the
-            // run happens post-response, so refreshing is the way to see it.
-            <Button size="sm" variant="secondary" onClick={() => router.refresh()}>
-              Queued — check again
-            </Button>
-          ) : (
-            <Button
-              size="sm"
-              variant="secondary"
-              disabled={normalizeState === "queueing"}
-              onClick={handleRenormalize}
-            >
-              Re-run normalization
-            </Button>
-          )}
-        </div>
-      )}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        {hasStaleLines ? (
+          <p className="flex items-center gap-2 text-sm text-muted-foreground">
+            <WarningIcon />
+            Some lines changed since the last normalization run and are
+            excluded from totals — normalize to rebuild them.
+          </p>
+        ) : (
+          <span />
+        )}
+        {normalizeState === "queued" ? (
+          // A 200 from the normalize route means "queued", not "done" — the
+          // run happens post-response, so refreshing is the way to see it.
+          <Button size="sm" variant="secondary" onClick={() => router.refresh()}>
+            Queued — check again
+          </Button>
+        ) : (
+          <Button
+            size="sm"
+            variant="secondary"
+            disabled={normalizeState === "queueing"}
+            onClick={handleRenormalize}
+            title="Re-parses and re-matches every line; manual matches are preserved"
+          >
+            Normalize
+          </Button>
+        )}
+      </div>
 
       {error && (
         <p role="alert" className="text-sm text-red-600">

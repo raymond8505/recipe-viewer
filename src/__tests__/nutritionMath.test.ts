@@ -62,6 +62,11 @@ describe("explicitWeightGrams", () => {
     ).toBe(30);
   });
 
+  it("finds the weight among prep notes inside one parenthetical", () => {
+    expect(explicitWeightGrams("3 garlic cloves (minced, 15g)")).toBe(15);
+    expect(explicitWeightGrams("1 onion (peeled; diced; 150 g)")).toBe(150);
+  });
+
   it("ignores volume parentheticals — they still need a density", () => {
     expect(explicitWeightGrams("gochujang (45 ml)")).toBeNull();
   });
@@ -125,6 +130,18 @@ describe("computeLineNutrition", () => {
         catalogButter,
       ),
     ).toMatchObject({ kind: "ok", grams: 100 });
+    // The weight can sit among prep notes in the same parenthetical.
+    expect(
+      computeLineNutrition(
+        {
+          quantity: 3,
+          unit: null,
+          ingredient_id: "ing-1",
+          raw_text: "3 garlic cloves (minced, 15g)",
+        },
+        catalogButter,
+      ),
+    ).toMatchObject({ kind: "ok", grams: 15 });
     expect(
       computeLineNutrition(
         {
