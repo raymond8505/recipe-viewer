@@ -190,9 +190,11 @@ export default function IngredientAutocomplete({
   }
 
   // cn/twMerge: the highlight bg must beat the sticky footer's own bg-popover.
+  // shrink-0: flex-column children would compress to fit max-h instead of
+  // letting the container scroll.
   const optionClass = (index: number, extra = "") =>
     cn(
-      "w-full px-3 py-2 text-left text-sm",
+      "w-full shrink-0 px-3 py-2 text-left text-sm",
       extra,
       index === highlight && "bg-brand-subtle",
     );
@@ -225,30 +227,34 @@ export default function IngredientAutocomplete({
         id={listboxId}
         role="listbox"
         aria-label="Ingredient matches"
-        className="absolute left-0 right-0 top-full z-30 mt-1 max-h-60 overflow-y-auto rounded-xl border border-border bg-popover shadow-lg"
+        // flex-col + whitespace-normal: the host TableCell sets
+        // whitespace-nowrap, which inherits here and would lay the
+        // inline-block option buttons out on one overflowing line. Flex
+        // children stack regardless of white-space.
+        className="absolute left-0 right-0 top-full z-30 mt-1 flex max-h-60 flex-col overflow-y-auto whitespace-normal rounded-xl border border-border bg-popover shadow-lg"
       >
         {error && (
-          <p className="px-3 py-2 text-sm text-muted-foreground" role="status">
+          <p className="shrink-0 px-3 py-2 text-sm text-muted-foreground" role="status">
             {error}
           </p>
         )}
         {!error && results.length === 0 && !loading && (
-          <p className="px-3 py-2 text-sm text-muted-foreground" role="status">
+          <p className="shrink-0 px-3 py-2 text-sm text-muted-foreground" role="status">
             {queryReady ? "No catalog matches" : "Type to search…"}
           </p>
         )}
         {usdaLoading && (
-          <p className="px-3 py-2 text-sm text-muted-foreground" role="status">
+          <p className="shrink-0 px-3 py-2 text-sm text-muted-foreground" role="status">
             Searching USDA…
           </p>
         )}
         {usdaError && (
-          <p className="px-3 py-2 text-sm text-muted-foreground" role="status">
+          <p className="shrink-0 px-3 py-2 text-sm text-muted-foreground" role="status">
             {usdaError}
           </p>
         )}
         {usdaResults?.length === 0 && (
-          <p className="px-3 py-2 text-sm text-muted-foreground" role="status">
+          <p className="shrink-0 px-3 py-2 text-sm text-muted-foreground" role="status">
             No USDA results
           </p>
         )}
