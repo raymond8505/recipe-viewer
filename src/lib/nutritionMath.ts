@@ -4,7 +4,7 @@
 //
 // Client-safe and pure — no supabase, no env.
 
-import { convert, isVolumeUnit } from "./units";
+import { convert, isVolumeUnit, unitKeyForAlias } from "./units";
 import type {
   IngredientNutrition,
   IngredientRow,
@@ -63,6 +63,28 @@ export function gramsForLine(
   return convert(quantity, unit, "g");
 }
 
+const PAREN_RE = /\(([^)]*)\)/g;
+const AMOUNT_UNIT_RE = /^\s*(\d+(?:\.\d+)?)\s*([a-z]+(?:\s[a-z]+)?)\s*$/i;
+
+/**
+ * Extract an explicit weight annotation from a recipe line's text — the
+ * "(45g)" in "3 tablespoons gochujang paste (45g)". Only parenthesized,
+ * weight-unit amounts count: volume parentheticals still need a density,
+ * and bare amounts outside parentheses are the parser's job. Returns grams,
+ * or null when no parenthetical converts.
+ */
+export function explicitWeightGrams(text: string): number | null {
+  for (const [, inner] of text.matchAll(PAREN_RE)) {
+    const match = inner.match(AMOUNT_UNIT_RE);
+    if (!match) continue;
+    const unitKey = unitKeyForAlias(match[2]);
+    if (!unitKey || isVolumeUnit(unitKey)) continue;
+    const grams = convert(parseFloat(match[1]), unitKey, "g");
+    if (grams > 0) return grams;
+  }
+  return null;
+}
+
 /**
  * Scale per-100g nutrition to a gram amount. Only keys present on the input
  * appear on the output — key sparsity is meaningful (absent ≠ zero).
@@ -84,9 +106,14 @@ export function scaleNutritionToGrams(
  * exclusion reason. Exclusion checks are ordered most-fundamental-first so
  * the flag names the primary blocker (an unmatched line is "unmatched" even
  * if it also lacks a unit).
+ *
+ * Grams come from the parsed quantity+unit when convertible; otherwise an
+ * explicit "(45g)"-style weight annotation in the raw text is the fallback —
+ * it rescues volume lines matched to density-less ingredients (e.g. Branded
+ * USDA imports carry no portions) and count/quantity-less lines alike.
  */
 export function computeLineNutrition(
-  row: Pick<RecipeIngredientRow, "quantity" | "unit" | "ingredient_id">,
+  row: Pick<RecipeIngredientRow, "quantity" | "unit" | "ingredient_id" | "raw_text">,
   ingredient: Pick<IngredientRow, "nutrition" | "density_g_per_ml"> | null,
 ): LineComputation {
   if (row.ingredient_id == null || ingredient == null) {
@@ -95,11 +122,18 @@ export function computeLineNutrition(
   if (ingredient.nutrition == null) {
     return { kind: "excluded", reason: "no_nutrition" };
   }
-  if (row.quantity == null) return { kind: "excluded", reason: "no_quantity" };
-  if (row.unit == null) return { kind: "excluded", reason: "no_unit" };
 
-  const grams = gramsForLine(row.quantity, row.unit, ingredient.density_g_per_ml);
-  if (grams == null) return { kind: "excluded", reason: "no_density" };
+  const parsedGrams =
+    row.quantity != null && row.unit != null
+      ? gramsForLine(row.quantity, row.unit, ingredient.density_g_per_ml)
+      : null;
+  const grams = parsedGrams ?? explicitWeightGrams(row.raw_text);
+
+  if (grams == null) {
+    if (row.quantity == null) return { kind: "excluded", reason: "no_quantity" };
+    if (row.unit == null) return { kind: "excluded", reason: "no_unit" };
+    return { kind: "excluded", reason: "no_density" };
+  }
 
   return {
     kind: "ok",

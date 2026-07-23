@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   computeLineNutrition,
+  explicitWeightGrams,
   gramsForLine,
   perPortionNutrition,
   scaleNutritionToGrams,
@@ -47,6 +48,30 @@ describe("scaleNutritionToGrams", () => {
   });
 });
 
+describe("explicitWeightGrams", () => {
+  it("extracts parenthesized weight annotations in grams", () => {
+    expect(explicitWeightGrams("3 tablespoons gochujang paste (45g)")).toBe(45);
+    expect(explicitWeightGrams("1 stick butter (4 oz)")).toBeCloseTo(113.398, 3);
+    expect(explicitWeightGrams("(1.5 kg) whole chicken")).toBe(1500);
+    expect(explicitWeightGrams("flour (45 grams)")).toBe(45);
+  });
+
+  it("skips non-weight parentheticals and finds the weight among several", () => {
+    expect(
+      explicitWeightGrams("2 tbsp gochujang (depending on preference) (30 g)"),
+    ).toBe(30);
+  });
+
+  it("ignores volume parentheticals — they still need a density", () => {
+    expect(explicitWeightGrams("gochujang (45 ml)")).toBeNull();
+  });
+
+  it("returns null without a parenthesized weight", () => {
+    expect(explicitWeightGrams("100g gochujang paste")).toBeNull();
+    expect(explicitWeightGrams("2 eggs")).toBeNull();
+  });
+});
+
 describe("computeLineNutrition", () => {
   const catalogButter = {
     nutrition: { calories_kcal: 717, fat_g: 81 },
@@ -55,7 +80,7 @@ describe("computeLineNutrition", () => {
 
   it("computes grams and scaled nutrition for a weight line", () => {
     const result = computeLineNutrition(
-      { quantity: 100, unit: "g", ingredient_id: "ing-1" },
+      { quantity: 100, unit: "g", ingredient_id: "ing-1", raw_text: "100 g butter" },
       catalogButter,
     );
     expect(result).toEqual({
@@ -67,7 +92,7 @@ describe("computeLineNutrition", () => {
 
   it("computes a volume line through density", () => {
     const result = computeLineNutrition(
-      { quantity: 1, unit: "tbsp", ingredient_id: "ing-1" },
+      { quantity: 1, unit: "tbsp", ingredient_id: "ing-1", raw_text: "1 tbsp butter" },
       catalogButter,
     );
     expect(result.kind).toBe("ok");
@@ -77,22 +102,75 @@ describe("computeLineNutrition", () => {
     expect(result.nutrition.calories_kcal).toBeCloseTo(96.586, 2);
   });
 
+  it("falls back to a weight annotation when a volume line has no density", () => {
+    const result = computeLineNutrition(
+      {
+        quantity: 3,
+        unit: "tbsp",
+        ingredient_id: "ing-1",
+        raw_text: "3 tablespoons gochujang paste (45g)",
+      },
+      { nutrition: { calories_kcal: 211 }, density_g_per_ml: null },
+    );
+    expect(result.kind).toBe("ok");
+    if (result.kind !== "ok") throw new Error("unreachable");
+    expect(result.grams).toBe(45);
+    expect(result.nutrition.calories_kcal).toBeCloseTo(94.95, 2);
+  });
+
+  it("rescues count and quantity-less lines that carry a weight annotation", () => {
+    expect(
+      computeLineNutrition(
+        { quantity: 2, unit: null, ingredient_id: "ing-1", raw_text: "2 eggs (100g)" },
+        catalogButter,
+      ),
+    ).toMatchObject({ kind: "ok", grams: 100 });
+    expect(
+      computeLineNutrition(
+        {
+          quantity: null,
+          unit: null,
+          ingredient_id: "ing-1",
+          raw_text: "butter to taste (10 g)",
+        },
+        catalogButter,
+      ),
+    ).toMatchObject({ kind: "ok", grams: 10 });
+  });
+
+  it("prefers the parsed conversion over the annotation when both work", () => {
+    const result = computeLineNutrition(
+      {
+        quantity: 100,
+        unit: "g",
+        ingredient_id: "ing-1",
+        raw_text: "100 g butter (3.5 oz)",
+      },
+      catalogButter,
+    );
+    // 100 g parsed wins; the (3.5 oz ≈ 99.2 g) annotation is ignored.
+    expect(result).toMatchObject({ kind: "ok", grams: 100 });
+  });
+
   it("excludes unmatched lines (null ingredient_id or missing catalog row)", () => {
     expect(
       computeLineNutrition(
-        { quantity: 1, unit: "g", ingredient_id: null },
+        { quantity: 1, unit: "g", ingredient_id: null, raw_text: "1 g butter" },
         catalogButter,
       ),
     ).toEqual({ kind: "excluded", reason: "unmatched" });
     expect(
-      computeLineNutrition({ quantity: 1, unit: "g", ingredient_id: "ing-1" }, null),
+      computeLineNutrition(
+        { quantity: 1, unit: "g", ingredient_id: "ing-1", raw_text: "1 g butter" },
+        null,
+      ),
     ).toEqual({ kind: "excluded", reason: "unmatched" });
   });
 
   it("excludes matched lines whose catalog row has no nutrition", () => {
     expect(
       computeLineNutrition(
-        { quantity: 1, unit: "g", ingredient_id: "ing-1" },
+        { quantity: 1, unit: "g", ingredient_id: "ing-1", raw_text: "1 g salt" },
         { nutrition: null, density_g_per_ml: 1 },
       ),
     ).toEqual({ kind: "excluded", reason: "no_nutrition" });
@@ -101,7 +179,7 @@ describe("computeLineNutrition", () => {
   it("excludes lines without a quantity", () => {
     expect(
       computeLineNutrition(
-        { quantity: null, unit: "g", ingredient_id: "ing-1" },
+        { quantity: null, unit: "g", ingredient_id: "ing-1", raw_text: "butter" },
         catalogButter,
       ),
     ).toEqual({ kind: "excluded", reason: "no_quantity" });
@@ -110,7 +188,7 @@ describe("computeLineNutrition", () => {
   it("excludes count lines without a unit", () => {
     expect(
       computeLineNutrition(
-        { quantity: 2, unit: null, ingredient_id: "ing-1" },
+        { quantity: 2, unit: null, ingredient_id: "ing-1", raw_text: "2 eggs" },
         catalogButter,
       ),
     ).toEqual({ kind: "excluded", reason: "no_unit" });
@@ -119,7 +197,7 @@ describe("computeLineNutrition", () => {
   it("excludes volume lines when the ingredient has no density", () => {
     expect(
       computeLineNutrition(
-        { quantity: 1, unit: "cup", ingredient_id: "ing-1" },
+        { quantity: 1, unit: "cup", ingredient_id: "ing-1", raw_text: "1 cup broth" },
         { nutrition: { calories_kcal: 100 }, density_g_per_ml: null },
       ),
     ).toEqual({ kind: "excluded", reason: "no_density" });
