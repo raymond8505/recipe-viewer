@@ -4,6 +4,7 @@ import { generateStructured } from "@/lib/gemini";
 import { getIngredientText } from "@/lib/format";
 import {
   IngredientRepoError,
+  getIngredientsByIds,
   getRecipeIngredients,
   matchIngredients,
   replaceRecipeIngredients,
@@ -11,10 +12,12 @@ import {
   type RecipeIngredientInsert,
 } from "@/lib/ingredients";
 import { importUsdaIngredient } from "@/lib/ingredientImport";
+import { explicitWeightGrams, gramsForLine } from "@/lib/nutritionMath";
 import { getRecipeById } from "@/lib/recipes";
 import { parseIngredient, unitKeyForAlias } from "@/lib/units";
 import { UsdaError, searchFoods } from "@/lib/usda";
 import type { IngredientMatch, MatchStatus } from "@/types/ingredient";
+import { estimateLineGrams } from "./estimateGrams";
 import { ingredientFingerprint } from "./fingerprint";
 
 // The ingredient-normalization workflow: parse the recipe's ingredient lines
@@ -64,6 +67,10 @@ const NormalizationState = Annotation.Root({
   rawLines: Annotation<string[]>,
   parsed: Annotation<ParsedLine[]>,
   matches: Annotation<LineMatch[]>,
+  // position → resolved gram weight for lines the density path can't convert
+  // (see the estimate node, which always runs before persist). Persisted as
+  // estimated_grams / grams_source.
+  estimates: Annotation<Record<number, number>>,
   errors: Annotation<string[]>({
     reducer: (a, b) => a.concat(b),
     default: () => [],
@@ -411,6 +418,62 @@ async function fetchNovel(state: State): Promise<Partial<State>> {
   return { matches, errors };
 }
 
+// ── estimate ─────────────────────────────────────────────────────────────────
+
+// Fill a gram weight for matched lines the density path can't convert: a volume
+// unit whose ingredient has no density, or a count/can line. Prior estimates
+// are carried forward by raw_text (unchanged text = unchanged amount) so
+// re-normalizing never re-spends LLM budget on unchanged lines and never wipes
+// a user's manual value. Only genuinely grams-less lines with no carried value
+// hit the LLM. Best-effort: a failed estimate simply leaves the line excluded.
+async function estimate(state: State): Promise<Partial<State>> {
+  const existing = await getRecipeIngredients(state.recipeId);
+  const carriedByRawText = new Map(
+    existing
+      .filter((row) => row.estimated_grams != null)
+      .map((row) => [row.raw_text, row.estimated_grams!]),
+  );
+
+  const matchByPosition = new Map(state.matches.map((m) => [m.position, m]));
+  const matchedIds = [
+    ...new Set(
+      state.matches
+        .map((m) => m.ingredientId)
+        .filter((id): id is string => Boolean(id)),
+    ),
+  ];
+  const ingredients = await getIngredientsByIds(matchedIds);
+  const densityById = new Map(
+    ingredients.map((ing) => [ing.id, ing.density_g_per_ml]),
+  );
+
+  const estimates: Record<number, number> = {};
+  await Promise.all(
+    state.parsed.map(async (line) => {
+      const carried = carriedByRawText.get(line.rawText);
+      if (carried != null) {
+        estimates[line.position] = carried;
+        return;
+      }
+      const match = matchByPosition.get(line.position);
+      if (!match?.ingredientId) return;
+      const derivable =
+        gramsForLine(line.quantity, line.unit, densityById.get(match.ingredientId) ?? null) != null ||
+        explicitWeightGrams(line.rawText) != null;
+      if (derivable) return;
+      const grams = await estimateLineGrams({
+        rawText: line.rawText,
+        name: line.name,
+        quantity: line.quantity,
+        unit: line.unit,
+      });
+      if (grams != null) estimates[line.position] = grams;
+    }),
+  );
+
+  return { estimates };
+}
+
 // ── persist ──────────────────────────────────────────────────────────────────
 
 async function persist(state: State): Promise<Partial<State>> {
@@ -437,6 +500,9 @@ async function persist(state: State): Promise<Partial<State>> {
 
   const matchByPosition = new Map(state.matches.map((m) => [m.position, m]));
   const rows: RecipeIngredientInsert[] = state.parsed.map((line) => {
+    // The estimate node carries prior values forward by raw_text and only adds
+    // new ones for grams-less lines, so this covers both.
+    const estimatedGrams = state.estimates[line.position] ?? null;
     const manualId = manualIdByRawText.get(line.rawText);
     if (manualId) {
       return {
@@ -449,6 +515,8 @@ async function persist(state: State): Promise<Partial<State>> {
         match_status: "manual" as MatchStatus,
         confidence: null,
         position: line.position,
+        estimated_grams: estimatedGrams,
+        grams_source: estimatedGrams != null ? "llm" : null,
       };
     }
     const match = matchByPosition.get(line.position);
@@ -464,6 +532,8 @@ async function persist(state: State): Promise<Partial<State>> {
       match_status: status,
       confidence: match?.confidence ?? null,
       position: line.position,
+      estimated_grams: estimatedGrams,
+      grams_source: estimatedGrams != null ? "llm" : null,
     };
   });
 
@@ -480,14 +550,14 @@ async function persist(state: State): Promise<Partial<State>> {
 
 // ── graph ────────────────────────────────────────────────────────────────────
 
-function routeAfterMatch(state: State): "adjudicate" | "fetchNovel" | "persist" {
+function routeAfterMatch(state: State): "adjudicate" | "fetchNovel" | "estimate" {
   if (state.matches.some((m) => m.status === "ambiguous")) return "adjudicate";
   if (state.matches.some((m) => m.status === "novel")) return "fetchNovel";
-  return "persist";
+  return "estimate";
 }
 
-function routeAfterAdjudicate(state: State): "fetchNovel" | "persist" {
-  return state.matches.some((m) => m.status === "novel") ? "fetchNovel" : "persist";
+function routeAfterAdjudicate(state: State): "fetchNovel" | "estimate" {
+  return state.matches.some((m) => m.status === "novel") ? "fetchNovel" : "estimate";
 }
 
 const graph = new StateGraph(NormalizationState)
@@ -495,12 +565,14 @@ const graph = new StateGraph(NormalizationState)
   .addNode("match", embedAndMatch)
   .addNode("adjudicate", adjudicate)
   .addNode("fetchNovel", fetchNovel)
+  .addNode("estimate", estimate)
   .addNode("persist", persist)
   .addEdge(START, "parse")
   .addEdge("parse", "match")
-  .addConditionalEdges("match", routeAfterMatch, ["adjudicate", "fetchNovel", "persist"])
-  .addConditionalEdges("adjudicate", routeAfterAdjudicate, ["fetchNovel", "persist"])
-  .addEdge("fetchNovel", "persist")
+  .addConditionalEdges("match", routeAfterMatch, ["adjudicate", "fetchNovel", "estimate"])
+  .addConditionalEdges("adjudicate", routeAfterAdjudicate, ["fetchNovel", "estimate"])
+  .addEdge("fetchNovel", "estimate")
+  .addEdge("estimate", "persist")
   .addEdge("persist", END)
   .compile();
 

@@ -3,18 +3,25 @@ import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import NutritionDetail from "@/components/ingredients/NutritionDetail";
 import {
+  estimateIngredientGrams,
   normalizeRecipe,
+  setIngredientGrams,
   updateRecipeIngredientAssociation,
 } from "@/lib/api/recipes";
 import { importUsdaIngredient } from "@/lib/api/ingredients";
 import { makeIngredient, makeRecipeIngredient } from "@/fixtures";
-import type { IngredientKeywordMatch, RecipeIngredientRow } from "@/types/ingredient";
+import type {
+  IngredientKeywordMatch,
+  RecipeIngredientRow,
+} from "@/types/ingredient";
 import type { UsdaSearchFood } from "@/lib/usda";
 import type { RecipeIngredient } from "@/types/recipe";
 
 vi.mock("@/lib/api/recipes", () => ({
   normalizeRecipe: vi.fn(),
   updateRecipeIngredientAssociation: vi.fn(),
+  estimateIngredientGrams: vi.fn(),
+  setIngredientGrams: vi.fn(),
 }));
 
 vi.mock("@/lib/api/ingredients", () => ({
@@ -92,7 +99,11 @@ function renderDetail(overrides?: {
     <NutritionDetail
       recipeId="r-1"
       schemaIngredients={schemaIngredients}
-      recipeYield={overrides && "recipeYield" in overrides ? overrides.recipeYield : "4 servings"}
+      recipeYield={
+        overrides && "recipeYield" in overrides
+          ? overrides.recipeYield
+          : "4 servings"
+      }
       initialRows={overrides?.rows ?? makeRows()}
       initialIngredients={[butter, eggs, cumin]}
       search={search}
@@ -156,7 +167,7 @@ describe("NutritionDetail", () => {
       "Protein (g)",
       "Carbohydrate (g)",
       "Total fat (g)",
-      "Dietary fiber (g)",
+      "Fiber (g)",
       "Sodium (mg)",
       // …then the rest. No computed-grams column.
       "Saturated fat (g)",
@@ -174,7 +185,9 @@ describe("NutritionDetail", () => {
     // "2 eggs" is matched but unitless — can't convert to grams.
     const eggsRow = rowFor("2 eggs");
     expect(
-      within(eggsRow).getByTitle("No unit (count line) — can't convert to grams"),
+      within(eggsRow).getByTitle(
+        "No unit (count line) — can't convert to grams",
+      ),
     ).toBeInTheDocument();
     expect(within(eggsRow).getAllByText("—").length).toBeGreaterThan(0);
 
@@ -185,7 +198,9 @@ describe("NutritionDetail", () => {
       ),
     ).toBeInTheDocument();
 
-    expect(screen.getByText(/Totals exclude 2 flagged lines/)).toBeInTheDocument();
+    expect(
+      screen.getByText(/Totals exclude 2 flagged lines/),
+    ).toBeInTheDocument();
   });
 
   it("sums totals over convertible lines and divides per portion by servings", () => {
@@ -202,9 +217,7 @@ describe("NutritionDetail", () => {
     renderDetail({ recipeYield: undefined });
 
     const perPortion = rowFor("Per portion");
-    expect(
-      within(perPortion).queryByText(/181/),
-    ).not.toBeInTheDocument();
+    expect(within(perPortion).queryByText(/181/)).not.toBeInTheDocument();
     expect(perPortion).toHaveTextContent("—");
   });
 
@@ -274,9 +287,13 @@ describe("NutritionDetail", () => {
       "ing-magic",
     );
     // 5 g × 100 kcal/100g = 5 kcal joins the totals: 724.76 + 5 = 729.76.
-    await waitFor(() => expect(rowFor("Recipe total")).toHaveTextContent("729.76"));
+    await waitFor(() =>
+      expect(rowFor("Recipe total")).toHaveTextContent("729.76"),
+    );
     expect(screen.getByText("magic dust")).toBeInTheDocument();
-    expect(screen.getByText(/Totals exclude 1 flagged line/)).toBeInTheDocument();
+    expect(
+      screen.getByText(/Totals exclude 1 flagged line/),
+    ).toBeInTheDocument();
   });
 
   it("imports a USDA food for a line the catalog can't match and recomputes", async () => {
@@ -309,7 +326,9 @@ describe("NutritionDetail", () => {
 
     await user.click(screen.getByLabelText("Change match for 5 g magic dust"));
     await user.type(screen.getByRole("combobox"), "magic dust");
-    await user.click(await screen.findByRole("option", { name: /Search USDA for/ }));
+    await user.click(
+      await screen.findByRole("option", { name: /Search USDA for/ }),
+    );
     await user.click(
       await screen.findByRole("option", { name: /MAGIC DUST SEASONING/ }),
     );
@@ -322,7 +341,80 @@ describe("NutritionDetail", () => {
       "ing-magic",
     );
     // The imported nutrition joins the totals: 724.76 + 5 = 729.76.
-    await waitFor(() => expect(rowFor("Recipe total")).toHaveTextContent("729.76"));
+    await waitFor(() =>
+      expect(rowFor("Recipe total")).toHaveTextContent("729.76"),
+    );
     expect(screen.getByText("magic dust")).toBeInTheDocument();
+  });
+
+  it("estimates grams for a grams-less matched line and folds it into totals", async () => {
+    const user = userEvent.setup();
+    // "2 eggs" is matched but count-based (no unit, no density) → excluded until
+    // it gets an estimate.
+    vi.mocked(estimateIngredientGrams).mockResolvedValue(
+      makeRecipeIngredient("r-1", 1, {
+        id: "ri-1",
+        raw_text: "2 eggs",
+        quantity: 2,
+        unit: null,
+        ingredient_id: "ing-eggs",
+        match_status: "matched",
+        estimated_grams: 100,
+        grams_source: "llm",
+      }),
+    );
+    renderDetail();
+
+    const eggsRow = rowFor("2 eggs");
+    // Starts excluded — no grams path.
+    expect(
+      within(eggsRow).getByTitle(
+        "No unit (count line) — can't convert to grams",
+      ),
+    ).toBeInTheDocument();
+
+    await user.click(
+      within(eggsRow).getByRole("button", {
+        name: "Estimate grams for 2 eggs",
+      }),
+    );
+
+    expect(estimateIngredientGrams).toHaveBeenCalledWith("r-1", "ri-1");
+    // 100 g × 143 kcal/100g = 143 kcal joins the totals: 724.76 + 143 = 867.76.
+    await waitFor(() =>
+      expect(rowFor("Recipe total")).toHaveTextContent("867.76"),
+    );
+    // The estimate is marked and the stored value fills the field.
+    expect(within(rowFor("2 eggs")).getByText("est.")).toBeInTheDocument();
+    expect(
+      within(rowFor("2 eggs")).getByLabelText("Grams for 2 eggs"),
+    ).toHaveValue(100);
+  });
+
+  it("persists a user-typed gram value on blur", async () => {
+    const user = userEvent.setup();
+    vi.mocked(setIngredientGrams).mockResolvedValue(
+      makeRecipeIngredient("r-1", 1, {
+        id: "ri-1",
+        raw_text: "2 eggs",
+        quantity: 2,
+        unit: null,
+        ingredient_id: "ing-eggs",
+        match_status: "matched",
+        estimated_grams: 110,
+        grams_source: "manual",
+      }),
+    );
+    renderDetail();
+
+    const input = within(rowFor("2 eggs")).getByLabelText("Grams for 2 eggs");
+    await user.type(input, "110");
+    await user.tab(); // blur commits
+
+    expect(setIngredientGrams).toHaveBeenCalledWith("r-1", "ri-1", 110);
+    // 110 g × 143 kcal/100g = 157.3 joins the totals: 724.76 + 157.3 = 882.06.
+    await waitFor(() =>
+      expect(rowFor("Recipe total")).toHaveTextContent("882.06"),
+    );
   });
 });

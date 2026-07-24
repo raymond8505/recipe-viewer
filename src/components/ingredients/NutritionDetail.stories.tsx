@@ -174,6 +174,54 @@ export const WithExclusions: Story = {
   },
 };
 
+/**
+ * Per-line gram estimates — the rescue for lines the density path can't
+ * convert. The first line (a volume amount matched to a density-less onion)
+ * carries a stored estimate, so it shows the "est." marker, the filled grams
+ * field, and contributes to the totals. The second identical line has no
+ * estimate yet: it's flagged (no density) and shows the "Estimate" trigger.
+ * The convertible flour line shows its derived grams as the field placeholder.
+ */
+export const EstimatedGrams: Story = {
+  args: {
+    schemaIngredients: [
+      "3 tbsp diced yellow onion",
+      "1 cup diced yellow onion",
+      "125 g all-purpose flour",
+    ],
+    recipeYield: "2 servings",
+    initialRows: [
+      makeRecipeIngredient("story-recipe", 0, {
+        raw_text: "3 tbsp diced yellow onion",
+        quantity: 3,
+        unit: "tbsp",
+        name_text: "yellow onion",
+        ingredient_id: onion.id,
+        match_status: "matched",
+        estimated_grams: 30,
+        grams_source: "llm",
+      }),
+      makeRecipeIngredient("story-recipe", 1, {
+        raw_text: "1 cup diced yellow onion",
+        quantity: 1,
+        unit: "cup",
+        name_text: "yellow onion",
+        ingredient_id: onion.id,
+        match_status: "matched",
+      }),
+      makeRecipeIngredient("story-recipe", 2, {
+        raw_text: "125 g all-purpose flour",
+        quantity: 125,
+        unit: "g",
+        name_text: "all-purpose flour",
+        ingredient_id: flour.id,
+        match_status: "matched",
+      }),
+    ],
+    initialIngredients: [onion, flour],
+  },
+};
+
 /** A recipe with no ingredient groups renders flat, without heading rows. */
 export const Flat: Story = {
   args: {

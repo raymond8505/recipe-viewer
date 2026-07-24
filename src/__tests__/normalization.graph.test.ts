@@ -8,6 +8,7 @@ import {
   IngredientRepoError,
   createIngredientRow,
   getIngredients,
+  getIngredientsByIds,
   getRecipeIngredients,
   matchIngredients,
   replaceRecipeIngredients,
@@ -35,6 +36,7 @@ vi.mock("@/lib/ingredients", async (importOriginal) => {
     ...actual,
     createIngredientRow: vi.fn(),
     getIngredients: vi.fn(),
+    getIngredientsByIds: vi.fn(),
     getRecipeIngredients: vi.fn(),
     matchIngredients: vi.fn(),
     replaceRecipeIngredients: vi.fn(),
@@ -88,6 +90,7 @@ beforeEach(() => {
   vi.mocked(generateEmbedding).mockResolvedValue([0.1, 0.2]);
   vi.mocked(generateStructured).mockResolvedValue(CUMIN_PARSE);
   vi.mocked(matchIngredients).mockResolvedValue([]);
+  vi.mocked(getIngredientsByIds).mockResolvedValue([]);
   vi.mocked(getRecipeIngredients).mockResolvedValue([]);
   vi.mocked(replaceRecipeIngredients).mockResolvedValue(undefined);
   vi.mocked(setRecipeNormalization).mockResolvedValue(undefined);
@@ -112,6 +115,9 @@ describe("runNormalization — matching", () => {
         match_status: "matched",
         confidence: 0.9,
         position: 0,
+        // A weight-unit line (tsp × direct convert) needs no estimate.
+        estimated_grams: null,
+        grams_source: null,
       },
     ]);
     expect(statusWrites()).toEqual([
@@ -351,6 +357,70 @@ describe("runNormalization — novel ingredients", () => {
       ingredient_id: "existing-1",
       match_status: "novel",
     });
+  });
+});
+
+describe("runNormalization — grams estimation", () => {
+  it("estimates grams for a matched line the density path can't convert", async () => {
+    // "1 tsp cumin seed" is a volume unit; the matched catalog row has no
+    // density, so gramsForLine yields nothing → the estimate node fills it.
+    vi.mocked(matchIngredients).mockResolvedValue([
+      candidate("ing-1", "cumin seed", 0.9),
+    ]);
+    vi.mocked(getIngredientsByIds).mockResolvedValue([
+      makeIngredient("ing-1", "cumin seed", { density_g_per_ml: null }),
+    ]);
+    vi.mocked(generateStructured)
+      .mockResolvedValueOnce(CUMIN_PARSE) // parse
+      .mockResolvedValueOnce({ grams: 26 }); // estimate
+
+    await runNormalization("r-1");
+
+    expect(persistedRows()?.[0]).toMatchObject({
+      ingredient_id: "ing-1",
+      estimated_grams: 26,
+      grams_source: "llm",
+    });
+  });
+
+  it("skips estimation when the line converts through density", async () => {
+    vi.mocked(matchIngredients).mockResolvedValue([
+      candidate("ing-1", "cumin seed", 0.9),
+    ]);
+    vi.mocked(getIngredientsByIds).mockResolvedValue([
+      makeIngredient("ing-1", "cumin seed", { density_g_per_ml: 0.5 }),
+    ]);
+    // Default generateStructured → CUMIN_PARSE for parse; no estimate call.
+
+    await runNormalization("r-1");
+
+    expect(persistedRows()?.[0]).toMatchObject({
+      estimated_grams: null,
+      grams_source: null,
+    });
+    // Parse only — the estimate node never reached the model.
+    expect(generateStructured).toHaveBeenCalledTimes(1);
+  });
+
+  it("carries a prior estimate forward by raw_text without re-calling the model", async () => {
+    vi.mocked(matchIngredients).mockResolvedValue([
+      candidate("ing-1", "cumin seed", 0.9),
+    ]);
+    vi.mocked(getIngredientsByIds).mockResolvedValue([
+      makeIngredient("ing-1", "cumin seed", { density_g_per_ml: null }),
+    ]);
+    vi.mocked(getRecipeIngredients).mockResolvedValue([
+      makeRecipeIngredient("r-1", 0, {
+        raw_text: "1 tsp cumin seed",
+        estimated_grams: 40,
+        grams_source: "manual",
+      }),
+    ]);
+
+    await runNormalization("r-1");
+
+    expect(persistedRows()?.[0]).toMatchObject({ estimated_grams: 40 });
+    expect(generateStructured).toHaveBeenCalledTimes(1);
   });
 });
 

@@ -62,6 +62,12 @@ export const recipeIngredientPatchSchema = z.object({
   ingredient_id: z.uuid().nullable(),
 });
 
+// PATCH /api/recipes/[id]/ingredients/[riId]/grams — user-typed per-line gram
+// override. null clears the estimate (line reverts to the derived value).
+export const recipeIngredientGramsPatchSchema = z.object({
+  grams: z.number().positive().nullable(),
+});
+
 // GET /api/usda/search — USDA candidates for the manual-import flow.
 export const usdaSearchQuerySchema = z.object({
   q: z.string().min(1).max(200),

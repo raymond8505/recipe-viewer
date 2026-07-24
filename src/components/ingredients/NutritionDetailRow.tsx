@@ -14,6 +14,7 @@ import type {
   UsdaFoodSearch,
 } from "@/hooks/useIngredientAutocomplete";
 import IngredientAutocomplete from "./IngredientAutocomplete";
+import NutritionGramsCell from "./NutritionGramsCell";
 import { NUTRITION_DETAIL_COLUMNS } from "./nutritionColumns";
 import { STICKY_ALIASES_CELL, STICKY_NAME_CELL } from "./tableStyles";
 
@@ -40,6 +41,8 @@ export default function NutritionDetailRow({
   usdaSearch,
   onSelect,
   onImportUsda,
+  onEstimateGrams,
+  onSetGrams,
 }: {
   line: NutritionDetailLine;
   saving: boolean;
@@ -47,9 +50,15 @@ export default function NutritionDetailRow({
   usdaSearch?: UsdaFoodSearch;
   onSelect: (rowId: string, match: IngredientKeywordMatch | null) => void;
   onImportUsda: (rowId: string, food: UsdaSearchFood) => void;
+  onEstimateGrams: (rowId: string) => void;
+  onSetGrams: (rowId: string, grams: number | null) => void;
 }) {
   const { row, ingredient, computation } = line;
   const excluded = computation.kind === "excluded";
+  // Grams only matter for a matched line, and a stale line's row is about to be
+  // rebuilt — hide the editor in both cases.
+  const isStale = computation.kind === "excluded" && computation.reason === "stale";
+  const showGrams = row != null && row.ingredient_id != null && !isStale;
   // The sticky cell is its own stacking context (z-10), so the dropdown's
   // internal z-index can't beat sibling rows' sticky cells — the whole cell
   // is raised above them (but below the z-30 header corners) while open.
@@ -73,27 +82,39 @@ export default function NutritionDetailRow({
       </TableCell>
       <TableCell className={cn(STICKY_ALIASES_CELL, autocompleteOpen && "z-20")}>
         {row ? (
-          <span className="flex w-full min-w-0 items-center gap-1.5">
-            <span className="min-w-0 flex-1">
-              <IngredientAutocomplete
-                value={
-                  row.ingredient_id
-                    ? {
-                        id: row.ingredient_id,
-                        name: ingredient?.name ?? "(unknown ingredient)",
-                      }
-                    : null
-                }
-                onSelect={(match) => onSelect(row.id, match)}
-                onImportUsda={(food) => onImportUsda(row.id, food)}
-                ariaLabel={`Change match for ${line.text}`}
-                disabled={saving}
-                search={search}
-                usdaSearch={usdaSearch}
-                onOpenChange={setAutocompleteOpen}
-              />
+          <span className="flex w-full min-w-0 flex-col gap-1">
+            <span className="flex w-full min-w-0 items-center gap-1.5">
+              <span className="min-w-0 flex-1">
+                <IngredientAutocomplete
+                  value={
+                    row.ingredient_id
+                      ? {
+                          id: row.ingredient_id,
+                          name: ingredient?.name ?? "(unknown ingredient)",
+                        }
+                      : null
+                  }
+                  onSelect={(match) => onSelect(row.id, match)}
+                  onImportUsda={(food) => onImportUsda(row.id, food)}
+                  ariaLabel={`Change match for ${line.text}`}
+                  disabled={saving}
+                  search={search}
+                  usdaSearch={usdaSearch}
+                  onOpenChange={setAutocompleteOpen}
+                />
+              </span>
+              {saving && <SpinnerIcon />}
             </span>
-            {saving && <SpinnerIcon />}
+            {showGrams && (
+              <NutritionGramsCell
+                row={row}
+                computation={computation}
+                saving={saving}
+                label={line.text}
+                onEstimate={onEstimateGrams}
+                onSetGrams={onSetGrams}
+              />
+            )}
           </span>
         ) : (
           <span className="text-muted-foreground">—</span>

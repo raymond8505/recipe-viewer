@@ -56,6 +56,58 @@ export async function updateRecipeIngredientAssociation(
 }
 
 /**
+ * Run the Gemini estimator for one parsed line and store the result
+ * (grams_source "llm") — the NutritionDetail "Estimate" button. Returns the
+ * updated row. Throws on a 422 (the model declined) so the caller can surface
+ * a "couldn't estimate" message.
+ */
+export async function estimateIngredientGrams(
+  recipeId: string,
+  recipeIngredientId: string,
+): Promise<RecipeIngredientRow> {
+  const res = await fetch(
+    `/api/recipes/${recipeId}/ingredients/${recipeIngredientId}/grams`,
+    { method: "POST" },
+  );
+  if (!res.ok) {
+    throw new Error(`Grams estimate failed with status ${res.status}`);
+  }
+  const row = await res.json();
+  if (!row || typeof row.id !== "string") {
+    throw new Error("Grams estimate returned no row");
+  }
+  return row;
+}
+
+/**
+ * Set a user-typed per-line gram value (grams_source "manual"), or clear it
+ * with null so the line reverts to the density-derived value. Returns the
+ * updated row.
+ */
+export async function setIngredientGrams(
+  recipeId: string,
+  recipeIngredientId: string,
+  grams: number | null,
+): Promise<RecipeIngredientRow> {
+  const res = await fetch(
+    `/api/recipes/${recipeId}/ingredients/${recipeIngredientId}/grams`,
+    {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ grams }),
+    },
+  );
+  if (!res.ok) {
+    throw new Error(`Grams update failed with status ${res.status}`);
+  }
+  const row = await res.json();
+  if (!row || typeof row.id !== "string") {
+    throw new Error("Grams update returned no row");
+  }
+  return row;
+}
+
+/**
  * Queue an ingredient-normalization re-run for a recipe (the recovery path
  * after a failed run, or after threshold/catalog changes). The work itself
  * happens post-response — a 200 means "queued", not "done".

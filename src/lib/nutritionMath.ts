@@ -22,8 +22,19 @@ export type ExclusionReason =
   | "no_nutrition"
   | "stale";
 
+// Where a line's grams came from. "estimated" = a stored per-line estimate
+// (LLM or user-typed), "measured" = parsed quantity+unit conversion (weight
+// direct, or volume × density), "annotation" = an explicit "(45g)"-style weight
+// in the raw text.
+export type GramsProvenance = "estimated" | "measured" | "annotation";
+
 export type LineComputation =
-  | { kind: "ok"; grams: number; nutrition: IngredientNutrition }
+  | {
+      kind: "ok";
+      grams: number;
+      gramsSource: GramsProvenance;
+      nutrition: IngredientNutrition;
+    }
   | { kind: "excluded"; reason: ExclusionReason };
 
 const NUTRITION_KEYS = [
@@ -111,13 +122,21 @@ export function scaleNutritionToGrams(
  * the flag names the primary blocker (an unmatched line is "unmatched" even
  * if it also lacks a unit).
  *
- * Grams come from the parsed quantity+unit when convertible; otherwise an
- * explicit "(45g)"-style weight annotation in the raw text is the fallback —
- * it rescues volume lines matched to density-less ingredients (e.g. Branded
- * USDA imports carry no portions) and count/quantity-less lines alike.
+ * Grams precedence:
+ *   1. a stored per-line `estimated_grams` (LLM or user-typed) — an explicit
+ *      decision, so it beats the derived value (a manual override/re-estimate
+ *      wins);
+ *   2. the parsed quantity+unit conversion (weight direct, volume × density);
+ *   3. an explicit "(45g)"-style weight annotation in the raw text — the
+ *      fallback that rescues volume lines matched to density-less ingredients
+ *      (e.g. Branded USDA imports carry no portions).
+ * A grams-less line falls to the ordered exclusion reasons.
  */
 export function computeLineNutrition(
-  row: Pick<RecipeIngredientRow, "quantity" | "unit" | "ingredient_id" | "raw_text">,
+  row: Pick<
+    RecipeIngredientRow,
+    "quantity" | "unit" | "ingredient_id" | "raw_text" | "estimated_grams"
+  >,
   ingredient: Pick<IngredientRow, "nutrition" | "density_g_per_ml"> | null,
 ): LineComputation {
   if (row.ingredient_id == null || ingredient == null) {
@@ -131,7 +150,19 @@ export function computeLineNutrition(
     row.quantity != null && row.unit != null
       ? gramsForLine(row.quantity, row.unit, ingredient.density_g_per_ml)
       : null;
-  const grams = parsedGrams ?? explicitWeightGrams(row.raw_text);
+
+  let grams: number | null;
+  let gramsSource: GramsProvenance;
+  if (row.estimated_grams != null) {
+    grams = row.estimated_grams;
+    gramsSource = "estimated";
+  } else if (parsedGrams != null) {
+    grams = parsedGrams;
+    gramsSource = "measured";
+  } else {
+    grams = explicitWeightGrams(row.raw_text);
+    gramsSource = "annotation";
+  }
 
   if (grams == null) {
     if (row.quantity == null) return { kind: "excluded", reason: "no_quantity" };
@@ -142,6 +173,7 @@ export function computeLineNutrition(
   return {
     kind: "ok",
     grams,
+    gramsSource,
     nutrition: scaleNutritionToGrams(ingredient.nutrition, grams),
   };
 }

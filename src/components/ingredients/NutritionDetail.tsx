@@ -76,6 +76,8 @@ export default function NutritionDetail({
     error,
     selectIngredient,
     importUsda,
+    estimateGrams,
+    setGrams,
   } = useNutritionDetail(
     recipeId,
     schemaIngredients,
@@ -186,6 +188,8 @@ export default function NutritionDetail({
                       usdaSearch={usdaSearch}
                       onSelect={selectIngredient}
                       onImportUsda={importUsda}
+                      onEstimateGrams={estimateGrams}
+                      onSetGrams={setGrams}
                     />
                   ))}
                 </Fragment>

@@ -116,6 +116,11 @@ export const ROUTE_POLICY = {
     rationale:
       "Manually re-associates one parsed line to a catalog ingredient (match_status → manual); logged-in curation surface only. Recipe-scoped tokens don't apply — agents curate via MCP tools, not this UI path.",
   },
+  "/api/recipes/[id]/ingredients/[riId]/grams": {
+    policy: "session",
+    rationale:
+      "Sets a parsed line's per-line gram estimate (LLM Estimate button / user-typed value) on the logged-in NutritionDetail screen; internal nutrition-manager curation, same surface as the sibling association route.",
+  },
   "/api/ingredients": {
     policy: "session",
     rationale:

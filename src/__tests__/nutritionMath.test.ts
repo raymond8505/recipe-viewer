@@ -91,6 +91,7 @@ describe("computeLineNutrition", () => {
     expect(result).toEqual({
       kind: "ok",
       grams: 100,
+      gramsSource: "measured",
       nutrition: { calories_kcal: 717, fat_g: 81 },
     });
   });
@@ -218,6 +219,55 @@ describe("computeLineNutrition", () => {
         { nutrition: { calories_kcal: 100 }, density_g_per_ml: null },
       ),
     ).toEqual({ kind: "excluded", reason: "no_density" });
+  });
+
+  it("uses a stored estimate and marks the provenance 'estimated'", () => {
+    const result = computeLineNutrition(
+      {
+        quantity: 3,
+        unit: "tbsp",
+        ingredient_id: "ing-1",
+        raw_text: "3 tbsp chopped garlic",
+        estimated_grams: 26,
+      },
+      { nutrition: { calories_kcal: 149 }, density_g_per_ml: null },
+    );
+    expect(result).toEqual({
+      kind: "ok",
+      grams: 26,
+      gramsSource: "estimated",
+      nutrition: { calories_kcal: 38.74 },
+    });
+  });
+
+  it("rescues a count line that has an estimate but no density path", () => {
+    // "540 ml canned chickpeas drained" — a can-yield, not a linear density.
+    const result = computeLineNutrition(
+      {
+        quantity: 540,
+        unit: "ml",
+        ingredient_id: "ing-1",
+        raw_text: "540 ml canned chickpeas drained",
+        estimated_grams: 325,
+      },
+      { nutrition: { calories_kcal: 139 }, density_g_per_ml: null },
+    );
+    expect(result).toMatchObject({ kind: "ok", grams: 325, gramsSource: "estimated" });
+  });
+
+  it("lets a stored estimate override the density-derived value", () => {
+    // A convertible weight line (100 g) whose curator typed a different weight.
+    const result = computeLineNutrition(
+      {
+        quantity: 100,
+        unit: "g",
+        ingredient_id: "ing-1",
+        raw_text: "100 g butter",
+        estimated_grams: 90,
+      },
+      catalogButter,
+    );
+    expect(result).toMatchObject({ kind: "ok", grams: 90, gramsSource: "estimated" });
   });
 });
 

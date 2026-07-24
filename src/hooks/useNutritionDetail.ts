@@ -9,7 +9,11 @@ import {
   type LineComputation,
 } from "@/lib/nutritionMath";
 import { parseServings } from "@/lib/units";
-import { updateRecipeIngredientAssociation } from "@/lib/api/recipes";
+import {
+  estimateIngredientGrams,
+  setIngredientGrams,
+  updateRecipeIngredientAssociation,
+} from "@/lib/api/recipes";
 import { importUsdaIngredient } from "@/lib/api/ingredients";
 import type { UsdaSearchFood } from "@/lib/usda";
 import type { QuantitativeValue, RecipeIngredient } from "@/types/recipe";
@@ -176,6 +180,35 @@ export function useNutritionDetail(
     }
   }
 
+  // Run the LLM estimator for one line and store the result. The returned row
+  // carries the new estimated_grams; totals recompute via useMemo.
+  async function estimateGrams(rowId: string) {
+    setSavingRowId(rowId);
+    setError(null);
+    try {
+      const updated = await estimateIngredientGrams(recipeId, rowId);
+      setRows((current) => current.map((r) => (r.id === rowId ? updated : r)));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to estimate grams");
+    } finally {
+      setSavingRowId(null);
+    }
+  }
+
+  // Set a user-typed gram value, or clear it (null → revert to derived).
+  async function setGrams(rowId: string, grams: number | null) {
+    setSavingRowId(rowId);
+    setError(null);
+    try {
+      const updated = await setIngredientGrams(recipeId, rowId, grams);
+      setRows((current) => current.map((r) => (r.id === rowId ? updated : r)));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to set grams");
+    } finally {
+      setSavingRowId(null);
+    }
+  }
+
   return {
     groups,
     totals,
@@ -187,5 +220,7 @@ export function useNutritionDetail(
     error,
     selectIngredient,
     importUsda,
+    estimateGrams,
+    setGrams,
   };
 }
