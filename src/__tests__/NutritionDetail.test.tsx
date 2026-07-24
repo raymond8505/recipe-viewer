@@ -165,8 +165,8 @@ describe("NutritionDetail", () => {
       // The NutritionPanel six, in its display order…
       "Calories (kcal)",
       "Protein (g)",
-      "Carbohydrate (g)",
-      "Total fat (g)",
+      "Carbs (g)",
+      "Fat (g)",
       "Fiber (g)",
       "Sodium (mg)",
       // …then the rest. No computed-grams column.

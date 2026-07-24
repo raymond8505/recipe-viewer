@@ -18,8 +18,9 @@ import {
 } from "@/lib/format";
 import { useScalableRecipe } from "@/hooks/useScalableRecipe";
 import { useRecipeEditor } from "@/hooks/useRecipeEditor";
-import { useUndoableSchemaOp } from "@/hooks/useUndoableSchemaOp";
+import { useUndoableSchemaOp, type OpState } from "@/hooks/useUndoableSchemaOp";
 import { useImageUpload } from "@/hooks/useImageUpload";
+import { normalizeRecipe } from "@/lib/api/recipes";
 import { DEFAULT_MAX_IMAGE_BYTES } from "@/lib/imageTypes";
 import CookingModeButton from "./CookingModeButton";
 import RecipeControls from "./RecipeControls";
@@ -92,6 +93,20 @@ export default function RecipeDetail({
       [recipe.id],
     ),
   );
+
+  // Manual ingredient normalization — fire-and-forget: the route queues a
+  // background re-run and returns immediately, so there's no schema to review
+  // (unlike rescrape/regenImage). A plain op-state drives the button feedback.
+  const [normalizeState, setNormalizeState] = useState<OpState>("idle");
+  const handleNormalize = useCallback(async () => {
+    setNormalizeState("loading");
+    try {
+      await normalizeRecipe(recipe.id);
+      setNormalizeState("success");
+    } catch {
+      setNormalizeState("error");
+    }
+  }, [recipe.id]);
 
   // Shopping list
   const [selectedIngredients, setSelectedIngredients] = useState<Set<string>>(
@@ -303,6 +318,7 @@ export default function RecipeDetail({
             isUploadImageReview={isUploadImageReview}
             rescrapeState={rescrapeState}
             regenImageState={regenImageState}
+            normalizeState={normalizeState}
             canRescrape={isMounted && recipe.url !== window.location.href}
             uploadError={imageUpload.error}
             fileInputRef={fileInputRef}
@@ -311,6 +327,7 @@ export default function RecipeDetail({
             onEditCancel={handleEditCancel}
             onRescrape={handleRescrape}
             onRegenImage={handleRegenImage}
+            onNormalize={handleNormalize}
             onUploadOpen={imageUpload.open}
             onFileSelected={handleFileSelected}
           />

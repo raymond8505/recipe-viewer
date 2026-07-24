@@ -22,6 +22,8 @@ export interface RecipeControlsProps {
   isUploadImageReview: boolean;
   rescrapeState: OpState;
   regenImageState: OpState;
+  /** Fire-and-forget ingredient normalization (queues a background re-run). */
+  normalizeState: OpState;
   /** Whether the Re-scrape button applies (mounted + not viewing the source URL). */
   canRescrape: boolean;
   /** Image-upload validation error flag. */
@@ -32,6 +34,7 @@ export interface RecipeControlsProps {
   onEditCancel: () => void;
   onRescrape: () => void;
   onRegenImage: () => void;
+  onNormalize: () => void;
   onUploadOpen: () => void;
   onFileSelected: (e: ChangeEvent<HTMLInputElement>) => void;
 }
@@ -55,6 +58,7 @@ export default function RecipeControls({
   isUploadImageReview,
   rescrapeState,
   regenImageState,
+  normalizeState,
   canRescrape,
   uploadError,
   fileInputRef,
@@ -63,6 +67,7 @@ export default function RecipeControls({
   onEditCancel,
   onRescrape,
   onRegenImage,
+  onNormalize,
   onUploadOpen,
   onFileSelected,
 }: RecipeControlsProps) {
@@ -191,6 +196,23 @@ export default function RecipeControls({
             {uploadError && (
               <span className="text-sm text-red-600">
                 File must be PNG, JPEG, or WebP and under 4MB.
+              </span>
+            )}
+            <Button
+              variant="outline"
+              onClick={onNormalize}
+              disabled={normalizeState === "loading"}
+            >
+              {normalizeState === "loading" ? "Normalizing…" : "Normalize"}
+            </Button>
+            {normalizeState === "success" && (
+              <span className="text-sm text-green-600">
+                Normalization queued.
+              </span>
+            )}
+            {normalizeState === "error" && (
+              <span className="text-sm text-red-600">
+                Normalization failed. Try again.
               </span>
             )}
           </>

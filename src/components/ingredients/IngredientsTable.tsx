@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -16,7 +17,11 @@ import { pluralize } from "@/lib/format";
 import { useIngredientsTable } from "@/hooks/useIngredientsTable";
 import type { IngredientRow } from "@/types/ingredient";
 import IngredientRowEditor from "./IngredientRowEditor";
-import { NUTRITION_COLUMNS } from "./nutritionColumns";
+import {
+  NUTRITION_BASIS_LABEL,
+  PRIMARY_NUTRITION_COLUMNS,
+  nutritionLabel,
+} from "./nutritionColumns";
 import {
   STICKY_ACTIONS_HEAD,
   STICKY_ALIASES_HEAD,
@@ -60,6 +65,23 @@ export default function IngredientsTable({
     totalPages,
     load,
   } = useIngredientsTable(initialIngredients, initialCount);
+
+  // The table is wider than its scroll viewport (frozen + primary columns), so
+  // an expanded detail row's full-width cell would push its fields off-screen.
+  // Measure the visible viewport width and hand it to each row so the detail
+  // panel can pin itself to it (sticky) and keep every field in view.
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const [viewportWidth, setViewportWidth] = useState<number>();
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const measure = () => setViewportWidth(el.clientWidth);
+    measure();
+    if (typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(measure);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
 
   function handleSearch(e: React.FormEvent) {
     e.preventDefault();
@@ -130,7 +152,11 @@ export default function IngredientsTable({
             onChange={(e) => setNewName(e.target.value)}
             className="w-64"
           />
-          <Button type="submit" size="sm" disabled={busyAdding || !newName.trim()}>
+          <Button
+            type="submit"
+            size="sm"
+            disabled={busyAdding || !newName.trim()}
+          >
             Add
           </Button>
         </form>
@@ -143,8 +169,8 @@ export default function IngredientsTable({
       )}
 
       <p className="text-xs text-muted-foreground">
-        Nutrition values are per 100 g. Density converts volume to weight
-        (grams = ml × g/ml).
+        Nutrition values are {NUTRITION_BASIS_LABEL}. Density converts volume to
+        weight (grams = ml × g/ml).
       </p>
 
       {/* Single scroll box (both axes). Capped at ~73vh so the chrome, heading,
@@ -153,28 +179,32 @@ export default function IngredientsTable({
           columns stick to the sides — so the shadcn Table's own overflow
           wrapper must be neutralized, or it would become the scrollport and
           break the sticky. */}
-      <div className="max-h-[73vh] overflow-auto [&_[data-slot=table-container]]:overflow-visible">
+      <div
+        ref={scrollRef}
+        className="max-h-[73vh] overflow-auto [&_[data-slot=table-container]]:overflow-visible"
+      >
         <Table>
           <TableHeader>
             <TableRow className="hover:bg-transparent">
               <TableHead className={STICKY_NAME_HEAD}>Name</TableHead>
               <TableHead className={STICKY_ALIASES_HEAD}>Aliases</TableHead>
-              {NUTRITION_COLUMNS.map((col) => (
+              {PRIMARY_NUTRITION_COLUMNS.map((col) => (
                 <TableHead
                   key={col.key}
-                  title={col.title}
+                  title={nutritionLabel(col)}
                   className={`${STICKY_HEAD} text-right`}
                 >
-                  {col.label}
-                  {col.unit && (
-                    <span className="ml-0.5 font-normal text-muted-foreground">
-                      ({col.unit})
-                    </span>
-                  )}
+                  {col.name}
+                  <span className="ml-0.5 font-normal text-muted-foreground">
+                    ({col.unit})
+                  </span>
                 </TableHead>
               ))}
-              <TableHead title="Density (g/ml)" className={`${STICKY_HEAD} text-right`}>
-                g/ml
+              <TableHead
+                title="Representative serving from USDA food portions"
+                className={`${STICKY_HEAD} max-w-50 text-right`}
+              >
+                Serving
               </TableHead>
               <TableHead className={STICKY_HEAD}>Source</TableHead>
               <TableHead className={`${STICKY_ACTIONS_HEAD} text-right`}>
@@ -186,7 +216,7 @@ export default function IngredientsTable({
             {rows.length === 0 ? (
               <TableRow>
                 <TableCell
-                  colSpan={NUTRITION_COLUMNS.length + 5}
+                  colSpan={PRIMARY_NUTRITION_COLUMNS.length + 5}
                   className="text-center text-muted-foreground py-8"
                 >
                   {loading
@@ -201,6 +231,7 @@ export default function IngredientsTable({
                   // after each successful save.
                   key={`${row.id}-${row.updated_at}`}
                   ingredient={row}
+                  detailWidth={viewportWidth}
                   onSaved={handleSaved}
                   onDeleted={handleDeleted}
                 />

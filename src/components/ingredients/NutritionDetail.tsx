@@ -23,7 +23,7 @@ import type {
 } from "@/hooks/useIngredientAutocomplete";
 import NutritionDetailRow from "./NutritionDetailRow";
 import NutritionSummaryRow from "./NutritionSummaryRow";
-import { NUTRITION_DETAIL_COLUMNS } from "./nutritionColumns";
+import { NUTRITION_DETAIL_COLUMNS, nutritionLabel } from "./nutritionColumns";
 import { STICKY_ALIASES_HEAD, STICKY_HEAD, STICKY_NAME_HEAD } from "./tableStyles";
 
 // Recipe text + autocomplete are the frozen columns; the 12 nutrition
@@ -148,7 +148,7 @@ export default function NutritionDetail({
                   key={col.key}
                   className={`${STICKY_HEAD} text-right whitespace-nowrap`}
                 >
-                  {col.title}
+                  {nutritionLabel(col)}
                 </TableHead>
               ))}
             </TableRow>
