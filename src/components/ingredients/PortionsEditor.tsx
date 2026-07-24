@@ -2,7 +2,7 @@
 
 import { Plus, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { DEFAULT_PORTION_DRAFT, type PortionDraft } from "./portions";
+import { EMPTY_PORTION_DRAFT, type PortionDraft } from "./portions";
 
 // A controlled editor for an ingredient's portions list. Each portion is a
 // label (e.g. "cup", "serving") plus a gram weight; the label is optional so
@@ -31,7 +31,7 @@ export default function PortionsEditor({
   }
 
   function add() {
-    onChange([...portions, { ...DEFAULT_PORTION_DRAFT, grams: "" }]);
+    onChange([...portions, { ...EMPTY_PORTION_DRAFT }]);
   }
 
   function remove(index: number) {

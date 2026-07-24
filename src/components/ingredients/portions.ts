@@ -20,6 +20,12 @@ export interface PortionDraft {
 // so formatServingSize renders just "100 g" rather than "1 100 g ≈ 100 g".
 export const DEFAULT_PORTION_DRAFT: PortionDraft = { label: "", grams: "100" };
 
+// A blank row for a portion the user adds beyond the seed (a "cup", a "tbsp").
+// Deliberately NOT the 100 g default: prefilling 100 g would be a wrong, tedious
+// starting value for a real household measure, so an added row starts empty and
+// the user types its actual weight.
+export const EMPTY_PORTION_DRAFT: PortionDraft = { label: "", grams: "" };
+
 /** A portion's label for the nutrition-basis selector: its label, or its grams
  *  when unlabelled (the default 100 g portion). */
 export function portionOptionLabel(portion: PortionDraft): string {
