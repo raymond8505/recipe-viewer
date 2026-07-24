@@ -227,11 +227,13 @@ export default function IngredientAutocomplete({
         id={listboxId}
         role="listbox"
         aria-label="Ingredient matches"
-        // flex-col + whitespace-normal: the host TableCell sets
-        // whitespace-nowrap, which inherits here and would lay the
-        // inline-block option buttons out on one overflowing line. Flex
-        // children stack regardless of white-space.
-        className="absolute left-0 right-0 top-full z-30 mt-1 flex max-h-60 flex-col overflow-y-auto whitespace-normal rounded-xl border border-border bg-popover shadow-lg"
+        // Size to the longest option instead of the (narrow, frozen) host
+        // column: `w-max` grows to the widest child, `min-w-full` keeps it at
+        // least as wide as the trigger, and `max-w` caps it against the
+        // viewport. `whitespace-nowrap` lets option text define that intrinsic
+        // width (names beyond the cap still truncate); flex-col stacks the
+        // option buttons regardless of white-space.
+        className="absolute left-0 top-full z-30 mt-1 flex max-h-60 w-max min-w-full max-w-[min(32rem,90vw)] flex-col overflow-y-auto whitespace-nowrap rounded-xl border border-border bg-popover shadow-lg"
       >
         {error && (
           <p className="shrink-0 px-3 py-2 text-sm text-muted-foreground" role="status">
