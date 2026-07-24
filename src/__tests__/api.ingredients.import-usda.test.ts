@@ -35,7 +35,10 @@ describe("POST /api/ingredients/import-usda", () => {
 
     expect(res.status).toBe(201);
     expect((await res.json()).id).toBe("ing-new");
-    expect(importUsdaIngredient).toHaveBeenCalledWith("gochujang", 123);
+    // The manual pick is authoritative — a same-name row is overwritten, not reused.
+    expect(importUsdaIngredient).toHaveBeenCalledWith("gochujang", 123, {
+      onConflict: "overwrite",
+    });
   });
 
   it("rejects an invalid body with 400", async () => {
