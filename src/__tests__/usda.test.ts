@@ -6,6 +6,7 @@ import {
   extractNutrition,
   getFoodDetail,
   searchFoods,
+  searchFoodsMixed,
 } from "@/lib/usda";
 import {
   chickenBreastDetailResponse,
@@ -62,6 +63,16 @@ describe("searchFoods", () => {
     const url = mockFetch.mock.calls[0][0] as URL;
     expect(url.searchParams.get("dataType")).toBe("Foundation,SR Legacy,Branded");
     expect(url.searchParams.get("pageSize")).toBe("8");
+  });
+
+  it("restricts to Branded with brandedOnly", async () => {
+    mockFetch.mockResolvedValueOnce(jsonResponse({ foods: [] }));
+
+    await searchFoods("chickpeas", { brandedOnly: true });
+
+    expect((mockFetch.mock.calls[0][0] as URL).searchParams.get("dataType")).toBe(
+      "Branded",
+    );
   });
 
   it("trims results to fdcId/description/dataType/score", async () => {
@@ -142,6 +153,54 @@ describe("searchFoods", () => {
       expect(foods).toHaveLength(2);
       expect(mockFetch).toHaveBeenCalledTimes(2);
     });
+  });
+});
+
+describe("searchFoodsMixed", () => {
+  const analytical = {
+    foods: [
+      { fdcId: 10, description: "Chickpeas, canned, drained", dataType: "SR Legacy", score: 260 },
+      { fdcId: 11, description: "Chickpeas, dry", dataType: "Foundation", score: 330 },
+    ],
+  };
+  const branded = {
+    foods: [
+      { fdcId: 20, description: "CHICKPEAS", dataType: "Branded", score: 1181 },
+      // USDA returns many identical Branded descriptions — they must collapse.
+      { fdcId: 21, description: "chickpeas", dataType: "Branded", score: 1181 },
+      { fdcId: 22, description: "Organic Chickpeas", dataType: "Branded", score: 900 },
+    ],
+  };
+
+  it("queries both pools separately and round-robin interleaves them", async () => {
+    mockFetch
+      .mockResolvedValueOnce(jsonResponse(analytical)) // analytical query
+      .mockResolvedValueOnce(jsonResponse(branded)); // brandedOnly query
+
+    const foods = await searchFoodsMixed("chickpeas", { pageSize: 10 });
+
+    // Two separate queries: analytical (no Branded) + brandedOnly.
+    expect(mockFetch).toHaveBeenCalledTimes(2);
+    expect((mockFetch.mock.calls[0][0] as URL).searchParams.get("dataType")).toBe(
+      "Foundation,SR Legacy",
+    );
+    expect((mockFetch.mock.calls[1][0] as URL).searchParams.get("dataType")).toBe(
+      "Branded",
+    );
+
+    // Interleaved a0, b0, a1, b1… with the duplicate "chickpeas" Branded row
+    // (fdcId 21) collapsed by lowercased description.
+    expect(foods.map((f) => f.fdcId)).toEqual([10, 20, 11, 22]);
+  });
+
+  it("caps the merged list at pageSize", async () => {
+    mockFetch
+      .mockResolvedValueOnce(jsonResponse(analytical))
+      .mockResolvedValueOnce(jsonResponse(branded));
+
+    const foods = await searchFoodsMixed("chickpeas", { pageSize: 2 });
+
+    expect(foods.map((f) => f.fdcId)).toEqual([10, 20]);
   });
 });
 

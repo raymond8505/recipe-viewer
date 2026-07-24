@@ -1,11 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { GET } from "@/app/api/usda/search/route";
-import { UsdaError, searchFoods } from "@/lib/usda";
+import { UsdaError, searchFoodsMixed } from "@/lib/usda";
 import { getIsLoggedIn } from "@/lib/auth";
 
 vi.mock("@/lib/usda", async (orig) => {
   const actual = await orig<typeof import("@/lib/usda")>();
-  return { ...actual, searchFoods: vi.fn() };
+  return { ...actual, searchFoodsMixed: vi.fn() };
 });
 
 vi.mock("@/env", () => ({
@@ -26,36 +26,34 @@ describe("GET /api/usda/search", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(getIsLoggedIn).mockResolvedValue(true);
-    vi.mocked(searchFoods).mockResolvedValue([]);
+    vi.mocked(searchFoodsMixed).mockResolvedValue([]);
   });
 
-  it("searches with Branded included — the human-curated path", async () => {
+  it("returns the interleaved analytical + branded results", async () => {
     const foods = [
-      { fdcId: 123, description: "GOCHUJANG PASTE", dataType: "Branded", score: 500 },
+      { fdcId: 1, description: "Chickpeas, canned", dataType: "SR Legacy", score: 260 },
+      { fdcId: 2, description: "CHICKPEAS", dataType: "Branded", score: 1181 },
     ];
-    vi.mocked(searchFoods).mockResolvedValue(foods);
+    vi.mocked(searchFoodsMixed).mockResolvedValue(foods);
 
-    const res = await GET(makeRequest("?q=gochujang"));
+    const res = await GET(makeRequest("?q=chickpeas"));
 
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ data: foods });
-    expect(searchFoods).toHaveBeenCalledWith("gochujang", {
-      includeBranded: true,
-      pageSize: 8,
-    });
+    expect(searchFoodsMixed).toHaveBeenCalledWith("chickpeas", { pageSize: 10 });
   });
 
   it("rejects a missing query with 400", async () => {
     const res = await GET(makeRequest(""));
 
     expect(res.status).toBe(400);
-    expect(searchFoods).not.toHaveBeenCalled();
+    expect(searchFoodsMixed).not.toHaveBeenCalled();
   });
 
   it("maps UsdaError to 502", async () => {
-    vi.mocked(searchFoods).mockRejectedValueOnce(new UsdaError(500, "down"));
+    vi.mocked(searchFoodsMixed).mockRejectedValueOnce(new UsdaError(500, "down"));
 
-    const res = await GET(makeRequest("?q=gochujang"));
+    const res = await GET(makeRequest("?q=chickpeas"));
 
     expect(res.status).toBe(502);
   });

@@ -23,7 +23,12 @@ export const cuminSearchResponse: {
       // Flat search-shape nutrients — the client must NOT read these; it
       // trims search results to fdcId/description/dataType/score.
       foodNutrients: [
-        { nutrientId: 1003, nutrientName: "Protein", unitName: "G", value: 17.8 },
+        {
+          nutrientId: 1003,
+          nutrientName: "Protein",
+          unitName: "G",
+          value: 17.8,
+        },
       ],
     },
     {
@@ -50,17 +55,59 @@ export const cuminDetailResponse: UsdaFoodDetail = {
     { nutrient: { id: 2045, name: "Proximates", unitName: "g" } },
     { nutrient: { id: 1008, name: "Energy", unitName: "kcal" }, amount: 375.0 },
     { nutrient: { id: 1003, name: "Protein", unitName: "g" }, amount: 17.81 },
-    { nutrient: { id: 1004, name: "Total lipid (fat)", unitName: "g" }, amount: 22.27 },
-    { nutrient: { id: 1258, name: "Fatty acids, total saturated", unitName: "g" }, amount: 1.535 },
-    { nutrient: { id: 1005, name: "Carbohydrate, by difference", unitName: "g" }, amount: 44.24 },
-    { nutrient: { id: 1079, name: "Fiber, total dietary", unitName: "g" }, amount: 10.5 },
-    { nutrient: { id: 2000, name: "Sugars, total including NLEA", unitName: "g" }, amount: 2.25 },
-    { nutrient: { id: 1093, name: "Sodium, Na", unitName: "mg" }, amount: 168.0 },
-    { nutrient: { id: 1253, name: "Cholesterol", unitName: "mg" }, amount: 0.0 },
-    { nutrient: { id: 1087, name: "Calcium, Ca", unitName: "mg" }, amount: 931.0 },
+    {
+      nutrient: { id: 1004, name: "Total lipid (fat)", unitName: "g" },
+      amount: 22.27,
+    },
+    {
+      nutrient: {
+        id: 1258,
+        name: "Fatty acids, total saturated",
+        unitName: "g",
+      },
+      amount: 1.535,
+    },
+    {
+      nutrient: {
+        id: 1005,
+        name: "Carbohydrate, by difference",
+        unitName: "g",
+      },
+      amount: 44.24,
+    },
+    {
+      nutrient: { id: 1079, name: "Fiber, total dietary", unitName: "g" },
+      amount: 10.5,
+    },
+    {
+      nutrient: {
+        id: 2000,
+        name: "Sugars, total including NLEA",
+        unitName: "g",
+      },
+      amount: 2.25,
+    },
+    {
+      nutrient: { id: 1093, name: "Sodium, Na", unitName: "mg" },
+      amount: 168.0,
+    },
+    {
+      nutrient: { id: 1253, name: "Cholesterol", unitName: "mg" },
+      amount: 0.0,
+    },
+    {
+      nutrient: { id: 1087, name: "Calcium, Ca", unitName: "mg" },
+      amount: 931.0,
+    },
     { nutrient: { id: 1089, name: "Iron, Fe", unitName: "mg" }, amount: 66.36 },
-    { nutrient: { id: 1092, name: "Potassium, K", unitName: "mg" }, amount: 1788.0 },
-    { nutrient: { id: 1090, name: "Magnesium, Mg", unitName: "mg" }, amount: 366.0 },
+    {
+      nutrient: { id: 1092, name: "Potassium, K", unitName: "mg" },
+      amount: 1788.0,
+    },
+    {
+      nutrient: { id: 1090, name: "Magnesium, Mg", unitName: "mg" },
+      amount: 366.0,
+    },
   ],
   foodPortions: [
     {
@@ -86,16 +133,51 @@ export const cuminDetailResponse: UsdaFoodDetail = {
 // 1079 row — a blank fiber cell is correct here, not a mapping gap.
 export const chickenBreastDetailResponse: UsdaFoodDetail = {
   fdcId: 2646170,
-  description: "Chicken, broilers or fryers, breast, skinless, boneless, meat only, raw",
+  description:
+    "Chicken, broilers or fryers, breast, skinless, boneless, meat only, raw",
   dataType: "Foundation",
   foodNutrients: [
-    { nutrient: { id: 2047, name: "Energy (Atwater General Factors)", unitName: "kcal" }, amount: 106.034 },
-    { nutrient: { id: 2048, name: "Energy (Atwater Specific Factors)", unitName: "kcal" }, amount: 112.20227 },
+    {
+      nutrient: {
+        id: 2047,
+        name: "Energy (Atwater General Factors)",
+        unitName: "kcal",
+      },
+      amount: 106.034,
+    },
+    {
+      nutrient: {
+        id: 2048,
+        name: "Energy (Atwater Specific Factors)",
+        unitName: "kcal",
+      },
+      amount: 112.20227,
+    },
     { nutrient: { id: 1003, name: "Protein", unitName: "g" }, amount: 22.525 },
-    { nutrient: { id: 1004, name: "Total lipid (fat)", unitName: "g" }, amount: 1.934 },
-    { nutrient: { id: 1258, name: "Fatty acids, total saturated", unitName: "g" }, amount: 0.3488 },
-    { nutrient: { id: 1005, name: "Carbohydrate, by difference", unitName: "g" }, amount: 0 },
-    { nutrient: { id: 1093, name: "Sodium, Na", unitName: "mg" }, amount: 65.75 },
+    {
+      nutrient: { id: 1004, name: "Total lipid (fat)", unitName: "g" },
+      amount: 1.934,
+    },
+    {
+      nutrient: {
+        id: 1258,
+        name: "Fatty acids, total saturated",
+        unitName: "g",
+      },
+      amount: 0.3488,
+    },
+    {
+      nutrient: {
+        id: 1005,
+        name: "Carbohydrate, by difference",
+        unitName: "g",
+      },
+      amount: 0,
+    },
+    {
+      nutrient: { id: 1093, name: "Sodium, Na", unitName: "mg" },
+      amount: 65.75,
+    },
   ],
 };
 
