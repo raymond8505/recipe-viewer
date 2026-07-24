@@ -242,13 +242,22 @@ export function getYieldUnit(
  * Return a Schema.org-compliant JSON-LD object for a recipe.
  * Strips custom extensions (notes, cookingNotes, ingredient group objects) so
  * external tools that validate against the spec can parse the output cleanly.
+ *
+ * `nutritionOverride` replaces the schema's own `nutrition` in the output when
+ * provided — used to emit the normalized-ingredient nutrition (already
+ * per-serving, Schema.org-shaped) in place of the hand-entered fields. It still
+ * flows through the same allowlist, so no custom fields leak.
  */
-export function toSchemaOrgJsonLd(schema: SchemaRecipe): object {
+export function toSchemaOrgJsonLd(
+  schema: SchemaRecipe,
+  options?: { nutritionOverride?: SchemaRecipe["nutrition"] },
+): object {
   const result: Record<string, unknown> = {
     "@context": schema["@context"] ?? "https://schema.org",
     "@type": schema["@type"] ?? "Recipe",
     name: schema.name,
   };
+  const nutrition = options?.nutritionOverride ?? schema.nutrition;
   const optionalFields = [
     "description",
     "image",
@@ -260,13 +269,13 @@ export function toSchemaOrgJsonLd(schema: SchemaRecipe): object {
     "recipeCuisine",
     "recipeCategory",
     "keywords",
-    "nutrition",
     "datePublished",
     "recipeInstructions",
   ] as const;
   for (const key of optionalFields) {
     if (schema[key] != null) result[key] = schema[key];
   }
+  if (nutrition != null) result.nutrition = nutrition;
   if (schema.recipeIngredient?.length) {
     result.recipeIngredient = schema.recipeIngredient.map(getIngredientText);
   }

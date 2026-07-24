@@ -3,7 +3,11 @@ import { useState } from "react";
 import { userEvent, fn } from "storybook/test";
 import NutritionPanel from "./NutritionPanel";
 import { ScalableRecipe } from "@/lib/ScalableRecipe";
-import { makeScalableRecipe, quantitativeValueYield } from "@/fixtures";
+import {
+  makeScalableRecipe,
+  makeSchemaRecipe,
+  quantitativeValueYield,
+} from "@/fixtures";
 import type { SchemaRecipe } from "@/types/recipe";
 
 type Nutrition = NonNullable<SchemaRecipe["nutrition"]>;
@@ -78,6 +82,36 @@ export const PartialData: Story = {
       recipeYield: "2 servings",
       nutrition: { calories: "350 kcal", proteinContent: "22 g" },
     }),
+  },
+};
+
+/**
+ * A fully-covered normalized recipe: values are computed from the ingredient
+ * list, so each carries an "ingredients" badge. Sodium isn't reported by the
+ * ingredients here, so it falls back to the recipe's own field and shows a
+ * "recipe" badge — the per-field fallback in action. (Totals are whole-recipe
+ * for 4 servings, e.g. 2080 kcal → 520 kcal per serving.)
+ */
+export const FromNormalizedIngredients: Story = {
+  args: {
+    initial: new ScalableRecipe(
+      makeSchemaRecipe({
+        recipeIngredient: undefined,
+        recipeYield: "4 servings",
+        nutrition: { sodiumContent: "820 mg" },
+      }),
+      undefined,
+      {
+        fullyCovered: true,
+        total: {
+          calories_kcal: 2080,
+          protein_g: 128,
+          carbs_g: 192,
+          fat_g: 72,
+          fiber_g: 24,
+        },
+      },
+    ),
   },
 };
 

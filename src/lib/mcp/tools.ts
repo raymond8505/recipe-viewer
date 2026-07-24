@@ -6,7 +6,13 @@ import {
   RecipeRepoError,
   updateRecipeRow,
 } from "@/lib/recipes";
-import { IngredientRepoError, matchIngredients } from "@/lib/ingredients";
+import {
+  getRecipeNormalizedNutrition,
+  IngredientRepoError,
+  matchIngredients,
+} from "@/lib/ingredients";
+import { resolveRecipeNutrition } from "@/lib/nutritionMath";
+import { parseServings } from "@/lib/units";
 import { generateEmbedding } from "@/lib/embedding";
 import { RECIPE_TOKEN_TTL_SECONDS, signRecipeToken } from "./recipeToken";
 import { env } from "@/env";
@@ -93,7 +99,26 @@ export async function searchIngredients(
 export async function getRecipe(args: RecipeIdInput): Promise<RecipeRow> {
   const row = await getRecipeById(args.id);
   if (!row) throw new ToolError("not_found", `Recipe ${args.id} not found`);
-  return row;
+
+  // Prefer the normalized ingredient nutrition (per serving) when the recipe is
+  // fully covered — same source as the UI panel and JSON-LD. Otherwise return
+  // the recipe's own nutrition unchanged.
+  const schema = row.metadata.schema;
+  const normalized = await getRecipeNormalizedNutrition(
+    args.id,
+    schema.recipeIngredient ?? [],
+  );
+  if (!normalized?.fullyCovered) return row;
+
+  const nutrition = resolveRecipeNutrition(
+    schema.nutrition,
+    normalized,
+    parseServings(schema.recipeYield),
+  );
+  return {
+    ...row,
+    metadata: { ...row.metadata, schema: { ...schema, nutrition } },
+  };
 }
 
 export async function getToken(

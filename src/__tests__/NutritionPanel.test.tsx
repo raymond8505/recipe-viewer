@@ -65,6 +65,36 @@ describe("NutritionPanel", () => {
     expect(container.firstChild).toBeNull();
   });
 
+  it("badges each value by source when the recipe is normalized", () => {
+    // Fully covered: calories/protein come from the ingredients; fat isn't
+    // reported so it falls back to the recipe's own field.
+    const r = new ScalableRecipe(
+      makeScalableRecipe({
+        recipeIngredient: undefined,
+        recipeYield: "4 servings",
+        nutrition: { fatContent: "5 g" },
+      }).schema,
+      undefined,
+      { total: { calories_kcal: 2000, protein_g: 40 }, fullyCovered: true },
+    );
+    render(<Harness initial={r} />);
+    expect(screen.getByText("500 kcal")).toBeTruthy();
+    // Two computed nutrients → two "ingredients" badges; one fallback → "recipe".
+    expect(screen.getAllByText("ingredients")).toHaveLength(2);
+    expect(screen.getAllByText("recipe")).toHaveLength(1);
+  });
+
+  it("shows no source badges for a non-normalized recipe", () => {
+    const r = makeScalableRecipe({
+      recipeIngredient: undefined,
+      recipeYield: "4 servings",
+      nutrition: { calories: "350 kcal" },
+    });
+    render(<Harness initial={r} />);
+    expect(screen.queryByText("ingredients")).toBeNull();
+    expect(screen.queryByText("recipe")).toBeNull();
+  });
+
   it("shows 'per serving' at the default portion count", () => {
     const r = makeScalableRecipe({
       recipeIngredient: undefined,

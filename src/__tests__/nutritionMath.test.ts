@@ -1,13 +1,58 @@
 import { describe, expect, it } from "vitest";
 import {
   computeLineNutrition,
+  computeRecipeNutrition,
   explicitWeightGrams,
   gramsForLine,
+  lineComputationForSchema,
+  normalizedTotalToPerServingSchema,
   perPortionNutrition,
+  resolveRecipeNutrition,
+  resolveRecipeNutritionWithSources,
   scaleNutritionToGrams,
   scalePortionNutritionToPer100g,
   sumNutrition,
 } from "@/lib/nutritionMath";
+import type { IngredientRow, RecipeIngredientRow } from "@/types/ingredient";
+
+// Minimal recipe_ingredients row builder for the recipe-wide aggregation tests.
+function makeRow(
+  position: number,
+  overrides: Partial<RecipeIngredientRow> = {},
+): RecipeIngredientRow {
+  return {
+    id: `ri-${position}`,
+    recipe_id: "r-1",
+    ingredient_id: `ing-${position}`,
+    raw_text: overrides.raw_text ?? `${position} g thing`,
+    quantity: 100,
+    unit: "g",
+    name_text: "thing",
+    note: null,
+    match_status: "matched",
+    confidence: 1,
+    position,
+    estimated_grams: null,
+    grams_source: null,
+    ...overrides,
+  };
+}
+
+function catalog(nutrition: IngredientRow["nutrition"]): IngredientRow {
+  return {
+    id: "ing-x",
+    name: "thing",
+    aliases: [],
+    fdc_id: null,
+    fdc_data_type: null,
+    nutrition,
+    density_g_per_ml: null,
+    food_portions: null,
+    source: "manual",
+    created_at: "",
+    updated_at: "",
+  };
+}
 
 describe("gramsForLine", () => {
   it("converts weight units directly to grams", () => {
@@ -341,5 +386,179 @@ describe("perPortionNutrition", () => {
     const perPortion = perPortionNutrition({ fiber_g: 8 }, 2);
     expect(perPortion).toEqual({ fiber_g: 4 });
     expect("calories_kcal" in perPortion).toBe(false);
+  });
+});
+
+describe("lineComputationForSchema", () => {
+  it("excludes a line with no row as stale", () => {
+    expect(lineComputationForSchema("2 cups flour", null, null)).toEqual({
+      kind: "excluded",
+      reason: "stale",
+    });
+  });
+
+  it("excludes a line whose stored text no longer matches the schema", () => {
+    const row = makeRow(0, { raw_text: "1 cup flour" });
+    expect(
+      lineComputationForSchema("2 cups flour", row, catalog({ calories_kcal: 100 })),
+    ).toEqual({ kind: "excluded", reason: "stale" });
+  });
+
+  it("defers to computeLineNutrition when the text matches", () => {
+    const row = makeRow(0, { raw_text: "100 g thing", quantity: 100, unit: "g" });
+    expect(
+      lineComputationForSchema("100 g thing", row, catalog({ calories_kcal: 50 })),
+    ).toMatchObject({ kind: "ok", nutrition: { calories_kcal: 50 } });
+  });
+});
+
+describe("computeRecipeNutrition", () => {
+  it("sums matched lines and reports full coverage", () => {
+    const schema = ["100 g thing", "100 g thing"];
+    const rows = [
+      makeRow(0, { raw_text: "100 g thing", ingredient_id: "a" }),
+      makeRow(1, { raw_text: "100 g thing", ingredient_id: "b" }),
+    ];
+    const byId = new Map([
+      ["a", catalog({ calories_kcal: 100, protein_g: 5 })],
+      ["b", catalog({ calories_kcal: 50 })],
+    ]);
+    const result = computeRecipeNutrition(schema, rows, byId);
+    expect(result.total).toEqual({ calories_kcal: 150, protein_g: 5 });
+    expect(result).toMatchObject({
+      lineCount: 2,
+      excludedCount: 0,
+      hasStaleLines: false,
+      fullyCovered: true,
+    });
+  });
+
+  it("is not fully covered when a line is unmatched", () => {
+    const schema = ["100 g thing", "salt to taste"];
+    const rows = [
+      makeRow(0, { raw_text: "100 g thing", ingredient_id: "a" }),
+      makeRow(1, { raw_text: "salt to taste", ingredient_id: null, match_status: "unmatched" }),
+    ];
+    const byId = new Map([["a", catalog({ calories_kcal: 100 })]]);
+    const result = computeRecipeNutrition(schema, rows, byId);
+    expect(result.total).toEqual({ calories_kcal: 100 });
+    expect(result).toMatchObject({ excludedCount: 1, fullyCovered: false });
+  });
+
+  it("is not fully covered when a schema line was edited after normalization", () => {
+    const schema = ["2 cups flour"];
+    const rows = [makeRow(0, { raw_text: "1 cup flour", ingredient_id: "a" })];
+    const byId = new Map([["a", catalog({ calories_kcal: 100 })]]);
+    const result = computeRecipeNutrition(schema, rows, byId);
+    expect(result).toMatchObject({
+      hasStaleLines: true,
+      excludedCount: 1,
+      fullyCovered: false,
+    });
+  });
+
+  it("is not fully covered for a recipe with no ingredient lines", () => {
+    expect(computeRecipeNutrition([], [], new Map()).fullyCovered).toBe(false);
+  });
+});
+
+describe("normalizedTotalToPerServingSchema", () => {
+  it("maps snake_case totals to per-serving Schema.org strings with units", () => {
+    expect(
+      normalizedTotalToPerServingSchema(
+        { calories_kcal: 2000, protein_g: 40, sodium_mg: 3200 },
+        4,
+      ),
+    ).toEqual({
+      calories: "500 kcal",
+      proteinContent: "10 g",
+      sodiumContent: "800 mg",
+    });
+  });
+
+  it("keeps one decimal place when fractional", () => {
+    expect(normalizedTotalToPerServingSchema({ fat_g: 25 }, 4)).toEqual({
+      fatContent: "6.3 g",
+    });
+  });
+
+  it("omits nutrients with no Schema.org slot (calcium/iron/potassium)", () => {
+    const out = normalizedTotalToPerServingSchema(
+      { calcium_mg: 400, iron_mg: 8, potassium_mg: 100 },
+      2,
+    );
+    expect(out).toEqual({});
+  });
+
+  it("returns an empty object for non-positive servings", () => {
+    expect(normalizedTotalToPerServingSchema({ calories_kcal: 100 }, 0)).toEqual({});
+  });
+});
+
+describe("resolveRecipeNutrition", () => {
+  const total = { calories_kcal: 2000, protein_g: 40 };
+
+  it("returns the schema nutrition unchanged when not fully covered", () => {
+    const schema = { calories: "300 kcal" };
+    expect(
+      resolveRecipeNutrition(schema, { total, fullyCovered: false }, 4),
+    ).toBe(schema);
+  });
+
+  it("returns the schema nutrition unchanged when servings are unknown", () => {
+    const schema = { calories: "300 kcal" };
+    expect(
+      resolveRecipeNutrition(schema, { total, fullyCovered: true }, null),
+    ).toBe(schema);
+  });
+
+  it("prefers normalized values per-field, falling back to the recipe field", () => {
+    const schema = {
+      "@type": "NutritionInformation" as const,
+      servingSize: "1 bowl",
+      calories: "300 kcal",
+      sodiumContent: "800 mg",
+    };
+    // calories/protein come from the ingredients; sodium isn't reported so it
+    // falls back; servingSize always comes from the schema.
+    expect(
+      resolveRecipeNutrition(schema, { total, fullyCovered: true }, 4),
+    ).toEqual({
+      "@type": "NutritionInformation",
+      servingSize: "1 bowl",
+      calories: "500 kcal",
+      proteinContent: "10 g",
+      sodiumContent: "800 mg",
+    });
+  });
+
+  it("supplies nutrition even when the recipe has none of its own", () => {
+    expect(
+      resolveRecipeNutrition(undefined, { total, fullyCovered: true }, 4),
+    ).toEqual({ calories: "500 kcal", proteinContent: "10 g" });
+  });
+});
+
+describe("resolveRecipeNutritionWithSources", () => {
+  it("returns no per-field sources when normalized isn't used", () => {
+    const { sources } = resolveRecipeNutritionWithSources(
+      { calories: "300 kcal", proteinContent: "20 g" },
+      { total: { calories_kcal: 2000 }, fullyCovered: false },
+      4,
+    );
+    expect(sources).toEqual({});
+  });
+
+  it("tags computed nutrients 'normalized' and fallbacks 'recipe'", () => {
+    const { sources } = resolveRecipeNutritionWithSources(
+      { calories: "300 kcal", sodiumContent: "800 mg" },
+      { total: { calories_kcal: 2000, protein_g: 40 }, fullyCovered: true },
+      4,
+    );
+    expect(sources).toEqual({
+      calories: "normalized",
+      proteinContent: "normalized",
+      sodiumContent: "recipe",
+    });
   });
 });

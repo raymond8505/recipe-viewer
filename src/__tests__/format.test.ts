@@ -532,6 +532,34 @@ describe("toSchemaOrgJsonLd", () => {
     }) as Record<string, unknown>;
     expect(result.recipeYield).toEqual(quantitativeValueYield);
   });
+
+  it("emits nutritionOverride in place of the schema's own nutrition", () => {
+    const result = toSchemaOrgJsonLd(
+      { name: "Pasta", nutrition: { calories: "300 kcal" } },
+      { nutritionOverride: { calories: "500 kcal", proteinContent: "10 g" } },
+    ) as Record<string, unknown>;
+    expect(result.nutrition).toEqual({
+      calories: "500 kcal",
+      proteinContent: "10 g",
+    });
+  });
+
+  it("still emits the schema's own nutrition without an override", () => {
+    const result = toSchemaOrgJsonLd({
+      name: "Pasta",
+      nutrition: { calories: "300 kcal" },
+    }) as Record<string, unknown>;
+    expect(result.nutrition).toEqual({ calories: "300 kcal" });
+  });
+
+  it("keeps custom fields out even with a nutrition override", () => {
+    const result = toSchemaOrgJsonLd(
+      { name: "Pasta", notes: "secret", nutrition: { calories: "300 kcal" } },
+      { nutritionOverride: { calories: "500 kcal" } },
+    ) as Record<string, unknown>;
+    expect(result.notes).toBeUndefined();
+    expect(result.nutrition).toEqual({ calories: "500 kcal" });
+  });
 });
 
 describe("normalizeRecipeInstructions", () => {

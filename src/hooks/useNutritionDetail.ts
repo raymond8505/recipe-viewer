@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import { getIngredientText, groupIngredientsWithIndex } from "@/lib/format";
 import {
-  computeLineNutrition,
+  lineComputationForSchema,
   perPortionNutrition,
   sumNutrition,
   type LineComputation,
@@ -74,18 +74,20 @@ export function useNutritionDetail(
         lines: items.map(({ ingredient: schemaIngredient, index }) => {
           const text = getIngredientText(schemaIngredient);
           const row = rowsByPosition.get(index) ?? null;
-          if (!row || row.raw_text !== text) {
-            return { index, text, row, ingredient: null, computation: { kind: "excluded" as const, reason: "stale" as const } };
-          }
-          const ingredient = row.ingredient_id
-            ? (ingredientsById.get(row.ingredient_id) ?? null)
-            : null;
+          // A stale line (no row, or text edited since normalization) shows no
+          // match; lineComputationForSchema returns the matching "stale"
+          // exclusion for it.
+          const isStale = !row || row.raw_text !== text;
+          const ingredient =
+            !isStale && row?.ingredient_id
+              ? (ingredientsById.get(row.ingredient_id) ?? null)
+              : null;
           return {
             index,
             text,
             row,
             ingredient,
-            computation: computeLineNutrition(row, ingredient),
+            computation: lineComputationForSchema(text, row, ingredient),
           };
         }),
       }),

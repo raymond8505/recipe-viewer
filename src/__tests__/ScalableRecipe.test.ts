@@ -354,3 +354,78 @@ describe("ScalableRecipe — serving weight (yield valueReference)", () => {
     expect(new ScalableRecipe(baseSchema).nutritionUnitLabel).toBe("per serving");
   });
 });
+
+describe("ScalableRecipe — normalized nutrition", () => {
+  // baseSchema: 4 servings; schema nutrition calories 200, protein 10, fat 5.
+  // Whole-recipe normalized total for 4 servings → per-serving 500 kcal / 10 g
+  // protein; fat is not reported by the ingredients.
+  const covered = {
+    total: { calories_kcal: 2000, protein_g: 40 },
+    fullyCovered: true,
+  };
+
+  it("prefers the normalized total per-serving when fully covered", () => {
+    const r = new ScalableRecipe(baseSchema, undefined, covered);
+    expect(r.nutrition?.calories).toBe("500 kcal");
+    expect(r.nutrition?.proteinContent).toBe("10 g");
+  });
+
+  it("falls back per-field to the recipe's own value for unreported nutrients", () => {
+    const r = new ScalableRecipe(baseSchema, undefined, covered);
+    // fat isn't in the normalized total → the schema's "5 g" shows through.
+    expect(r.nutrition?.fatContent).toBe("5 g");
+  });
+
+  it("reports per-field provenance via nutritionSources", () => {
+    const r = new ScalableRecipe(baseSchema, undefined, covered);
+    expect(r.nutritionSources).toMatchObject({
+      calories: "normalized",
+      proteinContent: "normalized",
+      fatContent: "recipe",
+    });
+  });
+
+  it("keeps the scaling/split multiplier working on the normalized base", () => {
+    const r = new ScalableRecipe(baseSchema, undefined, covered).splitPortions(8);
+    expect(r.nutritionMultiplier).toBe(0.5);
+    expect(r.nutrition?.calories).toBe("250 kcal");
+  });
+
+  it("ignores the normalized total when not fully covered", () => {
+    const r = new ScalableRecipe(baseSchema, undefined, {
+      total: { calories_kcal: 2000 },
+      fullyCovered: false,
+    });
+    expect(r.nutrition?.calories).toBe("200 kcal");
+    expect(r.nutritionSources.calories).toBeUndefined();
+  });
+
+  it("falls back to schema nutrition when baseServings is unknown", () => {
+    const r = new ScalableRecipe(
+      { ...baseSchema, recipeYield: undefined },
+      undefined,
+      covered,
+    );
+    expect(r.nutrition?.calories).toBe("200 kcal");
+  });
+
+  it("surfaces normalized nutrition even when the recipe has none of its own", () => {
+    const r = new ScalableRecipe(
+      { ...baseSchema, nutrition: undefined },
+      undefined,
+      covered,
+    );
+    expect(r.hasNutrition).toBe(true);
+    expect(r.nutrition?.calories).toBe("500 kcal");
+    expect(r.nutritionSources.calories).toBe("normalized");
+  });
+
+  it("carries the normalized total through scale/split/reset", () => {
+    const r = new ScalableRecipe(baseSchema, undefined, covered)
+      .scalePortionsTo(8)
+      .splitPortions(4)
+      .reset();
+    expect(r.normalized).toBe(covered);
+    expect(r.nutrition?.calories).toBe("500 kcal");
+  });
+});

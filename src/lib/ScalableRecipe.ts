@@ -1,4 +1,5 @@
 import type { SchemaRecipe, RecipeIngredient } from "@/types/recipe";
+import type { IngredientNutrition } from "@/types/ingredient";
 import {
   parseIngredient,
   parseServings,
@@ -6,6 +7,22 @@ import {
   type ParsedIngredient,
 } from "./units";
 import { getYieldValueReference } from "./format";
+import {
+  resolveRecipeNutritionWithSources,
+  type NutrientField,
+  type NutrientSource,
+} from "./nutritionMath";
+
+/**
+ * Normalized ingredient nutrition for a recipe, supplied to ScalableRecipe so
+ * the panel/JSON-LD can prefer it over the recipe's own fields. `total` is the
+ * whole-recipe sum; `fullyCovered` gates whether it's trusted (see
+ * `resolveRecipeNutrition`).
+ */
+export interface NormalizedNutrition {
+  total: IngredientNutrition;
+  fullyCovered: boolean;
+}
 
 export interface ScalableRecipeState {
   /** Multiplier on every ingredient amount. 1 = base. */
@@ -131,11 +148,22 @@ export class ScalableRecipe {
   readonly schema: SchemaRecipe;
   readonly state: ScalableRecipeState;
   readonly baseServings: number | null;
+  /**
+   * Normalized ingredient nutrition, or null when the recipe isn't normalized.
+   * Preferred over `schema.nutrition` (per-field, only when `fullyCovered`) via
+   * `resolveRecipeNutrition`.
+   */
+  readonly normalized: NormalizedNutrition | null;
   private readonly _entries: ReadonlyArray<InternalEntry>;
 
-  constructor(schema: SchemaRecipe, state?: Partial<ScalableRecipeState>) {
+  constructor(
+    schema: SchemaRecipe,
+    state?: Partial<ScalableRecipeState>,
+    normalized?: NormalizedNutrition | null,
+  ) {
     this.schema = schema;
     this.baseServings = parseServings(schema.recipeYield);
+    this.normalized = normalized ?? null;
     this.state = Object.freeze({
       ingredientScale: state?.ingredientScale ?? 1,
       nutritionPortions: state?.nutritionPortions ?? null,
@@ -152,20 +180,22 @@ export class ScalableRecipe {
     const clamped = Math.max(1, targetServings);
     const newScale = clamped / this.baseServings;
     if (newScale === this.state.ingredientScale) return this;
-    return new ScalableRecipe(this.schema, {
-      ...this.state,
-      ingredientScale: newScale,
-    });
+    return new ScalableRecipe(
+      this.schema,
+      { ...this.state, ingredientScale: newScale },
+      this.normalized,
+    );
   }
 
   splitPortions(portions: number): ScalableRecipe {
     if (!Number.isFinite(portions)) return this;
     const clamped = Math.max(1, Math.round(portions));
     if (clamped === this.state.nutritionPortions) return this;
-    return new ScalableRecipe(this.schema, {
-      ...this.state,
-      nutritionPortions: clamped,
-    });
+    return new ScalableRecipe(
+      this.schema,
+      { ...this.state, nutritionPortions: clamped },
+      this.normalized,
+    );
   }
 
   anchorIngredientAmount(ref: IngredientRef, amount: number): ScalableRecipe {
@@ -188,11 +218,11 @@ export class ScalableRecipe {
     const rangeAnchors = wasRange
       ? { ...this.state.rangeAnchors, [idx]: base }
       : this.state.rangeAnchors;
-    return new ScalableRecipe(this.schema, {
-      ...this.state,
-      ingredientScale: newScale,
-      rangeAnchors,
-    });
+    return new ScalableRecipe(
+      this.schema,
+      { ...this.state, ingredientScale: newScale, rangeAnchors },
+      this.normalized,
+    );
   }
 
   reset(): ScalableRecipe {
@@ -203,7 +233,7 @@ export class ScalableRecipe {
     ) {
       return this;
     }
-    return new ScalableRecipe(this.schema);
+    return new ScalableRecipe(this.schema, undefined, this.normalized);
   }
 
   get ingredients(): ScaledIngredient[] {
@@ -314,14 +344,41 @@ export class ScalableRecipe {
       .join(" ");
   }
 
+  /**
+   * The pre-multiplier nutrition base: the normalized ingredient total
+   * (per base serving, per-field) when the recipe is fully covered, else the
+   * recipe's own `schema.nutrition`. `nutritionMultiplier` is applied on top by
+   * the `nutrition` getter, so the portion-stepper/scaling math is unchanged.
+   */
+  private get nutritionBase(): ScaledNutrition | undefined {
+    return resolveRecipeNutritionWithSources(
+      this.schema.nutrition,
+      this.normalized,
+      this.baseServings,
+    ).nutrition;
+  }
+
+  /**
+   * Per nutrient field, whether the displayed value came from the normalized
+   * ingredients (`"normalized"`) or the recipe's own field (`"recipe"`). Keyed
+   * to the same fields as `nutrition`; used by the panel's per-value badges.
+   */
+  get nutritionSources(): Partial<Record<NutrientField, NutrientSource>> {
+    return resolveRecipeNutritionWithSources(
+      this.schema.nutrition,
+      this.normalized,
+      this.baseServings,
+    ).sources;
+  }
+
   get hasNutrition(): boolean {
-    const n = this.schema.nutrition;
+    const n = this.nutritionBase;
     if (!n) return false;
     return NUTRIENT_KEYS.some((k) => !!n[k]);
   }
 
   get nutrition(): ScaledNutrition | null {
-    const n = this.schema.nutrition;
+    const n = this.nutritionBase;
     if (!n) return null;
     const mult = this.nutritionMultiplier;
     const result: ScaledNutrition = {};
