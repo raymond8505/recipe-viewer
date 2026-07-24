@@ -132,6 +132,11 @@ describe("IngredientsTable", () => {
 
     fireEvent.click(screen.getByLabelText("Details for cumin seed"));
 
+    // Nutrition displays at 2 dp: the fixture's 1.535 saturated fat reads 1.54.
+    expect(
+      screen.getByLabelText("Saturated fat (g) for cumin seed"),
+    ).toHaveValue(1.54);
+
     const sugars = screen.getByLabelText("Sugars (g) for cumin seed");
     expect(sugars).toBeInTheDocument();
     fireEvent.change(sugars, { target: { value: "3" } });
@@ -142,6 +147,35 @@ describe("IngredientsTable", () => {
         cumin.id,
         expect.objectContaining({
           nutrition: expect.objectContaining({ sugars_g: 3 }),
+        }),
+      );
+    });
+  });
+
+  it("edits portions in the expanded row and sends the whole list on save", async () => {
+    vi.mocked(updateIngredient).mockResolvedValueOnce({
+      ...cumin,
+      updated_at: "2026-07-14T12:00:00.000Z",
+    });
+    renderTable();
+
+    fireEvent.click(screen.getByLabelText("Details for cumin seed"));
+
+    // Seeded from the USDA food_portions (amount 1 folds away).
+    const grams = screen.getByLabelText("cumin seed portion 1 grams");
+    expect(grams).toHaveValue("2.1");
+    fireEvent.change(grams, { target: { value: "3" } });
+    fireEvent.click(screen.getByLabelText("Save cumin seed"));
+
+    await waitFor(() => {
+      expect(updateIngredient).toHaveBeenCalledWith(
+        cumin.id,
+        expect.objectContaining({
+          // The list is replaced whole — the untouched second portion rides along.
+          food_portions: [
+            { modifier: "tsp, whole", gramWeight: 3 },
+            { modifier: "tbsp, whole", gramWeight: 6 },
+          ],
         }),
       );
     });
@@ -162,38 +196,50 @@ describe("IngredientsTable", () => {
     expect(screen.queryByLabelText("Name for cumin seed")).not.toBeInTheDocument();
   });
 
-  it("adds a manual ingredient and prepends it", async () => {
+  it("opens the create panel, adds a manual ingredient, and prepends it", async () => {
     vi.mocked(createIngredient).mockResolvedValueOnce(
       makeIngredient("new-1", "smoked paprika", { source: "manual" }),
     );
     renderTable();
 
+    // The panel is hidden until the "New ingredient" toggle is clicked.
+    expect(screen.queryByLabelText("New ingredient name")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "New ingredient" }));
+
     fireEvent.change(screen.getByLabelText("New ingredient name"), {
       target: { value: "smoked paprika" },
     });
-    fireEvent.click(screen.getByRole("button", { name: "Add" }));
+    fireEvent.click(screen.getByRole("button", { name: "Create ingredient" }));
 
     await waitFor(() => {
-      expect(createIngredient).toHaveBeenCalledWith({
-        name: "smoked paprika",
-        source: "manual",
-      });
+      expect(createIngredient).toHaveBeenCalledWith(
+        expect.objectContaining({
+          name: "smoked paprika",
+          source: "manual",
+          aliases: [],
+          // Seeded with the default 100 g portion.
+          food_portions: [{ gramWeight: 100 }],
+        }),
+      );
     });
     expect(
       await screen.findByLabelText("Name for smoked paprika"),
     ).toBeInTheDocument();
+    // The panel closes on success.
+    expect(screen.queryByLabelText("New ingredient name")).not.toBeInTheDocument();
   });
 
-  it("surfaces the duplicate-name error from a failed add", async () => {
+  it("surfaces the duplicate-name error from a failed create", async () => {
     vi.mocked(createIngredient).mockRejectedValueOnce(
       new Error("An ingredient with that name already exists"),
     );
     renderTable();
 
+    fireEvent.click(screen.getByRole("button", { name: "New ingredient" }));
     fireEvent.change(screen.getByLabelText("New ingredient name"), {
       target: { value: "cumin seed" },
     });
-    fireEvent.click(screen.getByRole("button", { name: "Add" }));
+    fireEvent.click(screen.getByRole("button", { name: "Create ingredient" }));
 
     expect(
       await screen.findByText("An ingredient with that name already exists"),

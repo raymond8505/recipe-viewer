@@ -1,9 +1,15 @@
 import { useState, type Dispatch, type SetStateAction } from "react";
 import { parseNumeric } from "@/lib/format";
+import { formatAmount } from "@/lib/units";
 import { deleteIngredient, updateIngredient } from "@/lib/api/ingredients";
 import type { IngredientUpdateInput } from "@/lib/schemas/ingredient";
 import type { IngredientNutrition, IngredientRow } from "@/types/ingredient";
 import { NUTRITION_COLUMNS } from "@/components/ingredients/nutritionColumns";
+import {
+  fromPortionDrafts,
+  toPortionDrafts,
+  type PortionDraft,
+} from "@/components/ingredients/portions";
 
 /** The draft buffer for one editable catalog row. Every field is a string so
  *  the inputs stay controlled; numbers are parsed only when building a patch. */
@@ -12,13 +18,17 @@ export interface Draft {
   aliases: string;
   density: string;
   nutrition: Record<string, string>;
+  portions: PortionDraft[];
 }
 
 function toDraft(ingredient: IngredientRow): Draft {
   const nutrition: Record<string, string> = {};
   for (const col of NUTRITION_COLUMNS) {
     const value = ingredient.nutrition?.[col.key];
-    nutrition[col.key] = value !== undefined && value !== null ? String(value) : "";
+    // Display (and, on save, persist) at 2 dp — matches formatAmount everywhere
+    // else nutrition surfaces (NutritionDetail), so a USDA 1.535 reads 1.54.
+    nutrition[col.key] =
+      value !== undefined && value !== null ? formatAmount(value) : "";
   }
   return {
     name: ingredient.name,
@@ -26,7 +36,15 @@ function toDraft(ingredient: IngredientRow): Draft {
     density:
       ingredient.density_g_per_ml !== null ? String(ingredient.density_g_per_ml) : "",
     nutrition,
+    portions: toPortionDrafts(ingredient.food_portions),
   };
+}
+
+function portionsEqual(a: PortionDraft[], b: PortionDraft[]): boolean {
+  return (
+    a.length === b.length &&
+    a.every((p, i) => p.label === b[i].label && p.grams === b[i].grams)
+  );
 }
 
 function draftsEqual(a: Draft, b: Draft): boolean {
@@ -34,7 +52,8 @@ function draftsEqual(a: Draft, b: Draft): boolean {
     a.name === b.name &&
     a.aliases === b.aliases &&
     a.density === b.density &&
-    NUTRITION_COLUMNS.every((col) => a.nutrition[col.key] === b.nutrition[col.key])
+    NUTRITION_COLUMNS.every((col) => a.nutrition[col.key] === b.nutrition[col.key]) &&
+    portionsEqual(a.portions, b.portions)
   );
 }
 
@@ -103,6 +122,11 @@ export function useIngredientRowEditor(
         if (typeof value === "number") nutrition[col.key] = value;
       }
       patch.nutrition = nutrition;
+    }
+    if (!portionsEqual(draft.portions, initial.portions)) {
+      // Replaced whole, like nutrition: send every valid portion so untouched
+      // rows aren't dropped. Invalid/blank-grams rows fall out in conversion.
+      patch.food_portions = fromPortionDrafts(draft.portions);
     }
     return patch;
   }

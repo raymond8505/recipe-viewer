@@ -3,9 +3,20 @@ import { z } from "zod";
 // Zod validators for the ingredient CRUD/search surface. Shared by the HTTP
 // routes and the MCP search tool so both agree on the allowed shapes.
 //
-// Deliberately NOT client-settable anywhere: `embedding` (server-derived from
-// the name) and `food_portions` (USDA provenance — the audit trail for a
-// density value; manual corrections edit density_g_per_ml itself).
+// Deliberately NOT client-settable: `embedding` (server-derived from the name).
+// `food_portions` IS client-settable — the manager lets users add/edit/delete
+// portions (the seed row is a 100 g portion), and the create form enters
+// nutrition against a chosen portion. Matches the UsdaFoodPortion shape so the
+// USDA-import path and hand-entered rows share one column + serving-size render.
+
+const foodPortionSchema = z.object({
+  gramWeight: z.number().positive(),
+  amount: z.number().positive().optional(),
+  // The label / unit for manual portions (USDA foods put it here too, e.g.
+  // "tsp, whole"); formatServingSize reads it when measureUnit.name is absent.
+  modifier: z.string().max(100).optional(),
+  measureUnit: z.object({ name: z.string().max(100).optional() }).optional(),
+});
 
 const nutritionSchema = z
   .object({
@@ -31,6 +42,7 @@ export const ingredientCreateInputSchema = z.object({
   fdc_data_type: z.string().max(50).nullish(),
   nutrition: nutritionSchema.nullish(),
   density_g_per_ml: z.number().positive().nullish(),
+  food_portions: z.array(foodPortionSchema).max(50).nullish(),
   // The UI creates hand-entered rows; the workflow's USDA rows go through the
   // repo layer directly.
   source: z.enum(["usda", "manual"]).default("manual"),

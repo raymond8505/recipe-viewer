@@ -100,6 +100,29 @@ describe("POST /api/ingredients", () => {
     expect(createIngredientRow).not.toHaveBeenCalled();
   });
 
+  it("forwards client-supplied food_portions to the repo", async () => {
+    const food_portions = [
+      { gramWeight: 100 },
+      { amount: 1, modifier: "cup", gramWeight: 240 },
+    ];
+
+    const res = await POST(makeJsonRequest({ name: "flour", food_portions }));
+
+    expect(res.status).toBe(201);
+    expect(createIngredientRow).toHaveBeenCalledWith(
+      expect.objectContaining({ food_portions }),
+    );
+  });
+
+  it("rejects a food_portion with a non-positive gram weight with 400", async () => {
+    const res = await POST(
+      makeJsonRequest({ name: "flour", food_portions: [{ gramWeight: 0 }] }),
+    );
+
+    expect(res.status).toBe(400);
+    expect(createIngredientRow).not.toHaveBeenCalled();
+  });
+
   it("returns 503 without creating when embedding generation fails", async () => {
     // The embedding column is NOT NULL, so a null embedding can't be inserted.
     vi.mocked(generateEmbedding).mockResolvedValueOnce(null);

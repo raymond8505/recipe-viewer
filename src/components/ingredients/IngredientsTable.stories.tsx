@@ -3,6 +3,10 @@ import { userEvent, within } from "storybook/test";
 import { ingredientFixtures } from "@/fixtures";
 import IngredientsTable from "./IngredientsTable";
 
+// Note: the "New ingredient" toggle (CreatingIngredient) drives internal
+// `showCreate` state, so the click genuinely reveals the create panel — a valid
+// visual transition, not a callback assertion.
+
 const meta: Meta<typeof IngredientsTable> = {
   component: IngredientsTable,
   title: "Components/Ingredients/IngredientsTable",
@@ -63,6 +67,22 @@ export const ExpandedDetail: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await userEvent.click(canvas.getByLabelText("Details for cumin seed"));
+  },
+};
+
+/**
+ * The "New ingredient" toggle opens the create panel (IngredientCreateForm)
+ * inline above the table — name, aliases, a portions list seeded with the
+ * default 100 g portion, and nutrition entered against a chosen portion.
+ */
+export const CreatingIngredient: Story = {
+  args: {
+    initialIngredients: ingredientFixtures.slice(0, 2),
+    initialCount: 2,
+  },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await userEvent.click(canvas.getByRole("button", { name: "New ingredient" }));
   },
 };
 
