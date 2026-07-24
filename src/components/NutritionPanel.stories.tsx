@@ -26,10 +26,12 @@ function StatefulNutritionPanel({
   initial,
   onSplitPortions,
   ingredientsHref,
+  showSources,
 }: {
   initial: ScalableRecipe;
   onSplitPortions?: (n: number) => void;
   ingredientsHref?: string;
+  showSources?: boolean;
 }) {
   const [recipe, setRecipe] = useState(initial);
   return (
@@ -40,6 +42,7 @@ function StatefulNutritionPanel({
         setRecipe((r) => r.splitPortions(n));
       }}
       ingredientsHref={ingredientsHref}
+      showSources={showSources}
     />
   );
 }
@@ -90,10 +93,12 @@ export const PartialData: Story = {
  * list, so each carries an "ingredients" badge. Sodium isn't reported by the
  * ingredients here, so it falls back to the recipe's own field and shows a
  * "recipe" badge — the per-field fallback in action. (Totals are whole-recipe
- * for 4 servings, e.g. 2080 kcal → 520 kcal per serving.)
+ * for 4 servings, e.g. 2080 kcal → 520 kcal per serving.) Badges are gated to
+ * logged-in users via `showSources`.
  */
 export const FromNormalizedIngredients: Story = {
   args: {
+    showSources: true,
     initial: new ScalableRecipe(
       makeSchemaRecipe({
         recipeIngredient: undefined,

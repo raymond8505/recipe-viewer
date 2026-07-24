@@ -491,6 +491,7 @@ export default function RecipeDetail({
           recipe={scalable}
           onSplitPortions={splitPortions}
           ingredientsHref={isLoggedIn ? `/recipes/${recipe.id}/ingredients` : undefined}
+          showSources={isLoggedIn}
         />
 
         {/* JSON-LD — Schema.org-compliant only; escape </script> sequences to prevent tag injection.

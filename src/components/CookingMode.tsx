@@ -743,6 +743,7 @@ export default function CookingMode({
               onSplitPortions={(n) =>
                 updateScalable(recipe.id, (r) => r.splitPortions(n))
               }
+              showSources={isLoggedIn}
             />
           </div>
         </div>

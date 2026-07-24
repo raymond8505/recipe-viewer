@@ -18,12 +18,19 @@ interface NutritionPanelProps {
    * href — and only passes it for logged-in users.
    */
   ingredientsHref?: string;
+  /**
+   * Whether to show the per-value source badges (ingredients vs recipe). Gated
+   * to logged-in users — the provenance distinction is an editor concern, not
+   * something to surface to anonymous visitors.
+   */
+  showSources?: boolean;
 }
 
 export default function NutritionPanel({
   recipe,
   onSplitPortions,
   ingredientsHref,
+  showSources = false,
 }: NutritionPanelProps) {
   // Without schema nutrition the panel normally disappears entirely — but the
   // breakdown link must stay reachable, so a minimal shell renders instead
@@ -51,7 +58,7 @@ export default function NutritionPanel({
   }
 
   const nutrition = recipe.nutrition!;
-  const sources = recipe.nutritionSources;
+  const sources = showSources ? recipe.nutritionSources : {};
   const portions = recipe.displayPortions;
   const canStep = recipe.baseServings != null;
 
