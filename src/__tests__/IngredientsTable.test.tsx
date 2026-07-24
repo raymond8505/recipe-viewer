@@ -132,6 +132,11 @@ describe("IngredientsTable", () => {
 
     fireEvent.click(screen.getByLabelText("Details for cumin seed"));
 
+    // Nutrition displays at 2 dp: the fixture's 1.535 saturated fat reads 1.54.
+    expect(
+      screen.getByLabelText("Saturated fat (g) for cumin seed"),
+    ).toHaveValue(1.54);
+
     const sugars = screen.getByLabelText("Sugars (g) for cumin seed");
     expect(sugars).toBeInTheDocument();
     fireEvent.change(sugars, { target: { value: "3" } });

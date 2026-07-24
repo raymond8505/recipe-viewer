@@ -1,5 +1,6 @@
 import { useState, type Dispatch, type SetStateAction } from "react";
 import { parseNumeric } from "@/lib/format";
+import { formatAmount } from "@/lib/units";
 import { deleteIngredient, updateIngredient } from "@/lib/api/ingredients";
 import type { IngredientUpdateInput } from "@/lib/schemas/ingredient";
 import type { IngredientNutrition, IngredientRow } from "@/types/ingredient";
@@ -24,7 +25,10 @@ function toDraft(ingredient: IngredientRow): Draft {
   const nutrition: Record<string, string> = {};
   for (const col of NUTRITION_COLUMNS) {
     const value = ingredient.nutrition?.[col.key];
-    nutrition[col.key] = value !== undefined && value !== null ? String(value) : "";
+    // Display (and, on save, persist) at 2 dp — matches formatAmount everywhere
+    // else nutrition surfaces (NutritionDetail), so a USDA 1.535 reads 1.54.
+    nutrition[col.key] =
+      value !== undefined && value !== null ? formatAmount(value) : "";
   }
   return {
     name: ingredient.name,

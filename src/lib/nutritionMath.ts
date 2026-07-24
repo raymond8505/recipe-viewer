@@ -4,7 +4,7 @@
 //
 // Client-safe and pure — no supabase, no env.
 
-import { convert, isVolumeUnit, unitKeyForAlias } from "./units";
+import { convert, isVolumeUnit, roundDecimal, unitKeyForAlias } from "./units";
 import type {
   IngredientNutrition,
   IngredientRow,
@@ -122,8 +122,12 @@ export function scaleNutritionToGrams(
  * create form lets a user type values for, say, a 30 g serving; this converts
  * them to per-100g before persisting so matching and the rest of nutritionMath
  * keep their single per-100g contract. Entering against a 100 g portion is an
- * identity transform. Key sparsity is preserved (absent ≠ zero); a non-positive
- * `portionGrams` yields an empty object rather than dividing by zero.
+ * identity transform (values already at ≤2 dp stay untouched). Results are
+ * rounded to 2 dp — hand-entered nutrition carries no meaningful precision
+ * beyond that, and it keeps the stored catalog value free of float noise
+ * (e.g. 7 g protein in a 32 g serving → 21.88, not 21.875). Key sparsity is
+ * preserved (absent ≠ zero); a non-positive `portionGrams` yields an empty
+ * object rather than dividing by zero.
  */
 export function scalePortionNutritionToPer100g(
   entered: IngredientNutrition,
@@ -133,7 +137,7 @@ export function scalePortionNutritionToPer100g(
   if (portionGrams <= 0) return per100g;
   for (const key of NUTRITION_KEYS) {
     const value = entered[key];
-    if (value != null) per100g[key] = (value * 100) / portionGrams;
+    if (value != null) per100g[key] = roundDecimal((value * 100) / portionGrams, 2);
   }
   return per100g;
 }

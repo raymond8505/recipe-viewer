@@ -62,6 +62,13 @@ describe("scalePortionNutritionToPer100g", () => {
     expect(scalePortionNutritionToPer100g(entered, 100)).toEqual(entered);
   });
 
+  it("rounds scaled values to 2 dp", () => {
+    // 7 g protein in a 32 g serving → 21.875 → 21.88
+    expect(scalePortionNutritionToPer100g({ protein_g: 7 }, 32)).toEqual({
+      protein_g: 21.88,
+    });
+  });
+
   it("round-trips with scaleNutritionToGrams", () => {
     const per100g = scalePortionNutritionToPer100g({ calories_kcal: 60 }, 240);
     expect(scaleNutritionToGrams(per100g, 240).calories_kcal).toBeCloseTo(60, 6);
