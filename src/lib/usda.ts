@@ -10,10 +10,13 @@ import type { IngredientNutrition, UsdaFoodPortion } from "@/types/ingredient";
 
 const BASE_URL = "https://api.nal.usda.gov/fdc/v1";
 
-// Analytical per-100g datasets only. Branded/Survey(FNDDS) foods use
-// serving-size semantics and label-rounded values — wrong basis for a
-// per-100g catalog.
+// Analytical per-100g datasets — the default and the automation bar.
+// Branded foods are opt-in (manual curation only): their DETAIL payloads do
+// report foodNutrients per 100 g/ml (only labelNutrients is per-serving),
+// but values are label-rounded and there are no foodPortions, so they're a
+// human-in-the-loop choice, never an automated match. FNDDS stays excluded.
 const DATA_TYPES = "Foundation,SR Legacy";
+const DATA_TYPES_WITH_BRANDED = `${DATA_TYPES},Branded`;
 
 const SEARCH_PAGE_SIZE = 5;
 
@@ -76,13 +79,27 @@ async function fetchJson<T>(url: URL, context: string): Promise<T> {
   }
 }
 
-/** Search Foundation + SR Legacy foods by keyword; top matches by FDC score. */
-export async function searchFoods(query: string): Promise<UsdaSearchFood[]> {
+/**
+ * Search USDA foods by keyword; top matches by FDC score. Defaults to the
+ * analytical datasets (Foundation + SR Legacy); `includeBranded` widens to
+ * Branded, and `brandedOnly` restricts to Branded (used to query the pools
+ * separately in searchFoodsMixed).
+ */
+export async function searchFoods(
+  query: string,
+  opts?: { includeBranded?: boolean; brandedOnly?: boolean; pageSize?: number },
+): Promise<UsdaSearchFood[]> {
+  const dataType = opts?.brandedOnly
+    ? "Branded"
+    : opts?.includeBranded
+      ? DATA_TYPES_WITH_BRANDED
+      : DATA_TYPES;
+
   const url = new URL(`${BASE_URL}/foods/search`);
   url.searchParams.set("api_key", env.USDA_API_KEY);
   url.searchParams.set("query", query);
-  url.searchParams.set("dataType", DATA_TYPES);
-  url.searchParams.set("pageSize", String(SEARCH_PAGE_SIZE));
+  url.searchParams.set("dataType", dataType);
+  url.searchParams.set("pageSize", String(opts?.pageSize ?? SEARCH_PAGE_SIZE));
 
   const body = await fetchJson<SearchResponse>(url, "USDA food search");
   return (body.foods ?? []).map((food) => ({
@@ -91,6 +108,42 @@ export async function searchFoods(query: string): Promise<UsdaSearchFood[]> {
     dataType: food.dataType,
     score: food.score,
   }));
+}
+
+/**
+ * Manual-import search: the analytical (Foundation + SR Legacy) and Branded
+ * pools are queried SEPARATELY and round-robin merged, so the high-value
+ * analytical foods (real per-100g + portions → density) always surface. A
+ * single combined query can't do this — Branded exact-name matches score far
+ * higher (e.g. six identical "CHICKPEAS" at ~1181 vs. the canned/dry SR Legacy
+ * foods at ~260-330), so they fill every top slot. Each pool stays ranked by
+ * USDA score; interleaving keeps both visible near the top, and near-duplicate
+ * Branded rows (USDA returns many identical descriptions) collapse by
+ * lowercased description.
+ */
+export async function searchFoodsMixed(
+  query: string,
+  opts?: { pageSize?: number },
+): Promise<UsdaSearchFood[]> {
+  const pageSize = opts?.pageSize ?? 10;
+  const [analytical, branded] = await Promise.all([
+    searchFoods(query, { pageSize }),
+    searchFoods(query, { brandedOnly: true, pageSize }),
+  ]);
+
+  const seen = new Set<string>();
+  const merged: UsdaSearchFood[] = [];
+  const rounds = Math.max(analytical.length, branded.length);
+  for (let i = 0; i < rounds && merged.length < pageSize; i++) {
+    for (const food of [analytical[i], branded[i]]) {
+      if (!food || merged.length >= pageSize) continue;
+      const key = `${food.dataType}:${food.description.toLowerCase()}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      merged.push(food);
+    }
+  }
+  return merged;
 }
 
 /** Fetch one food's full record (nested nutrients + foodPortions). */

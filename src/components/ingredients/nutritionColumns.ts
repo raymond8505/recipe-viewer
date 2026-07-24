@@ -59,3 +59,14 @@ export const PRIMARY_NUTRITION_COLUMNS: NutritionColumn[] =
   PRIMARY_NUTRITION_KEYS.map(
     (key) => NUTRITION_COLUMNS.find((col) => col.key === key)!,
   );
+
+// Column order for the NutritionDetail table: the primary six first (the same
+// nutrients the manager surfaces and NutritionPanel reads, in that reading
+// order), then the remaining nutrients in catalog order. Reuses the same
+// NUTRITION_COLUMNS objects, so labels via nutritionLabel() stay identical
+// across the manager table and this screen.
+const PRIMARY_KEY_SET = new Set<keyof IngredientNutrition>(PRIMARY_NUTRITION_KEYS);
+export const NUTRITION_DETAIL_COLUMNS: NutritionColumn[] = [
+  ...PRIMARY_NUTRITION_COLUMNS,
+  ...NUTRITION_COLUMNS.filter((col) => !PRIMARY_KEY_SET.has(col.key)),
+];

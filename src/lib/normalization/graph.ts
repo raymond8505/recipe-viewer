@@ -4,23 +4,20 @@ import { generateStructured } from "@/lib/gemini";
 import { getIngredientText } from "@/lib/format";
 import {
   IngredientRepoError,
-  createIngredientRow,
-  getIngredients,
+  getIngredientsByIds,
+  getRecipeIngredients,
   matchIngredients,
   replaceRecipeIngredients,
   setRecipeNormalization,
   type RecipeIngredientInsert,
 } from "@/lib/ingredients";
+import { importUsdaIngredient } from "@/lib/ingredientImport";
+import { explicitWeightGrams, gramsForLine } from "@/lib/nutritionMath";
 import { getRecipeById } from "@/lib/recipes";
 import { parseIngredient, unitKeyForAlias } from "@/lib/units";
-import {
-  UsdaError,
-  deriveDensity,
-  extractNutrition,
-  getFoodDetail,
-  searchFoods,
-} from "@/lib/usda";
+import { UsdaError, searchFoods } from "@/lib/usda";
 import type { IngredientMatch, MatchStatus } from "@/types/ingredient";
+import { estimateLineGrams } from "./estimateGrams";
 import { ingredientFingerprint } from "./fingerprint";
 
 // The ingredient-normalization workflow: parse the recipe's ingredient lines
@@ -70,6 +67,10 @@ const NormalizationState = Annotation.Root({
   rawLines: Annotation<string[]>,
   parsed: Annotation<ParsedLine[]>,
   matches: Annotation<LineMatch[]>,
+  // position → resolved gram weight for lines the density path can't convert
+  // (see the estimate node, which always runs before persist). Persisted as
+  // estimated_grams / grams_source.
+  estimates: Annotation<Record<number, number>>,
   errors: Annotation<string[]>({
     reducer: (a, b) => a.concat(b),
     default: () => [],
@@ -334,7 +335,9 @@ function pickPrompt(name: string, foods: Array<{ fdcId: number; description: str
 
 // Create one catalog ingredient from USDA. Returns the new (or, after losing a
 // unique-name race, existing) ingredient id — or null when USDA has nothing
-// usable (the line stays unmatched).
+// usable (the line stays unmatched). The food → catalog-row conversion lives
+// in importUsdaIngredient (shared with the NutritionDetail manual import);
+// this wrapper owns the automated parts: analytical-only search + LLM pick.
 async function createFromUsda(name: string, errors: string[]): Promise<string | null> {
   const foods = await searchFoods(name);
   if (foods.length === 0) {
@@ -354,39 +357,21 @@ async function createFromUsda(name: string, errors: string[]): Promise<string | 
   const fdcId =
     pick?.fdcId && foods.some((f) => f.fdcId === pick.fdcId) ? pick.fdcId : foods[0].fdcId;
 
-  const detail = await getFoodDetail(fdcId);
-  // The catalog's canonical name is the PARSED name ("cumin seed"), not USDA's
-  // description ("Spices, cumin seed") — future matching embeds recipe
-  // language, so the catalog should speak it. The USDA description is kept as
-  // an alias for provenance.
-  const embedding = await generateEmbedding(name);
-  if (!embedding) {
-    // The embedding column is NOT NULL (db/migrations/0006), so a row can't be
-    // created without one. Skip rather than abort the run — the line persists
-    // as unmatched and re-normalizing once embedding is back picks it up.
-    errors.push(`embedding unavailable for new ingredient "${name}" — skipped (retry once embedding is available)`);
-    return null;
-  }
-
   try {
-    const row = await createIngredientRow({
-      name,
-      aliases: [detail.description],
-      fdc_id: detail.fdcId,
-      fdc_data_type: detail.dataType,
-      nutrition: extractNutrition(detail),
-      density_g_per_ml: deriveDensity(detail.foodPortions),
-      food_portions: detail.foodPortions ?? null,
-      source: "usda",
-      embedding,
-    });
+    const row = await importUsdaIngredient(name, fdcId);
+    if (!row) {
+      // The embedding column is NOT NULL (db/migrations/0006), so a row can't
+      // be created without one. Skip rather than abort the run — the line
+      // persists as unmatched and re-normalizing once embedding is back picks
+      // it up.
+      errors.push(`embedding unavailable for new ingredient "${name}" — skipped (retry once embedding is available)`);
+      return null;
+    }
     return row.id;
   } catch (err) {
     if (err instanceof IngredientRepoError && err.kind === "conflict") {
-      // A concurrent run won the lower(name) unique index — use theirs.
-      const { data } = await getIngredients({ query: name, limit: 10 });
-      const existing = data.find((i) => i.name.toLowerCase() === name.toLowerCase());
-      if (existing) return existing.id;
+      // importUsdaIngredient already tried to resolve the race to the
+      // winner's row; a conflict surfacing here means no such row was found.
       errors.push(`conflict creating "${name}" but no existing row found`);
       return null;
     }
@@ -433,6 +418,62 @@ async function fetchNovel(state: State): Promise<Partial<State>> {
   return { matches, errors };
 }
 
+// ── estimate ─────────────────────────────────────────────────────────────────
+
+// Fill a gram weight for matched lines the density path can't convert: a volume
+// unit whose ingredient has no density, or a count/can line. Prior estimates
+// are carried forward by raw_text (unchanged text = unchanged amount) so
+// re-normalizing never re-spends LLM budget on unchanged lines and never wipes
+// a user's manual value. Only genuinely grams-less lines with no carried value
+// hit the LLM. Best-effort: a failed estimate simply leaves the line excluded.
+async function estimate(state: State): Promise<Partial<State>> {
+  const existing = await getRecipeIngredients(state.recipeId);
+  const carriedByRawText = new Map(
+    existing
+      .filter((row) => row.estimated_grams != null)
+      .map((row) => [row.raw_text, row.estimated_grams!]),
+  );
+
+  const matchByPosition = new Map(state.matches.map((m) => [m.position, m]));
+  const matchedIds = [
+    ...new Set(
+      state.matches
+        .map((m) => m.ingredientId)
+        .filter((id): id is string => Boolean(id)),
+    ),
+  ];
+  const ingredients = await getIngredientsByIds(matchedIds);
+  const densityById = new Map(
+    ingredients.map((ing) => [ing.id, ing.density_g_per_ml]),
+  );
+
+  const estimates: Record<number, number> = {};
+  await Promise.all(
+    state.parsed.map(async (line) => {
+      const carried = carriedByRawText.get(line.rawText);
+      if (carried != null) {
+        estimates[line.position] = carried;
+        return;
+      }
+      const match = matchByPosition.get(line.position);
+      if (!match?.ingredientId) return;
+      const derivable =
+        gramsForLine(line.quantity, line.unit, densityById.get(match.ingredientId) ?? null) != null ||
+        explicitWeightGrams(line.rawText) != null;
+      if (derivable) return;
+      const grams = await estimateLineGrams({
+        rawText: line.rawText,
+        name: line.name,
+        quantity: line.quantity,
+        unit: line.unit,
+      });
+      if (grams != null) estimates[line.position] = grams;
+    }),
+  );
+
+  return { estimates };
+}
+
 // ── persist ──────────────────────────────────────────────────────────────────
 
 async function persist(state: State): Promise<Partial<State>> {
@@ -446,8 +487,38 @@ async function persist(state: State): Promise<Partial<State>> {
     return {};
   }
 
+  // Manual associations are human decisions — they beat whatever the
+  // automated matcher concluded this run. Carried forward by raw_text (the
+  // stable key across the delete-then-insert replace) so re-normalizing to
+  // fill in unmatched lines never wipes curation on unchanged ones.
+  const existingRows = await getRecipeIngredients(state.recipeId);
+  const manualIdByRawText = new Map(
+    existingRows
+      .filter((row) => row.match_status === "manual" && row.ingredient_id != null)
+      .map((row) => [row.raw_text, row.ingredient_id!]),
+  );
+
   const matchByPosition = new Map(state.matches.map((m) => [m.position, m]));
   const rows: RecipeIngredientInsert[] = state.parsed.map((line) => {
+    // The estimate node carries prior values forward by raw_text and only adds
+    // new ones for grams-less lines, so this covers both.
+    const estimatedGrams = state.estimates[line.position] ?? null;
+    const manualId = manualIdByRawText.get(line.rawText);
+    if (manualId) {
+      return {
+        ingredient_id: manualId,
+        raw_text: line.rawText,
+        quantity: line.quantity,
+        unit: line.unit,
+        name_text: line.name,
+        note: line.note,
+        match_status: "manual" as MatchStatus,
+        confidence: null,
+        position: line.position,
+        estimated_grams: estimatedGrams,
+        grams_source: estimatedGrams != null ? "llm" : null,
+      };
+    }
     const match = matchByPosition.get(line.position);
     const status: MatchStatus =
       !match || match.status === "ambiguous" ? "unmatched" : match.status;
@@ -461,6 +532,8 @@ async function persist(state: State): Promise<Partial<State>> {
       match_status: status,
       confidence: match?.confidence ?? null,
       position: line.position,
+      estimated_grams: estimatedGrams,
+      grams_source: estimatedGrams != null ? "llm" : null,
     };
   });
 
@@ -477,14 +550,14 @@ async function persist(state: State): Promise<Partial<State>> {
 
 // ── graph ────────────────────────────────────────────────────────────────────
 
-function routeAfterMatch(state: State): "adjudicate" | "fetchNovel" | "persist" {
+function routeAfterMatch(state: State): "adjudicate" | "fetchNovel" | "estimate" {
   if (state.matches.some((m) => m.status === "ambiguous")) return "adjudicate";
   if (state.matches.some((m) => m.status === "novel")) return "fetchNovel";
-  return "persist";
+  return "estimate";
 }
 
-function routeAfterAdjudicate(state: State): "fetchNovel" | "persist" {
-  return state.matches.some((m) => m.status === "novel") ? "fetchNovel" : "persist";
+function routeAfterAdjudicate(state: State): "fetchNovel" | "estimate" {
+  return state.matches.some((m) => m.status === "novel") ? "fetchNovel" : "estimate";
 }
 
 const graph = new StateGraph(NormalizationState)
@@ -492,12 +565,14 @@ const graph = new StateGraph(NormalizationState)
   .addNode("match", embedAndMatch)
   .addNode("adjudicate", adjudicate)
   .addNode("fetchNovel", fetchNovel)
+  .addNode("estimate", estimate)
   .addNode("persist", persist)
   .addEdge(START, "parse")
   .addEdge("parse", "match")
-  .addConditionalEdges("match", routeAfterMatch, ["adjudicate", "fetchNovel", "persist"])
-  .addConditionalEdges("adjudicate", routeAfterAdjudicate, ["fetchNovel", "persist"])
-  .addEdge("fetchNovel", "persist")
+  .addConditionalEdges("match", routeAfterMatch, ["adjudicate", "fetchNovel", "estimate"])
+  .addConditionalEdges("adjudicate", routeAfterAdjudicate, ["fetchNovel", "estimate"])
+  .addEdge("fetchNovel", "estimate")
+  .addEdge("estimate", "persist")
   .addEdge("persist", END)
   .compile();
 

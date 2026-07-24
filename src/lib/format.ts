@@ -120,6 +120,44 @@ export function getIngredientText(
   return typeof ingredient === "string" ? ingredient : ingredient.name;
 }
 
+export interface IndexedIngredient {
+  ingredient: string | RecipeIngredient;
+  /**
+   * Position in the original recipeIngredient array. Grouping reorders
+   * interleaved groups, so this is the only stable join key back to derived
+   * per-line data (recipe_ingredients.position uses the same index).
+   */
+  index: number;
+}
+
+/**
+ * Group an ingredient list by group, carrying each item's original array
+ * index through the grouping. Returns a single group with a null heading
+ * when no ingredient defines group.
+ */
+export function groupIngredientsWithIndex(
+  ingredients: Array<string | RecipeIngredient>,
+): Array<{ heading: string | null; items: IndexedIngredient[] }> {
+  const indexed = ingredients.map((ingredient, index) => ({ ingredient, index }));
+  const hasGroups = ingredients.some(
+    (i) => typeof i !== "string" && i.group != null,
+  );
+  if (!hasGroups) return [{ heading: null, items: indexed }];
+
+  const order: Array<string | null> = [];
+  const map = new Map<string | null, IndexedIngredient[]>();
+  for (const item of indexed) {
+    const ing = item.ingredient;
+    const group = typeof ing === "string" ? null : (ing.group ?? null);
+    if (!map.has(group)) {
+      order.push(group);
+      map.set(group, []);
+    }
+    map.get(group)!.push(item);
+  }
+  return order.map((heading) => ({ heading, items: map.get(heading)! }));
+}
+
 /**
  * Group an ingredient list by group. Returns a single group with
  * a null heading when no ingredient defines group.
@@ -127,22 +165,10 @@ export function getIngredientText(
 export function groupIngredients(
   ingredients: Array<string | RecipeIngredient>,
 ): Array<{ heading: string | null; items: Array<string | RecipeIngredient> }> {
-  const hasGroups = ingredients.some(
-    (i) => typeof i !== "string" && i.group != null,
-  );
-  if (!hasGroups) return [{ heading: null, items: ingredients }];
-
-  const order: Array<string | null> = [];
-  const map = new Map<string | null, Array<string | RecipeIngredient>>();
-  for (const ing of ingredients) {
-    const group = typeof ing === "string" ? null : (ing.group ?? null);
-    if (!map.has(group)) {
-      order.push(group);
-      map.set(group, []);
-    }
-    map.get(group)!.push(ing);
-  }
-  return order.map((heading) => ({ heading, items: map.get(heading)! }));
+  return groupIngredientsWithIndex(ingredients).map(({ heading, items }) => ({
+    heading,
+    items: items.map((item) => item.ingredient),
+  }));
 }
 
 /**

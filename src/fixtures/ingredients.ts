@@ -196,6 +196,8 @@ export function makeRecipeIngredient(
     match_status: "unmatched",
     confidence: null,
     position,
+    estimated_grams: null,
+    grams_source: null,
     ...overrides,
   };
 }

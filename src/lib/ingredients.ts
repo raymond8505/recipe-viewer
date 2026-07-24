@@ -1,5 +1,7 @@
 import { getSupabaseAdminClient, selectColumns, toVectorLiteral } from "./supabase";
 import type {
+  GramsSource,
+  IngredientKeywordMatch,
   IngredientMatch,
   IngredientNutrition,
   IngredientRow,
@@ -33,6 +35,9 @@ export class IngredientRepoError extends Error {
 
 // Postgres unique-violation SQLSTATE, surfaced by PostgREST as error.code.
 const PG_UNIQUE_VIOLATION = "23505";
+// Postgres foreign-key-violation SQLSTATE — an association write pointing at
+// an ingredient deleted mid-flight.
+const PG_FOREIGN_KEY_VIOLATION = "23503";
 
 // `embedding` is write-only (queried via the match_ingredients RPC), so it is
 // not on IngredientRow — which means selectColumns rejects it here at compile
@@ -63,6 +68,8 @@ const RECIPE_INGREDIENT_COLUMNS = selectColumns<RecipeIngredientRow>()([
   "match_status",
   "confidence",
   "position",
+  "estimated_grams",
+  "grams_source",
 ]);
 
 const PAGE_SIZE = 50;
@@ -133,6 +140,26 @@ export async function getIngredients(opts?: {
     data: (data as unknown as IngredientRow[]) ?? [],
     count: count ?? 0,
   };
+}
+
+// Batch fetch for joining recipe_ingredients rows to their catalog rows.
+// Two queries instead of a PostgREST embed on purpose: selectColumns returns
+// a flat literal-typed column list, and an embedded-resource select string
+// would break its compile-time checking.
+export async function getIngredientsByIds(ids: string[]): Promise<IngredientRow[]> {
+  if (ids.length === 0) return [];
+  const supabase = getSupabaseAdminClient();
+
+  const { data, error } = await supabase
+    .from("ingredients")
+    .select(INGREDIENT_COLUMNS)
+    .in("id", ids);
+
+  if (error) {
+    console.error("Supabase error fetching ingredients by ids:", error);
+    return [];
+  }
+  return (data as unknown as IngredientRow[]) ?? [];
 }
 
 export async function getIngredientById(id: string): Promise<IngredientRow | null> {
@@ -271,6 +298,28 @@ export async function matchIngredients(
   return (data as IngredientMatch[]) ?? [];
 }
 
+// Keyword-only trigram search via the search_ingredients_keyword RPC
+// (db/migrations/0008) — the NutritionDetail autocomplete path. No embedding
+// call, so it's cheap enough for per-keystroke use. Throws ("match_failed")
+// on RPC failure — callers must treat that as "search unavailable", never as
+// "no matches".
+export async function searchIngredientsKeyword(
+  queryText: string,
+  count = 8,
+): Promise<IngredientKeywordMatch[]> {
+  const supabase = getSupabaseAdminClient();
+
+  const { data, error } = await supabase.rpc("search_ingredients_keyword", {
+    query_text: queryText,
+    match_count: count,
+  });
+
+  if (error) {
+    throw new IngredientRepoError("match_failed", error.message);
+  }
+  return (data as IngredientKeywordMatch[]) ?? [];
+}
+
 export async function getRecipeIngredients(
   recipeId: string,
 ): Promise<RecipeIngredientRow[]> {
@@ -287,6 +336,112 @@ export async function getRecipeIngredients(
     return [];
   }
   return (data as unknown as RecipeIngredientRow[]) ?? [];
+}
+
+// Manually re-point one parsed line at a catalog ingredient (the
+// NutritionDetail curation path). Setting an ingredient marks the line
+// "manual"; clearing it (null) marks it "unmatched". Confidence is nulled
+// either way — it described the automated match that's being overridden.
+// Scoped on id AND recipe_id so a route can't move another recipe's row.
+// Throws ("not_found") when the row doesn't exist under that recipe or the
+// target ingredient vanished mid-flight (FK 23503), or ("update_failed").
+export async function updateRecipeIngredientAssociation(
+  recipeId: string,
+  rowId: string,
+  ingredientId: string | null,
+): Promise<RecipeIngredientRow> {
+  const supabase = getSupabaseAdminClient();
+
+  const { data, error } = await supabase
+    .from("recipe_ingredients")
+    .update({
+      ingredient_id: ingredientId,
+      match_status: ingredientId == null ? "unmatched" : "manual",
+      confidence: null,
+    })
+    .eq("id", rowId)
+    .eq("recipe_id", recipeId)
+    .select(RECIPE_INGREDIENT_COLUMNS)
+    .single();
+
+  if (error || !data) {
+    if (error?.code === PG_FOREIGN_KEY_VIOLATION) {
+      throw new IngredientRepoError(
+        "not_found",
+        `Ingredient ${ingredientId} not found`,
+      );
+    }
+    // PostgREST .single() on zero updated rows errors with PGRST116, so a
+    // missing/mis-scoped row lands here rather than in a pre-check query.
+    if (error?.code === "PGRST116" || !error) {
+      throw new IngredientRepoError(
+        "not_found",
+        `Recipe ingredient ${rowId} not found for recipe ${recipeId}`,
+      );
+    }
+    throw new IngredientRepoError("update_failed", error.message);
+  }
+  return data as unknown as RecipeIngredientRow;
+}
+
+// Fetch one parsed line scoped to its recipe (the manual grams endpoint needs
+// the line's raw_text/quantity/unit to feed the estimator). Scoped on id AND
+// recipe_id so a route can't read another recipe's row. Returns null when the
+// row doesn't exist under that recipe.
+export async function getRecipeIngredientById(
+  recipeId: string,
+  rowId: string,
+): Promise<RecipeIngredientRow | null> {
+  const supabase = getSupabaseAdminClient();
+
+  const { data, error } = await supabase
+    .from("recipe_ingredients")
+    .select(RECIPE_INGREDIENT_COLUMNS)
+    .eq("id", rowId)
+    .eq("recipe_id", recipeId)
+    .single();
+
+  if (error || !data) return null;
+  return data as unknown as RecipeIngredientRow;
+}
+
+// Set (or clear, with null) the per-line gram estimate — the NutritionDetail
+// grams field and "Estimate" button path. `grams_source` records provenance
+// and must be null exactly when grams is null; callers pass "llm" for an
+// estimate and "manual" for a user-typed value. Scoped on id AND recipe_id.
+// Throws ("not_found") when the row doesn't exist under that recipe, or
+// ("update_failed").
+export async function setRecipeIngredientGrams(
+  recipeId: string,
+  rowId: string,
+  grams: number | null,
+  source: GramsSource | null,
+): Promise<RecipeIngredientRow> {
+  const supabase = getSupabaseAdminClient();
+
+  const { data, error } = await supabase
+    .from("recipe_ingredients")
+    .update({
+      estimated_grams: grams,
+      grams_source: grams == null ? null : source,
+    })
+    .eq("id", rowId)
+    .eq("recipe_id", recipeId)
+    .select(RECIPE_INGREDIENT_COLUMNS)
+    .single();
+
+  if (error || !data) {
+    // PostgREST .single() on zero updated rows errors with PGRST116, so a
+    // missing/mis-scoped row lands here rather than in a pre-check query.
+    if (error?.code === "PGRST116" || !error) {
+      throw new IngredientRepoError(
+        "not_found",
+        `Recipe ingredient ${rowId} not found for recipe ${recipeId}`,
+      );
+    }
+    throw new IngredientRepoError("update_failed", error.message);
+  }
+  return data as unknown as RecipeIngredientRow;
 }
 
 export type RecipeIngredientInsert = Omit<RecipeIngredientRow, "id" | "recipe_id">;

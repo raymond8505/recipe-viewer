@@ -13,7 +13,11 @@
 // instead of showing a seam. z-order: the sticky header (z-20) and its
 // frozen-column corners (z-30) sit above the frozen body columns (z-10), which
 // sit above the scrolling cells.
-const NAME_COL = "w-44 min-w-44";
+// max-w matters: in an auto-layout table, unshrinkable cell content (long
+// text without an effective truncate) widens the column past w-44, which
+// silently breaks the second frozen column's left-44 offset. Cell content
+// must also be shrinkable (min-w-0 on flex children) for truncate to bite.
+const NAME_COL = "w-44 min-w-44 max-w-44";
 
 /** Header cells that only stick to the top (the scrolling middle columns). */
 export const STICKY_HEAD = "sticky top-0 z-20 bg-background";

@@ -101,10 +101,40 @@ export const ROUTE_POLICY = {
   },
 
   // ── Ingredient catalog (logged-in manager UI) ───────────────────────────
+  "/api/ingredients/search": {
+    policy: "session",
+    rationale:
+      "Trigram autocomplete backing the logged-in NutritionDetail screen; no anonymous or agent-token use case (agents get the search_ingredients MCP tool).",
+  },
+  "/api/recipes/[id]/ingredients": {
+    policy: "session",
+    rationale:
+      "Reads a recipe's normalized ingredient rows + catalog joins for the logged-in NutritionDetail screen; normalized-layer curation is a manager surface, not part of the public recipe view.",
+  },
+  "/api/recipes/[id]/ingredients/[riId]": {
+    policy: "session",
+    rationale:
+      "Manually re-associates one parsed line to a catalog ingredient (match_status → manual); logged-in curation surface only. Recipe-scoped tokens don't apply — agents curate via MCP tools, not this UI path.",
+  },
+  "/api/recipes/[id]/ingredients/[riId]/grams": {
+    policy: "session",
+    rationale:
+      "Sets a parsed line's per-line gram estimate (LLM Estimate button / user-typed value) on the logged-in NutritionDetail screen; internal nutrition-manager curation, same surface as the sibling association route.",
+  },
   "/api/ingredients": {
     policy: "session",
     rationale:
       "Ingredient catalog list/create backs the logged-in /ingredients manager UI; no anonymous or agent-token use case (agents get the search_ingredients MCP tool).",
+  },
+  "/api/ingredients/import-usda": {
+    policy: "session",
+    rationale:
+      "Mints a catalog ingredient from a user-picked USDA food (NutritionDetail manual import); catalog writes are a logged-in curation surface like the rest of /api/ingredients.",
+  },
+  "/api/usda/search": {
+    policy: "session",
+    rationale:
+      "Proxies USDA FoodData Central search for the logged-in manual-import flow — keeps USDA_API_KEY server-side and the rate-limited upstream (1,000 req/hr) off the anonymous surface.",
   },
   "/api/ingredients/[id]": {
     policy: "session",

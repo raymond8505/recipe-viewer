@@ -6,9 +6,14 @@ import {
   deleteIngredientRow,
   getIngredientById,
   getIngredients,
+  getIngredientsByIds,
+  getRecipeIngredientById,
   getRecipeIngredients,
   matchIngredients,
   replaceRecipeIngredients,
+  searchIngredientsKeyword,
+  setRecipeIngredientGrams,
+  updateRecipeIngredientAssociation,
   setRecipeNormalization,
   updateIngredientRow,
 } from "@/lib/ingredients";
@@ -311,6 +316,50 @@ describe("matchIngredients", () => {
   });
 });
 
+describe("searchIngredientsKeyword", () => {
+  it("invokes the keyword RPC with the query text and count", async () => {
+    const matches = [
+      {
+        id: "ing-1",
+        name: "cumin seed",
+        aliases: ["cumin"],
+        nutrition: null,
+        density_g_per_ml: null,
+        similarity: 0.87,
+      },
+    ];
+    useQueue([{ data: matches }]);
+
+    const result = await searchIngredientsKeyword("cumin sed", 3);
+
+    expect(result).toEqual(matches);
+    expect(client.rpc).toHaveBeenCalledWith("search_ingredients_keyword", {
+      query_text: "cumin sed",
+      match_count: 3,
+    });
+  });
+
+  it("defaults to top-8", async () => {
+    useQueue([{ data: [] }]);
+
+    await searchIngredientsKeyword("cumin");
+
+    expect(client.rpc).toHaveBeenCalledWith("search_ingredients_keyword", {
+      query_text: "cumin",
+      match_count: 8,
+    });
+  });
+
+  it("throws match_failed on RPC error — callers must not read that as 'no matches'", async () => {
+    useQueue([{ data: null, error: { message: "function missing" } }]);
+
+    const err = await searchIngredientsKeyword("cumin").catch((e: unknown) => e);
+
+    expect(err).toBeInstanceOf(IngredientRepoError);
+    expect((err as IngredientRepoError).kind).toBe("match_failed");
+  });
+});
+
 describe("getRecipeIngredients", () => {
   it("filters by recipe and orders by position", async () => {
     const rows = [makeRecipeIngredient("r-1", 0), makeRecipeIngredient("r-1", 1)];
@@ -331,6 +380,177 @@ describe("getRecipeIngredients", () => {
   });
 });
 
+describe("getIngredientsByIds", () => {
+  it("fetches catalog rows with an .in filter", async () => {
+    const rows = [makeIngredient("ing-1", "cumin seed")];
+    useQueue([{ data: rows }]);
+
+    const result = await getIngredientsByIds(["ing-1", "ing-2"]);
+
+    expect(result).toEqual(rows);
+    const builder = builderAt(0);
+    expect(builder.in).toHaveBeenCalledWith("id", ["ing-1", "ing-2"]);
+  });
+
+  it("short-circuits to [] on empty ids without touching supabase", async () => {
+    useQueue([]);
+
+    expect(await getIngredientsByIds([])).toEqual([]);
+    expect(client.from).not.toHaveBeenCalled();
+  });
+
+  it("returns an empty array on supabase error", async () => {
+    useQueue([{ data: null, error: { message: "DB error" } }]);
+
+    expect(await getIngredientsByIds(["ing-1"])).toEqual([]);
+  });
+});
+
+describe("updateRecipeIngredientAssociation", () => {
+  it("sets ingredient_id + manual status, nulls confidence, scoped to the recipe", async () => {
+    const updated = {
+      ...makeRecipeIngredient("r-1", 0),
+      ingredient_id: "ing-2",
+      match_status: "manual",
+      confidence: null,
+    };
+    useQueue([{ data: updated }]);
+
+    const result = await updateRecipeIngredientAssociation("r-1", "ri-1", "ing-2");
+
+    expect(result).toEqual(updated);
+    expect(client.from).toHaveBeenCalledWith("recipe_ingredients");
+    const builder = builderAt(0);
+    expect(builder.update).toHaveBeenCalledWith({
+      ingredient_id: "ing-2",
+      match_status: "manual",
+      confidence: null,
+    });
+    expect(builder.eq).toHaveBeenCalledWith("id", "ri-1");
+    expect(builder.eq).toHaveBeenCalledWith("recipe_id", "r-1");
+  });
+
+  it("clearing the association marks the line unmatched", async () => {
+    useQueue([{ data: makeRecipeIngredient("r-1", 0) }]);
+
+    await updateRecipeIngredientAssociation("r-1", "ri-1", null);
+
+    const builder = builderAt(0);
+    expect(builder.update).toHaveBeenCalledWith({
+      ingredient_id: null,
+      match_status: "unmatched",
+      confidence: null,
+    });
+  });
+
+  it("throws not_found when the row doesn't exist under the recipe (PGRST116)", async () => {
+    useQueue([{ data: null, error: { message: "0 rows", code: "PGRST116" } }]);
+
+    const err = await updateRecipeIngredientAssociation("r-1", "ri-x", "ing-1").catch(
+      (e: unknown) => e,
+    );
+
+    expect(err).toBeInstanceOf(IngredientRepoError);
+    expect((err as IngredientRepoError).kind).toBe("not_found");
+  });
+
+  it("throws not_found when the target ingredient vanished (FK 23503)", async () => {
+    useQueue([{ data: null, error: { message: "fk violation", code: "23503" } }]);
+
+    const err = await updateRecipeIngredientAssociation("r-1", "ri-1", "ing-gone").catch(
+      (e: unknown) => e,
+    );
+
+    expect(err).toBeInstanceOf(IngredientRepoError);
+    expect((err as IngredientRepoError).kind).toBe("not_found");
+  });
+
+  it("throws update_failed on any other supabase error", async () => {
+    useQueue([{ data: null, error: { message: "boom", code: "XX000" } }]);
+
+    const err = await updateRecipeIngredientAssociation("r-1", "ri-1", "ing-1").catch(
+      (e: unknown) => e,
+    );
+
+    expect(err).toBeInstanceOf(IngredientRepoError);
+    expect((err as IngredientRepoError).kind).toBe("update_failed");
+  });
+});
+
+describe("getRecipeIngredientById", () => {
+  it("fetches one row scoped to the recipe", async () => {
+    const row = makeRecipeIngredient("r-1", 0);
+    useQueue([{ data: row }]);
+
+    const result = await getRecipeIngredientById("r-1", "ri-1");
+
+    expect(result).toEqual(row);
+    const builder = builderAt(0);
+    expect(builder.eq).toHaveBeenCalledWith("id", "ri-1");
+    expect(builder.eq).toHaveBeenCalledWith("recipe_id", "r-1");
+  });
+
+  it("returns null when the row doesn't exist under the recipe", async () => {
+    useQueue([{ data: null, error: { message: "0 rows", code: "PGRST116" } }]);
+
+    expect(await getRecipeIngredientById("r-1", "ri-x")).toBeNull();
+  });
+});
+
+describe("setRecipeIngredientGrams", () => {
+  it("stores grams + source, scoped to the recipe", async () => {
+    const updated = makeRecipeIngredient("r-1", 0, {
+      estimated_grams: 26,
+      grams_source: "llm",
+    });
+    useQueue([{ data: updated }]);
+
+    const result = await setRecipeIngredientGrams("r-1", "ri-1", 26, "llm");
+
+    expect(result).toEqual(updated);
+    const builder = builderAt(0);
+    expect(builder.update).toHaveBeenCalledWith({
+      estimated_grams: 26,
+      grams_source: "llm",
+    });
+    expect(builder.eq).toHaveBeenCalledWith("id", "ri-1");
+    expect(builder.eq).toHaveBeenCalledWith("recipe_id", "r-1");
+  });
+
+  it("clearing with null forces grams_source null regardless of the arg", async () => {
+    useQueue([{ data: makeRecipeIngredient("r-1", 0) }]);
+
+    await setRecipeIngredientGrams("r-1", "ri-1", null, "manual");
+
+    expect(builderAt(0).update).toHaveBeenCalledWith({
+      estimated_grams: null,
+      grams_source: null,
+    });
+  });
+
+  it("throws not_found when the row doesn't exist under the recipe (PGRST116)", async () => {
+    useQueue([{ data: null, error: { message: "0 rows", code: "PGRST116" } }]);
+
+    const err = await setRecipeIngredientGrams("r-1", "ri-x", 26, "llm").catch(
+      (e: unknown) => e,
+    );
+
+    expect(err).toBeInstanceOf(IngredientRepoError);
+    expect((err as IngredientRepoError).kind).toBe("not_found");
+  });
+
+  it("throws update_failed on any other supabase error", async () => {
+    useQueue([{ data: null, error: { message: "boom", code: "XX000" } }]);
+
+    const err = await setRecipeIngredientGrams("r-1", "ri-1", 26, "llm").catch(
+      (e: unknown) => e,
+    );
+
+    expect(err).toBeInstanceOf(IngredientRepoError);
+    expect((err as IngredientRepoError).kind).toBe("update_failed");
+  });
+});
+
 describe("replaceRecipeIngredients", () => {
   const insertRow = {
     ingredient_id: null,
@@ -342,6 +562,8 @@ describe("replaceRecipeIngredients", () => {
     match_status: "unmatched" as const,
     confidence: null,
     position: 0,
+    estimated_grams: null,
+    grams_source: null,
   };
 
   it("deletes the recipe's rows before inserting the new set", async () => {

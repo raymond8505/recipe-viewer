@@ -22,6 +22,12 @@ export type IngredientSource = "usda" | "manual";
 
 export type MatchStatus = "matched" | "novel" | "unmatched" | "manual";
 
+// Provenance of a line's estimated_grams (the display marker keys off this; the
+// nutrition math keys off estimated_grams presence alone). "llm" = the
+// normalization graph or the NutritionDetail "Estimate" button; "manual" = a
+// user-typed value in the grams field.
+export type GramsSource = "llm" | "manual";
+
 export type NormalizationStatus = "pending" | "running" | "completed" | "failed";
 
 // A USDA foodPortion entry, kept verbatim on the ingredient row for audit and
@@ -67,6 +73,13 @@ export interface RecipeIngredientRow {
   match_status: MatchStatus;
   confidence: number | null;
   position: number;
+  // A resolved gram weight (db/migrations/0009) that rescues lines the density
+  // path can't convert — volume-with-no-density, or count/can lines. Internal
+  // to NutritionDetail; never feeds recipe text or JSON-LD. Presence overrides
+  // the density-derived value in nutritionMath. null = none.
+  estimated_grams: number | null;
+  // Provenance of estimated_grams; null exactly when estimated_grams is null.
+  grams_source: GramsSource | null;
 }
 
 // A match_ingredients RPC result row (hybrid keyword + semantic search,
@@ -84,6 +97,21 @@ export interface IngredientMatch {
   // Reciprocal-rank-fusion score of the two signals. Ranking only — not a
   // similarity, so never threshold on it; threshold on the raw similarities.
   score: number;
+}
+
+// A search_ingredients_keyword RPC result row (keyword-only trigram search,
+// db/migrations/0008) — the NutritionDetail autocomplete path. Unlike
+// IngredientMatch there is no embedding involved, so `similarity` is a raw
+// trigram score and IS safe to threshold or display.
+export interface IngredientKeywordMatch {
+  id: string;
+  name: string;
+  aliases: string[];
+  nutrition: IngredientNutrition | null;
+  density_g_per_ml: number | null;
+  // Best pg_trgm trigram similarity of the query text across name + aliases;
+  // ~1.0 means a near-exact name or alias match.
+  similarity: number;
 }
 
 export interface IngredientsResult {

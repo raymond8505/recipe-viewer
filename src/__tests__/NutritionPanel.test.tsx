@@ -154,3 +154,53 @@ describe("NutritionPanel", () => {
     expect(screen.getByText("per 114 g serving")).toBeTruthy();
   });
 });
+
+describe("NutritionPanel — ingredient breakdown link", () => {
+  it("renders the link with the given href alongside nutrition data", () => {
+    const r = makeScalableRecipe({
+      recipeIngredient: undefined,
+      recipeYield: "4 servings",
+      nutrition: { calories: "350 kcal" },
+    });
+    render(
+      <NutritionPanel
+        recipe={r}
+        onSplitPortions={() => {}}
+        ingredientsHref="/recipes/r-1/ingredients"
+      />,
+    );
+    const link = screen.getByRole("link", { name: "Ingredient breakdown" });
+    expect(link).toHaveAttribute("href", "/recipes/r-1/ingredients");
+    expect(screen.getByText("350 kcal")).toBeTruthy();
+  });
+
+  it("renders a shell with the link when the recipe has no nutrition", () => {
+    const r = makeScalableRecipe({
+      recipeIngredient: undefined,
+      recipeYield: "4 servings",
+      nutrition: undefined,
+    });
+    render(
+      <NutritionPanel
+        recipe={r}
+        onSplitPortions={() => {}}
+        ingredientsHref="/recipes/r-1/ingredients"
+      />,
+    );
+    expect(screen.getByText("Nutrition")).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Ingredient breakdown" })).toBeTruthy();
+    expect(screen.getByText("No nutrition data on this recipe yet.")).toBeTruthy();
+  });
+
+  it("still renders nothing without nutrition or an href (anonymous view)", () => {
+    const r = makeScalableRecipe({
+      recipeIngredient: undefined,
+      recipeYield: "4 servings",
+      nutrition: undefined,
+    });
+    const { container } = render(
+      <NutritionPanel recipe={r} onSplitPortions={() => {}} />,
+    );
+    expect(container.firstChild).toBeNull();
+  });
+});

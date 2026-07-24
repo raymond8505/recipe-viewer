@@ -21,9 +21,11 @@ const fullNutrition: Nutrition = {
 function StatefulNutritionPanel({
   initial,
   onSplitPortions,
+  ingredientsHref,
 }: {
   initial: ScalableRecipe;
   onSplitPortions?: (n: number) => void;
+  ingredientsHref?: string;
 }) {
   const [recipe, setRecipe] = useState(initial);
   return (
@@ -33,6 +35,7 @@ function StatefulNutritionPanel({
         onSplitPortions?.(n);
         setRecipe((r) => r.splitPortions(n));
       }}
+      ingredientsHref={ingredientsHref}
     />
   );
 }
@@ -89,5 +92,36 @@ export const WithYieldWeight: Story = {
       recipeYield: quantitativeValueYield,
       nutrition: fullNutrition,
     }),
+  },
+};
+
+/**
+ * Logged-in view: the heading row gains the "Ingredient breakdown" link to
+ * the NutritionDetail screen, beside the portion stepper.
+ */
+export const WithBreakdownLink: Story = {
+  args: {
+    initial: makeScalableRecipe({
+      recipeIngredient: undefined,
+      recipeYield: "4 servings",
+      nutrition: fullNutrition,
+    }),
+    ingredientsHref: "/recipes/story-recipe/ingredients",
+  },
+};
+
+/**
+ * No schema nutrition but a breakdown link: instead of vanishing (the
+ * anonymous behavior), the panel renders a minimal shell so the
+ * NutritionDetail screen stays reachable.
+ */
+export const NoNutritionShell: Story = {
+  args: {
+    initial: makeScalableRecipe({
+      recipeIngredient: undefined,
+      recipeYield: "4 servings",
+      nutrition: undefined,
+    }),
+    ingredientsHref: "/recipes/story-recipe/ingredients",
   },
 };
