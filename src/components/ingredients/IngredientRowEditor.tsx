@@ -14,12 +14,14 @@ import {
   nutritionLabel,
 } from "./nutritionColumns";
 import PortionsEditor from "./PortionsEditor";
-import { formatServingSize } from "./servingSize";
+import { formatServingSize, representativePortion } from "./servingSize";
 import {
   STICKY_ACTIONS_CELL,
   STICKY_ALIASES_CELL,
   STICKY_NAME_CELL,
 } from "./tableStyles";
+import { scaleNutritionToGrams } from "@/lib/nutritionMath";
+import { formatAmount } from "@/lib/units";
 
 // One editable catalog row. All cells are draft-local until Save, which
 // PATCHes only the fields that changed. The parent keys this component by
@@ -27,12 +29,11 @@ import {
 // The edit buffer + save/delete lifecycle live in useIngredientRowEditor; this
 // component is presentation and input wiring only.
 //
-// The main row shows only the primary nutrition columns; the rest (plus
-// density) live in an expandable detail row. Both edit surfaces bind to the
-// same draft keys, so there is a single source of truth and one save path.
-
-const numericCellClass =
-  "w-16 bg-transparent text-right text-sm rounded-none border-0 border-b border-transparent focus:border-orange-400 focus:outline-none";
+// The main row shows the primary nutrition columns as READ-ONLY text, scaled to
+// the representative serving (so the numbers match the Serving column instead of
+// silently reading per-100 g). All editing — the primary six plus the rest, plus
+// density — happens in the expandable detail row, which binds the draft's
+// per-100 g values and is the single save path.
 
 const detailInputClass =
   "w-14 shrink-0 bg-transparent text-right text-sm rounded-none border-0 border-b border-muted-foreground/30 focus:border-orange-400 focus:outline-none";
@@ -67,6 +68,16 @@ export default function IngredientRowEditor({
 
   const [expanded, setExpanded] = useState(false);
   const servingSize = formatServingSize(ingredient.food_portions);
+  // Row numbers are scaled to the serving the Serving column shows (the first
+  // portion, or the 100 g default = identity). Read from the saved ingredient,
+  // not the draft, so it stays in lockstep with servingSize above; the drawer
+  // remains the per-100 g edit surface and a save remounts the row.
+  const rowNutrition = ingredient.nutrition
+    ? scaleNutritionToGrams(
+        ingredient.nutrition,
+        representativePortion(ingredient.food_portions).gramWeight,
+      )
+    : null;
 
   return (
     <>
@@ -88,31 +99,24 @@ export default function IngredientRowEditor({
             className="w-full bg-transparent text-sm text-muted-foreground rounded-none border-0 border-b border-transparent focus:border-orange-400 focus:outline-none"
           />
         </TableCell>
-        {PRIMARY_NUTRITION_COLUMNS.map((col) => (
-          <TableCell key={col.key} className="text-right">
-            <input
-              type="number"
-              step="any"
-              min="0"
-              aria-label={`${nutritionLabel(col)} for ${ingredient.name}`}
-              value={draft.nutrition[col.key]}
-              onChange={(e) =>
-                setDraft({
-                  ...draft,
-                  nutrition: { ...draft.nutrition, [col.key]: e.target.value },
-                })
-              }
-              className={numericCellClass}
-            />
-          </TableCell>
-        ))}
+        {PRIMARY_NUTRITION_COLUMNS.map((col) => {
+          const value = rowNutrition?.[col.key];
+          return (
+            <TableCell
+              key={col.key}
+              className="text-right text-sm tabular-nums text-muted-foreground"
+            >
+              {value != null ? formatAmount(value) : "—"}
+            </TableCell>
+          );
+        })}
         <TableCell className="align-top text-right text-sm text-muted-foreground">
           {/* Inner div caps the width reliably (a td's own max-width isn't
               honored under table-layout:auto), so long portions — e.g. cooking
               spray's "1 spray (1/3 second)…" — wrap instead of widening the
               column. */}
           <div className="ml-auto max-w-40 whitespace-normal break-words">
-            {servingSize ?? "—"}
+            {servingSize}
           </div>
         </TableCell>
         <TableCell>
@@ -266,7 +270,7 @@ export default function IngredientRowEditor({
               <dl className="flex flex-wrap gap-x-8 gap-y-1 text-xs text-muted-foreground">
                 <div className="flex gap-1">
                   <dt className="font-medium">Serving:</dt>
-                  <dd>{servingSize ?? "—"}</dd>
+                  <dd>{servingSize}</dd>
                 </div>
                 <div className="flex gap-1">
                   <dt className="font-medium">Source:</dt>

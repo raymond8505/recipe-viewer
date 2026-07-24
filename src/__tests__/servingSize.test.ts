@@ -1,5 +1,8 @@
 import { describe, it, expect } from "vitest";
-import { formatServingSize } from "@/components/ingredients/servingSize";
+import {
+  formatServingSize,
+  representativePortion,
+} from "@/components/ingredients/servingSize";
 import type { UsdaFoodPortion } from "@/types/ingredient";
 
 describe("formatServingSize", () => {
@@ -50,8 +53,32 @@ describe("formatServingSize", () => {
     expect(formatServingSize(portions)).toBe("1 cup ≈ 240 g");
   });
 
-  it("returns null for empty or null portions", () => {
-    expect(formatServingSize([])).toBeNull();
-    expect(formatServingSize(null)).toBeNull();
+  it("defaults to a 100 g serving when there are no portions", () => {
+    expect(formatServingSize([])).toBe("100 g");
+    expect(formatServingSize(null)).toBe("100 g");
+    // A portions list where none has a positive weight also falls back.
+    expect(formatServingSize([{ gramWeight: 0, modifier: "serving" }])).toBe(
+      "100 g",
+    );
+  });
+});
+
+describe("representativePortion", () => {
+  it("picks the first portion with a positive weight", () => {
+    const portions: UsdaFoodPortion[] = [
+      { gramWeight: 0, modifier: "serving" },
+      { gramWeight: 55, amount: 1, modifier: '8" tortilla' },
+      { gramWeight: 110, amount: 2, modifier: '8" tortilla' },
+    ];
+    expect(representativePortion(portions)).toEqual({
+      gramWeight: 55,
+      amount: 1,
+      modifier: '8" tortilla',
+    });
+  });
+
+  it("falls back to a 100 g portion when there is none usable", () => {
+    expect(representativePortion(null)).toEqual({ gramWeight: 100 });
+    expect(representativePortion([])).toEqual({ gramWeight: 100 });
   });
 });

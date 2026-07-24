@@ -8,6 +8,8 @@ import {
   updateIngredient,
 } from "@/lib/api/ingredients";
 import { ingredientFixtures, makeIngredient } from "@/fixtures";
+import { scaleNutritionToGrams } from "@/lib/nutritionMath";
+import { formatAmount } from "@/lib/units";
 import type { IngredientRow } from "@/types/ingredient";
 
 vi.mock("@/lib/api/ingredients", () => ({
@@ -79,6 +81,8 @@ describe("IngredientsTable", () => {
     });
     renderTable();
 
+    // Editing lives in the details drawer now (the row cells are read-only).
+    fireEvent.click(screen.getByLabelText("Details for cumin seed"));
     fireEvent.change(screen.getByLabelText("Calories (kcal) for cumin seed"), {
       target: { value: "400" },
     });
@@ -98,16 +102,23 @@ describe("IngredientsTable", () => {
     });
   });
 
-  it("shows the primary nutrition columns but hides the rest until expanded", () => {
+  it("shows the primary nutrition as read-only, portion-scaled text; edit lives in the drawer", () => {
     renderTable();
 
-    // Primary columns are inline on the row.
+    // The row shows nutrition scaled to the representative serving (cumin's
+    // first portion, 2.1 g) — not the per-100 g figures — matching the Serving
+    // column. Computed with the same helpers so the expectation can't drift.
+    const scaled = scaleNutritionToGrams(cumin.nutrition!, 2.1);
     expect(
-      screen.getByLabelText("Calories (kcal) for cumin seed"),
+      screen.getByText(formatAmount(scaled.calories_kcal!)),
     ).toBeInTheDocument();
+    // The per-100 g value (375) is NOT what the row shows.
+    expect(screen.queryByText("375")).not.toBeInTheDocument();
+
+    // The primary cells are read-only text: no editable input until expanded.
     expect(
-      screen.getByLabelText("Sodium (mg) for cumin seed"),
-    ).toBeInTheDocument();
+      screen.queryByLabelText("Calories (kcal) for cumin seed"),
+    ).not.toBeInTheDocument();
     // Secondary columns aren't rendered anywhere until the row is expanded.
     expect(
       screen.queryByLabelText("Sugars (g) for cumin seed"),
@@ -115,12 +126,29 @@ describe("IngredientsTable", () => {
     expect(
       screen.queryByLabelText("Density (g/ml) for cumin seed"),
     ).not.toBeInTheDocument();
+
+    // Expanding reveals the per-100 g edit inputs for every nutrient.
+    fireEvent.click(screen.getByLabelText("Details for cumin seed"));
+    expect(
+      screen.getByLabelText("Calories (kcal) for cumin seed"),
+    ).toHaveValue(375);
   });
 
   it("derives a read-only serving size from the USDA food portions", () => {
     renderTable();
 
     expect(screen.getByText("1 tsp, whole ≈ 2.1 g")).toBeInTheDocument();
+  });
+
+  it("defaults a portionless ingredient to a 100 g serving with per-100 g values", () => {
+    // yellow onion has food_portions: null → the row falls back to 100 g, so the
+    // nutrition shown IS the stored per-100 g figure (identity scaling).
+    const onion = ingredientFixtures[4];
+    renderTable([onion]);
+
+    expect(screen.getByText("100 g")).toBeInTheDocument();
+    // 40 kcal per 100 g, shown unscaled because the serving is 100 g.
+    expect(screen.getByText("40")).toBeInTheDocument();
   });
 
   it("expands to reveal and edit the hidden nutrition fields", async () => {
