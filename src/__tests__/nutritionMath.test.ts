@@ -5,6 +5,7 @@ import {
   gramsForLine,
   perPortionNutrition,
   scaleNutritionToGrams,
+  scalePortionNutritionToPer100g,
   sumNutrition,
 } from "@/lib/nutritionMath";
 
@@ -45,6 +46,36 @@ describe("scaleNutritionToGrams", () => {
     const scaled = scaleNutritionToGrams({ sodium_mg: 40 }, 200);
     expect(scaled).toEqual({ sodium_mg: 80 });
     expect("calories_kcal" in scaled).toBe(false);
+  });
+});
+
+describe("scalePortionNutritionToPer100g", () => {
+  it("scales values entered against a portion up to per-100g", () => {
+    // 120 kcal in a 30 g serving → 400 kcal / 100 g
+    expect(
+      scalePortionNutritionToPer100g({ calories_kcal: 120, protein_g: 6 }, 30),
+    ).toEqual({ calories_kcal: 400, protein_g: 20 });
+  });
+
+  it("is an identity transform for a 100 g portion", () => {
+    const entered = { calories_kcal: 375, sodium_mg: 40 };
+    expect(scalePortionNutritionToPer100g(entered, 100)).toEqual(entered);
+  });
+
+  it("round-trips with scaleNutritionToGrams", () => {
+    const per100g = scalePortionNutritionToPer100g({ calories_kcal: 60 }, 240);
+    expect(scaleNutritionToGrams(per100g, 240).calories_kcal).toBeCloseTo(60, 6);
+  });
+
+  it("keeps key sparsity — absent keys stay absent", () => {
+    const scaled = scalePortionNutritionToPer100g({ fiber_g: 2 }, 50);
+    expect(scaled).toEqual({ fiber_g: 4 });
+    expect("calories_kcal" in scaled).toBe(false);
+  });
+
+  it("returns an empty object for a non-positive portion (no divide-by-zero)", () => {
+    expect(scalePortionNutritionToPer100g({ calories_kcal: 10 }, 0)).toEqual({});
+    expect(scalePortionNutritionToPer100g({ calories_kcal: 10 }, -5)).toEqual({});
   });
 });
 

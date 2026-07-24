@@ -14,10 +14,6 @@ export interface UseIngredientsTable {
   page: number;
   setPage: Dispatch<SetStateAction<number>>;
   loading: boolean;
-  newName: string;
-  setNewName: Dispatch<SetStateAction<string>>;
-  busyAdding: boolean;
-  setBusyAdding: Dispatch<SetStateAction<boolean>>;
   error: string | null;
   setError: Dispatch<SetStateAction<string | null>>;
   /** Derived: page count from `count`, never below 1. */
@@ -28,11 +24,11 @@ export interface UseIngredientsTable {
 }
 
 /**
- * Owns the ingredient manager's data layer: the row/count/query/page state, the
- * add-form fields, and the server fetch (`load`). The event handlers
- * (search/paginate/add/save/delete) stay in IngredientsTable — they read and
- * drive this state, keeping the wiring next to the JSX while the fetch-and-set
- * business logic lives here.
+ * Owns the ingredient manager's data layer: the row/count/query/page state and
+ * the server fetch (`load`). The event handlers (search/paginate/save/delete)
+ * stay in IngredientsTable — they read and drive this state, keeping the wiring
+ * next to the JSX while the fetch-and-set business logic lives here. The
+ * create-ingredient panel (IngredientCreateForm) owns its own field state.
  */
 export function useIngredientsTable(
   initialIngredients: IngredientRow[],
@@ -43,8 +39,6 @@ export function useIngredientsTable(
   const [query, setQuery] = useState("");
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(false);
-  const [newName, setNewName] = useState("");
-  const [busyAdding, setBusyAdding] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const totalPages = Math.max(1, Math.ceil(count / PAGE_SIZE));
@@ -77,10 +71,6 @@ export function useIngredientsTable(
     page,
     setPage,
     loading,
-    newName,
-    setNewName,
-    busyAdding,
-    setBusyAdding,
     error,
     setError,
     totalPages,

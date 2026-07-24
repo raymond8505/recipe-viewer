@@ -13,6 +13,7 @@ import {
   PRIMARY_NUTRITION_COLUMNS,
   nutritionLabel,
 } from "./nutritionColumns";
+import PortionsEditor from "./PortionsEditor";
 import { formatServingSize } from "./servingSize";
 import {
   STICKY_ACTIONS_CELL,
@@ -246,6 +247,19 @@ export default function IngredientRowEditor({
                       className={detailInputClass}
                     />
                   </label>
+                </div>
+              </div>
+
+              <div>
+                <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2">
+                  Portions
+                </h3>
+                <div className="max-w-md">
+                  <PortionsEditor
+                    idPrefix={`${ingredient.name} portion`}
+                    portions={draft.portions}
+                    onChange={(portions) => setDraft({ ...draft, portions })}
+                  />
                 </div>
               </div>
 

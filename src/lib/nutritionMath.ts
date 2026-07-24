@@ -117,6 +117,28 @@ export function scaleNutritionToGrams(
 }
 
 /**
+ * Inverse of scaleNutritionToGrams: take nutrition entered against a portion of
+ * `portionGrams` and scale it up to the per-100g basis the catalog stores. The
+ * create form lets a user type values for, say, a 30 g serving; this converts
+ * them to per-100g before persisting so matching and the rest of nutritionMath
+ * keep their single per-100g contract. Entering against a 100 g portion is an
+ * identity transform. Key sparsity is preserved (absent ≠ zero); a non-positive
+ * `portionGrams` yields an empty object rather than dividing by zero.
+ */
+export function scalePortionNutritionToPer100g(
+  entered: IngredientNutrition,
+  portionGrams: number,
+): IngredientNutrition {
+  const per100g: IngredientNutrition = {};
+  if (portionGrams <= 0) return per100g;
+  for (const key of NUTRITION_KEYS) {
+    const value = entered[key];
+    if (value != null) per100g[key] = (value * 100) / portionGrams;
+  }
+  return per100g;
+}
+
+/**
  * Full line computation: grams conversion + nutrition scaling, or the
  * exclusion reason. Exclusion checks are ordered most-fundamental-first so
  * the flag names the primary blocker (an unmatched line is "unmatched" even

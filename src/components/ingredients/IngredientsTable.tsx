@@ -12,10 +12,10 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { SpinnerIcon } from "@/components/icons";
-import { createIngredient } from "@/lib/api/ingredients";
 import { pluralize } from "@/lib/format";
 import { useIngredientsTable } from "@/hooks/useIngredientsTable";
 import type { IngredientRow } from "@/types/ingredient";
+import IngredientCreateForm from "./IngredientCreateForm";
 import IngredientRowEditor from "./IngredientRowEditor";
 import {
   NUTRITION_BASIS_LABEL,
@@ -56,15 +56,13 @@ export default function IngredientsTable({
     page,
     setPage,
     loading,
-    newName,
-    setNewName,
-    busyAdding,
-    setBusyAdding,
     error,
     setError,
     totalPages,
     load,
   } = useIngredientsTable(initialIngredients, initialCount);
+
+  const [showCreate, setShowCreate] = useState(false);
 
   // The table is wider than its scroll viewport (frozen + primary columns), so
   // an expanded detail row's full-width cell would push its fields off-screen.
@@ -94,22 +92,10 @@ export default function IngredientsTable({
     void load(query, p);
   }
 
-  async function handleAdd(e: React.FormEvent) {
-    e.preventDefault();
-    const name = newName.trim();
-    if (!name) return;
-    setBusyAdding(true);
-    setError(null);
-    try {
-      const row = await createIngredient({ name, source: "manual" });
-      setRows((current) => [row, ...current]);
-      setCount((current) => current + 1);
-      setNewName("");
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to add ingredient");
-    } finally {
-      setBusyAdding(false);
-    }
+  function handleCreated(row: IngredientRow) {
+    setRows((current) => [row, ...current]);
+    setCount((current) => current + 1);
+    setShowCreate(false);
   }
 
   function handleSaved(updated: IngredientRow) {
@@ -144,23 +130,22 @@ export default function IngredientsTable({
             {loading ? <SpinnerIcon className="animate-spin" /> : "Search"}
           </Button>
         </form>
-        <form onSubmit={handleAdd} className="flex items-end gap-2">
-          <Input
-            aria-label="New ingredient name"
-            placeholder="New ingredient name…"
-            value={newName}
-            onChange={(e) => setNewName(e.target.value)}
-            className="w-64"
-          />
-          <Button
-            type="submit"
-            size="sm"
-            disabled={busyAdding || !newName.trim()}
-          >
-            Add
-          </Button>
-        </form>
+        <Button
+          type="button"
+          size="sm"
+          onClick={() => setShowCreate((prev) => !prev)}
+          aria-expanded={showCreate}
+        >
+          {showCreate ? "Close" : "New ingredient"}
+        </Button>
       </div>
+
+      {showCreate && (
+        <IngredientCreateForm
+          onCreated={handleCreated}
+          onCancel={() => setShowCreate(false)}
+        />
+      )}
 
       {error && (
         <p role="alert" className="text-sm text-red-600">
