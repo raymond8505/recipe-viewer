@@ -57,7 +57,8 @@ export default function NutritionDetailRow({
   const excluded = computation.kind === "excluded";
   // Grams only matter for a matched line, and a stale line's row is about to be
   // rebuilt — hide the editor in both cases.
-  const isStale = computation.kind === "excluded" && computation.reason === "stale";
+  const isStale =
+    computation.kind === "excluded" && computation.reason === "stale";
   const showGrams = row != null && row.ingredient_id != null && !isStale;
   // The sticky cell is its own stacking context (z-10), so the dropdown's
   // internal z-index can't beat sibling rows' sticky cells — the whole cell
@@ -80,11 +81,13 @@ export default function NutritionDetailRow({
           )}
         </span>
       </TableCell>
-      <TableCell className={cn(STICKY_ALIASES_CELL, autocompleteOpen && "z-20")}>
+      <TableCell
+        className={cn(STICKY_ALIASES_CELL, autocompleteOpen && "z-20")}
+      >
         {row ? (
           <span className="flex w-full min-w-0 flex-col gap-1">
             <span className="flex w-full min-w-0 items-center gap-1.5">
-              <span className="min-w-0 flex-1">
+              <span className="min-w-0 flex-1 text-wrap">
                 <IngredientAutocomplete
                   value={
                     row.ingredient_id
@@ -122,7 +125,9 @@ export default function NutritionDetailRow({
       </TableCell>
       {NUTRITION_DETAIL_COLUMNS.map((col) => {
         const value =
-          computation.kind === "ok" ? computation.nutrition[col.key] : undefined;
+          computation.kind === "ok"
+            ? computation.nutrition[col.key]
+            : undefined;
         return (
           <TableCell key={col.key} className="text-right tabular-nums">
             {value != null ? formatAmount(value) : "—"}
