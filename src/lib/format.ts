@@ -70,6 +70,21 @@ export function parseNumeric(raw: string): number | null | undefined {
   return Number.isFinite(value) ? value : undefined;
 }
 
+/**
+ * Nutrition-panel display rounding for a "value unit" string: values over 1
+ * round to the nearest integer ("9.96 g" → "10 g", "12.4 g" → "12 g");
+ * values ≤ 1 keep their precision ("0.2 g") — integer-rounding those would
+ * erase them entirely. Strings without a leading number pass through
+ * unchanged. Display-only: JSON-LD/MCP serialization keeps full precision.
+ */
+export function formatNutrientDisplay(raw: string): string {
+  const match = raw.match(/^([\d.]+)(\s*.*)$/);
+  if (!match) return raw;
+  const value = parseFloat(match[1]);
+  if (!(value > 1)) return raw;
+  return Math.round(value) + match[2];
+}
+
 /** Pick the singular or plural form of a noun for a count. Returns the word
  *  only — callers render the count separately. Defaults the plural to the
  *  singular + "s"; pass an explicit plural for irregular nouns. */

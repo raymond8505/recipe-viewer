@@ -128,6 +128,17 @@ describe("NutritionPanel", () => {
     expect(screen.getByText("1/4")).toBeTruthy();
   });
 
+  it("rounds displayed values over 1 to the nearest integer, keeping sub-1 precision", () => {
+    const r = makeScalableRecipe({
+      recipeIngredient: undefined,
+      recipeYield: "4 servings",
+      nutrition: { proteinContent: "9.96 g", fiberContent: "0.2 g" },
+    });
+    render(<Harness initial={r} />);
+    expect(screen.getByText("10 g")).toBeTruthy();
+    expect(screen.getByText("0.2 g")).toBeTruthy();
+  });
+
   it("shows unscaled values at the default portion count", () => {
     const r = makeScalableRecipe({
       recipeIngredient: undefined,

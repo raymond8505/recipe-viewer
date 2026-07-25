@@ -4,6 +4,7 @@ import Link from "next/link";
 import { PortionStepperButton } from "@/components/buttons";
 import { Button } from "@/components/ui/button";
 import NutritionSourceBadge from "@/components/ingredients/NutritionSourceBadge";
+import { formatNutrientDisplay } from "@/lib/format";
 import type { ScalableRecipe } from "@/lib/ScalableRecipe";
 
 export { scaleNutrientValue } from "@/lib/ScalableRecipe";
@@ -109,7 +110,7 @@ function NutritionStat({ label, value }: { label: string; value: string }) {
   return (
     <div className="bg-gray-50 rounded-lg p-2 text-center">
       <p className="text-xs text-gray-500 mb-0.5">{label}</p>
-      <p className="font-medium text-gray-900">{value}</p>
+      <p className="font-medium text-gray-900">{formatNutrientDisplay(value)}</p>
     </div>
   );
 }
