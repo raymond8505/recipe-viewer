@@ -1,9 +1,13 @@
 import type { UsdaFoodDetail, UsdaSearchFood } from "@/lib/usda";
+import type { UsdaFoodPortion } from "@/types/ingredient";
 
-// Trimmed real USDA FoodData Central payloads (pulled 2026-07-14 with
-// DEMO_KEY) — these lock in the two shape quirks the client must handle:
-// search nutrients are FLAT, detail nutrients are NESTED with optional
-// `amount`, and SR Legacy portion units hide in `modifier`.
+// Trimmed real USDA FoodData Central payloads — these lock in the shape quirks
+// the client must handle: search nutrients are FLAT with `nutrientId`, and
+// ABRIDGED detail nutrients are flat entries keyed by legacy NDB `number`
+// (a string; Foundation uses dotted numbers like "269.3"), with the duplicate
+// kJ "Energy" row under 268. Search payloads pulled 2026-07-14; abridged
+// detail payloads pulled 2026-07-24 (the day the full format started 404ing
+// Foundation records — see getFoodDetail).
 //
 // NOT exported from the @/fixtures barrel: only the usda/normalization tests
 // need these; import directly from "@/fixtures/usda" (same convention as
@@ -41,158 +45,128 @@ export const cuminSearchResponse: {
   ],
 };
 
-// Detail payload for "Spices, cumin seed" (SR Legacy fdcId 170923). Nutrient
-// values are the real per-100g figures. Includes:
-// - a category-header row ("Proximates") with NO `amount` (must be skipped)
-// - an unmapped nutrient (Magnesium 1090) that must be ignored
-// - foodPortions whose unit text lives in `modifier` ("tsp, whole") with
-//   measureUnit.name "undetermined"
+// Abridged detail payload for "Spices, cumin seed" (SR Legacy fdcId 170923).
+// Real per-100g figures (abridged rounds to 3 significant digits). Includes:
+// - the kJ "Energy" row (number 268) that must never win over 208 kcal
+// - an unmapped nutrient (Magnesium 304) that must be ignored
+// - sugars under 269 ("Total Sugars") — the SR Legacy number
 export const cuminDetailResponse: UsdaFoodDetail = {
   fdcId: 170923,
   description: "Spices, cumin seed",
   dataType: "SR Legacy",
   foodNutrients: [
-    { nutrient: { id: 2045, name: "Proximates", unitName: "g" } },
-    { nutrient: { id: 1008, name: "Energy", unitName: "kcal" }, amount: 375.0 },
-    { nutrient: { id: 1003, name: "Protein", unitName: "g" }, amount: 17.81 },
+    { number: "208", name: "Energy", amount: 375, unitName: "KCAL" },
+    { number: "268", name: "Energy", amount: 1570, unitName: "kJ" },
+    { number: "203", name: "Protein", amount: 17.8, unitName: "G" },
+    { number: "204", name: "Total lipid (fat)", amount: 22.3, unitName: "G" },
     {
-      nutrient: { id: 1004, name: "Total lipid (fat)", unitName: "g" },
-      amount: 22.27,
+      number: "606",
+      name: "Fatty acids, total saturated",
+      amount: 1.54,
+      unitName: "G",
     },
     {
-      nutrient: {
-        id: 1258,
-        name: "Fatty acids, total saturated",
-        unitName: "g",
-      },
-      amount: 1.535,
+      number: "205",
+      name: "Carbohydrate, by difference",
+      amount: 44.2,
+      unitName: "G",
     },
-    {
-      nutrient: {
-        id: 1005,
-        name: "Carbohydrate, by difference",
-        unitName: "g",
-      },
-      amount: 44.24,
-    },
-    {
-      nutrient: { id: 1079, name: "Fiber, total dietary", unitName: "g" },
-      amount: 10.5,
-    },
-    {
-      nutrient: {
-        id: 2000,
-        name: "Sugars, total including NLEA",
-        unitName: "g",
-      },
-      amount: 2.25,
-    },
-    {
-      nutrient: { id: 1093, name: "Sodium, Na", unitName: "mg" },
-      amount: 168.0,
-    },
-    {
-      nutrient: { id: 1253, name: "Cholesterol", unitName: "mg" },
-      amount: 0.0,
-    },
-    {
-      nutrient: { id: 1087, name: "Calcium, Ca", unitName: "mg" },
-      amount: 931.0,
-    },
-    { nutrient: { id: 1089, name: "Iron, Fe", unitName: "mg" }, amount: 66.36 },
-    {
-      nutrient: { id: 1092, name: "Potassium, K", unitName: "mg" },
-      amount: 1788.0,
-    },
-    {
-      nutrient: { id: 1090, name: "Magnesium, Mg", unitName: "mg" },
-      amount: 366.0,
-    },
-  ],
-  foodPortions: [
-    {
-      gramWeight: 2.1,
-      amount: 1.0,
-      modifier: "tsp, whole",
-      measureUnit: { name: "undetermined" },
-    },
-    {
-      gramWeight: 6.0,
-      amount: 1.0,
-      modifier: "tbsp, whole",
-      measureUnit: { name: "undetermined" },
-    },
+    { number: "291", name: "Fiber, total dietary", amount: 10.5, unitName: "G" },
+    { number: "269", name: "Total Sugars", amount: 2.25, unitName: "G" },
+    { number: "307", name: "Sodium, Na", amount: 168, unitName: "MG" },
+    { number: "601", name: "Cholesterol", amount: 0, unitName: "MG" },
+    { number: "301", name: "Calcium, Ca", amount: 931, unitName: "MG" },
+    { number: "303", name: "Iron, Fe", amount: 66.4, unitName: "MG" },
+    { number: "306", name: "Potassium, K", amount: 1790, unitName: "MG" },
+    { number: "304", name: "Magnesium, Mg", amount: 366, unitName: "MG" },
   ],
 };
 
-// Foundation food (chicken breast, fdcId 2646170, pulled 2026-07-18 with
-// DEMO_KEY, trimmed). The energy quirk: Foundation foods OMIT the SR Legacy
-// Energy id (1008) and carry only the Atwater energies — 2048 (specific
-// factors) and 2047 (general). extractNutrition must fall back to these or the
-// row persists with no calories. Chicken has no dietary fiber, so there is no
-// 1079 row — a blank fiber cell is correct here, not a mapping gap.
-export const chickenBreastDetailResponse: UsdaFoodDetail = {
-  fdcId: 2646170,
-  description:
-    "Chicken, broilers or fryers, breast, skinless, boneless, meat only, raw",
+// Abridged detail payload for "Eggs, Grade A, Large, egg whole" (Foundation
+// fdcId 748967) — the record whose full-format 404 motivated the abridged
+// switch. Locks in the Foundation quirks: sugars under 269.3 ("Sugars, Total",
+// no 269 row) and calculated energy present under plain 208.
+export const eggDetailResponse: UsdaFoodDetail = {
+  fdcId: 748967,
+  description: "Eggs, Grade A, Large, egg whole",
   dataType: "Foundation",
   foodNutrients: [
+    { number: "208", name: "Energy", amount: 148, unitName: "KCAL" },
+    { number: "268", name: "Energy", amount: 617, unitName: "kJ" },
+    { number: "203", name: "Protein", amount: 12.4, unitName: "G" },
+    { number: "204", name: "Total lipid (fat)", amount: 9.96, unitName: "G" },
     {
-      nutrient: {
-        id: 2047,
-        name: "Energy (Atwater General Factors)",
-        unitName: "kcal",
-      },
-      amount: 106.034,
+      number: "606",
+      name: "Fatty acids, total saturated",
+      amount: 3.2,
+      unitName: "G",
     },
     {
-      nutrient: {
-        id: 2048,
-        name: "Energy (Atwater Specific Factors)",
-        unitName: "kcal",
-      },
-      amount: 112.20227,
+      number: "205",
+      name: "Carbohydrate, by difference",
+      amount: 0.96,
+      unitName: "G",
     },
-    { nutrient: { id: 1003, name: "Protein", unitName: "g" }, amount: 22.525 },
-    {
-      nutrient: { id: 1004, name: "Total lipid (fat)", unitName: "g" },
-      amount: 1.934,
-    },
-    {
-      nutrient: {
-        id: 1258,
-        name: "Fatty acids, total saturated",
-        unitName: "g",
-      },
-      amount: 0.3488,
-    },
-    {
-      nutrient: {
-        id: 1005,
-        name: "Carbohydrate, by difference",
-        unitName: "g",
-      },
-      amount: 0,
-    },
-    {
-      nutrient: { id: 1093, name: "Sodium, Na", unitName: "mg" },
-      amount: 65.75,
-    },
+    { number: "291", name: "Fiber, total dietary", amount: 0, unitName: "G" },
+    { number: "269.3", name: "Sugars, Total", amount: 0.2, unitName: "G" },
+    { number: "210", name: "Sucrose", amount: 0, unitName: "G" },
+    { number: "211", name: "Glucose", amount: 0.2, unitName: "G" },
+    { number: "307", name: "Sodium, Na", amount: 129, unitName: "MG" },
+    { number: "601", name: "Cholesterol", amount: 411, unitName: "MG" },
+    { number: "301", name: "Calcium, Ca", amount: 48, unitName: "MG" },
+    { number: "303", name: "Iron, Fe", amount: 1.67, unitName: "MG" },
+    { number: "306", name: "Potassium, K", amount: 132, unitName: "MG" },
   ],
 };
+
+// Real SR Legacy foodPortions for cumin (full-format only — abridged never
+// returns portions). Kept for deriveDensity, whose UsdaFoodPortion handling is
+// unchanged: unit text hides in `modifier` ("tsp, whole") with
+// measureUnit.name "undetermined".
+export const cuminFoodPortions: UsdaFoodPortion[] = [
+  {
+    gramWeight: 2.1,
+    amount: 1.0,
+    modifier: "tsp, whole",
+    measureUnit: { name: "undetermined" },
+  },
+  {
+    gramWeight: 6.0,
+    amount: 1.0,
+    modifier: "tbsp, whole",
+    measureUnit: { name: "undetermined" },
+  },
+];
 
 // The exact core-label-set extraction of cuminDetailResponse.
 export const cuminExpectedNutrition = {
-  calories_kcal: 375.0,
-  protein_g: 17.81,
-  fat_g: 22.27,
-  saturated_fat_g: 1.535,
-  carbs_g: 44.24,
+  calories_kcal: 375,
+  protein_g: 17.8,
+  fat_g: 22.3,
+  saturated_fat_g: 1.54,
+  carbs_g: 44.2,
   fiber_g: 10.5,
   sugars_g: 2.25,
-  sodium_mg: 168.0,
-  cholesterol_mg: 0.0,
-  calcium_mg: 931.0,
-  iron_mg: 66.36,
-  potassium_mg: 1788.0,
+  sodium_mg: 168,
+  cholesterol_mg: 0,
+  calcium_mg: 931,
+  iron_mg: 66.4,
+  potassium_mg: 1790,
+};
+
+// The exact core-label-set extraction of eggDetailResponse (sugars via the
+// 269.3 Foundation fallback).
+export const eggExpectedNutrition = {
+  calories_kcal: 148,
+  protein_g: 12.4,
+  fat_g: 9.96,
+  saturated_fat_g: 3.2,
+  carbs_g: 0.96,
+  fiber_g: 0,
+  sugars_g: 0.2,
+  sodium_mg: 129,
+  cholesterol_mg: 411,
+  calcium_mg: 48,
+  iron_mg: 1.67,
+  potassium_mg: 132,
 };

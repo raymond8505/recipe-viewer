@@ -9,10 +9,12 @@ import {
   searchFoodsMixed,
 } from "@/lib/usda";
 import {
-  chickenBreastDetailResponse,
   cuminDetailResponse,
   cuminExpectedNutrition,
+  cuminFoodPortions,
   cuminSearchResponse,
+  eggDetailResponse,
+  eggExpectedNutrition,
 } from "@/fixtures/usda";
 
 // Module-level createEnv captures runtimeEnv at import time — mock with inline
@@ -205,7 +207,7 @@ describe("searchFoodsMixed", () => {
 });
 
 describe("getFoodDetail", () => {
-  it("fetches the food by fdcId with the api key", async () => {
+  it("fetches the food by fdcId in abridged format with the api key", async () => {
     mockFetch.mockResolvedValueOnce(jsonResponse(cuminDetailResponse));
 
     const detail = await getFoodDetail(170923);
@@ -215,6 +217,9 @@ describe("getFoodDetail", () => {
       "https://api.nal.usda.gov/fdc/v1/food/170923",
     );
     expect(url.searchParams.get("api_key")).toBe("test-usda-key");
+    // Abridged is load-bearing: the default full format 404s Foundation
+    // records (2026-07 upstream regression).
+    expect(url.searchParams.get("format")).toBe("abridged");
     expect(detail.description).toBe("Spices, cumin seed");
   });
 
@@ -240,9 +245,9 @@ describe("getFoodDetail", () => {
 });
 
 describe("extractNutrition", () => {
-  it("maps the nested detail nutrients onto the exact core label set", () => {
-    // Also proves: the amount-less "Proximates" header row is skipped, and the
-    // unmapped Magnesium entry is ignored.
+  it("maps the abridged NDB-number nutrients onto the exact core label set", () => {
+    // Also proves: the kJ Energy row (268) never wins over 208 kcal, and the
+    // unmapped Magnesium entry (304) is ignored.
     expect(extractNutrition(cuminDetailResponse)).toEqual(
       cuminExpectedNutrition,
     );
@@ -258,35 +263,45 @@ describe("extractNutrition", () => {
     ).toEqual({});
   });
 
-  it("falls back to Atwater energy for Foundation foods that omit id 1008", () => {
-    // Foundation chicken breast carries only 2047/2048, no 1008 — without the
-    // fallback its calories would be dropped (the real bug that left 12 catalog
-    // rows calorie-less). Prefer the specific-factors value (2048).
-    const nutrition = extractNutrition(chickenBreastDetailResponse);
-    expect(nutrition.calories_kcal).toBe(112.20227);
-    expect(nutrition.protein_g).toBe(22.525);
-    // No dietary-fiber nutrient in the payload → fiber stays absent (correct).
-    expect(nutrition.fiber_g).toBeUndefined();
+  it("falls back to 269.3 for Foundation foods that report sugars there", () => {
+    // Foundation egg carries "Sugars, Total" under 269.3 and has NO 269 row —
+    // without the fallback every Foundation food would persist sugar-less. The
+    // sucrose/glucose component rows (210/211) must not leak in either.
+    expect(extractNutrition(eggDetailResponse)).toEqual(eggExpectedNutrition);
   });
 
-  it("prefers the SR Legacy Energy id (1008) over Atwater factors when both exist", () => {
+  it("prefers the SR Legacy sugars number (269) over 269.3 when both exist", () => {
     const nutrition = extractNutrition({
       fdcId: 1,
       description: "x",
       dataType: "SR Legacy",
       foodNutrients: [
-        { nutrient: { id: 1008, name: "Energy", unitName: "kcal" }, amount: 200 },
-        { nutrient: { id: 2048, name: "Energy (Atwater Specific Factors)", unitName: "kcal" }, amount: 999 },
+        { number: "269", name: "Total Sugars", amount: 5, unitName: "G" },
+        { number: "269.3", name: "Sugars, Total", amount: 999, unitName: "G" },
       ],
     });
-    expect(nutrition.calories_kcal).toBe(200);
+    expect(nutrition.sugars_g).toBe(5);
+  });
+
+  it("skips entries without a number or a numeric amount", () => {
+    const nutrition = extractNutrition({
+      fdcId: 1,
+      description: "x",
+      dataType: "Foundation",
+      foodNutrients: [
+        { name: "Energy", unitName: "KCAL", amount: 100 },
+        { number: "208", name: "Energy", unitName: "KCAL" },
+        { number: "203", name: "Protein", amount: 12.4, unitName: "G" },
+      ],
+    });
+    expect(nutrition).toEqual({ protein_g: 12.4 });
   });
 });
 
 describe("deriveDensity", () => {
   it("derives the median g/ml from SR Legacy modifier-style volume portions", () => {
     // 2.1g/tsp → 0.42606; 6g/tbsp → 0.40577; median (avg of the two) → 0.416
-    expect(deriveDensity(cuminDetailResponse.foodPortions)).toBe(0.416);
+    expect(deriveDensity(cuminFoodPortions)).toBe(0.416);
   });
 
   it("reads Foundation-style measureUnit.name when populated", () => {

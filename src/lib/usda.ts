@@ -44,18 +44,26 @@ interface SearchResponse {
   foods?: UsdaSearchFood[];
 }
 
-// The DETAIL endpoint's nutrient shape is nested — different from the flat
-// shape the search endpoint returns — and category-header rows (e.g.
-// "Proximates") carry no `amount`. Verified against real payloads (SR Legacy
-// fdcId 170923), fixtures in src/fixtures/usda.ts.
+// The ABRIDGED detail shape: flat nutrient entries keyed by legacy NDB
+// `number` (a string — Foundation uses dotted numbers like "269.3"), no
+// nested `nutrient.id` and no foodPortions. Verified against real abridged
+// payloads (Foundation 748967, SR Legacy 170923), fixtures in
+// src/fixtures/usda.ts.
 export interface UsdaFoodDetail {
   fdcId: number;
   description: string;
   dataType: string;
   foodNutrients?: Array<{
-    nutrient?: { id?: number; name?: string; unitName?: string };
+    number?: string;
+    name?: string;
+    unitName?: string;
     amount?: number;
   }>;
+  /**
+   * Never populated by the abridged format — kept on the type so the import
+   * row shape (food_portions / density) stays compilable and revivable if the
+   * full format is ever restored (see getFoodDetail).
+   */
   foodPortions?: UsdaFoodPortion[];
 }
 
@@ -146,68 +154,73 @@ export async function searchFoodsMixed(
   return merged;
 }
 
-/** Fetch one food's full record (nested nutrients + foodPortions). */
+/**
+ * Fetch one food's ABRIDGED record. Abridged deliberately, since 2026-07:
+ * USDA 404s every Foundation record on the default full format (verified with
+ * USDA's own documented DEMO_KEY sample) while abridged keeps working — and
+ * abridged carries the entire tracked nutrient set. The cost is foodPortions
+ * (full-format only), so USDA imports persist density_g_per_ml/food_portions
+ * as null; fdc_id stays on the row, so a re-import can backfill them if the
+ * full format is ever restored.
+ */
 export async function getFoodDetail(fdcId: number): Promise<UsdaFoodDetail> {
   const url = new URL(`${BASE_URL}/food/${fdcId}`);
   url.searchParams.set("api_key", env.USDA_API_KEY);
+  url.searchParams.set("format", "abridged");
 
   return fetchJson<UsdaFoodDetail>(url, `USDA food detail ${fdcId}`);
 }
 
-// USDA nutrient id → IngredientNutrition field. The "core label set" decided
-// against real payloads; per-100g for Foundation/SR Legacy. Ids are stable
-// across both data types. Unmapped nutrients (~50-60 per food) are ignored —
-// fdc_id is kept on the ingredient row, so widening this set later is a
-// re-fetch, not a migration.
-const NUTRIENT_FIELD_BY_USDA_ID: Record<number, keyof IngredientNutrition> = {
-  1008: "calories_kcal",
-  1003: "protein_g",
-  1004: "fat_g",
-  1258: "saturated_fat_g",
-  1005: "carbs_g",
-  1079: "fiber_g",
-  2000: "sugars_g",
-  1093: "sodium_mg",
-  1253: "cholesterol_mg",
-  1087: "calcium_mg",
-  1089: "iron_mg",
-  1092: "potassium_mg",
+// NDB nutrient number → IngredientNutrition field. Abridged entries carry the
+// legacy NDB *number* (string), not the nested nutrient.id the full format
+// used. Numbers verified against real abridged payloads of both data types
+// (Foundation 748967, SR Legacy 170923); per-100g in both. Keying strictly by
+// number also sidesteps the duplicate "Energy" row — kJ lives under 268 and
+// must never win over 208 kcal. Unmapped nutrients (~50-80 per food) are
+// ignored — fdc_id is kept on the ingredient row, so widening this set later
+// is a re-fetch, not a migration.
+const NUTRIENT_FIELD_BY_NDB_NUMBER: Record<string, keyof IngredientNutrition> = {
+  "208": "calories_kcal",
+  "203": "protein_g",
+  "204": "fat_g",
+  "606": "saturated_fat_g",
+  "205": "carbs_g",
+  "291": "fiber_g",
+  "269": "sugars_g",
+  "307": "sodium_mg",
+  "601": "cholesterol_mg",
+  "301": "calcium_mg",
+  "303": "iron_mg",
+  "306": "potassium_mg",
 };
 
-// Energy is the one nutrient whose id differs by data type. SR Legacy reports
-// kcal under 1008 (in the map above), but Foundation foods OMIT 1008 and carry
-// only the calculated Atwater energies — 2048 (specific factors, food-tuned and
-// closest to the SR Legacy basis) and 2047 (general factors, the fallback).
-// Verified against a real payload (Foundation "chicken breast" fdcId 2646170:
-// 2047=106, 2048=112, no 1008). Without this every Foundation food persists
-// calorie-less. Prefer specific, then general; 1008 is handled by the main map.
-const ENERGY_KCAL_IDS_BY_PRIORITY = [2048, 2047];
+// Sugars is the one nutrient whose number differs by data type: SR Legacy
+// reports "Total Sugars" under 269 (in the map above), but Foundation foods
+// carry "Sugars, Total" under 269.3 instead. Verified on egg 748967 (269.3
+// only) vs cumin 170923 (269 only). Without this every Foundation food would
+// persist sugar-less.
+const SUGARS_FALLBACK_NDB_NUMBER = "269.3";
 
-/** Map a detail payload's nested nutrients onto the core label set. */
+/** Map an abridged payload's NDB-number-keyed nutrients onto the core label set. */
 export function extractNutrition(detail: UsdaFoodDetail): IngredientNutrition {
-  const amountByNutrientId = new Map<number, number>();
+  const amountByNumber = new Map<string, number>();
   for (const entry of detail.foodNutrients ?? []) {
-    const id = entry.nutrient?.id;
-    // Category-header rows ("Proximates", "Minerals", ...) have no amount.
-    if (id === undefined || typeof entry.amount !== "number") continue;
-    if (!amountByNutrientId.has(id)) amountByNutrientId.set(id, entry.amount);
+    if (entry.number === undefined || typeof entry.amount !== "number") continue;
+    if (!amountByNumber.has(entry.number)) {
+      amountByNumber.set(entry.number, entry.amount);
+    }
   }
 
   const nutrition: IngredientNutrition = {};
-  for (const [idStr, field] of Object.entries(NUTRIENT_FIELD_BY_USDA_ID)) {
-    const amount = amountByNutrientId.get(Number(idStr));
+  for (const [number, field] of Object.entries(NUTRIENT_FIELD_BY_NDB_NUMBER)) {
+    const amount = amountByNumber.get(number);
     if (amount !== undefined) nutrition[field] = amount;
   }
 
-  // Foundation-food energy fallback (see ENERGY_KCAL_IDS_BY_PRIORITY).
-  if (nutrition.calories_kcal === undefined) {
-    for (const id of ENERGY_KCAL_IDS_BY_PRIORITY) {
-      const amount = amountByNutrientId.get(id);
-      if (amount !== undefined) {
-        nutrition.calories_kcal = amount;
-        break;
-      }
-    }
+  // Foundation-food sugars fallback (see SUGARS_FALLBACK_NDB_NUMBER).
+  if (nutrition.sugars_g === undefined) {
+    const amount = amountByNumber.get(SUGARS_FALLBACK_NDB_NUMBER);
+    if (amount !== undefined) nutrition.sugars_g = amount;
   }
 
   return nutrition;

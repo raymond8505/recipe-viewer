@@ -60,14 +60,35 @@ describe("POST /api/ingredients/import-usda", () => {
     expect(res.status).toBe(503);
   });
 
-  it("maps UsdaError to 502", async () => {
-    vi.mocked(importUsdaIngredient).mockRejectedValueOnce(new UsdaError(500, "down"));
+  it("maps an upstream USDA 404 to 404 (unknown food, not unavailability)", async () => {
+    vi.mocked(importUsdaIngredient).mockRejectedValueOnce(
+      new UsdaError(404, "USDA food detail 123 failed (404): "),
+    );
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
 
     const res = await POST(
       makeJsonRequest({ fdcId: 123, name: "gochujang" }, { method: "POST" }),
     );
 
-    expect(res.status).toBe(502);
+    expect(res.status).toBe(404);
+    // The real upstream status/detail must land in the server log — the
+    // client-facing message is deliberately generic.
+    expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining("404"));
+    errorSpy.mockRestore();
+  });
+
+  it("maps other UsdaErrors (5xx, network) to 502", async () => {
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    for (const err of [new UsdaError(500, "down"), new UsdaError(null, "timeout")]) {
+      vi.mocked(importUsdaIngredient).mockRejectedValueOnce(err);
+
+      const res = await POST(
+        makeJsonRequest({ fdcId: 123, name: "gochujang" }, { method: "POST" }),
+      );
+
+      expect(res.status).toBe(502);
+    }
+    errorSpy.mockRestore();
   });
 
   it("maps repo failures to 500", async () => {
