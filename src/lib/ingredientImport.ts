@@ -6,6 +6,7 @@ import {
   updateIngredientRow,
 } from "./ingredients";
 import { getFoodDetail, deriveDensity, extractNutrition } from "./usda";
+import { estimateDensity } from "./normalization/estimateDensity";
 import type { IngredientRow } from "@/types/ingredient";
 
 // How importUsdaIngredient resolves a lower(name) collision with an existing
@@ -42,6 +43,14 @@ export async function importUsdaIngredient(
   const embedding = await generateEmbedding(name);
   if (!embedding) return null;
 
+  // USDA portions first (real measured data), LLM estimate second — the
+  // abridged detail format never carries foodPortions, so without the
+  // estimate every import would land density-less and push volume lines onto
+  // per-line gram estimates. Best-effort: a declined estimate leaves null.
+  const density =
+    deriveDensity(detail.foodPortions) ??
+    (await estimateDensity({ name, usdaDescription: detail.description }));
+
   // The USDA-derived values, shared by the create and overwrite paths so a
   // brand-new row and an overwritten same-name row carry identical data. The
   // name (and thus the embedding) is unchanged on overwrite, so neither is
@@ -51,7 +60,7 @@ export async function importUsdaIngredient(
     fdc_id: detail.fdcId,
     fdc_data_type: detail.dataType,
     nutrition: extractNutrition(detail),
-    density_g_per_ml: deriveDensity(detail.foodPortions),
+    density_g_per_ml: density,
     food_portions: detail.foodPortions ?? null,
     source: "usda" as const,
   };

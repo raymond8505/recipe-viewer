@@ -268,7 +268,9 @@ describe("runNormalization — novel ingredients", () => {
     await runNormalization("r-1");
 
     // Real extractNutrition ran against the abridged fixture detail. Abridged
-    // never returns foodPortions, so density/food_portions persist as null.
+    // never returns foodPortions, and the density-estimate generateStructured
+    // call is unqueued here (returns undefined → estimate declines), so
+    // density/food_portions persist as null.
     expect(createIngredientRow).toHaveBeenCalledWith({
       name: "cumin seed",
       aliases: ["Spices, cumin seed"],
