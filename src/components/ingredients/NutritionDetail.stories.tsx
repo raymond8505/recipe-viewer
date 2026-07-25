@@ -55,8 +55,9 @@ type Story = StoryObj<typeof NutritionDetail>;
  * A fully normalized recipe with interleaved groups ("Spice rub" lines are
  * split around a "Sauce" line in the schema, and regroup for display exactly
  * like the recipe page). Every line converts to grams, so the totals and
- * per-portion rows are fully populated. The play() opens one line's
- * autocomplete to show the match-editing affordance.
+ * per-portion rows are fully populated. The long salt line shows the
+ * ingredient column wrapping to its full text instead of truncating. The
+ * play() opens one line's autocomplete to show the match-editing affordance.
  */
 export const Default: Story = {
   args: {
@@ -64,7 +65,7 @@ export const Default: Story = {
       { name: "2 tsp cumin seed", group: "Spice rub" },
       { name: "1 tbsp olive oil", group: "Sauce" },
       { name: "125 g all-purpose flour", group: "Spice rub" },
-      "1 tsp kosher salt",
+      "1 tsp Diamond Crystal kosher salt, plus more to season the pot generously",
     ],
     recipeYield: "4 servings",
     initialRows: [
@@ -93,7 +94,8 @@ export const Default: Story = {
         match_status: "matched",
       }),
       makeRecipeIngredient("story-recipe", 3, {
-        raw_text: "1 tsp kosher salt",
+        raw_text:
+          "1 tsp Diamond Crystal kosher salt, plus more to season the pot generously",
         quantity: 1,
         unit: "tsp",
         name_text: "kosher salt",

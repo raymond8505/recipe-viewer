@@ -71,9 +71,11 @@ export default function NutritionDetailRow({
         className={cn(STICKY_NAME_CELL, excluded && "text-muted-foreground")}
       >
         <span className="flex w-full min-w-0 items-center gap-1.5">
-          <span className="min-w-0 truncate" title={line.text}>
-            {line.text}
-          </span>
+          {/* Wrap (same treatment as the matched-ingredient label) — the
+              column is fixed-width (w-44), so long lines must grow the row,
+              not truncate. break-words keeps unbroken tokens from widening
+              the frozen column and breaking the left-44 offset. */}
+          <span className="min-w-0 text-wrap break-words">{line.text}</span>
           {excluded && (
             <span title={EXCLUSION_TITLES[computation.reason]}>
               <WarningIcon className="size-4 shrink-0 text-amber-500" />
