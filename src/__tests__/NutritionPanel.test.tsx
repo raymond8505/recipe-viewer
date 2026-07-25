@@ -72,9 +72,9 @@ describe("NutritionPanel", () => {
     expect(container.firstChild).toBeNull();
   });
 
-  it("badges each value by source when normalized and showSources is set", () => {
-    // Fully covered: calories/protein come from the ingredients; fat isn't
-    // reported so it falls back to the recipe's own field.
+  it("shows one 'ingredients' header badge when the ingredients view is served", () => {
+    // Fully covered → the whole panel serves the ingredients view: one badge,
+    // and the recipe-only fat field does NOT fill the gap (all-or-nothing).
     const r = new ScalableRecipe(
       makeScalableRecipe({
         recipeIngredient: undefined,
@@ -86,12 +86,12 @@ describe("NutritionPanel", () => {
     );
     render(<Harness initial={r} showSources />);
     expect(screen.getByText("500 kcal")).toBeTruthy();
-    // Two computed nutrients → two "ingredients" badges; one fallback → "recipe".
-    expect(screen.getAllByText("ingredients")).toHaveLength(2);
-    expect(screen.getAllByText("recipe")).toHaveLength(1);
+    expect(screen.getAllByText("ingredients")).toHaveLength(1);
+    expect(screen.queryByText("recipe")).toBeNull();
+    expect(screen.queryByText("5 g")).toBeNull();
   });
 
-  it("hides source badges when showSources is false, even if normalized", () => {
+  it("hides the source badge when showSources is false, even if normalized", () => {
     const r = new ScalableRecipe(
       makeScalableRecipe({
         recipeIngredient: undefined,
@@ -106,15 +106,15 @@ describe("NutritionPanel", () => {
     expect(screen.queryByText("recipe")).toBeNull();
   });
 
-  it("shows no source badges for a non-normalized recipe", () => {
+  it("shows one 'recipe' header badge for a non-normalized recipe", () => {
     const r = makeScalableRecipe({
       recipeIngredient: undefined,
       recipeYield: "4 servings",
       nutrition: { calories: "350 kcal" },
     });
     render(<Harness initial={r} showSources />);
+    expect(screen.getAllByText("recipe")).toHaveLength(1);
     expect(screen.queryByText("ingredients")).toBeNull();
-    expect(screen.queryByText("recipe")).toBeNull();
   });
 
   it("shows 'per serving' at the default portion count", () => {

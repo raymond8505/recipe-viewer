@@ -89,12 +89,10 @@ export const PartialData: Story = {
 };
 
 /**
- * A fully-covered normalized recipe: values are computed from the ingredient
- * list, so each carries an "ingredients" badge. Sodium isn't reported by the
- * ingredients here, so it falls back to the recipe's own field and shows a
- * "recipe" badge — the per-field fallback in action. (Totals are whole-recipe
- * for 4 servings, e.g. 2080 kcal → 520 kcal per serving.) Badges are gated to
- * logged-in users via `showSources`.
+ * A fully-covered normalized recipe: the whole panel serves the view computed
+ * from the ingredient list, flagged by a single "ingredients" badge in the
+ * header. (Totals are whole-recipe for 4 servings, e.g. 2080 kcal → 520 kcal
+ * per serving.) The badge is gated to logged-in users via `showSources`.
  */
 export const FromNormalizedIngredients: Story = {
   args: {
@@ -103,7 +101,7 @@ export const FromNormalizedIngredients: Story = {
       makeSchemaRecipe({
         recipeIngredient: undefined,
         recipeYield: "4 servings",
-        nutrition: { sodiumContent: "820 mg" },
+        nutrition: undefined,
       }),
       undefined,
       {
@@ -114,9 +112,25 @@ export const FromNormalizedIngredients: Story = {
           carbs_g: 192,
           fat_g: 72,
           fiber_g: 24,
+          sodium_mg: 3280,
         },
       },
     ),
+  },
+};
+
+/**
+ * A recipe without trusted ingredient coverage serves its own manually set
+ * nutrition fields — the header badge reads "recipe" for logged-in users.
+ */
+export const FromRecipeFields: Story = {
+  args: {
+    showSources: true,
+    initial: makeScalableRecipe({
+      recipeIngredient: undefined,
+      recipeYield: "4 servings",
+      nutrition: fullNutrition,
+    }),
   },
 };
 

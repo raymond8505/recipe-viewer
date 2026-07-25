@@ -194,12 +194,12 @@ describe("getRecipe", () => {
     });
 
     const out = await getRecipe({ id: recipe.id });
-    // 2000 kcal / 4 servings = 500; 40 g / 4 = 10. Sodium (not reported by the
-    // ingredients) falls back to the recipe's own field.
+    // 2000 kcal / 4 servings = 500; 40 g / 4 = 10. All-or-nothing: sodium
+    // (recipe-only) does NOT fill the gap in the ingredients view.
     expect(out.metadata.schema.nutrition).toEqual({
+      "@type": "NutritionInformation",
       calories: "500 kcal",
       proteinContent: "10 g",
-      sodiumContent: "800 mg",
     });
   });
 

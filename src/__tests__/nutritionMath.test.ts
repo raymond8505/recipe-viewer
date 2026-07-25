@@ -7,8 +7,6 @@ import {
   lineComputationForSchema,
   normalizedTotalToPerServingSchema,
   perPortionNutrition,
-  resolveRecipeNutrition,
-  resolveRecipeNutritionWithSources,
   scaleNutritionToGrams,
   scalePortionNutritionToPer100g,
   sumNutrition,
@@ -495,70 +493,3 @@ describe("normalizedTotalToPerServingSchema", () => {
   });
 });
 
-describe("resolveRecipeNutrition", () => {
-  const total = { calories_kcal: 2000, protein_g: 40 };
-
-  it("returns the schema nutrition unchanged when not fully covered", () => {
-    const schema = { calories: "300 kcal" };
-    expect(
-      resolveRecipeNutrition(schema, { total, fullyCovered: false }, 4),
-    ).toBe(schema);
-  });
-
-  it("returns the schema nutrition unchanged when servings are unknown", () => {
-    const schema = { calories: "300 kcal" };
-    expect(
-      resolveRecipeNutrition(schema, { total, fullyCovered: true }, null),
-    ).toBe(schema);
-  });
-
-  it("prefers normalized values per-field, falling back to the recipe field", () => {
-    const schema = {
-      "@type": "NutritionInformation" as const,
-      servingSize: "1 bowl",
-      calories: "300 kcal",
-      sodiumContent: "800 mg",
-    };
-    // calories/protein come from the ingredients; sodium isn't reported so it
-    // falls back; servingSize always comes from the schema.
-    expect(
-      resolveRecipeNutrition(schema, { total, fullyCovered: true }, 4),
-    ).toEqual({
-      "@type": "NutritionInformation",
-      servingSize: "1 bowl",
-      calories: "500 kcal",
-      proteinContent: "10 g",
-      sodiumContent: "800 mg",
-    });
-  });
-
-  it("supplies nutrition even when the recipe has none of its own", () => {
-    expect(
-      resolveRecipeNutrition(undefined, { total, fullyCovered: true }, 4),
-    ).toEqual({ calories: "500 kcal", proteinContent: "10 g" });
-  });
-});
-
-describe("resolveRecipeNutritionWithSources", () => {
-  it("returns no per-field sources when normalized isn't used", () => {
-    const { sources } = resolveRecipeNutritionWithSources(
-      { calories: "300 kcal", proteinContent: "20 g" },
-      { total: { calories_kcal: 2000 }, fullyCovered: false },
-      4,
-    );
-    expect(sources).toEqual({});
-  });
-
-  it("tags computed nutrients 'normalized' and fallbacks 'recipe'", () => {
-    const { sources } = resolveRecipeNutritionWithSources(
-      { calories: "300 kcal", sodiumContent: "800 mg" },
-      { total: { calories_kcal: 2000, protein_g: 40 }, fullyCovered: true },
-      4,
-    );
-    expect(sources).toEqual({
-      calories: "normalized",
-      proteinContent: "normalized",
-      sodiumContent: "recipe",
-    });
-  });
-});

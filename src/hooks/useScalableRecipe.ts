@@ -23,8 +23,9 @@ export interface UseScalableRecipe {
  * the carried-over numbers meaningless.
  *
  * `normalized` (the recipe's normalized ingredient nutrition) is baked into the
- * instance so the panel prefers it over the schema fields. Callers pass it only
- * for the original, unedited schema — see RecipeDetail.
+ * instance, whose `nutrition()` decides whether to serve it or the schema
+ * fields. Callers pass it only for the original, unedited schema — see
+ * RecipeDetail.
  */
 export function useScalableRecipe(
   schema: SchemaRecipe,

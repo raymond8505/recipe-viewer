@@ -11,8 +11,7 @@ import {
   IngredientRepoError,
   matchIngredients,
 } from "@/lib/ingredients";
-import { resolveRecipeNutrition } from "@/lib/nutritionMath";
-import { parseServings } from "@/lib/units";
+import { ScalableRecipe } from "@/lib/ScalableRecipe";
 import { generateEmbedding } from "@/lib/embedding";
 import { RECIPE_TOKEN_TTL_SECONDS, signRecipeToken } from "./recipeToken";
 import { env } from "@/env";
@@ -100,24 +99,27 @@ export async function getRecipe(args: RecipeIdInput): Promise<RecipeRow> {
   const row = await getRecipeById(args.id);
   if (!row) throw new ToolError("not_found", `Recipe ${args.id} not found`);
 
-  // Prefer the normalized ingredient nutrition (per serving) when the recipe is
-  // fully covered — same source as the UI panel and JSON-LD. Otherwise return
-  // the recipe's own nutrition unchanged.
+  // Serve the recipe's single resolved nutrition view — the same
+  // ScalableRecipe.nutrition() decision as the UI panel and JSON-LD. Only an
+  // ingredients-sourced result overrides; otherwise the row's own nutrition is
+  // already what nutrition() would serve.
   const schema = row.metadata.schema;
   const normalized = await getRecipeNormalizedNutrition(
     args.id,
     schema.recipeIngredient ?? [],
   );
-  if (!normalized?.fullyCovered) return row;
+  const resolved = new ScalableRecipe(schema, undefined, normalized).nutrition();
+  if (resolved?.source !== "ingredients") return row;
 
-  const nutrition = resolveRecipeNutrition(
-    schema.nutrition,
-    normalized,
-    parseServings(schema.recipeYield),
-  );
   return {
     ...row,
-    metadata: { ...row.metadata, schema: { ...schema, nutrition } },
+    metadata: {
+      ...row.metadata,
+      schema: {
+        ...schema,
+        nutrition: { "@type": "NutritionInformation", ...resolved.values },
+      },
+    },
   };
 }
 

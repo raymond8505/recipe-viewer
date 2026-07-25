@@ -1,19 +1,19 @@
 import { Badge } from "@/components/ui/badge";
-import type { NutrientSource } from "@/lib/nutritionMath";
+import type { NutritionSource } from "@/lib/ScalableRecipe";
 
 /**
- * Provenance badge for a single nutrition value: whether it was computed from
- * the normalized ingredient list ("ingredients") or read from the recipe's own
- * nutrition fields ("recipe").
+ * Provenance badge for the nutrition panel: whether the displayed values were
+ * computed from the normalized ingredient list ("ingredients") or read from
+ * the recipe's own nutrition fields ("recipe").
  *
- * @summary shows where a nutrition value came from
+ * @summary shows where the nutrition values came from
  */
 export default function NutritionSourceBadge({
   source,
 }: {
-  source: NutrientSource;
+  source: NutritionSource;
 }) {
-  if (source === "normalized") {
+  if (source === "ingredients") {
     return (
       <Badge variant="secondary" title="Computed from the ingredient list">
         ingredients

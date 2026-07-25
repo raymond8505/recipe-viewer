@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import Image from "next/image";
 import type {
   RecipeRow,
@@ -16,9 +16,7 @@ import {
   getIngredientText,
   toSchemaOrgJsonLd,
 } from "@/lib/format";
-import { resolveRecipeNutrition } from "@/lib/nutritionMath";
-import { parseServings } from "@/lib/units";
-import type { NormalizedNutrition } from "@/lib/ScalableRecipe";
+import { ScalableRecipe, type NormalizedNutrition } from "@/lib/ScalableRecipe";
 import { useScalableRecipe } from "@/hooks/useScalableRecipe";
 import { useRecipeEditor } from "@/hooks/useRecipeEditor";
 import { useUndoableSchemaOp, type OpState } from "@/hooks/useUndoableSchemaOp";
@@ -72,6 +70,13 @@ export default function RecipeDetail({
     splitPortions,
     anchorIngredientAmount,
   } = useScalableRecipe(schema, normalizedForSchema);
+  // JSON-LD serializes the base per-serving nutrition. A default-state
+  // instance keeps it independent of the user's live scale/split (which
+  // `scalable` tracks).
+  const jsonLdNutrition = useMemo(
+    () => new ScalableRecipe(schema, undefined, normalizedForSchema ?? null).nutrition(),
+    [schema, normalizedForSchema],
+  );
 
   // Edit buffer + the two undoable schema operations (re-scrape / regen image)
   // + image-upload staging each own their slice of state in a dedicated hook;
@@ -495,17 +500,15 @@ export default function RecipeDetail({
         />
 
         {/* JSON-LD — Schema.org-compliant only; escape </script> sequences to prevent tag injection.
-            Nutrition prefers the normalized total (per serving) when fully covered. */}
+            Nutrition comes from the recipe's single resolved view (ScalableRecipe.nutrition). */}
         <script
           type="application/ld+json"
           dangerouslySetInnerHTML={{
             __html: JSON.stringify(
               toSchemaOrgJsonLd(schema, {
-                nutritionOverride: resolveRecipeNutrition(
-                  schema.nutrition,
-                  normalizedForSchema,
-                  parseServings(schema.recipeYield),
-                ),
+                nutritionOverride: jsonLdNutrition
+                  ? { "@type": "NutritionInformation", ...jsonLdNutrition.values }
+                  : undefined,
               }),
               null,
               2,
