@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { useState } from "react";
 import { render, screen, fireEvent } from "@testing-library/react";
-import NutritionPanel, { scaleNutrientValue } from "@/components/NutritionPanel";
+import NutritionPanel from "@/components/NutritionPanel";
 import { ScalableRecipe } from "@/lib/ScalableRecipe";
 import { makeScalableRecipe, quantitativeValueYield } from "@/fixtures";
 
@@ -23,32 +23,6 @@ function Harness({
   );
 }
 
-describe("scaleNutrientValue", () => {
-  it("scales a value with a spaced unit", () => {
-    expect(scaleNutrientValue("350 kcal", 2)).toBe("700 kcal");
-  });
-
-  it("scales a value with an attached unit", () => {
-    expect(scaleNutrientValue("20g", 2)).toBe("40g");
-  });
-
-  it("rounds to one decimal place", () => {
-    expect(scaleNutrientValue("25g", 1.5)).toBe("37.5g");
-  });
-
-  it("strips trailing zero decimal", () => {
-    expect(scaleNutrientValue("10g", 2)).toBe("20g");
-  });
-
-  it("returns raw value unchanged for unrecognized format", () => {
-    expect(scaleNutrientValue("unknown", 2)).toBe("unknown");
-  });
-
-  it("handles fractional multiplier", () => {
-    expect(scaleNutrientValue("300 kcal", 0.5)).toBe("150 kcal");
-  });
-});
-
 describe("NutritionPanel", () => {
   it("renders nutrition section with fields", () => {
     const r = makeScalableRecipe({
@@ -59,7 +33,9 @@ describe("NutritionPanel", () => {
     render(<Harness initial={r} />);
     expect(screen.getByText("Nutrition")).toBeTruthy();
     expect(screen.getByText("350 kcal")).toBeTruthy();
-    expect(screen.getByText("20g")).toBeTruthy();
+    // "20g" in the schema normalizes to spaced display — units are re-attached
+    // from the parsed NutrientValue, never echoed from the raw string.
+    expect(screen.getByText("20 g")).toBeTruthy();
   });
 
   it("returns null when no countable nutrition data is present", () => {

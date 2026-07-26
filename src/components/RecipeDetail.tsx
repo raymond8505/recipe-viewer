@@ -17,6 +17,7 @@ import {
   toSchemaOrgJsonLd,
 } from "@/lib/format";
 import { ScalableRecipe, type NormalizedNutrition } from "@/lib/ScalableRecipe";
+import { nutrientValuesToSchema } from "@/lib/nutritionMath";
 import { useScalableRecipe } from "@/hooks/useScalableRecipe";
 import { useRecipeEditor } from "@/hooks/useRecipeEditor";
 import { useUndoableSchemaOp, type OpState } from "@/hooks/useUndoableSchemaOp";
@@ -507,7 +508,10 @@ export default function RecipeDetail({
             __html: JSON.stringify(
               toSchemaOrgJsonLd(schema, {
                 nutritionOverride: jsonLdNutrition
-                  ? { "@type": "NutritionInformation", ...jsonLdNutrition.values }
+                  ? {
+                      "@type": "NutritionInformation",
+                      ...nutrientValuesToSchema(jsonLdNutrition.values),
+                    }
                   : undefined,
               }),
               null,

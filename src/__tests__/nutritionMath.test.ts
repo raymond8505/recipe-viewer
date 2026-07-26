@@ -4,9 +4,13 @@ import {
   computeRecipeNutrition,
   explicitWeightGrams,
   gramsForLine,
+  formatNutrientString,
   lineComputationForSchema,
-  normalizedTotalToPerServingSchema,
+  normalizedTotalToPerServing,
+  nutrientValuesToSchema,
+  parseNutrientValue,
   perPortionNutrition,
+  schemaNutritionToValues,
   scaleNutritionToGrams,
   scalePortionNutritionToPer100g,
   sumNutrition,
@@ -460,28 +464,28 @@ describe("computeRecipeNutrition", () => {
   });
 });
 
-describe("normalizedTotalToPerServingSchema", () => {
-  it("maps snake_case totals to per-serving Schema.org strings with units", () => {
+describe("normalizedTotalToPerServing", () => {
+  it("maps snake_case totals to per-serving NutrientValues with units", () => {
     expect(
-      normalizedTotalToPerServingSchema(
+      normalizedTotalToPerServing(
         { calories_kcal: 2000, protein_g: 40, sodium_mg: 3200 },
         4,
       ),
     ).toEqual({
-      calories: "500 kcal",
-      proteinContent: "10 g",
-      sodiumContent: "800 mg",
+      calories: { value: 500, unit: "kcal" },
+      proteinContent: { value: 10, unit: "g" },
+      sodiumContent: { value: 800, unit: "mg" },
     });
   });
 
-  it("keeps one decimal place when fractional", () => {
-    expect(normalizedTotalToPerServingSchema({ fat_g: 25 }, 4)).toEqual({
-      fatContent: "6.3 g",
+  it("keeps full precision — rounding is deferred to the boundaries", () => {
+    expect(normalizedTotalToPerServing({ fat_g: 25 }, 4)).toEqual({
+      fatContent: { value: 6.25, unit: "g" },
     });
   });
 
   it("omits nutrients with no Schema.org slot (calcium/iron/potassium)", () => {
-    const out = normalizedTotalToPerServingSchema(
+    const out = normalizedTotalToPerServing(
       { calcium_mg: 400, iron_mg: 8, potassium_mg: 100 },
       2,
     );
@@ -489,7 +493,85 @@ describe("normalizedTotalToPerServingSchema", () => {
   });
 
   it("returns an empty object for non-positive servings", () => {
-    expect(normalizedTotalToPerServingSchema({ calories_kcal: 100 }, 0)).toEqual({});
+    expect(normalizedTotalToPerServing({ calories_kcal: 100 }, 0)).toEqual({});
+  });
+});
+
+describe("parseNutrientValue", () => {
+  it("parses a spaced unit", () => {
+    expect(parseNutrientValue("350 kcal")).toEqual({ value: 350, unit: "kcal" });
+  });
+
+  it("parses an attached unit", () => {
+    expect(parseNutrientValue("20g")).toEqual({ value: 20, unit: "g" });
+  });
+
+  it("parses a bare number to an empty unit", () => {
+    expect(parseNutrientValue("250")).toEqual({ value: 250, unit: "" });
+  });
+
+  it("parses decimals", () => {
+    expect(parseNutrientValue("0.5 mg")).toEqual({ value: 0.5, unit: "mg" });
+  });
+
+  it("returns null for strings without a leading number", () => {
+    expect(parseNutrientValue("unknown")).toBeNull();
+    expect(parseNutrientValue("about 300 kcal")).toBeNull();
+  });
+});
+
+describe("formatNutrientString", () => {
+  it("prints integers without a decimal", () => {
+    expect(formatNutrientString({ value: 480, unit: "kcal" })).toBe("480 kcal");
+  });
+
+  it("rounds to one decimal place when fractional", () => {
+    expect(formatNutrientString({ value: 6.25, unit: "g" })).toBe("6.3 g");
+  });
+
+  it("strips a trailing zero decimal", () => {
+    expect(formatNutrientString({ value: 19.999, unit: "g" })).toBe("20 g");
+  });
+
+  it("prints bare when the unit is empty", () => {
+    expect(formatNutrientString({ value: 250, unit: "" })).toBe("250");
+  });
+});
+
+describe("schemaNutritionToValues / nutrientValuesToSchema", () => {
+  it("round-trips wire strings through object values", () => {
+    const wire = {
+      servingSize: "1 slice",
+      calories: "350 kcal",
+      proteinContent: "20g",
+      fiberContent: "0.5 g",
+    };
+    const values = schemaNutritionToValues(wire);
+    expect(values).toEqual({
+      servingSize: "1 slice",
+      calories: { value: 350, unit: "kcal" },
+      proteinContent: { value: 20, unit: "g" },
+      fiberContent: { value: 0.5, unit: "g" },
+    });
+    // Attached units come back spaced — the wire format is normalized.
+    expect(nutrientValuesToSchema(values)).toEqual({
+      servingSize: "1 slice",
+      calories: "350 kcal",
+      proteinContent: "20 g",
+      fiberContent: "0.5 g",
+    });
+  });
+
+  it("omits unparseable fields at the parse boundary", () => {
+    expect(
+      schemaNutritionToValues({ calories: "unknown", fatContent: "5 g" }),
+    ).toEqual({ fatContent: { value: 5, unit: "g" } });
+  });
+
+  it("rounds to 1dp at the stringify boundary", () => {
+    expect(
+      nutrientValuesToSchema({ fatContent: { value: 6.6666, unit: "g" } }),
+    ).toEqual({ fatContent: "6.7 g" });
   });
 });
 

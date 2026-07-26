@@ -12,6 +12,7 @@ import {
   matchIngredients,
 } from "@/lib/ingredients";
 import { ScalableRecipe } from "@/lib/ScalableRecipe";
+import { nutrientValuesToSchema } from "@/lib/nutritionMath";
 import { generateEmbedding } from "@/lib/embedding";
 import { RECIPE_TOKEN_TTL_SECONDS, signRecipeToken } from "./recipeToken";
 import { env } from "@/env";
@@ -117,7 +118,10 @@ export async function getRecipe(args: RecipeIdInput): Promise<RecipeRow> {
       ...row.metadata,
       schema: {
         ...schema,
-        nutrition: { "@type": "NutritionInformation", ...resolved.values },
+        nutrition: {
+          "@type": "NutritionInformation",
+          ...nutrientValuesToSchema(resolved.values),
+        },
       },
     },
   };

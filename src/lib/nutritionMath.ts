@@ -321,11 +321,101 @@ export function computeRecipeNutrition(
   };
 }
 
+/**
+ * A nutrition quantity split into numeric value and unit ("kcal", "g", "mg";
+ * "" when the source carried no unit). The internal nutrition currency —
+ * Schema.org "value unit" strings exist only at the wire boundaries
+ * (schema.nutrition, JSON-LD, MCP output).
+ */
+export interface NutrientValue {
+  value: number;
+  unit: string;
+}
+
+/** The nutrient fields of SchemaNutrition (everything but @type/servingSize). */
+export const NUTRIENT_FIELDS = [
+  "calories",
+  "proteinContent",
+  "carbohydrateContent",
+  "fatContent",
+  "fiberContent",
+  "sodiumContent",
+  "sugarContent",
+  "saturatedFatContent",
+  "unsaturatedFatContent",
+  "cholesterolContent",
+] as const satisfies readonly (keyof SchemaNutrition)[];
+
+export type NutrientField = (typeof NUTRIENT_FIELDS)[number];
+
+/** Object-valued nutrition keyed by Schema.org field name. */
+export type NutrientValues = Partial<Record<NutrientField, NutrientValue>>;
+
+/**
+ * Parse a Schema.org "value unit" nutrition string ("350 kcal", "20g", "250").
+ * The single string→NutrientValue site in the codebase. Returns null when the
+ * string has no leading number.
+ */
+export function parseNutrientValue(raw: string): NutrientValue | null {
+  const match = raw.match(/^([\d.]+)\s*(.*)$/);
+  if (!match) return null;
+  const value = parseFloat(match[1]);
+  if (!Number.isFinite(value)) return null;
+  return { value, unit: match[2].trim() };
+}
+
+/**
+ * Render a NutrientValue in the Schema.org wire format — the single
+ * `${value} ${unit}` site in the codebase. One decimal place when fractional,
+ * integer otherwise ("480 kcal", "12.5 g"); a unit-less value prints bare.
+ */
+export function formatNutrientString(nv: NutrientValue): string {
+  const rounded = Math.round(nv.value * 10) / 10;
+  const formatted = rounded % 1 === 0 ? rounded.toString() : rounded.toFixed(1);
+  return nv.unit ? `${formatted} ${nv.unit}` : formatted;
+}
+
+/**
+ * Parse boundary: schema.nutrition wire strings → object values. Fields
+ * without a leading number are omitted; servingSize is free text ("1 slice")
+ * and rides along verbatim.
+ */
+export function schemaNutritionToValues(
+  n: SchemaNutrition,
+): NutrientValues & { servingSize?: string } {
+  const result: NutrientValues & { servingSize?: string } = {};
+  if (n.servingSize != null) result.servingSize = n.servingSize;
+  for (const field of NUTRIENT_FIELDS) {
+    const raw = n[field];
+    if (raw == null) continue;
+    const parsed = parseNutrientValue(raw);
+    if (parsed) result[field] = parsed;
+  }
+  return result;
+}
+
+/**
+ * Stringify boundary: object values → schema.nutrition wire strings, for
+ * JSON-LD and MCP serialization. Rounding (1dp) happens here, so internal
+ * values stay full-precision until the edge.
+ */
+export function nutrientValuesToSchema(
+  values: NutrientValues & { servingSize?: string },
+): SchemaNutrition {
+  const result: SchemaNutrition = {};
+  if (values.servingSize != null) result.servingSize = values.servingSize;
+  for (const field of NUTRIENT_FIELDS) {
+    const nv = values[field];
+    if (nv) result[field] = formatNutrientString(nv);
+  }
+  return result;
+}
+
 // snake_case IngredientNutrition key → Schema.org NutritionInformation field +
 // unit. calcium/iron/potassium have no Schema.org slot, so they're omitted.
 const SCHEMA_NUTRITION_MAP: ReadonlyArray<{
   key: keyof IngredientNutrition;
-  field: Exclude<keyof SchemaNutrition, "@type">;
+  field: NutrientField;
   unit: string;
 }> = [
   { key: "calories_kcal", field: "calories", unit: "kcal" },
@@ -339,29 +429,22 @@ const SCHEMA_NUTRITION_MAP: ReadonlyArray<{
   { key: "cholesterol_mg", field: "cholesterolContent", unit: "mg" },
 ];
 
-// Match scaleNutrientValue's formatting: one decimal place when fractional,
-// integer otherwise (e.g. "480 kcal", "12.5 g").
-function formatNutrientValue(value: number, unit: string): string {
-  const rounded = Math.round(value * 10) / 10;
-  const formatted = rounded % 1 === 0 ? rounded.toString() : rounded.toFixed(1);
-  return `${formatted} ${unit}`;
-}
-
 /**
- * Convert a whole-recipe normalized total to a Schema.org per-serving nutrition
- * object (camelCase string values with units). Key sparsity is preserved — a
- * nutrient no ingredient reports simply doesn't appear. A non-positive
- * `servings` yields an empty object rather than dividing by zero.
+ * Convert a whole-recipe normalized total to per-serving object values
+ * (camelCase Schema.org field names, full precision — rounding is deferred to
+ * the display/serialization boundary). Key sparsity is preserved — a nutrient
+ * no ingredient reports simply doesn't appear. A non-positive `servings`
+ * yields an empty object rather than dividing by zero.
  */
-export function normalizedTotalToPerServingSchema(
+export function normalizedTotalToPerServing(
   total: IngredientNutrition,
   servings: number,
-): SchemaNutrition {
-  const result: SchemaNutrition = {};
+): NutrientValues {
+  const result: NutrientValues = {};
   if (servings <= 0) return result;
   for (const { key, field, unit } of SCHEMA_NUTRITION_MAP) {
     const value = total[key];
-    if (value != null) result[field] = formatNutrientValue(value / servings, unit);
+    if (value != null) result[field] = { value: value / servings, unit };
   }
   return result;
 }

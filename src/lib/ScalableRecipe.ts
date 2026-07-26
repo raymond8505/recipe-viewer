@@ -7,7 +7,12 @@ import {
   type ParsedIngredient,
 } from "./units";
 import { getYieldValueReference } from "./format";
-import { normalizedTotalToPerServingSchema } from "./nutritionMath";
+import {
+  NUTRIENT_FIELDS,
+  normalizedTotalToPerServing,
+  schemaNutritionToValues,
+  type NutrientValues,
+} from "./nutritionMath";
 
 /**
  * Normalized ingredient nutrition for a recipe, supplied to the ScalableRecipe
@@ -63,51 +68,15 @@ export interface ScaledIngredient {
 
 export type IngredientRef = number | { index: number };
 
-export interface ScaledNutrition {
-  servingSize?: string;
-  calories?: string;
-  proteinContent?: string;
-  carbohydrateContent?: string;
-  fatContent?: string;
-  fiberContent?: string;
-  sodiumContent?: string;
-  sugarContent?: string;
-  saturatedFatContent?: string;
-  unsaturatedFatContent?: string;
-  cholesterolContent?: string;
-}
-
 /**
- * Multiply the numeric prefix of a Schema.org nutrition string by `multiplier`,
- * preserving any trailing unit text ("350 kcal", "20g", "0.5 mg"). The output
- * keeps one decimal place when the result is fractional, integer otherwise.
- * Returns the input unchanged for strings without a leading number.
+ * Object-valued resolved nutrition: every nutrient is a `NutrientValue`
+ * (numbers internally, full precision); `servingSize` stays the free-text
+ * Schema.org string ("1 slice"). Stringified only at the boundaries via
+ * `nutrientValuesToSchema` / `formatNutrientDisplay`.
  */
-export function scaleNutrientValue(raw: string, multiplier: number): string {
-  const match = raw.match(/^([\d.]+)(\s*.*)$/);
-  if (!match) return raw;
-  const scaled = parseFloat(match[1]) * multiplier;
-  const rounded = Math.round(scaled * 10) / 10;
-  const formatted = rounded % 1 === 0 ? rounded.toString() : rounded.toFixed(1);
-  return formatted + match[2];
-}
+export type ScaledNutrition = NutrientValues & { servingSize?: string };
 
 // ─── Private helpers (used by ScalableRecipe below) ───────────────────────
-
-const NUTRIENT_KEYS = [
-  "calories",
-  "proteinContent",
-  "carbohydrateContent",
-  "fatContent",
-  "fiberContent",
-  "sodiumContent",
-  "sugarContent",
-  "saturatedFatContent",
-  "unsaturatedFatContent",
-  "cholesterolContent",
-] as const;
-
-type NutrientKey = (typeof NUTRIENT_KEYS)[number];
 
 function scaleParsedAmount(a: ParsedAmount, scale: number): ParsedAmount {
   return a.kind === "single"
@@ -354,24 +323,26 @@ export class ScalableRecipe {
    * doesn't count).
    */
   private scaleNutrition(base: ScaledNutrition | undefined): ScaledNutrition | null {
-    if (!base || !NUTRIENT_KEYS.some((k) => !!base[k])) return null;
+    if (!base || !NUTRIENT_FIELDS.some((k) => !!base[k])) return null;
     const mult = this.nutritionMultiplier;
     const result: ScaledNutrition = {};
     if (base.servingSize != null) result.servingSize = base.servingSize;
-    for (const k of NUTRIENT_KEYS) {
+    for (const k of NUTRIENT_FIELDS) {
       const v = base[k];
       if (v == null) continue;
-      result[k] = mult === 1 ? v : scaleNutrientValue(v, mult);
+      result[k] = mult === 1 ? v : { value: v.value * mult, unit: v.unit };
     }
     return result;
   }
 
   /**
    * The recipe's own (manually set) `schema.nutrition` fields at the current
-   * scale/split, or null when the schema has none.
+   * scale/split, or null when the schema has none. Wire strings are parsed to
+   * NutrientValues here — fields without a leading number are dropped.
    */
   recipeNutrition(): ScaledNutrition | null {
-    return this.scaleNutrition(this.schema.nutrition);
+    const n = this.schema.nutrition;
+    return this.scaleNutrition(n ? schemaNutritionToValues(n) : undefined);
   }
 
   /**
@@ -384,7 +355,7 @@ export class ScalableRecipe {
     if (!this.normalized) return null;
     if (this.baseServings == null || this.baseServings <= 0) return null;
     return this.scaleNutrition(
-      normalizedTotalToPerServingSchema(this.normalized.total, this.baseServings),
+      normalizedTotalToPerServing(this.normalized.total, this.baseServings),
     );
   }
 

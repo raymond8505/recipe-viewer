@@ -5,9 +5,8 @@ import { PortionStepperButton } from "@/components/buttons";
 import { Button } from "@/components/ui/button";
 import NutritionSourceBadge from "@/components/ingredients/NutritionSourceBadge";
 import { formatNutrientDisplay } from "@/lib/format";
+import type { NutrientValue } from "@/lib/nutritionMath";
 import type { ScalableRecipe } from "@/lib/ScalableRecipe";
-
-export { scaleNutrientValue } from "@/lib/ScalableRecipe";
 
 interface NutritionPanelProps {
   recipe: ScalableRecipe;
@@ -106,7 +105,7 @@ export default function NutritionPanel({
   );
 }
 
-function NutritionStat({ label, value }: { label: string; value: string }) {
+function NutritionStat({ label, value }: { label: string; value: NutrientValue }) {
   return (
     <div className="bg-gray-50 rounded-lg p-2 text-center">
       <p className="text-xs text-gray-500 mb-0.5">{label}</p>
