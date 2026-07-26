@@ -26,10 +26,10 @@ const DENSITY_SCHEMA = {
 };
 
 // Food densities live in a narrow band (chopped leafy herbs ~0.1, flours
-// ~0.5-0.6, liquids ~1, honey ~1.4). A value outside (0, 5] means the model
+// ~0.5-0.6, liquids ~1, honey ~1.4, salt ~2.6). A value outside (0, 3] means the model
 // answered something other than g/ml — discard it rather than persist a
 // number that would silently corrupt every volume→gram conversion.
-const MAX_PLAUSIBLE_DENSITY_G_PER_ML = 5;
+const MAX_PLAUSIBLE_DENSITY_G_PER_ML = 3;
 
 function densityPrompt(input: {
   name: string;
