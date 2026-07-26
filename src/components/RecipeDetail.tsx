@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import Image from "next/image";
 import type {
   RecipeRow,
@@ -16,6 +16,7 @@ import {
   getIngredientText,
   toSchemaOrgJsonLd,
 } from "@/lib/format";
+import { ScalableRecipe, type NormalizedNutrition } from "@/lib/ScalableRecipe";
 import { useScalableRecipe } from "@/hooks/useScalableRecipe";
 import { useRecipeEditor } from "@/hooks/useRecipeEditor";
 import { useUndoableSchemaOp, type OpState } from "@/hooks/useUndoableSchemaOp";
@@ -40,12 +41,16 @@ interface RecipeDetailProps {
   // Client components can't import @/env — t3-env throws on server-var
   // access in the browser — so the prop is the only wiring.
   maxImageBytes?: number;
+  // The recipe's normalized ingredient nutrition, computed server-side. When
+  // fully covered it's preferred over the schema's own nutrition fields.
+  normalizedNutrition?: NormalizedNutrition | null;
 }
 
 export default function RecipeDetail({
   recipe,
   isLoggedIn = false,
   maxImageBytes = DEFAULT_MAX_IMAGE_BYTES,
+  normalizedNutrition,
 }: RecipeDetailProps) {
   const [schema, setSchema] = useState(recipe.metadata.schema);
   const [status, setStatus] = useState(recipe.status ?? "draft");
@@ -54,12 +59,24 @@ export default function RecipeDetail({
   const cookTime = formatDuration(schema.cookTime);
   const totalTime = formatDuration(schema.totalTime);
   const categories = toArray(schema.recipeCategory);
+  // The normalized total was computed against the original, unedited schema; a
+  // client-side edit/re-scrape swaps `schema`, invalidating it — so only apply
+  // it while the schema is still the one it was derived from.
+  const normalizedForSchema =
+    schema === recipe.metadata.schema ? normalizedNutrition : undefined;
   const {
     recipe: scalable,
     scalePortionsTo,
     splitPortions,
     anchorIngredientAmount,
-  } = useScalableRecipe(schema);
+  } = useScalableRecipe(schema, normalizedForSchema);
+  // JSON-LD serializes the base per-serving nutrition. A default-state
+  // instance keeps it independent of the user's live scale/split (which
+  // `scalable` tracks).
+  const jsonLdNutrition = useMemo(
+    () => new ScalableRecipe(schema, undefined, normalizedForSchema ?? null).nutrition(),
+    [schema, normalizedForSchema],
+  );
 
   // Edit buffer + the two undoable schema operations (re-scrape / regen image)
   // + image-upload staging each own their slice of state in a dedicated hook;
@@ -246,7 +263,11 @@ export default function RecipeDetail({
                 <h1 className="text-3xl sm:text-4xl text-gray-900 leading-tight">
                   {schema.name}
                 </h1>
-                <CookingModeButton recipe={recipe} isLoggedIn={isLoggedIn} />
+                <CookingModeButton
+                  recipe={recipe}
+                  isLoggedIn={isLoggedIn}
+                  normalizedNutrition={normalizedNutrition}
+                />
               </>
             )}
           </div>
@@ -475,16 +496,23 @@ export default function RecipeDetail({
           recipe={scalable}
           onSplitPortions={splitPortions}
           ingredientsHref={isLoggedIn ? `/recipes/${recipe.id}/ingredients` : undefined}
+          showSources={isLoggedIn}
         />
 
-        {/* JSON-LD — Schema.org-compliant only; escape </script> sequences to prevent tag injection */}
+        {/* JSON-LD — Schema.org-compliant only; escape </script> sequences to prevent tag injection.
+            Nutrition comes from the recipe's single resolved view (ScalableRecipe.nutrition). */}
         <script
           type="application/ld+json"
           dangerouslySetInnerHTML={{
-            __html: JSON.stringify(toSchemaOrgJsonLd(schema), null, 2).replace(
-              /</g,
-              "\\u003c",
-            ),
+            __html: JSON.stringify(
+              toSchemaOrgJsonLd(schema, {
+                nutritionOverride: jsonLdNutrition
+                  ? { "@type": "NutritionInformation", ...jsonLdNutrition.values }
+                  : undefined,
+              }),
+              null,
+              2,
+            ).replace(/</g, "\\u003c"),
           }}
         />
       </div>

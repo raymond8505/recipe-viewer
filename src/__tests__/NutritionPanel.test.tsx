@@ -6,12 +6,19 @@ import { ScalableRecipe } from "@/lib/ScalableRecipe";
 import { makeScalableRecipe, quantitativeValueYield } from "@/fixtures";
 
 /** Stateful wrapper so the stepper can actually update via onSplitPortions. */
-function Harness({ initial }: { initial: ScalableRecipe }) {
+function Harness({
+  initial,
+  showSources,
+}: {
+  initial: ScalableRecipe;
+  showSources?: boolean;
+}) {
   const [recipe, setRecipe] = useState(initial);
   return (
     <NutritionPanel
       recipe={recipe}
       onSplitPortions={(n) => setRecipe((r) => r.splitPortions(n))}
+      showSources={showSources}
     />
   );
 }
@@ -65,6 +72,51 @@ describe("NutritionPanel", () => {
     expect(container.firstChild).toBeNull();
   });
 
+  it("shows one 'ingredients' header badge when the ingredients view is served", () => {
+    // Fully covered → the whole panel serves the ingredients view: one badge,
+    // and the recipe-only fat field does NOT fill the gap (all-or-nothing).
+    const r = new ScalableRecipe(
+      makeScalableRecipe({
+        recipeIngredient: undefined,
+        recipeYield: "4 servings",
+        nutrition: { fatContent: "5 g" },
+      }).schema,
+      undefined,
+      { total: { calories_kcal: 2000, protein_g: 40 }, fullyCovered: true },
+    );
+    render(<Harness initial={r} showSources />);
+    expect(screen.getByText("500 kcal")).toBeTruthy();
+    expect(screen.getAllByText("ingredients")).toHaveLength(1);
+    expect(screen.queryByText("recipe")).toBeNull();
+    expect(screen.queryByText("5 g")).toBeNull();
+  });
+
+  it("hides the source badge when showSources is false, even if normalized", () => {
+    const r = new ScalableRecipe(
+      makeScalableRecipe({
+        recipeIngredient: undefined,
+        recipeYield: "4 servings",
+        nutrition: { fatContent: "5 g" },
+      }).schema,
+      undefined,
+      { total: { calories_kcal: 2000, protein_g: 40 }, fullyCovered: true },
+    );
+    render(<Harness initial={r} />);
+    expect(screen.queryByText("ingredients")).toBeNull();
+    expect(screen.queryByText("recipe")).toBeNull();
+  });
+
+  it("shows one 'recipe' header badge for a non-normalized recipe", () => {
+    const r = makeScalableRecipe({
+      recipeIngredient: undefined,
+      recipeYield: "4 servings",
+      nutrition: { calories: "350 kcal" },
+    });
+    render(<Harness initial={r} showSources />);
+    expect(screen.getAllByText("recipe")).toHaveLength(1);
+    expect(screen.queryByText("ingredients")).toBeNull();
+  });
+
   it("shows 'per serving' at the default portion count", () => {
     const r = makeScalableRecipe({
       recipeIngredient: undefined,
@@ -74,6 +126,17 @@ describe("NutritionPanel", () => {
     render(<Harness initial={r} />);
     expect(screen.getByText("per serving")).toBeTruthy();
     expect(screen.getByText("1/4")).toBeTruthy();
+  });
+
+  it("rounds displayed values over 1 to the nearest integer, keeping sub-1 precision", () => {
+    const r = makeScalableRecipe({
+      recipeIngredient: undefined,
+      recipeYield: "4 servings",
+      nutrition: { proteinContent: "9.96 g", fiberContent: "0.2 g" },
+    });
+    render(<Harness initial={r} />);
+    expect(screen.getByText("10 g")).toBeTruthy();
+    expect(screen.getByText("0.2 g")).toBeTruthy();
   });
 
   it("shows unscaled values at the default portion count", () => {

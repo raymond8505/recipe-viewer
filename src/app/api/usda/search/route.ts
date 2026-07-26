@@ -23,6 +23,11 @@ export const GET = requireSession(async (req: Request) => {
     return NextResponse.json({ data });
   } catch (err) {
     if (err instanceof UsdaError) {
+      // Keep the real status/detail in the server log — the client message is
+      // deliberately generic.
+      console.error(
+        `usda/search: UsdaError (status ${err.status ?? "network"}): ${err.message}`,
+      );
       return NextResponse.json({ error: "USDA search unavailable" }, { status: 502 });
     }
     throw err;

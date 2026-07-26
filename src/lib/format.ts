@@ -70,6 +70,21 @@ export function parseNumeric(raw: string): number | null | undefined {
   return Number.isFinite(value) ? value : undefined;
 }
 
+/**
+ * Nutrition-panel display rounding for a "value unit" string: values over 1
+ * round to the nearest integer ("9.96 g" → "10 g", "12.4 g" → "12 g");
+ * values ≤ 1 keep their precision ("0.2 g") — integer-rounding those would
+ * erase them entirely. Strings without a leading number pass through
+ * unchanged. Display-only: JSON-LD/MCP serialization keeps full precision.
+ */
+export function formatNutrientDisplay(raw: string): string {
+  const match = raw.match(/^([\d.]+)(\s*.*)$/);
+  if (!match) return raw;
+  const value = parseFloat(match[1]);
+  if (!(value > 1)) return raw;
+  return Math.round(value) + match[2];
+}
+
 /** Pick the singular or plural form of a noun for a count. Returns the word
  *  only — callers render the count separately. Defaults the plural to the
  *  singular + "s"; pass an explicit plural for irregular nouns. */
@@ -242,13 +257,22 @@ export function getYieldUnit(
  * Return a Schema.org-compliant JSON-LD object for a recipe.
  * Strips custom extensions (notes, cookingNotes, ingredient group objects) so
  * external tools that validate against the spec can parse the output cleanly.
+ *
+ * `nutritionOverride` replaces the schema's own `nutrition` in the output when
+ * provided — used to emit the normalized-ingredient nutrition (already
+ * per-serving, Schema.org-shaped) in place of the hand-entered fields. It still
+ * flows through the same allowlist, so no custom fields leak.
  */
-export function toSchemaOrgJsonLd(schema: SchemaRecipe): object {
+export function toSchemaOrgJsonLd(
+  schema: SchemaRecipe,
+  options?: { nutritionOverride?: SchemaRecipe["nutrition"] },
+): object {
   const result: Record<string, unknown> = {
     "@context": schema["@context"] ?? "https://schema.org",
     "@type": schema["@type"] ?? "Recipe",
     name: schema.name,
   };
+  const nutrition = options?.nutritionOverride ?? schema.nutrition;
   const optionalFields = [
     "description",
     "image",
@@ -260,13 +284,13 @@ export function toSchemaOrgJsonLd(schema: SchemaRecipe): object {
     "recipeCuisine",
     "recipeCategory",
     "keywords",
-    "nutrition",
     "datePublished",
     "recipeInstructions",
   ] as const;
   for (const key of optionalFields) {
     if (schema[key] != null) result[key] = schema[key];
   }
+  if (nutrition != null) result.nutrition = nutrition;
   if (schema.recipeIngredient?.length) {
     result.recipeIngredient = schema.recipeIngredient.map(getIngredientText);
   }

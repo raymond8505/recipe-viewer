@@ -6,7 +6,12 @@ import {
   RecipeRepoError,
   updateRecipeRow,
 } from "@/lib/recipes";
-import { IngredientRepoError, matchIngredients } from "@/lib/ingredients";
+import {
+  getRecipeNormalizedNutrition,
+  IngredientRepoError,
+  matchIngredients,
+} from "@/lib/ingredients";
+import { ScalableRecipe } from "@/lib/ScalableRecipe";
 import { generateEmbedding } from "@/lib/embedding";
 import { RECIPE_TOKEN_TTL_SECONDS, signRecipeToken } from "./recipeToken";
 import { env } from "@/env";
@@ -93,7 +98,29 @@ export async function searchIngredients(
 export async function getRecipe(args: RecipeIdInput): Promise<RecipeRow> {
   const row = await getRecipeById(args.id);
   if (!row) throw new ToolError("not_found", `Recipe ${args.id} not found`);
-  return row;
+
+  // Serve the recipe's single resolved nutrition view — the same
+  // ScalableRecipe.nutrition() decision as the UI panel and JSON-LD. Only an
+  // ingredients-sourced result overrides; otherwise the row's own nutrition is
+  // already what nutrition() would serve.
+  const schema = row.metadata.schema;
+  const normalized = await getRecipeNormalizedNutrition(
+    args.id,
+    schema.recipeIngredient ?? [],
+  );
+  const resolved = new ScalableRecipe(schema, undefined, normalized).nutrition();
+  if (resolved?.source !== "ingredients") return row;
+
+  return {
+    ...row,
+    metadata: {
+      ...row.metadata,
+      schema: {
+        ...schema,
+        nutrition: { "@type": "NutritionInformation", ...resolved.values },
+      },
+    },
+  };
 }
 
 export async function getToken(

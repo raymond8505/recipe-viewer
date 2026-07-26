@@ -18,8 +18,9 @@ type Story = StoryObj<typeof IngredientsTable>;
 
 /**
  * The catalog as the admin sees it: USDA-sourced rows (badge shows the
- * FoodData Central id) alongside manual entries, nutrition per 100 g, and
- * density where a food had volume portions.
+ * FoodData Central id) alongside manual entries. The main-row nutrition is
+ * read-only and scaled to each row's serving (its first portion, or 100 g when
+ * it has none); the per-100 g values are editable in a row's details.
  */
 export const Populated: Story = {
   args: {

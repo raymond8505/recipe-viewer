@@ -154,8 +154,9 @@ export default function IngredientsTable({
       )}
 
       <p className="text-xs text-muted-foreground">
-        Nutrition values are {NUTRITION_BASIS_LABEL}. Density converts volume to
-        weight (grams = ml × g/ml).
+        Nutrition is shown per the serving in the Serving column (100 g when a
+        row has no portion). Edit the {NUTRITION_BASIS_LABEL} values in a row&apos;s
+        details. Density converts volume to weight (grams = ml × g/ml).
       </p>
 
       {/* Single scroll box (both axes). Capped at ~73vh so the chrome, heading,

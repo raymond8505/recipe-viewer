@@ -33,6 +33,19 @@ export const POST = requireSession(async (req: Request) => {
     return NextResponse.json(row, { status: 201 });
   } catch (err) {
     if (err instanceof UsdaError) {
+      // The generic client message hides which upstream failure this was —
+      // keep the real status/detail in the server log or it's undiagnosable.
+      console.error(
+        `import-usda: UsdaError (status ${err.status ?? "network"}): ${err.message}`,
+      );
+      if (err.status === 404) {
+        // USDA rejected the id itself (e.g. search advertises a record the
+        // detail endpoint no longer serves) — not an availability problem.
+        return NextResponse.json(
+          { error: "USDA has no record for this food" },
+          { status: 404 },
+        );
+      }
       return NextResponse.json({ error: "USDA is unavailable" }, { status: 502 });
     }
     if (err instanceof IngredientRepoError) {

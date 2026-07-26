@@ -157,8 +157,8 @@ describe("ScalableRecipe — splitPortions", () => {
   it("halves nutrition when split into twice as many portions", () => {
     const r = new ScalableRecipe(baseSchema).splitPortions(8);
     expect(r.nutritionMultiplier).toBe(0.5);
-    expect(r.nutrition?.calories).toBe("100 kcal");
-    expect(r.nutrition?.proteinContent).toBe("5 g");
+    expect(r.nutrition()?.values.calories).toBe("100 kcal");
+    expect(r.nutrition()?.values.proteinContent).toBe("5 g");
   });
 });
 
@@ -265,14 +265,14 @@ describe("ScalableRecipe — nutrition interaction", () => {
   it("nutrition unchanged when only scaling up servings", () => {
     const r = new ScalableRecipe(baseSchema).scalePortionsTo(8);
     expect(r.nutritionMultiplier).toBe(1);
-    expect(r.nutrition?.calories).toBe("200 kcal");
+    expect(r.nutrition()?.values.calories).toBe("200 kcal");
   });
 
   it("nutrition multiplier reflects scale × split together", () => {
     // base=4, scale to 8 (cur=8), split to 4 → cur/dp = 8/4 = 2.
     const r = new ScalableRecipe(baseSchema).scalePortionsTo(8).splitPortions(4);
     expect(r.nutritionMultiplier).toBe(2);
-    expect(r.nutrition?.calories).toBe("400 kcal");
+    expect(r.nutrition()?.values.calories).toBe("400 kcal");
   });
 
   it("hasNutrition reflects schema content", () => {
@@ -280,8 +280,8 @@ describe("ScalableRecipe — nutrition interaction", () => {
     expect(new ScalableRecipe({ ...baseSchema, nutrition: undefined }).hasNutrition).toBe(false);
   });
 
-  it("nutrition is null when schema has no nutrition", () => {
-    expect(new ScalableRecipe({ ...baseSchema, nutrition: undefined }).nutrition).toBeNull();
+  it("nutrition() is null when schema has no nutrition", () => {
+    expect(new ScalableRecipe({ ...baseSchema, nutrition: undefined }).nutrition()).toBeNull();
   });
 
   it("nutritionMultiplier is 1 when baseServings is null", () => {
@@ -352,5 +352,114 @@ describe("ScalableRecipe — serving weight (yield valueReference)", () => {
 
   it("nutritionUnitLabel falls back to the plain label without a valueReference", () => {
     expect(new ScalableRecipe(baseSchema).nutritionUnitLabel).toBe("per serving");
+  });
+});
+
+describe("ScalableRecipe — nutrition views", () => {
+  // baseSchema: 4 servings; schema nutrition calories 200, protein 10, fat 5.
+  // Whole-recipe normalized total for 4 servings → per-serving 500 kcal / 10 g
+  // protein; fat is not reported by the ingredients.
+  const covered = {
+    total: { calories_kcal: 2000, protein_g: 40 },
+    fullyCovered: true,
+  };
+
+  it("serves the ingredients view when fully covered", () => {
+    const n = new ScalableRecipe(baseSchema, undefined, covered).nutrition();
+    expect(n?.source).toBe("ingredients");
+    expect(n?.values.calories).toBe("500 kcal");
+    expect(n?.values.proteinContent).toBe("10 g");
+  });
+
+  it("is all-or-nothing: recipe-only nutrients don't fill ingredients-view gaps", () => {
+    // fat is in the schema fields but not the normalized total — under the
+    // ingredients source it must NOT show through.
+    const n = new ScalableRecipe(baseSchema, undefined, covered).nutrition();
+    expect(n?.values.fatContent).toBeUndefined();
+  });
+
+  it("recipeNutrition() always serves the schema fields, ignoring normalized", () => {
+    const r = new ScalableRecipe(baseSchema, undefined, covered);
+    expect(r.recipeNutrition()?.calories).toBe("200 kcal");
+    expect(r.recipeNutrition()?.fatContent).toBe("5 g");
+  });
+
+  it("ingredientsNutrition() serves the normalized view even when not fully covered", () => {
+    const r = new ScalableRecipe(baseSchema, undefined, {
+      total: { calories_kcal: 2000 },
+      fullyCovered: false,
+    });
+    expect(r.ingredientsNutrition()?.calories).toBe("500 kcal");
+  });
+
+  it("ingredientsNutrition() is null without normalized data or servings", () => {
+    expect(new ScalableRecipe(baseSchema).ingredientsNutrition()).toBeNull();
+    expect(
+      new ScalableRecipe(
+        { ...baseSchema, recipeYield: undefined },
+        undefined,
+        covered,
+      ).ingredientsNutrition(),
+    ).toBeNull();
+  });
+
+  it("keeps the scaling/split multiplier working on every view", () => {
+    const r = new ScalableRecipe(baseSchema, undefined, covered).splitPortions(8);
+    expect(r.nutritionMultiplier).toBe(0.5);
+    expect(r.nutrition()?.values.calories).toBe("250 kcal");
+    expect(r.ingredientsNutrition()?.calories).toBe("250 kcal");
+    expect(r.recipeNutrition()?.calories).toBe("100 kcal");
+  });
+
+  it("serves the recipe view when not fully covered", () => {
+    const n = new ScalableRecipe(baseSchema, undefined, {
+      total: { calories_kcal: 2000 },
+      fullyCovered: false,
+    }).nutrition();
+    expect(n?.source).toBe("recipe");
+    expect(n?.values.calories).toBe("200 kcal");
+  });
+
+  it("serves the recipe view when baseServings is unknown", () => {
+    const n = new ScalableRecipe(
+      { ...baseSchema, recipeYield: undefined },
+      undefined,
+      covered,
+    ).nutrition();
+    expect(n?.source).toBe("recipe");
+    expect(n?.values.calories).toBe("200 kcal");
+  });
+
+  it("serves the ingredients view even when the recipe has no fields of its own", () => {
+    const r = new ScalableRecipe(
+      { ...baseSchema, nutrition: undefined },
+      undefined,
+      covered,
+    );
+    expect(r.hasNutrition).toBe(true);
+    expect(r.recipeNutrition()).toBeNull();
+    const n = r.nutrition();
+    expect(n?.source).toBe("ingredients");
+    expect(n?.values.calories).toBe("500 kcal");
+  });
+
+  it("servingSize rides along from the schema for both sources", () => {
+    const withSize = {
+      ...baseSchema,
+      nutrition: { ...baseSchema.nutrition, servingSize: "1 slice" },
+    };
+    expect(
+      new ScalableRecipe(withSize, undefined, covered).nutrition()?.values.servingSize,
+    ).toBe("1 slice");
+    expect(new ScalableRecipe(withSize).nutrition()?.values.servingSize).toBe("1 slice");
+  });
+
+  it("carries the normalized total through scale/split/reset", () => {
+    const r = new ScalableRecipe(baseSchema, undefined, covered)
+      .scalePortionsTo(8)
+      .splitPortions(4)
+      .reset();
+    expect(r.normalized).toBe(covered);
+    expect(r.nutrition()?.values.calories).toBe("500 kcal");
   });
 });

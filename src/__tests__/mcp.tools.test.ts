@@ -37,6 +37,7 @@ vi.mock("@/lib/storage", () => ({
 
 vi.mock("@/lib/ingredients", () => ({
   matchIngredients: vi.fn(),
+  getRecipeNormalizedNutrition: vi.fn(),
   IngredientRepoError: class IngredientRepoError extends Error {
     constructor(public kind: string, public detail: string) {
       super(`${kind}: ${detail}`);
@@ -62,7 +63,11 @@ import {
 import { verifyRecipeToken } from "@/lib/mcp/recipeToken";
 import { RecipeRepoError } from "@/lib/recipes";
 import { StorageUploadError } from "@/lib/storage";
-import { IngredientRepoError, matchIngredients } from "@/lib/ingredients";
+import {
+  getRecipeNormalizedNutrition,
+  IngredientRepoError,
+  matchIngredients,
+} from "@/lib/ingredients";
 import { generateEmbedding } from "@/lib/embedding";
 
 describe("searchIngredients", () => {
@@ -162,6 +167,68 @@ describe("getRecipe", () => {
     const { getRecipeById } = await import("@/lib/recipes");
     vi.mocked(getRecipeById).mockResolvedValueOnce(null);
     await expect(getRecipe({ id: "missing" })).rejects.toBeInstanceOf(ToolError);
+  });
+
+  it("replaces nutrition with the normalized per-serving values when fully covered", async () => {
+    const { getRecipeById } = await import("@/lib/recipes");
+    const base = recipeFixtures[0];
+    const recipe = {
+      ...base,
+      metadata: {
+        ...base.metadata,
+        schema: {
+          ...base.metadata.schema,
+          recipeYield: "4 servings",
+          recipeIngredient: ["2 cups flour"],
+          nutrition: { sodiumContent: "800 mg" },
+        },
+      },
+    };
+    vi.mocked(getRecipeById).mockResolvedValueOnce(recipe);
+    vi.mocked(getRecipeNormalizedNutrition).mockResolvedValueOnce({
+      total: { calories_kcal: 2000, protein_g: 40 },
+      fullyCovered: true,
+      lineCount: 1,
+      excludedCount: 0,
+      hasStaleLines: false,
+    });
+
+    const out = await getRecipe({ id: recipe.id });
+    // 2000 kcal / 4 servings = 500; 40 g / 4 = 10. All-or-nothing: sodium
+    // (recipe-only) does NOT fill the gap in the ingredients view.
+    expect(out.metadata.schema.nutrition).toEqual({
+      "@type": "NutritionInformation",
+      calories: "500 kcal",
+      proteinContent: "10 g",
+    });
+  });
+
+  it("leaves the recipe's own nutrition when not fully covered", async () => {
+    const { getRecipeById } = await import("@/lib/recipes");
+    const base = recipeFixtures[0];
+    const recipe = {
+      ...base,
+      metadata: {
+        ...base.metadata,
+        schema: {
+          ...base.metadata.schema,
+          recipeYield: "4 servings",
+          recipeIngredient: ["2 cups flour"],
+          nutrition: { calories: "123 kcal" },
+        },
+      },
+    };
+    vi.mocked(getRecipeById).mockResolvedValueOnce(recipe);
+    vi.mocked(getRecipeNormalizedNutrition).mockResolvedValueOnce({
+      total: { calories_kcal: 2000 },
+      fullyCovered: false,
+      lineCount: 1,
+      excludedCount: 1,
+      hasStaleLines: false,
+    });
+
+    const out = await getRecipe({ id: recipe.id });
+    expect(out.metadata.schema.nutrition).toEqual({ calories: "123 kcal" });
   });
 });
 

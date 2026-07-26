@@ -5,11 +5,22 @@
 // Client-safe and pure — no supabase, no env.
 
 import { convert, isVolumeUnit, roundDecimal, unitKeyForAlias } from "./units";
+import { getIngredientText } from "./format";
 import type {
   IngredientNutrition,
   IngredientRow,
   RecipeIngredientRow,
 } from "@/types/ingredient";
+import type { RecipeIngredient, SchemaRecipe } from "@/types/recipe";
+
+/** The Schema.org NutritionInformation shape carried on SchemaRecipe. */
+export type SchemaNutrition = NonNullable<SchemaRecipe["nutrition"]>;
+
+/** A catalog row reduced to what the line math needs. */
+export type CatalogNutritionSource = Pick<
+  IngredientRow,
+  "nutrition" | "density_g_per_ml"
+>;
 
 // Why a line is excluded from nutrition totals. "stale" is assigned by the
 // caller (schema text no longer matches the normalized row) — the math here
@@ -232,3 +243,126 @@ export function perPortionNutrition(
   }
   return perPortion;
 }
+
+// ─── Recipe-wide aggregation + recipe-nutrition source resolution ──────────
+
+/**
+ * The line computation for a schema line joined to its normalized row. A line
+ * is "stale" when there is no row for its position, or the stored `raw_text` no
+ * longer equals the recipe's display text (the recipe was edited after the last
+ * normalization run) — such a line can't be trusted and is excluded. Otherwise
+ * defers to `computeLineNutrition`. Shared by the NutritionDetail hook and the
+ * recipe-wide total so the two paths can never disagree.
+ */
+export function lineComputationForSchema(
+  schemaText: string,
+  row: RecipeIngredientRow | null,
+  ingredient: CatalogNutritionSource | null,
+): LineComputation {
+  if (!row || row.raw_text !== schemaText) {
+    return { kind: "excluded", reason: "stale" };
+  }
+  return computeLineNutrition(row, ingredient);
+}
+
+export interface RecipeNutritionResult {
+  /** Whole-recipe total (sum of every `ok` line), snake_case per-nutrient. */
+  total: IngredientNutrition;
+  lineCount: number;
+  excludedCount: number;
+  hasStaleLines: boolean;
+  /**
+   * True only when there is at least one line and every line contributed
+   * (no exclusions). The nutrition panel prefers the normalized total only in
+   * this case — a partial total would silently undercount.
+   */
+  fullyCovered: boolean;
+}
+
+/**
+ * Aggregate a recipe's normalized ingredient nutrition. Schema lines join to
+ * `recipe_ingredients` rows by position (the array index — see
+ * `groupIngredientsWithIndex`), each line is computed via
+ * `lineComputationForSchema`, and the `ok` lines are summed into a whole-recipe
+ * total. `ingredientsById` maps `ingredient_id` → catalog nutrition/density.
+ */
+export function computeRecipeNutrition(
+  schemaIngredients: Array<string | RecipeIngredient>,
+  rows: RecipeIngredientRow[],
+  ingredientsById: Map<string, CatalogNutritionSource>,
+): RecipeNutritionResult {
+  const rowsByPosition = new Map(rows.map((row) => [row.position, row]));
+  const computations = schemaIngredients.map((ingredient, index) => {
+    const text = getIngredientText(ingredient);
+    const row = rowsByPosition.get(index) ?? null;
+    const catalog =
+      row?.ingredient_id != null
+        ? (ingredientsById.get(row.ingredient_id) ?? null)
+        : null;
+    return lineComputationForSchema(text, row, catalog);
+  });
+
+  const total = sumNutrition(
+    computations
+      .filter((c): c is Extract<LineComputation, { kind: "ok" }> => c.kind === "ok")
+      .map((c) => c.nutrition),
+  );
+  const excludedCount = computations.filter((c) => c.kind === "excluded").length;
+  const hasStaleLines = computations.some(
+    (c) => c.kind === "excluded" && c.reason === "stale",
+  );
+
+  return {
+    total,
+    lineCount: computations.length,
+    excludedCount,
+    hasStaleLines,
+    fullyCovered: computations.length > 0 && excludedCount === 0,
+  };
+}
+
+// snake_case IngredientNutrition key → Schema.org NutritionInformation field +
+// unit. calcium/iron/potassium have no Schema.org slot, so they're omitted.
+const SCHEMA_NUTRITION_MAP: ReadonlyArray<{
+  key: keyof IngredientNutrition;
+  field: Exclude<keyof SchemaNutrition, "@type">;
+  unit: string;
+}> = [
+  { key: "calories_kcal", field: "calories", unit: "kcal" },
+  { key: "protein_g", field: "proteinContent", unit: "g" },
+  { key: "fat_g", field: "fatContent", unit: "g" },
+  { key: "saturated_fat_g", field: "saturatedFatContent", unit: "g" },
+  { key: "carbs_g", field: "carbohydrateContent", unit: "g" },
+  { key: "fiber_g", field: "fiberContent", unit: "g" },
+  { key: "sugars_g", field: "sugarContent", unit: "g" },
+  { key: "sodium_mg", field: "sodiumContent", unit: "mg" },
+  { key: "cholesterol_mg", field: "cholesterolContent", unit: "mg" },
+];
+
+// Match scaleNutrientValue's formatting: one decimal place when fractional,
+// integer otherwise (e.g. "480 kcal", "12.5 g").
+function formatNutrientValue(value: number, unit: string): string {
+  const rounded = Math.round(value * 10) / 10;
+  const formatted = rounded % 1 === 0 ? rounded.toString() : rounded.toFixed(1);
+  return `${formatted} ${unit}`;
+}
+
+/**
+ * Convert a whole-recipe normalized total to a Schema.org per-serving nutrition
+ * object (camelCase string values with units). Key sparsity is preserved — a
+ * nutrient no ingredient reports simply doesn't appear. A non-positive
+ * `servings` yields an empty object rather than dividing by zero.
+ */
+export function normalizedTotalToPerServingSchema(
+  total: IngredientNutrition,
+  servings: number,
+): SchemaNutrition {
+  const result: SchemaNutrition = {};
+  if (servings <= 0) return result;
+  for (const { key, field, unit } of SCHEMA_NUTRITION_MAP) {
+    const value = total[key];
+    if (value != null) result[field] = formatNutrientValue(value / servings, unit);
+  }
+  return result;
+}
+

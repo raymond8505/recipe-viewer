@@ -9,8 +9,13 @@ import {
 } from "@/lib/ingredients";
 import { generateEmbedding } from "@/lib/embedding";
 import { getFoodDetail, UsdaError } from "@/lib/usda";
+import { estimateDensity } from "@/lib/normalization/estimateDensity";
 import { makeIngredient } from "@/fixtures";
-import { cuminDetailResponse, cuminExpectedNutrition } from "@/fixtures/usda";
+import {
+  cuminDetailResponse,
+  cuminExpectedNutrition,
+  cuminFoodPortions,
+} from "@/fixtures/usda";
 
 vi.mock("@/lib/ingredients", async (orig) => {
   const actual = await orig<typeof import("@/lib/ingredients")>();
@@ -29,10 +34,15 @@ vi.mock("@/lib/usda", async (orig) => {
   return { ...actual, getFoodDetail: vi.fn() };
 });
 
+vi.mock("@/lib/normalization/estimateDensity", () => ({
+  estimateDensity: vi.fn(),
+}));
+
 describe("importUsdaIngredient", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(getFoodDetail).mockResolvedValue(cuminDetailResponse);
+    vi.mocked(estimateDensity).mockResolvedValue(null);
     vi.mocked(generateEmbedding).mockResolvedValue([0.1, 0.2]);
     vi.mocked(createIngredientRow).mockResolvedValue(
       makeIngredient("ing-new", "gochujang"),
@@ -53,6 +63,44 @@ describe("importUsdaIngredient", () => {
         source: "usda",
         embedding: [0.1, 0.2],
       }),
+    );
+  });
+
+  it("fills density from the LLM estimate when the payload has no portions", async () => {
+    // Abridged detail payloads never carry foodPortions, so the estimate is
+    // the only density source on this path.
+    vi.mocked(estimateDensity).mockResolvedValue(0.43);
+
+    await importUsdaIngredient("cumin seed", 170923);
+
+    expect(estimateDensity).toHaveBeenCalledWith({
+      name: "cumin seed",
+      usdaDescription: cuminDetailResponse.description,
+    });
+    expect(createIngredientRow).toHaveBeenCalledWith(
+      expect.objectContaining({ density_g_per_ml: 0.43 }),
+    );
+  });
+
+  it("persists a null density when the estimate declines", async () => {
+    await importUsdaIngredient("cumin seed", 170923);
+
+    expect(createIngredientRow).toHaveBeenCalledWith(
+      expect.objectContaining({ density_g_per_ml: null }),
+    );
+  });
+
+  it("prefers real USDA portions over the estimate when present", async () => {
+    vi.mocked(getFoodDetail).mockResolvedValue({
+      ...cuminDetailResponse,
+      foodPortions: cuminFoodPortions,
+    });
+
+    await importUsdaIngredient("cumin seed", 170923);
+
+    expect(estimateDensity).not.toHaveBeenCalled();
+    expect(createIngredientRow).toHaveBeenCalledWith(
+      expect.objectContaining({ density_g_per_ml: 0.416 }),
     );
   });
 

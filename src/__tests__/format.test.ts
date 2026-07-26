@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   formatDuration,
   formatMS,
+  formatNutrientDisplay,
   parseMS,
   parseNumeric,
   pluralize,
@@ -532,6 +533,34 @@ describe("toSchemaOrgJsonLd", () => {
     }) as Record<string, unknown>;
     expect(result.recipeYield).toEqual(quantitativeValueYield);
   });
+
+  it("emits nutritionOverride in place of the schema's own nutrition", () => {
+    const result = toSchemaOrgJsonLd(
+      { name: "Pasta", nutrition: { calories: "300 kcal" } },
+      { nutritionOverride: { calories: "500 kcal", proteinContent: "10 g" } },
+    ) as Record<string, unknown>;
+    expect(result.nutrition).toEqual({
+      calories: "500 kcal",
+      proteinContent: "10 g",
+    });
+  });
+
+  it("still emits the schema's own nutrition without an override", () => {
+    const result = toSchemaOrgJsonLd({
+      name: "Pasta",
+      nutrition: { calories: "300 kcal" },
+    }) as Record<string, unknown>;
+    expect(result.nutrition).toEqual({ calories: "300 kcal" });
+  });
+
+  it("keeps custom fields out even with a nutrition override", () => {
+    const result = toSchemaOrgJsonLd(
+      { name: "Pasta", notes: "secret", nutrition: { calories: "300 kcal" } },
+      { nutritionOverride: { calories: "500 kcal" } },
+    ) as Record<string, unknown>;
+    expect(result.notes).toBeUndefined();
+    expect(result.nutrition).toEqual({ calories: "500 kcal" });
+  });
 });
 
 describe("normalizeRecipeInstructions", () => {
@@ -564,5 +593,28 @@ describe("normalizeRecipeInstructions", () => {
   it("wraps a single non-array object in an array", () => {
     const step = { "@type": "HowToStep", text: "Stir" };
     expect(normalizeRecipeInstructions(step)).toEqual([step]);
+  });
+});
+
+describe("formatNutrientDisplay", () => {
+  it("rounds values over 1 to the nearest integer", () => {
+    expect(formatNutrientDisplay("9.96 g")).toBe("10 g");
+    expect(formatNutrientDisplay("12.4 g")).toBe("12 g");
+    expect(formatNutrientDisplay("37.5g")).toBe("38g");
+  });
+
+  it("leaves integer values untouched", () => {
+    expect(formatNutrientDisplay("148 kcal")).toBe("148 kcal");
+  });
+
+  it("keeps values of 1 or less at full precision", () => {
+    // Rounding "0.2 g" of fiber to "0 g" would erase the value entirely.
+    expect(formatNutrientDisplay("0.96 g")).toBe("0.96 g");
+    expect(formatNutrientDisplay("0.2 g")).toBe("0.2 g");
+    expect(formatNutrientDisplay("1 g")).toBe("1 g");
+  });
+
+  it("passes strings without a leading number through unchanged", () => {
+    expect(formatNutrientDisplay("unknown")).toBe("unknown");
   });
 });

@@ -3,6 +3,8 @@
 import Link from "next/link";
 import { PortionStepperButton } from "@/components/buttons";
 import { Button } from "@/components/ui/button";
+import NutritionSourceBadge from "@/components/ingredients/NutritionSourceBadge";
+import { formatNutrientDisplay } from "@/lib/format";
 import type { ScalableRecipe } from "@/lib/ScalableRecipe";
 
 export { scaleNutrientValue } from "@/lib/ScalableRecipe";
@@ -16,12 +18,19 @@ interface NutritionPanelProps {
    * href — and only passes it for logged-in users.
    */
   ingredientsHref?: string;
+  /**
+   * Whether to show the source badge (ingredients vs recipe) in the header.
+   * Gated to logged-in users — the provenance distinction is an editor
+   * concern, not something to surface to anonymous visitors.
+   */
+  showSources?: boolean;
 }
 
 export default function NutritionPanel({
   recipe,
   onSplitPortions,
   ingredientsHref,
+  showSources = false,
 }: NutritionPanelProps) {
   // Without schema nutrition the panel normally disappears entirely — but the
   // breakdown link must stay reachable, so a minimal shell renders instead
@@ -48,7 +57,8 @@ export default function NutritionPanel({
     );
   }
 
-  const nutrition = recipe.nutrition!;
+  const resolved = recipe.nutrition()!;
+  const nutrition = resolved.values;
   const portions = recipe.displayPortions;
   const canStep = recipe.baseServings != null;
 
@@ -60,6 +70,7 @@ export default function NutritionPanel({
           <span className="text-sm text-gray-500">
             {recipe.nutritionUnitLabel}
           </span>
+          {showSources && <NutritionSourceBadge source={resolved.source} />}
         </div>
         <div className="flex items-center gap-3">
           {breakdownLink}
@@ -99,7 +110,7 @@ function NutritionStat({ label, value }: { label: string; value: string }) {
   return (
     <div className="bg-gray-50 rounded-lg p-2 text-center">
       <p className="text-xs text-gray-500 mb-0.5">{label}</p>
-      <p className="font-medium text-gray-900">{value}</p>
+      <p className="font-medium text-gray-900">{formatNutrientDisplay(value)}</p>
     </div>
   );
 }

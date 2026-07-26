@@ -267,15 +267,18 @@ describe("runNormalization — novel ingredients", () => {
 
     await runNormalization("r-1");
 
-    // Real extractNutrition + deriveDensity ran against the fixture detail.
+    // Real extractNutrition ran against the abridged fixture detail. Abridged
+    // never returns foodPortions, and the density-estimate generateStructured
+    // call is unqueued here (returns undefined → estimate declines), so
+    // density/food_portions persist as null.
     expect(createIngredientRow).toHaveBeenCalledWith({
       name: "cumin seed",
       aliases: ["Spices, cumin seed"],
       fdc_id: 170923,
       fdc_data_type: "SR Legacy",
       nutrition: cuminExpectedNutrition,
-      density_g_per_ml: 0.416,
-      food_portions: cuminDetailResponse.foodPortions,
+      density_g_per_ml: null,
+      food_portions: null,
       source: "usda",
       embedding: [0.1, 0.2],
     });

@@ -1,4 +1,6 @@
 import { getSupabaseAdminClient, selectColumns, toVectorLiteral } from "./supabase";
+import { computeRecipeNutrition, type RecipeNutritionResult } from "./nutritionMath";
+import type { RecipeIngredient } from "@/types/recipe";
 import type {
   GramsSource,
   IngredientKeywordMatch,
@@ -336,6 +338,32 @@ export async function getRecipeIngredients(
     return [];
   }
   return (data as unknown as RecipeIngredientRow[]) ?? [];
+}
+
+/**
+ * Aggregate a recipe's normalized ingredient nutrition into a whole-recipe
+ * total, or null when the recipe has no normalized rows (never normalized).
+ * Fetches the recipe_ingredients rows + their matched catalog ingredients, then
+ * defers to the pure `computeRecipeNutrition`. Single server entry point for the
+ * recipe page and the MCP `get_recipe` tool. `fullyCovered` on the result gates
+ * whether callers should prefer the total over the recipe's own nutrition.
+ */
+export async function getRecipeNormalizedNutrition(
+  recipeId: string,
+  schemaIngredients: Array<string | RecipeIngredient>,
+): Promise<RecipeNutritionResult | null> {
+  const rows = await getRecipeIngredients(recipeId);
+  if (rows.length === 0) return null;
+
+  const ingredientIds = [
+    ...new Set(
+      rows.map((r) => r.ingredient_id).filter((x): x is string => x != null),
+    ),
+  ];
+  const ingredients = await getIngredientsByIds(ingredientIds);
+  const ingredientsById = new Map(ingredients.map((ing) => [ing.id, ing]));
+
+  return computeRecipeNutrition(schemaIngredients, rows, ingredientsById);
 }
 
 // Manually re-point one parsed line at a catalog ingredient (the
