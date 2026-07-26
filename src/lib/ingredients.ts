@@ -177,6 +177,24 @@ export async function getIngredientById(id: string): Promise<IngredientRow | nul
   return data as unknown as IngredientRow;
 }
 
+// Look up a catalog row by its USDA record id — "is this exact food already
+// imported?" for the manual-import fork path. fdc_id has no unique index, so
+// take the first row if several exist. Returns null when none does.
+export async function getIngredientByFdcId(
+  fdcId: number,
+): Promise<IngredientRow | null> {
+  const supabase = getSupabaseAdminClient();
+
+  const { data, error } = await supabase
+    .from("ingredients")
+    .select(INGREDIENT_COLUMNS)
+    .eq("fdc_id", fdcId)
+    .limit(1);
+
+  if (error || !data || data.length === 0) return null;
+  return data[0] as unknown as IngredientRow;
+}
+
 // Insert a new catalog ingredient. Throws IngredientRepoError("conflict") when
 // the case-insensitive name already exists (callers re-match instead of
 // duplicating), or ("insert_failed") on any other Supabase failure.

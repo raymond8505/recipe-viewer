@@ -71,18 +71,15 @@ export function parseNumeric(raw: string): number | null | undefined {
 }
 
 /**
- * Nutrition-panel display rounding for a "value unit" string: values over 1
- * round to the nearest integer ("9.96 g" → "10 g", "12.4 g" → "12 g");
- * values ≤ 1 keep their precision ("0.2 g") — integer-rounding those would
- * erase them entirely. Strings without a leading number pass through
- * unchanged. Display-only: JSON-LD/MCP serialization keeps full precision.
+ * Nutrition-panel display rounding: values over 1 round to the nearest
+ * integer (9.96 → "10 g", 12.4 → "12 g"); values ≤ 1 round to 2dp (0.2 →
+ * "0.2 g") — integer-rounding those would erase them entirely. Display-only:
+ * JSON-LD/MCP serialization keeps its own (1dp) precision.
  */
-export function formatNutrientDisplay(raw: string): string {
-  const match = raw.match(/^([\d.]+)(\s*.*)$/);
-  if (!match) return raw;
-  const value = parseFloat(match[1]);
-  if (!(value > 1)) return raw;
-  return Math.round(value) + match[2];
+export function formatNutrientDisplay(nv: NutrientValue): string {
+  const rounded =
+    nv.value > 1 ? Math.round(nv.value) : Math.round(nv.value * 100) / 100;
+  return nv.unit ? `${rounded} ${nv.unit}` : String(rounded);
 }
 
 /** Pick the singular or plural form of a noun for a count. Returns the word
@@ -113,6 +110,7 @@ export function formatDate(iso: string | undefined | null): string | null {
 }
 
 import { nanoid } from "nanoid";
+import type { NutrientValue } from "./nutritionMath";
 import type {
   HowToSection,
   HowToStep,

@@ -127,9 +127,11 @@ describe("RecipeDetail", () => {
       />
     );
     expect(screen.getByText("350 kcal")).toBeTruthy();
-    expect(screen.getByText("20g")).toBeTruthy();
-    expect(screen.getByText("40g")).toBeTruthy();
-    expect(screen.getByText("10g")).toBeTruthy();
+    // Attached units ("20g") normalize to spaced display — values are
+    // re-rendered from parsed NutrientValues, not echoed from the raw string.
+    expect(screen.getByText("20 g")).toBeTruthy();
+    expect(screen.getByText("40 g")).toBeTruthy();
+    expect(screen.getByText("10 g")).toBeTruthy();
   });
 
   it("hides nutrition section when only non-counted fields are present (e.g. servingSize)", () => {

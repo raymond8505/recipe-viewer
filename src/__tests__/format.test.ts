@@ -598,23 +598,24 @@ describe("normalizeRecipeInstructions", () => {
 
 describe("formatNutrientDisplay", () => {
   it("rounds values over 1 to the nearest integer", () => {
-    expect(formatNutrientDisplay("9.96 g")).toBe("10 g");
-    expect(formatNutrientDisplay("12.4 g")).toBe("12 g");
-    expect(formatNutrientDisplay("37.5g")).toBe("38g");
+    expect(formatNutrientDisplay({ value: 9.96, unit: "g" })).toBe("10 g");
+    expect(formatNutrientDisplay({ value: 12.4, unit: "g" })).toBe("12 g");
+    expect(formatNutrientDisplay({ value: 37.5, unit: "g" })).toBe("38 g");
   });
 
   it("leaves integer values untouched", () => {
-    expect(formatNutrientDisplay("148 kcal")).toBe("148 kcal");
+    expect(formatNutrientDisplay({ value: 148, unit: "kcal" })).toBe("148 kcal");
   });
 
-  it("keeps values of 1 or less at full precision", () => {
-    // Rounding "0.2 g" of fiber to "0 g" would erase the value entirely.
-    expect(formatNutrientDisplay("0.96 g")).toBe("0.96 g");
-    expect(formatNutrientDisplay("0.2 g")).toBe("0.2 g");
-    expect(formatNutrientDisplay("1 g")).toBe("1 g");
+  it("rounds values of 1 or less to 2dp instead of integer", () => {
+    // Rounding 0.2 g of fiber to "0 g" would erase the value entirely.
+    expect(formatNutrientDisplay({ value: 0.96, unit: "g" })).toBe("0.96 g");
+    expect(formatNutrientDisplay({ value: 0.2, unit: "g" })).toBe("0.2 g");
+    expect(formatNutrientDisplay({ value: 0.1234, unit: "g" })).toBe("0.12 g");
+    expect(formatNutrientDisplay({ value: 1, unit: "g" })).toBe("1 g");
   });
 
-  it("passes strings without a leading number through unchanged", () => {
-    expect(formatNutrientDisplay("unknown")).toBe("unknown");
+  it("prints bare when the unit is empty", () => {
+    expect(formatNutrientDisplay({ value: 250, unit: "" })).toBe("250");
   });
 });

@@ -9,8 +9,10 @@ import { usdaImportInputSchema } from "@/lib/schemas/ingredient";
 // manual-import flow). `name` is the recipe-language canonical name; the USDA
 // description becomes an alias. Shares importUsdaIngredient with automated
 // normalization so the two paths produce identical rows — but here the pick is
-// authoritative: `onConflict: "overwrite"` makes a same-name row take the
-// chosen food's values instead of silently reusing whatever was there.
+// authoritative FOR THIS LINE: `onConflict: "fork"` makes a same-name
+// collision with a different food create a new row (named by the USDA
+// description) instead of clobbering the existing one, which other recipes'
+// lines may reference.
 export const POST = requireSession(async (req: Request) => {
   const body = await req.json().catch(() => null);
   const parsed = usdaImportInputSchema.safeParse(body);
@@ -20,7 +22,7 @@ export const POST = requireSession(async (req: Request) => {
 
   try {
     const row = await importUsdaIngredient(parsed.data.name, parsed.data.fdcId, {
-      onConflict: "overwrite",
+      onConflict: "fork",
     });
     if (!row) {
       // Embedding generation failed — the column is NOT NULL, so no row can

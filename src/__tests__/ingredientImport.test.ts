@@ -4,8 +4,8 @@ import { importUsdaIngredient } from "@/lib/ingredientImport";
 import {
   IngredientRepoError,
   createIngredientRow,
+  getIngredientByFdcId,
   getIngredients,
-  updateIngredientRow,
 } from "@/lib/ingredients";
 import { generateEmbedding } from "@/lib/embedding";
 import { getFoodDetail, UsdaError } from "@/lib/usda";
@@ -22,8 +22,8 @@ vi.mock("@/lib/ingredients", async (orig) => {
   return {
     ...actual,
     createIngredientRow: vi.fn(),
+    getIngredientByFdcId: vi.fn(),
     getIngredients: vi.fn(),
-    updateIngredientRow: vi.fn(),
   };
 });
 
@@ -119,53 +119,113 @@ describe("importUsdaIngredient", () => {
     vi.mocked(getIngredients).mockResolvedValue({ data: [winner], count: 1 });
 
     expect(await importUsdaIngredient("Cumin Seed", 170923)).toEqual(winner);
-    expect(updateIngredientRow).not.toHaveBeenCalled();
+    expect(createIngredientRow).toHaveBeenCalledTimes(1);
+    expect(getIngredientByFdcId).not.toHaveBeenCalled();
   });
 
-  it("overwrites the same-name row in place with onConflict=overwrite", async () => {
-    // The user's manual USDA pick is authoritative: the existing row's stale
-    // values (e.g. a wrong earlier import) are replaced with the chosen food's.
-    const stale = makeIngredient("ing-existing", "cumin seed", {
-      nutrition: { calories_kcal: 999 },
-      fdc_id: 111,
-    });
-    const overwritten = makeIngredient("ing-existing", "cumin seed", {
-      nutrition: cuminExpectedNutrition,
+  it("reuses the row already holding this USDA record on a fork collision", async () => {
+    // Re-picking the same food (or a food already imported under another
+    // name) must be idempotent — no duplicate catalog row for one fdc_id.
+    const sameFood = makeIngredient("ing-existing", "spices, cumin seed", {
       fdc_id: cuminDetailResponse.fdcId,
     });
     vi.mocked(createIngredientRow).mockRejectedValueOnce(
       new IngredientRepoError("conflict", "taken"),
     );
-    vi.mocked(getIngredients).mockResolvedValue({ data: [stale], count: 1 });
-    vi.mocked(updateIngredientRow).mockResolvedValue(overwritten);
+    vi.mocked(getIngredientByFdcId).mockResolvedValue(sameFood);
 
     const row = await importUsdaIngredient("cumin seed", 170923, {
-      onConflict: "overwrite",
+      onConflict: "fork",
     });
 
-    expect(row).toEqual(overwritten);
-    expect(updateIngredientRow).toHaveBeenCalledWith(
-      "ing-existing",
+    expect(row).toEqual(sameFood);
+    expect(getIngredientByFdcId).toHaveBeenCalledWith(cuminDetailResponse.fdcId);
+    expect(createIngredientRow).toHaveBeenCalledTimes(1);
+  });
+
+  it("forks a new row named by the USDA description when the taken name is a different food", async () => {
+    // The user is correcting a mistaken earlier pick: the same-name row (a
+    // different fdc_id) must stay untouched and the chosen food becomes its
+    // own catalog row, recipe-language name kept as an alias.
+    const forked = makeIngredient("ing-forked", cuminDetailResponse.description);
+    vi.mocked(createIngredientRow)
+      .mockRejectedValueOnce(new IngredientRepoError("conflict", "taken"))
+      .mockResolvedValueOnce(forked);
+    vi.mocked(getIngredientByFdcId).mockResolvedValue(null);
+    vi.mocked(generateEmbedding).mockImplementation(async (text) =>
+      text === cuminDetailResponse.description ? [0.3, 0.4] : [0.1, 0.2],
+    );
+
+    const row = await importUsdaIngredient("cumin seed", 170923, {
+      onConflict: "fork",
+    });
+
+    expect(row).toEqual(forked);
+    expect(createIngredientRow).toHaveBeenLastCalledWith(
       expect.objectContaining({
-        aliases: [cuminDetailResponse.description],
+        name: cuminDetailResponse.description,
+        aliases: ["cumin seed"],
         fdc_id: cuminDetailResponse.fdcId,
         nutrition: cuminExpectedNutrition,
         source: "usda",
+        // The fork row's embedding embeds ITS name (the description), not the
+        // recipe-language name the collision was on.
+        embedding: [0.3, 0.4],
       }),
     );
   });
 
-  it("still rethrows an unresolvable conflict under overwrite", async () => {
+  it("retries the fork under an fdcId-suffixed name when the description is also taken", async () => {
+    const forked = makeIngredient(
+      "ing-forked",
+      `${cuminDetailResponse.description} (USDA ${cuminDetailResponse.fdcId})`,
+    );
+    vi.mocked(createIngredientRow)
+      .mockRejectedValueOnce(new IngredientRepoError("conflict", "taken"))
+      .mockRejectedValueOnce(new IngredientRepoError("conflict", "taken"))
+      .mockResolvedValueOnce(forked);
+    vi.mocked(getIngredientByFdcId).mockResolvedValue(null);
+
+    const row = await importUsdaIngredient("cumin seed", 170923, {
+      onConflict: "fork",
+    });
+
+    expect(row).toEqual(forked);
+    expect(createIngredientRow).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        name: "Spices, cumin seed (USDA 170923)",
+        aliases: ["cumin seed"],
+      }),
+    );
+  });
+
+  it("returns null when the fork embedding cannot be generated", async () => {
     vi.mocked(createIngredientRow).mockRejectedValueOnce(
       new IngredientRepoError("conflict", "taken"),
     );
-    vi.mocked(getIngredients).mockResolvedValue({ data: [], count: 0 });
+    vi.mocked(getIngredientByFdcId).mockResolvedValue(null);
+    vi.mocked(generateEmbedding).mockImplementation(async (text) =>
+      text === cuminDetailResponse.description ? null : [0.1, 0.2],
+    );
+
+    expect(
+      await importUsdaIngredient("cumin seed", 170923, { onConflict: "fork" }),
+    ).toBeNull();
+    expect(createIngredientRow).toHaveBeenCalledTimes(1);
+  });
+
+  it("rethrows when both fork names are taken", async () => {
+    vi.mocked(createIngredientRow).mockRejectedValue(
+      new IngredientRepoError("conflict", "taken"),
+    );
+    vi.mocked(getIngredientByFdcId).mockResolvedValue(null);
 
     const err = await importUsdaIngredient("cumin seed", 170923, {
-      onConflict: "overwrite",
+      onConflict: "fork",
     }).catch((e: unknown) => e);
     expect(err).toBeInstanceOf(IngredientRepoError);
-    expect(updateIngredientRow).not.toHaveBeenCalled();
+    expect((err as IngredientRepoError).kind).toBe("conflict");
+    expect(createIngredientRow).toHaveBeenCalledTimes(3);
   });
 
   it("rethrows an unresolvable conflict", async () => {

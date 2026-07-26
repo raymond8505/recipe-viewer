@@ -4,6 +4,7 @@ import {
   IngredientRepoError,
   createIngredientRow,
   deleteIngredientRow,
+  getIngredientByFdcId,
   getIngredientById,
   getIngredients,
   getIngredientsByIds,
@@ -120,6 +121,29 @@ describe("getIngredientById", () => {
     useQueue([{ data: null, error: { message: "missing" } }]);
 
     expect(await getIngredientById("nope")).toBeNull();
+  });
+});
+
+describe("getIngredientByFdcId", () => {
+  it("returns the first row holding the fdc_id", async () => {
+    const row = makeIngredient("ing-1", "cumin seed", { fdc_id: 170923 });
+    useQueue([{ data: [row] }]);
+
+    expect(await getIngredientByFdcId(170923)).toEqual(row);
+    expect(builderAt(0).eq).toHaveBeenCalledWith("fdc_id", 170923);
+    expect(builderAt(0).limit).toHaveBeenCalledWith(1);
+  });
+
+  it("returns null when no row holds the fdc_id", async () => {
+    useQueue([{ data: [] }]);
+
+    expect(await getIngredientByFdcId(999999)).toBeNull();
+  });
+
+  it("returns null on error", async () => {
+    useQueue([{ data: null, error: { message: "boom" } }]);
+
+    expect(await getIngredientByFdcId(170923)).toBeNull();
   });
 });
 
