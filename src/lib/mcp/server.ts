@@ -7,16 +7,25 @@ import {
   recipeSearchInputSchema,
   recipeUpdateInputSchema,
 } from "@/lib/schemas/recipe";
-import { ingredientSearchInputSchema } from "@/lib/schemas/ingredient";
+import {
+  ingredientCreateInputSchema,
+  ingredientIdInputSchema,
+  ingredientSearchInputSchema,
+  ingredientUpdateToolInputSchema,
+} from "@/lib/schemas/ingredient";
 import {
   clearCookingNotes,
+  createIngredient,
   createRecipe,
+  deleteIngredient,
   deleteRecipe,
+  getIngredient,
   getRecipe,
   getToken,
   searchIngredients,
   searchRecipes,
   ToolError,
+  updateIngredient,
   updateRecipe,
   uploadRecipeImage,
 } from "./tools";
@@ -55,6 +64,34 @@ export const TOOLS: ToolDefinition[] = [
       "Semantic search over the known-ingredient catalog. Returns up to `limit` ingredients ranked by similarity (1.0 = identical), each with per-100g nutrition (calories_kcal, protein_g, fat_g, saturated_fat_g, carbs_g, fiber_g, sugars_g, sodium_mg, cholesterol_mg, calcium_mg, iron_mg, potassium_mg) and density_g_per_ml. Density converts volume↔weight: grams = ml × density_g_per_ml (e.g. 1 tbsp = 14.79 ml). Data is USDA FoodData Central or manually curated; null fields mean not yet known.",
     inputSchema: TOOL_SCHEMAS.search_ingredients,
     call: (args) => searchIngredients(ingredientSearchInputSchema.parse(args)),
+  },
+  {
+    name: "get_ingredient",
+    description:
+      "Fetch the full catalog row for an ingredient UUID — includes fields search_ingredients results omit (aliases, fdc_id, fdc_data_type, food_portions, source, timestamps). Get ids from search_ingredients.",
+    inputSchema: TOOL_SCHEMAS.get_ingredient,
+    call: (args) => getIngredient(ingredientIdInputSchema.parse(args)),
+  },
+  {
+    name: "create_ingredient",
+    description:
+      "Add an ingredient to the known-ingredient catalog. Names are unique case-insensitively — ALWAYS call search_ingredients first and update the existing row instead of creating a near-duplicate. nutrition is per 100 g of the ingredient; density_g_per_ml converts volume↔weight (grams = ml × density). The matching embedding is derived server-side from name — you never supply it. source defaults to 'manual'.",
+    inputSchema: TOOL_SCHEMAS.create_ingredient,
+    call: (args) => createIngredient(ingredientCreateInputSchema.parse(args)),
+  },
+  {
+    name: "update_ingredient",
+    description:
+      "Patch fields on a catalog ingredient — only the fields you pass change. Renaming re-derives the matching embedding server-side. nutrition is per 100 g and replaces the whole nutrition object when passed. Fails with 'conflict' if the new name collides with another row (case-insensitive).",
+    inputSchema: TOOL_SCHEMAS.update_ingredient,
+    call: (args) => updateIngredient(ingredientUpdateToolInputSchema.parse(args)),
+  },
+  {
+    name: "delete_ingredient",
+    description:
+      "PERMANENTLY delete a catalog ingredient (hard delete — there is no archive state, unlike delete_recipe). Recipe lines that referenced it keep their parsed text/quantities but detach (their ingredient_id nulls out), so those recipes lose ingredient-derived nutrition until re-matched. Prefer update_ingredient to fix a bad row.",
+    inputSchema: TOOL_SCHEMAS.delete_ingredient,
+    call: (args) => deleteIngredient(ingredientIdInputSchema.parse(args)),
   },
   {
     name: "get_recipe",

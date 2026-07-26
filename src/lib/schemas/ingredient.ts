@@ -50,6 +50,15 @@ export const ingredientCreateInputSchema = z.object({
 
 export const ingredientUpdateInputSchema = ingredientCreateInputSchema.partial();
 
+export const ingredientIdInputSchema = z.object({
+  id: z.string().min(1),
+});
+
+// MCP update_ingredient — flat { id, ...patch }, matching update_recipe's shape.
+export const ingredientUpdateToolInputSchema = ingredientUpdateInputSchema.extend({
+  id: z.string().min(1),
+});
+
 export const ingredientListQuerySchema = z.object({
   q: z.string().max(200).optional(),
   page: z.coerce.number().int().positive().default(1),
@@ -94,4 +103,6 @@ export const usdaImportInputSchema = z.object({
 
 export type IngredientCreateInput = z.infer<typeof ingredientCreateInputSchema>;
 export type IngredientUpdateInput = z.infer<typeof ingredientUpdateInputSchema>;
+export type IngredientIdInput = z.infer<typeof ingredientIdInputSchema>;
+export type IngredientUpdateToolInput = z.infer<typeof ingredientUpdateToolInputSchema>;
 export type IngredientSearchInput = z.infer<typeof ingredientSearchInputSchema>;

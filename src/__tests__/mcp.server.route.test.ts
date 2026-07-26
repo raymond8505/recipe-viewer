@@ -79,7 +79,7 @@ describe("/api/mcp/server", () => {
       expect(body.result.serverInfo.name).toBe("recipe-viewer-mcp");
     });
 
-    it("lists 9 tools", async () => {
+    it("lists 13 tools", async () => {
       const res = await POST(
         rpc({ jsonrpc: "2.0", id: 2, method: JsonRpcMethod.TOOLS_LIST }, { authorization: auth }),
       );
@@ -88,12 +88,16 @@ describe("/api/mcp/server", () => {
       expect(names).toEqual(
         [
           "clear_cooking_notes",
+          "create_ingredient",
           "create_recipe",
+          "delete_ingredient",
           "delete_recipe",
+          "get_ingredient",
           "get_recipe",
           "get_token",
           "search_ingredients",
           "search_recipes",
+          "update_ingredient",
           "update_recipe",
           "upload_recipe_image",
         ],

@@ -92,6 +92,81 @@ const schemaRecipeJsonSchema = {
 
 const statusEnum = { type: "string", enum: RECIPE_STATUSES } as const;
 
+// Mirror of the ingredient zod validators (`@/lib/schemas/ingredient`).
+// `embedding` is deliberately absent: it is server-derived from `name` and
+// never client-settable (NOT NULL column, db/migrations/0006).
+const ingredientNutritionJsonSchema = {
+  type: "object",
+  description:
+    "Nutrition per 100 g of the ingredient. All fields optional non-negative numbers; omit what you don't know.",
+  properties: {
+    calories_kcal: { type: "number", minimum: 0 },
+    protein_g: { type: "number", minimum: 0 },
+    fat_g: { type: "number", minimum: 0 },
+    saturated_fat_g: { type: "number", minimum: 0 },
+    carbs_g: { type: "number", minimum: 0 },
+    fiber_g: { type: "number", minimum: 0 },
+    sugars_g: { type: "number", minimum: 0 },
+    sodium_mg: { type: "number", minimum: 0 },
+    cholesterol_mg: { type: "number", minimum: 0 },
+    calcium_mg: { type: "number", minimum: 0 },
+    iron_mg: { type: "number", minimum: 0 },
+    potassium_mg: { type: "number", minimum: 0 },
+  },
+} as const;
+
+const ingredientFieldsJsonSchema = {
+  name: {
+    type: "string",
+    description:
+      'Canonical recipe-language name (e.g. "unsalted butter"). Unique case-insensitively across the catalog; the matching embedding is derived from it server-side.',
+  },
+  aliases: {
+    type: "array",
+    items: { type: "string" },
+    maxItems: 20,
+    description: "Alternate names that should also keyword-match this ingredient.",
+  },
+  fdc_id: {
+    type: ["integer", "null"],
+    description: "USDA FoodData Central record id this row was sourced from, if any.",
+  },
+  fdc_data_type: {
+    type: ["string", "null"],
+    description: 'USDA data type of fdc_id (e.g. "Foundation", "SR Legacy").',
+  },
+  nutrition: ingredientNutritionJsonSchema,
+  density_g_per_ml: {
+    type: ["number", "null"],
+    description:
+      "Density in g/ml for volume↔weight conversion: grams = ml × density_g_per_ml (e.g. 1 tbsp = 14.79 ml).",
+  },
+  food_portions: {
+    type: "array",
+    maxItems: 50,
+    description:
+      "Named portions with gram weights (USDA foodPortions shape); drives serving-size rendering.",
+    items: {
+      type: "object",
+      required: ["gramWeight"],
+      properties: {
+        gramWeight: { type: "number", exclusiveMinimum: 0 },
+        amount: { type: "number", exclusiveMinimum: 0 },
+        modifier: { type: "string", description: 'Portion label/unit, e.g. "tsp, whole"' },
+        measureUnit: {
+          type: "object",
+          properties: { name: { type: "string" } },
+        },
+      },
+    },
+  },
+  source: {
+    type: "string",
+    enum: ["usda", "manual"],
+    description: 'Provenance of the row. Defaults to "manual" for agent-created rows.',
+  },
+} as const;
+
 export const TOOL_SCHEMAS = {
   search_recipes: {
     type: "object",
@@ -112,6 +187,36 @@ export const TOOL_SCHEMAS = {
         description: 'Ingredient name to search for (e.g. "cumin seed")',
       },
       limit: { type: "integer", minimum: 1, maximum: 10, default: 5 },
+    },
+  },
+  get_ingredient: {
+    type: "object",
+    required: ["id"],
+    properties: {
+      id: { type: "string", description: "Ingredient UUID (from search_ingredients results)" },
+    },
+  },
+  create_ingredient: {
+    type: "object",
+    required: ["name"],
+    properties: ingredientFieldsJsonSchema,
+  },
+  update_ingredient: {
+    type: "object",
+    required: ["id"],
+    properties: {
+      id: { type: "string", description: "Ingredient UUID" },
+      ...ingredientFieldsJsonSchema,
+    },
+  },
+  delete_ingredient: {
+    type: "object",
+    required: ["id"],
+    properties: {
+      id: {
+        type: "string",
+        description: "Ingredient UUID — the row is deleted PERMANENTLY (no archive state)",
+      },
     },
   },
   get_recipe: {

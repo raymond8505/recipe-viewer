@@ -1,6 +1,6 @@
 // @vitest-environment node
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { recipeFixtures } from "@/fixtures";
+import { makeIngredient, recipeFixtures } from "@/fixtures";
 
 vi.mock("@/env", () => ({
   env: {
@@ -38,6 +38,10 @@ vi.mock("@/lib/storage", () => ({
 vi.mock("@/lib/ingredients", () => ({
   matchIngredients: vi.fn(),
   getRecipeNormalizedNutrition: vi.fn(),
+  getIngredientById: vi.fn(),
+  createIngredientRow: vi.fn(),
+  updateIngredientRow: vi.fn(),
+  deleteIngredientRow: vi.fn(),
   IngredientRepoError: class IngredientRepoError extends Error {
     constructor(public kind: string, public detail: string) {
       super(`${kind}: ${detail}`);
@@ -50,13 +54,17 @@ vi.mock("@/lib/embedding", () => ({ generateEmbedding: vi.fn() }));
 
 import {
   clearCookingNotes,
+  createIngredient,
   createRecipe,
+  deleteIngredient,
   deleteRecipe,
+  getIngredient,
   getRecipe,
   getToken,
   searchIngredients,
   searchRecipes,
   ToolError,
+  updateIngredient,
   updateRecipe,
   uploadRecipeImage,
 } from "@/lib/mcp/tools";
@@ -64,9 +72,13 @@ import { verifyRecipeToken } from "@/lib/mcp/recipeToken";
 import { RecipeRepoError } from "@/lib/recipes";
 import { StorageUploadError } from "@/lib/storage";
 import {
+  createIngredientRow,
+  deleteIngredientRow,
+  getIngredientById,
   getRecipeNormalizedNutrition,
   IngredientRepoError,
   matchIngredients,
+  updateIngredientRow,
 } from "@/lib/ingredients";
 import { generateEmbedding } from "@/lib/embedding";
 
@@ -119,6 +131,157 @@ describe("searchIngredients", () => {
 
     expect(err).toBeInstanceOf(ToolError);
     expect((err as ToolError).code).toBe("search_failed");
+  });
+});
+
+describe("getIngredient", () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it("returns the catalog row", async () => {
+    const row = makeIngredient("ing-1", "cumin seed");
+    vi.mocked(getIngredientById).mockResolvedValueOnce(row);
+
+    await expect(getIngredient({ id: "ing-1" })).resolves.toEqual(row);
+    expect(getIngredientById).toHaveBeenCalledWith("ing-1");
+  });
+
+  it("throws ToolError(not_found) for a missing id", async () => {
+    vi.mocked(getIngredientById).mockResolvedValueOnce(null);
+
+    await expect(getIngredient({ id: "missing" })).rejects.toMatchObject({
+      name: "ToolError",
+      code: "not_found",
+    });
+  });
+});
+
+describe("createIngredient", () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it("embeds the name and passes it through to createIngredientRow", async () => {
+    const row = makeIngredient("ing-1", "smoked paprika", { source: "manual" });
+    vi.mocked(generateEmbedding).mockResolvedValueOnce([0.1, 0.2]);
+    vi.mocked(createIngredientRow).mockResolvedValueOnce(row);
+
+    const out = await createIngredient({
+      name: "smoked paprika",
+      nutrition: { calories_kcal: 282 },
+      source: "manual",
+    });
+
+    expect(generateEmbedding).toHaveBeenCalledWith("smoked paprika");
+    expect(createIngredientRow).toHaveBeenCalledWith({
+      name: "smoked paprika",
+      nutrition: { calories_kcal: 282 },
+      source: "manual",
+      embedding: [0.1, 0.2],
+    });
+    expect(out).toEqual(row);
+  });
+
+  it("throws ToolError(embedding_unavailable) without creating when embedding fails", async () => {
+    vi.mocked(generateEmbedding).mockResolvedValueOnce(null);
+
+    await expect(
+      createIngredient({ name: "smoked paprika", source: "manual" }),
+    ).rejects.toMatchObject({ name: "ToolError", code: "embedding_unavailable" });
+    expect(createIngredientRow).not.toHaveBeenCalled();
+  });
+
+  it("translates a name collision into ToolError(conflict)", async () => {
+    vi.mocked(generateEmbedding).mockResolvedValueOnce([0.1]);
+    vi.mocked(createIngredientRow).mockRejectedValueOnce(
+      new IngredientRepoError("conflict", 'Ingredient "smoked paprika" already exists'),
+    );
+
+    await expect(
+      createIngredient({ name: "smoked paprika", source: "manual" }),
+    ).rejects.toMatchObject({ name: "ToolError", code: "conflict" });
+  });
+});
+
+describe("updateIngredient", () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it("patches without touching the embedding when name is absent", async () => {
+    const row = makeIngredient("ing-1", "cumin seed", { density_g_per_ml: 0.42 });
+    vi.mocked(updateIngredientRow).mockResolvedValueOnce(row);
+
+    const out = await updateIngredient({ id: "ing-1", density_g_per_ml: 0.42 });
+
+    expect(generateEmbedding).not.toHaveBeenCalled();
+    expect(updateIngredientRow).toHaveBeenCalledWith("ing-1", { density_g_per_ml: 0.42 });
+    expect(out).toEqual(row);
+  });
+
+  it("re-embeds on rename", async () => {
+    const row = makeIngredient("ing-1", "ground cumin");
+    vi.mocked(generateEmbedding).mockResolvedValueOnce([0.3, 0.4]);
+    vi.mocked(updateIngredientRow).mockResolvedValueOnce(row);
+
+    await updateIngredient({ id: "ing-1", name: "ground cumin" });
+
+    expect(generateEmbedding).toHaveBeenCalledWith("ground cumin");
+    expect(updateIngredientRow).toHaveBeenCalledWith("ing-1", {
+      name: "ground cumin",
+      embedding: [0.3, 0.4],
+    });
+  });
+
+  it("keeps the old vector (embedding undefined) when re-embedding fails", async () => {
+    const row = makeIngredient("ing-1", "ground cumin");
+    vi.mocked(generateEmbedding).mockResolvedValueOnce(null);
+    vi.mocked(updateIngredientRow).mockResolvedValueOnce(row);
+
+    await updateIngredient({ id: "ing-1", name: "ground cumin" });
+
+    expect(updateIngredientRow).toHaveBeenCalledWith("ing-1", {
+      name: "ground cumin",
+      embedding: undefined,
+    });
+  });
+
+  it("translates RepoError kinds (not_found, conflict)", async () => {
+    vi.mocked(updateIngredientRow).mockRejectedValueOnce(
+      new IngredientRepoError("not_found", "Ingredient missing not found"),
+    );
+    await expect(
+      updateIngredient({ id: "missing", density_g_per_ml: 1 }),
+    ).rejects.toMatchObject({ name: "ToolError", code: "not_found" });
+
+    vi.mocked(generateEmbedding).mockResolvedValueOnce([0.1]);
+    vi.mocked(updateIngredientRow).mockRejectedValueOnce(
+      new IngredientRepoError("conflict", 'Ingredient "salt" already exists'),
+    );
+    await expect(updateIngredient({ id: "ing-1", name: "salt" })).rejects.toMatchObject({
+      name: "ToolError",
+      code: "conflict",
+    });
+  });
+});
+
+describe("deleteIngredient", () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it("hard-deletes and confirms", async () => {
+    vi.mocked(deleteIngredientRow).mockResolvedValueOnce(undefined);
+
+    await expect(deleteIngredient({ id: "ing-1" })).resolves.toEqual({
+      id: "ing-1",
+      deleted: true,
+    });
+    expect(deleteIngredientRow).toHaveBeenCalledWith("ing-1");
+  });
+
+  it("throws ToolError(not_found) for a missing id", async () => {
+    vi.mocked(deleteIngredientRow).mockRejectedValueOnce(
+      new IngredientRepoError("not_found", "Ingredient missing not found"),
+    );
+
+    await expect(deleteIngredient({ id: "missing" })).rejects.toMatchObject({
+      name: "ToolError",
+      code: "not_found",
+    });
   });
 });
 
