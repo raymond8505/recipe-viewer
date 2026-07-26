@@ -151,7 +151,9 @@ export function useNutritionDetail(
   // Mint a catalog row from a user-picked USDA food, then associate the line
   // with it. Canonical name = the line's PARSED name (recipe language, e.g.
   // "gochujang"), per the normalization convention — the USDA description
-  // lands as an alias server-side.
+  // lands as an alias server-side. Re-picking a different food for a line
+  // whose name is already cataloged forks a NEW row (named by the USDA
+  // description), so this association lands on whatever row the API returns.
   async function importUsda(rowId: string, food: UsdaSearchFood) {
     const row = rows.find((r) => r.id === rowId);
     if (!row) return;

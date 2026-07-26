@@ -35,9 +35,10 @@ describe("POST /api/ingredients/import-usda", () => {
 
     expect(res.status).toBe(201);
     expect((await res.json()).id).toBe("ing-new");
-    // The manual pick is authoritative — a same-name row is overwritten, not reused.
+    // The manual pick is authoritative for this line — a same-name collision
+    // with a different food forks a new row instead of clobbering the old one.
     expect(importUsdaIngredient).toHaveBeenCalledWith("gochujang", 123, {
-      onConflict: "overwrite",
+      onConflict: "fork",
     });
   });
 
