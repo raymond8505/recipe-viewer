@@ -98,7 +98,7 @@ const statusEnum = { type: "string", enum: RECIPE_STATUSES } as const;
 const ingredientNutritionJsonSchema = {
   type: "object",
   description:
-    "Nutrition values AS MEASURED for the accompanying `portion` (which becomes required when this is passed). The server converts to its storage form deterministically. All fields optional non-negative numbers; omit what you don't know.",
+    "Nutrition values AS MEASURED for the accompanying `portion`. Passing this makes `portion` REQUIRED — the call is rejected without it (exception: nutrition null on update, which clears stored values and needs no portion). The server converts to its storage form deterministically. All fields optional non-negative numbers; omit what you don't know.",
   properties: {
     calories_kcal: { type: "number", minimum: 0 },
     protein_g: { type: "number", minimum: 0 },
@@ -140,7 +140,7 @@ const ingredientFieldsJsonSchema = {
     type: "object",
     required: ["gramWeight"],
     description:
-      'The portion the nutrition values are measured for — REQUIRED whenever nutrition is passed (e.g. 1 tbsp: { gramWeight: 14, amount: 1, modifier: "tbsp" }). On create it is also saved as a named portion of the ingredient.',
+      'The portion the nutrition values are measured for — REQUIRED whenever nutrition is passed, unnecessary otherwise (e.g. 1 tbsp: { gramWeight: 14, amount: 1, modifier: "tbsp" }). On create it is also saved as a named portion of the ingredient.',
     properties: {
       gramWeight: { type: "number", exclusiveMinimum: 0, description: "Total gram weight of the portion" },
       amount: { type: "number", exclusiveMinimum: 0 },
