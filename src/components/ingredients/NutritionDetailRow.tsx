@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { TableCell, TableRow } from "@/components/ui/table";
-import { SpinnerIcon, WarningIcon } from "@/components/icons";
+import { EditIcon, SpinnerIcon, WarningIcon } from "@/components/icons";
 import { cn } from "@/lib/utils";
 import { formatAmount } from "@/lib/units";
 import type { NutritionDetailLine } from "@/hooks/useNutritionDetail";
@@ -28,11 +28,12 @@ const EXCLUSION_TITLES: Record<ExclusionReason, string> = {
 };
 
 /**
- * One recipe line in the NutritionDetail table: frozen recipe text (with an
- * exclusion flag when the line can't contribute to totals), the frozen
- * normalized-ingredient autocomplete, then read-only nutrition cells.
+ * One recipe line in the NutritionDetail table: the recipe text (editable in
+ * place — this edits the recipe schema itself, with an exclusion flag when
+ * the line can't contribute to totals), the frozen normalized-ingredient
+ * autocomplete, then read-only nutrition cells.
  *
- * @summary read-only nutrition row with an editable match cell
+ * @summary nutrition row with editable line text and match cells
  */
 export default function NutritionDetailRow({
   line,
@@ -41,6 +42,7 @@ export default function NutritionDetailRow({
   usdaSearch,
   onSelect,
   onImportUsda,
+  onEditText,
   onEstimateGrams,
   onSetGrams,
 }: {
@@ -50,6 +52,7 @@ export default function NutritionDetailRow({
   usdaSearch?: UsdaFoodSearch;
   onSelect: (rowId: string, match: IngredientKeywordMatch | null) => void;
   onImportUsda: (rowId: string, food: UsdaSearchFood) => void;
+  onEditText: (index: number, text: string) => void;
   onEstimateGrams: (rowId: string) => void;
   onSetGrams: (rowId: string, grams: number | null) => void;
 }) {
@@ -64,24 +67,64 @@ export default function NutritionDetailRow({
   // internal z-index can't beat sibling rows' sticky cells — the whole cell
   // is raised above them (but below the z-30 header corners) while open.
   const [autocompleteOpen, setAutocompleteOpen] = useState(false);
+  // Inline edit buffer for the recipe line text; null = not editing. Commit
+  // on Enter/blur, cancel on Escape — same idioms as NutritionGramsCell.
+  const [draft, setDraft] = useState<string | null>(null);
+
+  function commitDraft() {
+    if (draft == null) return;
+    const trimmed = draft.trim();
+    setDraft(null);
+    // An empty or unchanged commit is a cancel, not a save.
+    if (trimmed !== "" && trimmed !== line.text) onEditText(line.index, trimmed);
+  }
 
   return (
     <TableRow className="group">
       <TableCell
         className={cn(STICKY_NAME_CELL, excluded && "text-muted-foreground")}
       >
-        <span className="flex w-full min-w-0 items-center gap-1.5">
-          {/* Wrap (same treatment as the matched-ingredient label) — the
-              column is fixed-width (w-44), so long lines must grow the row,
-              not truncate. break-words keeps unbroken tokens from widening
-              the frozen column and breaking the left-44 offset. */}
-          <span className="min-w-0 text-wrap break-words">{line.text}</span>
-          {excluded && (
-            <span title={EXCLUSION_TITLES[computation.reason]}>
-              <WarningIcon className="size-4 shrink-0 text-amber-500" />
-            </span>
-          )}
-        </span>
+        {draft != null ? (
+          <input
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            onBlur={commitDraft}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                e.currentTarget.blur();
+              }
+              if (e.key === "Escape") setDraft(null);
+            }}
+            autoFocus
+            disabled={saving}
+            aria-label={`Edit line ${line.text}`}
+            className="w-full rounded-none border-0 border-b border-border bg-transparent outline-hidden focus:border-orange-400 disabled:opacity-50"
+          />
+        ) : (
+          <span className="flex w-full min-w-0 items-center gap-1.5">
+            {/* Wrap (same treatment as the matched-ingredient label) — the
+                column is fixed-width (w-44), so long lines must grow the row,
+                not truncate. break-words keeps unbroken tokens from widening
+                the frozen column and breaking the left-44 offset. */}
+            <span className="min-w-0 text-wrap break-words">{line.text}</span>
+            {excluded && (
+              <span title={EXCLUSION_TITLES[computation.reason]}>
+                <WarningIcon className="size-4 shrink-0 text-amber-500" />
+              </span>
+            )}
+            <button
+              type="button"
+              onClick={() => setDraft(line.text)}
+              disabled={saving}
+              aria-label={`Edit ${line.text}`}
+              title="Edit this recipe line — saves to the recipe and re-normalizes"
+              className="shrink-0 text-muted-foreground hover:text-brand disabled:opacity-50 [&_svg]:size-3.5"
+            >
+              <EditIcon />
+            </button>
+          </span>
+        )}
       </TableCell>
       <TableCell
         className={cn(STICKY_ALIASES_CELL, autocompleteOpen && "z-20")}
