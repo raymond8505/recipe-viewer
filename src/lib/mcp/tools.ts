@@ -114,10 +114,11 @@ export async function searchIngredients(
 // catalog. The embedding is never client-settable: it is derived from `name`
 // here, exactly like those routes do.
 //
-// Nutrition arrives AS MEASURED for the accompanying `portion` (agents think
-// in "1 tbsp = 14 g", not storage units) and is scaled to the per-100g storage
-// form here — the same deterministic conversion the manager UI's create form
-// does client-side (IngredientCreateForm → scalePortionNutritionToPer100g).
+// Nutrition arrives AS MEASURED for the accompanying `nutrition_portion`
+// (agents think in "1 tbsp = 14 g", not storage units) and is scaled to the
+// per-100g storage form here — the same deterministic conversion the manager
+// UI's create form does client-side (IngredientCreateForm →
+// scalePortionNutritionToPer100g).
 
 export async function getIngredient(args: IngredientIdInput): Promise<IngredientRow> {
   const row = await getIngredientById(args.id);
@@ -139,7 +140,7 @@ export async function createIngredient(
     );
   }
 
-  const { portion, ...fields } = args;
+  const { nutrition_portion: portion, ...fields } = args;
   const input = { ...fields, embedding };
   if (portion) {
     // The portion is real data, not just a math basis — persist it (first, as
@@ -160,7 +161,7 @@ export async function createIngredient(
 export async function updateIngredient(
   args: IngredientUpdateToolInput,
 ): Promise<IngredientRow> {
-  const { id, portion, ...fields } = args;
+  const { id, nutrition_portion: portion, ...fields } = args;
   const patch: UpdateIngredientPatch = { ...fields };
   // Unlike create, the portion here is only the math basis for the new
   // nutrition values — food_portions changes only when passed explicitly.

@@ -125,6 +125,36 @@ describe("/api/mcp/server", () => {
       expect(parsed.count).toBe(1);
     });
 
+    it("formats argument-validation failures with tool name and field paths", async () => {
+      // Regression for the food_portions spiral: nutrition without
+      // nutrition_portion must fail with a message that names the tool and
+      // the missing field — not a raw zod issues array with path [].
+      const res = await POST(
+        rpc(
+          {
+            jsonrpc: "2.0",
+            id: 7,
+            method: JsonRpcMethod.TOOLS_CALL,
+            params: {
+              name: "create_ingredient",
+              arguments: {
+                name: "PC Maple Breakfast Pork Sausages",
+                nutrition: { calories_kcal: 237.5 },
+                food_portions: [{ gramWeight: 80, amount: 3, modifier: "sausages" }],
+              },
+            },
+          },
+          { authorization: auth },
+        ),
+      );
+      const body = await res.json();
+      expect(body.result.isError).toBe(true);
+      const text = body.result.content[0].text as string;
+      expect(text).toMatch(/^invalid_arguments: create_ingredient/);
+      expect(text).toMatch(/nutrition_portion:/);
+      expect(text).toMatch(/food_portions does not satisfy/);
+    });
+
     it("returns isError result when the tool throws", async () => {
       const { getRecipeById } = await import("@/lib/recipes");
       vi.mocked(getRecipeById).mockResolvedValueOnce(null);

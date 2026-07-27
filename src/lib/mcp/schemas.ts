@@ -98,7 +98,7 @@ const statusEnum = { type: "string", enum: RECIPE_STATUSES } as const;
 const ingredientNutritionJsonSchema = {
   type: "object",
   description:
-    "Nutrition values AS MEASURED for the accompanying `portion`. Passing this makes `portion` REQUIRED — the call is rejected without it (exception: nutrition null on update, which clears stored values and needs no portion). The server converts to its storage form deterministically. All fields optional non-negative numbers; omit what you don't know.",
+    "Nutrition values AS MEASURED for the accompanying `nutrition_portion`. Passing this makes `nutrition_portion` REQUIRED — the call is rejected without it, and food_portions does NOT satisfy it (exception: nutrition null on update, which clears stored values and needs no nutrition_portion). The server converts to its storage form deterministically. All fields optional non-negative numbers; omit what you don't know.",
   properties: {
     calories_kcal: { type: "number", minimum: 0 },
     protein_g: { type: "number", minimum: 0 },
@@ -136,11 +136,11 @@ const ingredientFieldsJsonSchema = {
     description: 'USDA data type of fdc_id (e.g. "Foundation", "SR Legacy").',
   },
   nutrition: ingredientNutritionJsonSchema,
-  portion: {
+  nutrition_portion: {
     type: "object",
     required: ["gramWeight"],
     description:
-      'The portion the nutrition values are measured for — REQUIRED whenever nutrition is passed, unnecessary otherwise (e.g. 1 tbsp: { gramWeight: 14, amount: 1, modifier: "tbsp" }). On create it is also saved as a named portion of the ingredient.',
+      'The portion the nutrition values are measured for — REQUIRED whenever nutrition is passed, unnecessary otherwise (e.g. 1 tbsp: { gramWeight: 14, amount: 1, modifier: "tbsp" }). Distinct from food_portions, which never satisfies this. On create it is also saved as a named portion of the ingredient.',
     properties: {
       gramWeight: { type: "number", exclusiveMinimum: 0, description: "Total gram weight of the portion" },
       amount: { type: "number", exclusiveMinimum: 0 },
@@ -160,7 +160,7 @@ const ingredientFieldsJsonSchema = {
     type: "array",
     maxItems: 50,
     description:
-      "Named portions with gram weights (USDA foodPortions shape); drives serving-size rendering.",
+      "Named DISPLAY portions with gram weights (USDA foodPortions shape); drives serving-size rendering only. NOT the nutrition basis — nutrition values are measured against `nutrition_portion`, and this field does not satisfy that requirement.",
     items: {
       type: "object",
       required: ["gramWeight"],
@@ -214,11 +214,16 @@ export const TOOL_SCHEMAS = {
   create_ingredient: {
     type: "object",
     required: ["name"],
+    // Machine-readable form of "nutrition needs nutrition_portion" for
+    // clients that validate arguments against the schema.
+    dependentRequired: { nutrition: ["nutrition_portion"] },
     properties: ingredientFieldsJsonSchema,
   },
   update_ingredient: {
     type: "object",
     required: ["id"],
+    // No dependentRequired here: it keys on property PRESENCE, and
+    // `nutrition: null` (clearing) is legal without a nutrition_portion.
     properties: {
       id: { type: "string", description: "Ingredient UUID" },
       ...ingredientFieldsJsonSchema,

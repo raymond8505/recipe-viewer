@@ -56,26 +56,35 @@ export const ingredientIdInputSchema = z.object({
 
 // MCP tool inputs. Unlike the HTTP routes (whose UI does the conversion
 // client-side), agents pass nutrition AS MEASURED for an accompanying
-// `portion`; the tool scales to the per-100g storage form deterministically.
-// Setting nutrition therefore requires a portion; clearing (null) does not.
+// `nutrition_portion`; the tool scales to the per-100g storage form
+// deterministically. Setting nutrition therefore requires a nutrition_portion;
+// clearing (null) does not.
+//
+// The field is named nutrition_portion (not `portion`) and the error names it
+// explicitly with a path: an agent conflated the bare word "portion" with
+// food_portions and burned 13 calls varying that field's shape before giving
+// up. The message must be a recovery instruction, not a description.
 const nutritionRequiresPortion = (d: {
   nutrition?: unknown;
-  portion?: unknown;
-}) => d.nutrition == null || d.portion != null;
-const NUTRITION_REQUIRES_PORTION_MESSAGE =
-  "nutrition requires a portion describing what the values are measured for";
+  nutrition_portion?: unknown;
+}) => d.nutrition == null || d.nutrition_portion != null;
+const NUTRITION_REQUIRES_PORTION_ISSUE = {
+  message:
+    "Pass nutrition_portion ({ gramWeight, amount?, modifier? }) describing what the nutrition values are measured for. This is a separate field from food_portions — food_portions does not satisfy it.",
+  path: ["nutrition_portion"],
+};
 
 export const ingredientCreateToolInputSchema = ingredientCreateInputSchema
-  .extend({ portion: foodPortionSchema.optional() })
-  .refine(nutritionRequiresPortion, { message: NUTRITION_REQUIRES_PORTION_MESSAGE });
+  .extend({ nutrition_portion: foodPortionSchema.optional() })
+  .refine(nutritionRequiresPortion, NUTRITION_REQUIRES_PORTION_ISSUE);
 
 // MCP update_ingredient — flat { id, ...patch }, matching update_recipe's shape.
 export const ingredientUpdateToolInputSchema = ingredientUpdateInputSchema
   .extend({
     id: z.string().min(1),
-    portion: foodPortionSchema.optional(),
+    nutrition_portion: foodPortionSchema.optional(),
   })
-  .refine(nutritionRequiresPortion, { message: NUTRITION_REQUIRES_PORTION_MESSAGE });
+  .refine(nutritionRequiresPortion, NUTRITION_REQUIRES_PORTION_ISSUE);
 
 export const ingredientListQuerySchema = z.object({
   q: z.string().max(200).optional(),

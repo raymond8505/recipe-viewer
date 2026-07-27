@@ -170,7 +170,7 @@ describe("createIngredient", () => {
     const out = await createIngredient({
       name: "smoked paprika",
       nutrition: { calories_kcal: 120, protein_g: 6 },
-      portion: { gramWeight: 30, amount: 2, modifier: "tbsp" },
+      nutrition_portion: { gramWeight: 30, amount: 2, modifier: "tbsp" },
       source: "manual",
     });
 
@@ -194,7 +194,7 @@ describe("createIngredient", () => {
     await createIngredient({
       name: "smoked paprika",
       nutrition: { calories_kcal: 100 },
-      portion: { gramWeight: 25, modifier: "tbsp" },
+      nutrition_portion: { gramWeight: 25, modifier: "tbsp" },
       food_portions: [{ gramWeight: 240, modifier: "cup" }],
       source: "manual",
     });
@@ -251,7 +251,7 @@ describe("updateIngredient", () => {
     await updateIngredient({
       id: "ing-1",
       nutrition: { calories_kcal: 60 },
-      portion: { gramWeight: 240, amount: 1, modifier: "cup" },
+      nutrition_portion: { gramWeight: 240, amount: 1, modifier: "cup" },
     });
 
     // 60 kcal per 240 g cup → 25 per 100 g; the portion is only the math
@@ -309,8 +309,8 @@ describe("updateIngredient", () => {
 
 // Parse-time contract enforced in server.ts's `call` before the handlers run:
 // nutrition values are meaningless without the portion they were measured for.
-describe("ingredient tool input schemas — nutrition requires portion", () => {
-  it("create: rejects nutrition without a portion, accepts it with one", () => {
+describe("ingredient tool input schemas — nutrition requires nutrition_portion", () => {
+  it("create: rejects nutrition without a nutrition_portion, accepts it with one", () => {
     const noPortion = ingredientCreateToolInputSchema.safeParse({
       name: "smoked paprika",
       nutrition: { calories_kcal: 282 },
@@ -320,16 +320,34 @@ describe("ingredient tool input schemas — nutrition requires portion", () => {
     const withPortion = ingredientCreateToolInputSchema.safeParse({
       name: "smoked paprika",
       nutrition: { calories_kcal: 282 },
-      portion: { gramWeight: 100 },
+      nutrition_portion: { gramWeight: 100 },
     });
     expect(withPortion.success).toBe(true);
   });
 
-  it("create: portion is not required without nutrition", () => {
+  it("the refine issue names the field and disambiguates from food_portions", () => {
+    // An agent once spiraled retrying food_portions shapes against a path-less
+    // "requires a portion" error — the issue must point at nutrition_portion
+    // and say food_portions won't do.
+    const result = ingredientCreateToolInputSchema.safeParse({
+      name: "smoked paprika",
+      nutrition: { calories_kcal: 282 },
+      food_portions: [{ gramWeight: 80, amount: 3, modifier: "sausages" }],
+    });
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      const issue = result.error.issues[0];
+      expect(issue.path).toEqual(["nutrition_portion"]);
+      expect(issue.message).toMatch(/nutrition_portion/);
+      expect(issue.message).toMatch(/food_portions does not satisfy/);
+    }
+  });
+
+  it("create: nutrition_portion is not required without nutrition", () => {
     expect(ingredientCreateToolInputSchema.safeParse({ name: "bay leaf" }).success).toBe(true);
   });
 
-  it("update: rejects nutrition without a portion, allows clearing with null", () => {
+  it("update: rejects nutrition without a nutrition_portion, allows clearing with null", () => {
     const noPortion = ingredientUpdateToolInputSchema.safeParse({
       id: "ing-1",
       nutrition: { calories_kcal: 10 },
