@@ -54,10 +54,28 @@ export const ingredientIdInputSchema = z.object({
   id: z.string().min(1),
 });
 
+// MCP tool inputs. Unlike the HTTP routes (whose UI does the conversion
+// client-side), agents pass nutrition AS MEASURED for an accompanying
+// `portion`; the tool scales to the per-100g storage form deterministically.
+// Setting nutrition therefore requires a portion; clearing (null) does not.
+const nutritionRequiresPortion = (d: {
+  nutrition?: unknown;
+  portion?: unknown;
+}) => d.nutrition == null || d.portion != null;
+const NUTRITION_REQUIRES_PORTION_MESSAGE =
+  "nutrition requires a portion describing what the values are measured for";
+
+export const ingredientCreateToolInputSchema = ingredientCreateInputSchema
+  .extend({ portion: foodPortionSchema.optional() })
+  .refine(nutritionRequiresPortion, { message: NUTRITION_REQUIRES_PORTION_MESSAGE });
+
 // MCP update_ingredient — flat { id, ...patch }, matching update_recipe's shape.
-export const ingredientUpdateToolInputSchema = ingredientUpdateInputSchema.extend({
-  id: z.string().min(1),
-});
+export const ingredientUpdateToolInputSchema = ingredientUpdateInputSchema
+  .extend({
+    id: z.string().min(1),
+    portion: foodPortionSchema.optional(),
+  })
+  .refine(nutritionRequiresPortion, { message: NUTRITION_REQUIRES_PORTION_MESSAGE });
 
 export const ingredientListQuerySchema = z.object({
   q: z.string().max(200).optional(),
@@ -104,5 +122,6 @@ export const usdaImportInputSchema = z.object({
 export type IngredientCreateInput = z.infer<typeof ingredientCreateInputSchema>;
 export type IngredientUpdateInput = z.infer<typeof ingredientUpdateInputSchema>;
 export type IngredientIdInput = z.infer<typeof ingredientIdInputSchema>;
+export type IngredientCreateToolInput = z.infer<typeof ingredientCreateToolInputSchema>;
 export type IngredientUpdateToolInput = z.infer<typeof ingredientUpdateToolInputSchema>;
 export type IngredientSearchInput = z.infer<typeof ingredientSearchInputSchema>;

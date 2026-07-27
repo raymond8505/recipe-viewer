@@ -8,7 +8,7 @@ import {
   recipeUpdateInputSchema,
 } from "@/lib/schemas/recipe";
 import {
-  ingredientCreateInputSchema,
+  ingredientCreateToolInputSchema,
   ingredientIdInputSchema,
   ingredientSearchInputSchema,
   ingredientUpdateToolInputSchema,
@@ -75,14 +75,14 @@ export const TOOLS: ToolDefinition[] = [
   {
     name: "create_ingredient",
     description:
-      "Add an ingredient to the known-ingredient catalog. Names are unique case-insensitively — ALWAYS call search_ingredients first and update the existing row instead of creating a near-duplicate. nutrition is per 100 g of the ingredient; density_g_per_ml converts volume↔weight (grams = ml × density). The matching embedding is derived server-side from name — you never supply it. source defaults to 'manual'.",
+      "Add an ingredient to the known-ingredient catalog. Names are unique case-insensitively — ALWAYS call search_ingredients first and update the existing row instead of creating a near-duplicate. Pass nutrition together with the portion those values are measured for (e.g. calories per 1 tbsp with portion { gramWeight: 14, amount: 1, modifier: \"tbsp\" }); the server converts deterministically for storage and saves the portion on the ingredient. density_g_per_ml converts volume↔weight (grams = ml × density). The matching embedding is derived server-side from name — you never supply it. source defaults to 'manual'.",
     inputSchema: TOOL_SCHEMAS.create_ingredient,
-    call: (args) => createIngredient(ingredientCreateInputSchema.parse(args)),
+    call: (args) => createIngredient(ingredientCreateToolInputSchema.parse(args)),
   },
   {
     name: "update_ingredient",
     description:
-      "Patch fields on a catalog ingredient — only the fields you pass change. Renaming re-derives the matching embedding server-side. nutrition is per 100 g and replaces the whole nutrition object when passed. Fails with 'conflict' if the new name collides with another row (case-insensitive).",
+      "Patch fields on a catalog ingredient — only the fields you pass change. Renaming re-derives the matching embedding server-side. To change nutrition, pass nutrition together with the portion those values are measured for — the stored nutrition is replaced to match (whole object, deterministic conversion; the portion itself is not saved). Fails with 'conflict' if the new name collides with another row (case-insensitive).",
     inputSchema: TOOL_SCHEMAS.update_ingredient,
     call: (args) => updateIngredient(ingredientUpdateToolInputSchema.parse(args)),
   },

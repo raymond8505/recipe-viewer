@@ -81,6 +81,10 @@ import {
   updateIngredientRow,
 } from "@/lib/ingredients";
 import { generateEmbedding } from "@/lib/embedding";
+import {
+  ingredientCreateToolInputSchema,
+  ingredientUpdateToolInputSchema,
+} from "@/lib/schemas/ingredient";
 
 describe("searchIngredients", () => {
   beforeEach(() => vi.clearAllMocks());
@@ -158,25 +162,51 @@ describe("getIngredient", () => {
 describe("createIngredient", () => {
   beforeEach(() => vi.clearAllMocks());
 
-  it("embeds the name and passes it through to createIngredientRow", async () => {
+  it("scales portion-measured nutrition to per-100g and stores the portion", async () => {
     const row = makeIngredient("ing-1", "smoked paprika", { source: "manual" });
     vi.mocked(generateEmbedding).mockResolvedValueOnce([0.1, 0.2]);
     vi.mocked(createIngredientRow).mockResolvedValueOnce(row);
 
     const out = await createIngredient({
       name: "smoked paprika",
-      nutrition: { calories_kcal: 282 },
+      nutrition: { calories_kcal: 120, protein_g: 6 },
+      portion: { gramWeight: 30, amount: 2, modifier: "tbsp" },
       source: "manual",
     });
 
     expect(generateEmbedding).toHaveBeenCalledWith("smoked paprika");
     expect(createIngredientRow).toHaveBeenCalledWith({
       name: "smoked paprika",
-      nutrition: { calories_kcal: 282 },
+      // 120 kcal / 6 g protein per 30 g → per-100g storage form
+      nutrition: { calories_kcal: 400, protein_g: 20 },
+      food_portions: [{ gramWeight: 30, amount: 2, modifier: "tbsp" }],
       source: "manual",
       embedding: [0.1, 0.2],
     });
     expect(out).toEqual(row);
+  });
+
+  it("prepends the nutrition-basis portion to caller-passed food_portions", async () => {
+    const row = makeIngredient("ing-1", "smoked paprika", { source: "manual" });
+    vi.mocked(generateEmbedding).mockResolvedValueOnce([0.1]);
+    vi.mocked(createIngredientRow).mockResolvedValueOnce(row);
+
+    await createIngredient({
+      name: "smoked paprika",
+      nutrition: { calories_kcal: 100 },
+      portion: { gramWeight: 25, modifier: "tbsp" },
+      food_portions: [{ gramWeight: 240, modifier: "cup" }],
+      source: "manual",
+    });
+
+    expect(createIngredientRow).toHaveBeenCalledWith(
+      expect.objectContaining({
+        food_portions: [
+          { gramWeight: 25, modifier: "tbsp" },
+          { gramWeight: 240, modifier: "cup" },
+        ],
+      }),
+    );
   });
 
   it("throws ToolError(embedding_unavailable) without creating when embedding fails", async () => {
@@ -212,6 +242,23 @@ describe("updateIngredient", () => {
     expect(generateEmbedding).not.toHaveBeenCalled();
     expect(updateIngredientRow).toHaveBeenCalledWith("ing-1", { density_g_per_ml: 0.42 });
     expect(out).toEqual(row);
+  });
+
+  it("replaces stored nutrition with values scaled from the given portion", async () => {
+    const row = makeIngredient("ing-1", "oat milk");
+    vi.mocked(updateIngredientRow).mockResolvedValueOnce(row);
+
+    await updateIngredient({
+      id: "ing-1",
+      nutrition: { calories_kcal: 60 },
+      portion: { gramWeight: 240, amount: 1, modifier: "cup" },
+    });
+
+    // 60 kcal per 240 g cup → 25 per 100 g; the portion is only the math
+    // basis on update — food_portions must not appear in the patch.
+    expect(updateIngredientRow).toHaveBeenCalledWith("ing-1", {
+      nutrition: { calories_kcal: 25 },
+    });
   });
 
   it("re-embeds on rename", async () => {
@@ -257,6 +304,44 @@ describe("updateIngredient", () => {
       name: "ToolError",
       code: "conflict",
     });
+  });
+});
+
+// Parse-time contract enforced in server.ts's `call` before the handlers run:
+// nutrition values are meaningless without the portion they were measured for.
+describe("ingredient tool input schemas — nutrition requires portion", () => {
+  it("create: rejects nutrition without a portion, accepts it with one", () => {
+    const noPortion = ingredientCreateToolInputSchema.safeParse({
+      name: "smoked paprika",
+      nutrition: { calories_kcal: 282 },
+    });
+    expect(noPortion.success).toBe(false);
+
+    const withPortion = ingredientCreateToolInputSchema.safeParse({
+      name: "smoked paprika",
+      nutrition: { calories_kcal: 282 },
+      portion: { gramWeight: 100 },
+    });
+    expect(withPortion.success).toBe(true);
+  });
+
+  it("create: portion is not required without nutrition", () => {
+    expect(ingredientCreateToolInputSchema.safeParse({ name: "bay leaf" }).success).toBe(true);
+  });
+
+  it("update: rejects nutrition without a portion, allows clearing with null", () => {
+    const noPortion = ingredientUpdateToolInputSchema.safeParse({
+      id: "ing-1",
+      nutrition: { calories_kcal: 10 },
+    });
+    expect(noPortion.success).toBe(false);
+
+    // null clears stored nutrition — no measurement involved, no portion needed
+    const clearing = ingredientUpdateToolInputSchema.safeParse({
+      id: "ing-1",
+      nutrition: null,
+    });
+    expect(clearing.success).toBe(true);
   });
 });
 

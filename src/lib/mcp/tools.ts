@@ -17,7 +17,10 @@ import {
   type UpdateIngredientPatch,
 } from "@/lib/ingredients";
 import { ScalableRecipe } from "@/lib/ScalableRecipe";
-import { nutrientValuesToSchema } from "@/lib/nutritionMath";
+import {
+  nutrientValuesToSchema,
+  scalePortionNutritionToPer100g,
+} from "@/lib/nutritionMath";
 import { generateEmbedding } from "@/lib/embedding";
 import { RECIPE_TOKEN_TTL_SECONDS, signRecipeToken } from "./recipeToken";
 import { env } from "@/env";
@@ -35,7 +38,7 @@ import type {
   RecipeUpdateInput,
 } from "@/lib/schemas/recipe";
 import type {
-  IngredientCreateInput,
+  IngredientCreateToolInput,
   IngredientIdInput,
   IngredientSearchInput,
   IngredientUpdateToolInput,
@@ -110,6 +113,11 @@ export async function searchIngredients(
 // /api/ingredients/[id]) so OAuth-authenticated agents can maintain the
 // catalog. The embedding is never client-settable: it is derived from `name`
 // here, exactly like those routes do.
+//
+// Nutrition arrives AS MEASURED for the accompanying `portion` (agents think
+// in "1 tbsp = 14 g", not storage units) and is scaled to the per-100g storage
+// form here — the same deterministic conversion the manager UI's create form
+// does client-side (IngredientCreateForm → scalePortionNutritionToPer100g).
 
 export async function getIngredient(args: IngredientIdInput): Promise<IngredientRow> {
   const row = await getIngredientById(args.id);
@@ -118,7 +126,7 @@ export async function getIngredient(args: IngredientIdInput): Promise<Ingredient
 }
 
 export async function createIngredient(
-  args: IngredientCreateInput,
+  args: IngredientCreateToolInput,
 ): Promise<IngredientRow> {
   // The column is NOT NULL (db/migrations/0006) — an embedding-less row can't
   // exist (it would be invisible to matching), so a failed embedding is a
@@ -131,8 +139,19 @@ export async function createIngredient(
     );
   }
 
+  const { portion, ...fields } = args;
+  const input = { ...fields, embedding };
+  if (portion) {
+    // The portion is real data, not just a math basis — persist it (first, as
+    // the nutrition-entry basis) like the UI stores its portion list.
+    input.food_portions = [portion, ...(fields.food_portions ?? [])];
+    if (fields.nutrition) {
+      input.nutrition = scalePortionNutritionToPer100g(fields.nutrition, portion.gramWeight);
+    }
+  }
+
   try {
-    return await createIngredientRow({ ...args, embedding });
+    return await createIngredientRow(input);
   } catch (err) {
     throw toIngredientToolError(err, "create_failed");
   }
@@ -141,8 +160,13 @@ export async function createIngredient(
 export async function updateIngredient(
   args: IngredientUpdateToolInput,
 ): Promise<IngredientRow> {
-  const { id, ...fields } = args;
+  const { id, portion, ...fields } = args;
   const patch: UpdateIngredientPatch = { ...fields };
+  // Unlike create, the portion here is only the math basis for the new
+  // nutrition values — food_portions changes only when passed explicitly.
+  if (fields.nutrition && portion) {
+    patch.nutrition = scalePortionNutritionToPer100g(fields.nutrition, portion.gramWeight);
+  }
   // The embedding IS the name (that's what matching searches), so a rename
   // must re-embed. Best-effort: on null the repo keeps the old vector, which
   // still points at the previous name — re-saving the name retries.
