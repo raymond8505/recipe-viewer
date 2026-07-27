@@ -13,6 +13,7 @@ import {
   PRIMARY_NUTRITION_COLUMNS,
   nutritionLabel,
 } from "./nutritionColumns";
+import NutritionFactsPreview from "./NutritionFactsPreview";
 import PortionsEditor from "./PortionsEditor";
 import { formatServingSize, representativePortion } from "./servingSize";
 import {
@@ -200,95 +201,113 @@ export default function IngredientRowEditor({
                 so every field stays visible without horizontal scrolling, even
                 though the cell spans the (wider) full table. */}
             <div
-              className="sticky left-0 space-y-4 px-4"
+              className="sticky left-0 px-4"
               style={detailWidth ? { width: detailWidth } : undefined}
             >
-              <div>
-                <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2">
-                  All nutrition ({NUTRITION_BASIS_LABEL})
-                </h3>
-                <div className="grid grid-cols-2 gap-x-4 gap-y-2 sm:grid-cols-3 lg:grid-cols-4">
-                  {NUTRITION_COLUMNS.map((col) => (
-                    <label
-                      key={col.key}
-                      className="flex min-w-0 items-center justify-between gap-2 text-sm"
-                    >
-                      <span className="min-w-0 text-muted-foreground">
-                        {nutritionLabel(col)}
-                      </span>
-                      <input
-                        type="number"
-                        step="any"
-                        min="0"
-                        aria-label={`${nutritionLabel(col)} for ${ingredient.name}`}
-                        value={draft.nutrition[col.key]}
-                        onChange={(e) =>
-                          setDraft({
-                            ...draft,
-                            nutrition: {
-                              ...draft.nutrition,
-                              [col.key]: e.target.value,
-                            },
-                          })
-                        }
-                        className={detailInputClass}
-                      />
-                    </label>
-                  ))}
-                  <label className="flex min-w-0 items-center justify-between gap-2 text-sm">
-                    <span className="min-w-0 text-muted-foreground">
-                      Density (g/ml)
-                    </span>
-                    <input
-                      type="number"
-                      step="any"
-                      min="0"
-                      aria-label={`Density (g/ml) for ${ingredient.name}`}
-                      value={draft.density}
-                      onChange={(e) =>
-                        setDraft({ ...draft, density: e.target.value })
-                      }
-                      className={detailInputClass}
-                    />
-                  </label>
-                </div>
-              </div>
-
-              <div>
-                <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2">
-                  Portions
-                </h3>
-                <div className="max-w-md">
-                  <PortionsEditor
-                    idPrefix={`${ingredient.name} portion`}
+              <div className="flex flex-col gap-6 md:flex-row">
+                {/* Label preview first (left on md+): the whole point of the
+                    drawer is confirming amounts against the physical package
+                    label, so the label leads and tracks the draft live. */}
+                <div className="w-full shrink-0 md:w-72">
+                  <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2">
+                    Label preview
+                  </h3>
+                  <NutritionFactsPreview
+                    nutrition={draft.nutrition}
                     portions={draft.portions}
-                    onChange={(portions) => setDraft({ ...draft, portions })}
+                    idPrefix={ingredient.name}
                   />
                 </div>
-              </div>
 
-              <dl className="flex flex-wrap gap-x-8 gap-y-1 text-xs text-muted-foreground">
-                <div className="flex gap-1">
-                  <dt className="font-medium">Serving:</dt>
-                  <dd>{servingSize}</dd>
-                </div>
-                <div className="flex gap-1">
-                  <dt className="font-medium">Source:</dt>
-                  <dd>{ingredient.source}</dd>
-                </div>
-                {ingredient.fdc_id != null && (
-                  <div className="flex gap-1">
-                    <dt className="font-medium">FDC ID:</dt>
-                    <dd>{ingredient.fdc_id}</dd>
+                <div className="min-w-0 flex-1 space-y-4">
+                  <div>
+                    <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2">
+                      All nutrition ({NUTRITION_BASIS_LABEL})
+                    </h3>
+                    <div className="grid grid-cols-2 gap-x-4 gap-y-2 sm:grid-cols-3 lg:grid-cols-4">
+                      {NUTRITION_COLUMNS.map((col) => (
+                        <label
+                          key={col.key}
+                          className="flex min-w-0 items-center justify-between gap-2 text-sm"
+                        >
+                          <span className="min-w-0 text-muted-foreground">
+                            {nutritionLabel(col)}
+                          </span>
+                          <input
+                            type="number"
+                            step="any"
+                            min="0"
+                            aria-label={`${nutritionLabel(col)} for ${ingredient.name}`}
+                            value={draft.nutrition[col.key]}
+                            onChange={(e) =>
+                              setDraft({
+                                ...draft,
+                                nutrition: {
+                                  ...draft.nutrition,
+                                  [col.key]: e.target.value,
+                                },
+                              })
+                            }
+                            className={detailInputClass}
+                          />
+                        </label>
+                      ))}
+                      <label className="flex min-w-0 items-center justify-between gap-2 text-sm">
+                        <span className="min-w-0 text-muted-foreground">
+                          Density (g/ml)
+                        </span>
+                        <input
+                          type="number"
+                          step="any"
+                          min="0"
+                          aria-label={`Density (g/ml) for ${ingredient.name}`}
+                          value={draft.density}
+                          onChange={(e) =>
+                            setDraft({ ...draft, density: e.target.value })
+                          }
+                          className={detailInputClass}
+                        />
+                      </label>
+                    </div>
                   </div>
-                )}
-                {ingredient.fdc_data_type && (
-                  <div className="flex gap-1">
-                    <dt className="font-medium">Data type:</dt>
-                    <dd>{ingredient.fdc_data_type}</dd>
+
+                  <div>
+                    <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2">
+                      Portions
+                    </h3>
+                    <div className="max-w-md">
+                      <PortionsEditor
+                        idPrefix={`${ingredient.name} portion`}
+                        portions={draft.portions}
+                        onChange={(portions) => setDraft({ ...draft, portions })}
+                      />
+                    </div>
                   </div>
-                )}
-              </dl>
+
+                  <dl className="flex flex-wrap gap-x-8 gap-y-1 text-xs text-muted-foreground">
+                    <div className="flex gap-1">
+                      <dt className="font-medium">Serving:</dt>
+                      <dd>{servingSize}</dd>
+                    </div>
+                    <div className="flex gap-1">
+                      <dt className="font-medium">Source:</dt>
+                      <dd>{ingredient.source}</dd>
+                    </div>
+                    {ingredient.fdc_id != null && (
+                      <div className="flex gap-1">
+                        <dt className="font-medium">FDC ID:</dt>
+                        <dd>{ingredient.fdc_id}</dd>
+                      </div>
+                    )}
+                    {ingredient.fdc_data_type && (
+                      <div className="flex gap-1">
+                        <dt className="font-medium">Data type:</dt>
+                        <dd>{ingredient.fdc_data_type}</dd>
+                      </div>
+                    )}
+                  </dl>
+                </div>
+              </div>
             </div>
           </TableCell>
         </TableRow>
