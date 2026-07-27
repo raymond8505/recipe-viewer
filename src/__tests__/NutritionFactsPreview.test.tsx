@@ -86,10 +86,9 @@ describe("NutritionFactsPreview", () => {
   it("renders em dashes for absent nutrients, never zeros", () => {
     renderPreview({ nutrition: { calories_kcal: "", fat_g: "oops" } });
 
-    // Calories and all 8 panel rows are absent: 9 standalone dashes. The 3
-    // micronutrients inline their dash next to the name ("Calcium —").
-    expect(screen.getAllByText("—")).toHaveLength(9);
-    expect(screen.getByText(/Calcium —/)).toBeInTheDocument();
+    // Calories, all 8 panel rows, and the 3 mineral rows are absent:
+    // 12 dashes, no fabricated 0 values.
+    expect(screen.getAllByText("—")).toHaveLength(12);
     expect(screen.queryByText(/^0/)).not.toBeInTheDocument();
   });
 });

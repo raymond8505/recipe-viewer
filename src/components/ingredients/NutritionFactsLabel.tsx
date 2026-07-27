@@ -82,12 +82,15 @@ export default function NutritionFactsLabel({
         ))}
       </div>
 
-      <div className="mt-1 flex flex-wrap gap-x-2 border-t-8 border-foreground pt-1 text-xs">
-        {NUTRITION_LABEL_MICRONUTRIENTS.map((row, index) => (
-          <span key={row.key} className="whitespace-nowrap">
-            {index > 0 && <span aria-hidden="true">· </span>}
-            {row.name} {rowValue(nutrition, row)}
-          </span>
+      <div className="mt-1 border-t-8 border-foreground">
+        {NUTRITION_LABEL_MICRONUTRIENTS.map((row) => (
+          <div
+            key={row.key}
+            className="flex items-baseline justify-between gap-2 border-t border-foreground/40 py-0.5 text-sm first:border-t-0"
+          >
+            <span>{row.name}</span>
+            <span className="tabular-nums">{rowValue(nutrition, row)}</span>
+          </div>
         ))}
       </div>
     </div>

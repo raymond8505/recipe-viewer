@@ -89,22 +89,26 @@ export interface NutritionLabelRow {
   bold?: boolean;
 }
 
-/** Main panel rows in FDA order. Calories is rendered separately as the big
- *  number, so it's not in this list. */
+/** Main panel rows. The macro order (fat, carbs, protein, then cholesterol
+ *  and sodium) is the user's preferred reading order rather than the strict
+ *  FDA 2016 sequence; sub-nutrients stay indented under their parent.
+ *  Calories is rendered separately as the big number, so it's not in this
+ *  list. */
 export const NUTRITION_LABEL_ROWS: readonly NutritionLabelRow[] = [
   { key: "fat_g", name: "Total Fat", unit: "g", bold: true },
   { key: "saturated_fat_g", name: "Saturated Fat", unit: "g", indent: true },
-  { key: "cholesterol_mg", name: "Cholesterol", unit: "mg", bold: true },
-  { key: "sodium_mg", name: "Sodium", unit: "mg", bold: true },
   { key: "carbs_g", name: "Total Carbohydrate", unit: "g", bold: true },
   { key: "fiber_g", name: "Dietary Fiber", unit: "g", indent: true },
   { key: "sugars_g", name: "Total Sugars", unit: "g", indent: true },
   { key: "protein_g", name: "Protein", unit: "g", bold: true },
+  { key: "cholesterol_mg", name: "Cholesterol", unit: "mg", bold: true },
+  { key: "sodium_mg", name: "Sodium", unit: "mg", bold: true },
 ];
 
-/** Footer micronutrients, below the closing heavy rule on a real label. */
+/** Minerals below the closing heavy rule, rendered as full-width rows just
+ *  like the main panel (not an inline footer). */
 export const NUTRITION_LABEL_MICRONUTRIENTS: readonly NutritionLabelRow[] = [
+  { key: "potassium_mg", name: "Potassium", unit: "mg" },
   { key: "calcium_mg", name: "Calcium", unit: "mg" },
   { key: "iron_mg", name: "Iron", unit: "mg" },
-  { key: "potassium_mg", name: "Potassium", unit: "mg" },
 ];
