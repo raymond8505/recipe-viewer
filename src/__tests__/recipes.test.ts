@@ -201,11 +201,17 @@ describe("getRecipes", () => {
   });
 
   it("returns empty data and zero count on supabase error", async () => {
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
     makeSupabaseMock({ error: { message: "DB error" } });
     const result = await getRecipes();
 
     expect(result.data).toEqual([]);
     expect(result.count).toBe(0);
+    expect(errorSpy).toHaveBeenCalledWith(
+      "Supabase error fetching recipes:",
+      expect.anything(),
+    );
+    errorSpy.mockRestore();
   });
 
   it("applies eq status filter and skips neq when status option is provided (logged-in)", async () => {

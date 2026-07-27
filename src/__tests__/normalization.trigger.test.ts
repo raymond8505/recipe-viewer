@@ -54,7 +54,10 @@ describe("scheduleNormalization", () => {
     expect(() => scheduleNormalization("r-1")).not.toThrow();
 
     await vi.waitFor(() => {
-      expect(consoleError).toHaveBeenCalled();
+      expect(consoleError).toHaveBeenCalledWith(
+        "Detached normalization run failed for r-1:",
+        expect.any(Error),
+      );
     });
     consoleError.mockRestore();
   });
