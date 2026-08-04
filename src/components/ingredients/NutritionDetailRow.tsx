@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { TableCell, TableRow } from "@/components/ui/table";
+import { Checkbox } from "@/components/ui/checkbox";
 import { SpinnerIcon, WarningIcon } from "@/components/icons";
 import { cn } from "@/lib/utils";
 import { formatAmount } from "@/lib/units";
@@ -27,12 +28,21 @@ const EXCLUSION_TITLES: Record<ExclusionReason, string> = {
   stale: "Line changed since normalization — re-run normalization",
 };
 
+// A line the user switched off. Deliberately applied to cell *contents* rather
+// than the <tr>: opacity on the row would create a stacking context, re-rooting
+// the frozen columns' z-10 inside it and letting a faded row's sticky cells
+// paint wrong against their neighbours (see tableStyles.ts for the z-order).
+const OFF_CLASS = "opacity-60 line-through";
+
 /**
- * One recipe line in the NutritionDetail table: frozen recipe text (with an
- * exclusion flag when the line can't contribute to totals), the frozen
- * normalized-ingredient autocomplete, then read-only nutrition cells.
+ * One recipe line in the NutritionDetail table: a toggle plus the frozen recipe
+ * text (with an exclusion flag when the line can't contribute to totals), the
+ * frozen normalized-ingredient autocomplete, then read-only nutrition cells.
  *
- * @summary read-only nutrition row with an editable match cell
+ * Switching the toggle off drops the line from the totals but keeps its numbers
+ * on screen, struck through — the point of the lens is seeing what you removed.
+ *
+ * @summary read-only nutrition row with an include toggle and an editable match cell
  */
 export default function NutritionDetailRow({
   line,
@@ -43,6 +53,7 @@ export default function NutritionDetailRow({
   onImportUsda,
   onEstimateGrams,
   onSetGrams,
+  onToggle,
 }: {
   line: NutritionDetailLine;
   saving: boolean;
@@ -52,8 +63,9 @@ export default function NutritionDetailRow({
   onImportUsda: (rowId: string, food: UsdaSearchFood) => void;
   onEstimateGrams: (rowId: string) => void;
   onSetGrams: (rowId: string, grams: number | null) => void;
+  onToggle: (index: number) => void;
 }) {
-  const { row, ingredient, computation } = line;
+  const { row, ingredient, computation, enabled } = line;
   const excluded = computation.kind === "excluded";
   // Grams only matter for a matched line, and a stale line's row is about to be
   // rebuilt — hide the editor in both cases.
@@ -71,11 +83,24 @@ export default function NutritionDetailRow({
         className={cn(STICKY_NAME_CELL, excluded && "text-muted-foreground")}
       >
         <span className="flex w-full min-w-0 items-center gap-1.5">
+          {/* Rides inside the existing frozen cell rather than taking a column
+              of its own — a new leading column would break the w-44/left-44
+              contract the two frozen columns share (tableStyles.ts). */}
+          <Checkbox
+            checked={enabled}
+            onCheckedChange={() => onToggle(line.index)}
+            aria-label={`Include ${line.text}`}
+            className="mt-0.5 self-start"
+          />
           {/* Wrap (same treatment as the matched-ingredient label) — the
               column is fixed-width (w-44), so long lines must grow the row,
               not truncate. break-words keeps unbroken tokens from widening
               the frozen column and breaking the left-44 offset. */}
-          <span className="min-w-0 text-wrap break-words">{line.text}</span>
+          <span
+            className={cn("min-w-0 text-wrap break-words", !enabled && OFF_CLASS)}
+          >
+            {line.text}
+          </span>
           {excluded && (
             <span title={EXCLUSION_TITLES[computation.reason]}>
               <WarningIcon className="size-4 shrink-0 text-amber-500" />
@@ -87,7 +112,14 @@ export default function NutritionDetailRow({
         className={cn(STICKY_ALIASES_CELL, autocompleteOpen && "z-20")}
       >
         {row ? (
-          <span className="flex w-full min-w-0 flex-col gap-1">
+          // Recedes with the rest of the row, but no strikethrough — the match
+          // and grams stay editable while the line is switched off.
+          <span
+            className={cn(
+              "flex w-full min-w-0 flex-col gap-1",
+              !enabled && "opacity-60",
+            )}
+          >
             <span className="flex w-full min-w-0 items-center gap-1.5">
               <span className="min-w-0 flex-1 text-wrap">
                 <IngredientAutocomplete
@@ -131,7 +163,10 @@ export default function NutritionDetailRow({
             ? computation.nutrition[col.key]
             : undefined;
         return (
-          <TableCell key={col.key} className="text-right tabular-nums">
+          <TableCell
+            key={col.key}
+            className={cn("text-right tabular-nums", !enabled && OFF_CLASS)}
+          >
             {value != null ? formatAmount(value) : "—"}
           </TableCell>
         );

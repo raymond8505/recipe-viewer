@@ -22,6 +22,7 @@ import type {
   UsdaFoodSearch,
 } from "@/hooks/useIngredientAutocomplete";
 import NutritionDetailRow from "./NutritionDetailRow";
+import NutritionGroupRow from "./NutritionGroupRow";
 import NutritionSummaryRow from "./NutritionSummaryRow";
 import { NUTRITION_DETAIL_COLUMNS, nutritionLabel } from "./nutritionColumns";
 import { STICKY_ALIASES_HEAD, STICKY_HEAD, STICKY_NAME_HEAD } from "./tableStyles";
@@ -50,7 +51,11 @@ interface NutritionDetailProps {
  * association and recomputes the row + totals. Table chrome (frozen columns,
  * sticky header, capped scroll box) mirrors IngredientsTable.
  *
- * @summary per-line nutrition table with manual match curation
+ * Every line and every group also carries an include toggle, so the totals can
+ * answer "what are the macros if I skip this component of the recipe?". Those
+ * toggles are session-only and never leave this screen.
+ *
+ * @summary per-line nutrition table with manual match curation and what-if toggles
  */
 export default function NutritionDetail({
   recipeId,
@@ -72,12 +77,16 @@ export default function NutritionDetail({
     servings,
     excludedCount,
     hasStaleLines,
+    disabledCount,
     savingRowId,
     error,
     selectIngredient,
     importUsda,
     estimateGrams,
     setGrams,
+    toggleLine,
+    setLinesEnabled,
+    enableAll,
   } = useNutritionDetail(
     recipeId,
     schemaIngredients,
@@ -167,17 +176,17 @@ export default function NutritionDetail({
               groups.map((group, gi) => (
                 <Fragment key={group.heading ?? `ungrouped-${gi}`}>
                   {group.heading != null && (
-                    // Distinct band; the heading cell freezes left so the
-                    // group name stays visible during horizontal scroll.
-                    <TableRow className="bg-muted hover:bg-muted">
-                      <TableCell
-                        colSpan={2}
-                        className="sticky left-0 z-10 bg-muted font-sans text-xs font-semibold uppercase tracking-widest text-muted-foreground"
-                      >
-                        {group.heading}
-                      </TableCell>
-                      <TableCell colSpan={COLUMN_COUNT - 2} />
-                    </TableRow>
+                    <NutritionGroupRow
+                      heading={group.heading}
+                      enabled={group.enabled}
+                      columnCount={COLUMN_COUNT}
+                      onToggle={(enabled) =>
+                        setLinesEnabled(
+                          group.lines.map((l) => l.index),
+                          enabled,
+                        )
+                      }
+                    />
                   )}
                   {group.lines.map((line) => (
                     <NutritionDetailRow
@@ -190,6 +199,7 @@ export default function NutritionDetail({
                       onImportUsda={importUsda}
                       onEstimateGrams={estimateGrams}
                       onSetGrams={setGrams}
+                      onToggle={toggleLine}
                     />
                   ))}
                 </Fragment>
@@ -211,6 +221,19 @@ export default function NutritionDetail({
           {pluralize(excludedCount, "line")} — hover a{" "}
           <WarningIcon className="inline-block size-3.5 align-text-bottom text-amber-500" />{" "}
           flag for the reason.
+        </p>
+      )}
+
+      {/* The only batch control the table needs beyond group toggles: a way
+          back to the unfiltered recipe. A "select all" header checkbox would
+          otherwise duplicate it. */}
+      {disabledCount > 0 && (
+        <p className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+          {disabledCount} {pluralize(disabledCount, "ingredient")} switched off —
+          totals reflect the rest.
+          <Button size="sm" variant="ghost" onClick={enableAll}>
+            Enable all
+          </Button>
         </p>
       )}
     </div>

@@ -391,6 +391,111 @@ describe("NutritionDetail", () => {
     ).toHaveValue(100);
   });
 
+  it("drops a switched-off line from the recipe total and per-portion rows", async () => {
+    const user = userEvent.setup();
+    renderDetail();
+
+    await user.click(screen.getByRole("checkbox", { name: "Include 100 g butter" }));
+
+    // Only cumin still contributes: 724.76 − 717 = 7.76, ÷4 = 1.94.
+    expect(rowFor("Recipe total")).toHaveTextContent("7.76");
+    expect(rowFor("Recipe total")).not.toHaveTextContent("724.76");
+    expect(rowFor("Per portion (÷4)")).toHaveTextContent("1.94");
+  });
+
+  it("fades and strikes through a switched-off line instead of hiding it", async () => {
+    const user = userEvent.setup();
+    renderDetail();
+
+    await user.click(screen.getByRole("checkbox", { name: "Include 100 g butter" }));
+
+    // The numbers stay on screen — seeing what you removed is the point.
+    const butterRow = rowFor("100 g butter");
+    expect(butterRow).toHaveTextContent("717");
+    expect(screen.getByText("100 g butter")).toHaveClass("line-through");
+  });
+
+  it("switches a whole group off in one action, leaving other groups alone", async () => {
+    const user = userEvent.setup();
+    renderDetail();
+
+    await user.click(
+      screen.getByRole("checkbox", { name: "Include all Cake ingredients" }),
+    );
+
+    // Cake holds both contributing lines (butter + cumin), so nothing is left
+    // to total; "2 eggs" (Frosting) never contributed and stays switched on.
+    expect(rowFor("Recipe total")).not.toHaveTextContent("724.76");
+    expect(rowFor("Recipe total")).not.toHaveTextContent("7.76");
+    expect(
+      screen.getByRole("checkbox", { name: "Include 100 g butter" }),
+    ).toHaveAttribute("aria-checked", "false");
+    expect(
+      screen.getByRole("checkbox", { name: "Include 1 tsp cumin" }),
+    ).toHaveAttribute("aria-checked", "false");
+    expect(
+      screen.getByRole("checkbox", { name: "Include 2 eggs" }),
+    ).toHaveAttribute("aria-checked", "true");
+  });
+
+  it("shows a group toggle as mixed when only some of its lines are on", async () => {
+    const user = userEvent.setup();
+    renderDetail();
+
+    const cakeToggle = screen.getByRole("checkbox", {
+      name: "Include all Cake ingredients",
+    });
+    await user.click(cakeToggle);
+    expect(cakeToggle).toHaveAttribute("aria-checked", "false");
+
+    await user.click(screen.getByRole("checkbox", { name: "Include 100 g butter" }));
+    expect(cakeToggle).toHaveAttribute("aria-checked", "mixed");
+
+    // Clicking a mixed group completes it rather than clearing it.
+    await user.click(cakeToggle);
+    expect(cakeToggle).toHaveAttribute("aria-checked", "true");
+    expect(rowFor("Recipe total")).toHaveTextContent("724.76");
+  });
+
+  it("keeps switched-off lines out of the flagged-line count", async () => {
+    const user = userEvent.setup();
+    renderDetail();
+
+    // Baseline: "2 eggs" (no unit) and "5 g magic dust" (unmatched).
+    expect(screen.getByText(/Totals exclude 2 flagged lines/)).toBeInTheDocument();
+
+    // Switching off a healthy line must not turn it into a flagged one.
+    await user.click(screen.getByRole("checkbox", { name: "Include 100 g butter" }));
+    expect(screen.getByText(/Totals exclude 2 flagged lines/)).toBeInTheDocument();
+
+    // Switching off an already-flagged line drops it from the count — it is no
+    // longer silently missing from the tally.
+    await user.click(screen.getByRole("checkbox", { name: "Include 2 eggs" }));
+    expect(screen.getByText(/Totals exclude 1 flagged line/)).toBeInTheDocument();
+  });
+
+  it("offers 'Enable all' only while something is off, and restores the total", async () => {
+    const user = userEvent.setup();
+    renderDetail();
+
+    expect(
+      screen.queryByRole("button", { name: "Enable all" }),
+    ).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("checkbox", { name: "Include 100 g butter" }));
+    await user.click(screen.getByRole("checkbox", { name: "Include 2 eggs" }));
+    expect(
+      screen.getByText(/2 ingredients switched off/),
+    ).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Enable all" }));
+
+    expect(rowFor("Recipe total")).toHaveTextContent("724.76");
+    expect(
+      screen.queryByRole("button", { name: "Enable all" }),
+    ).not.toBeInTheDocument();
+  });
+
   it("persists a user-typed gram value on blur", async () => {
     const user = userEvent.setup();
     vi.mocked(setIngredientGrams).mockResolvedValue(
