@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { requireSession } from "@/lib/api/guard";
+import { requireSessionOrDev } from "@/lib/api/guard";
 import { importUsdaIngredient } from "@/lib/ingredientImport";
 import { IngredientRepoError } from "@/lib/ingredients";
 import { UsdaError } from "@/lib/usda";
@@ -13,7 +13,7 @@ import { usdaImportInputSchema } from "@/lib/schemas/ingredient";
 // collision with a different food create a new row (named by the USDA
 // description) instead of clobbering the existing one, which other recipes'
 // lines may reference.
-export const POST = requireSession(async (req: Request) => {
+export const POST = requireSessionOrDev(async (req: Request) => {
   const body = await req.json().catch(() => null);
   const parsed = usdaImportInputSchema.safeParse(body);
   if (!parsed.success) {

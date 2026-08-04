@@ -22,6 +22,13 @@ export type RoutePolicy =
   // subject matches the `[id]` (the agent path). Enforced via
   // `requireSessionOrRecipeToken` / `requireApiAuth`.
   | "session-or-recipe-token"
+  // As `session`, plus an open door for ANY caller when NODE_ENV is
+  // "development" — the nutrition/ingredient curation surface needs no login in
+  // the local dev loop. Enforced via `requireSessionOrDev`.
+  | "session-or-dev"
+  // As `session-or-recipe-token`, plus the same development-only open door.
+  // Enforced via `requireSessionOrRecipeTokenOrDev`.
+  | "session-or-recipe-token-or-dev"
   // OAuth 2.1 access token (audience "mcp"), verified by the handler.
   | "mcp-oauth"
   // Static `MCP_API_TOKEN` bearer, verified by the handler.
@@ -57,6 +64,23 @@ export function isProtectedPolicy(policy: RoutePolicy): boolean {
 }
 
 /**
+ * Policies carrying the development-only open door (see src/lib/devAccess.ts).
+ * These are still *protected* — the door is shut under `NODE_ENV=test`, so the
+ * behavioral gate exercises them exactly like any other protected route — but
+ * they are enumerated here so the enforcement test can additionally prove they
+ * reject under `NODE_ENV=production`, and cross-check that the set of routes
+ * using a `*OrDev` guard is exactly the set declared here.
+ */
+export const DEV_BYPASS_POLICIES = [
+  "session-or-dev",
+  "session-or-recipe-token-or-dev",
+] as const satisfies readonly RoutePolicy[];
+
+export function isDevBypassPolicy(policy: RoutePolicy): boolean {
+  return (DEV_BYPASS_POLICIES as readonly RoutePolicy[]).includes(policy);
+}
+
+/**
  * Route path (as derived from `src/app/api/<path>/route.ts`) → exposure policy.
  * Keys use the literal `[id]` dynamic segment, matching the file path.
  */
@@ -74,9 +98,9 @@ export const ROUTE_POLICY = {
     rationale: "Mutates a recipe (archive); browser session or recipe-scoped token.",
   },
   "/api/recipes/[id]/normalize": {
-    policy: "session-or-recipe-token",
+    policy: "session-or-recipe-token-or-dev",
     rationale:
-      "Manually re-runs ingredient normalization for a recipe (recovery after USDA/Gemini outages or threshold tuning); browser session or recipe-scoped token.",
+      "Manually re-runs ingredient normalization for a recipe (recovery after USDA/Gemini outages or threshold tuning); browser session or recipe-scoped token. Also open to any caller under NODE_ENV=development — it backs the Normalize button on the dev-open NutritionDetail screen. Spends Gemini/USDA quota, which is acceptable at localhost volume.",
   },
   "/api/recipes/[id]/notes": {
     policy: "session-or-recipe-token",
@@ -100,46 +124,51 @@ export const ROUTE_POLICY = {
       "Multipart image upload; browser session or single-use recipe-scoped token. This is the agent curl path the get_token MCP tool directs to.",
   },
 
-  // ── Ingredient catalog (logged-in manager UI) ───────────────────────────
+  // ── Ingredient catalog (logged-in manager UI; open in local dev) ────────
+  // Every route in this block is `session-or-dev`: the nutrition layer is fully
+  // reachable without a login under `next dev` so the local loop is frictionless.
+  // The door is structurally shut everywhere else — the Dockerfile and both
+  // compose files pin NODE_ENV=production, and vitest runs as "test". See
+  // src/lib/devAccess.ts and the containment gate in route-auth-policy.test.ts.
   "/api/ingredients/search": {
-    policy: "session",
+    policy: "session-or-dev",
     rationale:
-      "Trigram autocomplete backing the logged-in NutritionDetail screen; no anonymous or agent-token use case (agents get the search_ingredients MCP tool).",
+      "Trigram autocomplete backing the NutritionDetail screen; no anonymous or agent-token use case in production (agents get the search_ingredients MCP tool), but open in local dev alongside the screen it serves.",
   },
   "/api/recipes/[id]/ingredients": {
-    policy: "session",
+    policy: "session-or-dev",
     rationale:
-      "Reads a recipe's normalized ingredient rows + catalog joins for the logged-in NutritionDetail screen; normalized-layer curation is a manager surface, not part of the public recipe view.",
+      "Reads a recipe's normalized ingredient rows + catalog joins for the NutritionDetail screen; normalized-layer curation is a manager surface, not part of the public recipe view — except in local dev, where that screen is open.",
   },
   "/api/recipes/[id]/ingredients/[riId]": {
-    policy: "session",
+    policy: "session-or-dev",
     rationale:
-      "Manually re-associates one parsed line to a catalog ingredient (match_status → manual); logged-in curation surface only. Recipe-scoped tokens don't apply — agents curate via MCP tools, not this UI path.",
+      "Manually re-associates one parsed line to a catalog ingredient (match_status → manual); a curation surface, open in local dev. Recipe-scoped tokens don't apply — agents curate via MCP tools, not this UI path.",
   },
   "/api/recipes/[id]/ingredients/[riId]/grams": {
-    policy: "session",
+    policy: "session-or-dev",
     rationale:
-      "Sets a parsed line's per-line gram estimate (LLM Estimate button / user-typed value) on the logged-in NutritionDetail screen; internal nutrition-manager curation, same surface as the sibling association route.",
+      "Sets a parsed line's per-line gram estimate (LLM Estimate button / user-typed value) on the NutritionDetail screen; internal nutrition-manager curation, same surface and same dev-open posture as the sibling association route.",
   },
   "/api/ingredients": {
-    policy: "session",
+    policy: "session-or-dev",
     rationale:
-      "Ingredient catalog list/create backs the logged-in /ingredients manager UI; no anonymous or agent-token use case (agents get the search_ingredients MCP tool).",
+      "Ingredient catalog list/create backs the /ingredients manager UI, which is open in local dev; no anonymous or agent-token use case in production (agents get the search_ingredients MCP tool).",
   },
   "/api/ingredients/import-usda": {
-    policy: "session",
+    policy: "session-or-dev",
     rationale:
-      "Mints a catalog ingredient from a user-picked USDA food (NutritionDetail manual import); catalog writes are a logged-in curation surface like the rest of /api/ingredients.",
+      "Mints a catalog ingredient from a user-picked USDA food (NutritionDetail manual import); catalog writes follow the same dev-open posture as the rest of /api/ingredients.",
   },
   "/api/usda/search": {
-    policy: "session",
+    policy: "session-or-dev",
     rationale:
-      "Proxies USDA FoodData Central search for the logged-in manual-import flow — keeps USDA_API_KEY server-side and the rate-limited upstream (1,000 req/hr) off the anonymous surface.",
+      "Proxies USDA FoodData Central search for the manual-import flow — keeps USDA_API_KEY server-side and the rate-limited upstream (1,000 req/hr) off the PUBLIC surface. The dev door only ever exposes it to localhost, so the quota stays protected from the internet.",
   },
   "/api/ingredients/[id]": {
-    policy: "session",
+    policy: "session-or-dev",
     rationale:
-      "Ingredient catalog update/delete backs the logged-in /ingredients manager UI. Recipe-scoped tokens don't apply — they authorize one recipe, not the shared catalog.",
+      "Ingredient catalog update/delete backs the /ingredients manager UI, open in local dev. Recipe-scoped tokens don't apply — they authorize one recipe, not the shared catalog.",
   },
 
   // ── MCP transport ───────────────────────────────────────────────────────

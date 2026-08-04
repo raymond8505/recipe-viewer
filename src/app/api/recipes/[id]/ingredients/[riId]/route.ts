@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { requireSession } from "@/lib/api/guard";
+import { requireSessionOrDev } from "@/lib/api/guard";
 import {
   IngredientRepoError,
   updateRecipeIngredientAssociation,
@@ -9,7 +9,7 @@ import { recipeIngredientPatchSchema } from "@/lib/schemas/ingredient";
 // Manually re-point one parsed ingredient line at a catalog ingredient (or
 // clear it with null). The repo update is scoped on riId AND the recipe id,
 // so a valid session can't move another recipe's row through this URL.
-export const PATCH = requireSession(
+export const PATCH = requireSessionOrDev(
   async (
     req: Request,
     { params }: RouteContext<"/api/recipes/[id]/ingredients/[riId]">,

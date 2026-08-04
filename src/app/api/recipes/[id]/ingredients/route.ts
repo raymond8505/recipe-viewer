@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { requireSession } from "@/lib/api/guard";
+import { requireSessionOrDev } from "@/lib/api/guard";
 import { getIngredientsByIds, getRecipeIngredients } from "@/lib/ingredients";
 import { getRecipeById } from "@/lib/recipes";
 
@@ -7,7 +7,7 @@ import { getRecipeById } from "@/lib/recipes";
 // for the NutritionDetail screen. The page itself fetches repo-direct
 // server-side; this route exists for client-side refresh (e.g. after a
 // re-normalization run completes).
-export const GET = requireSession(
+export const GET = requireSessionOrDev(
   async (_req: Request, { params }: RouteContext<"/api/recipes/[id]/ingredients">) => {
     const { id } = await params;
 
