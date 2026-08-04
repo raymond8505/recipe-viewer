@@ -4,6 +4,7 @@ import type { Metadata } from "next";
 import { getRecipeById } from "@/lib/recipes";
 import { getIngredientsByIds, getRecipeIngredients } from "@/lib/ingredients";
 import { getIsLoggedIn } from "@/lib/auth";
+import { canCurateNutrition } from "@/lib/devAccess";
 import NutritionDetail from "@/components/ingredients/NutritionDetail";
 
 interface RecipeIngredientsPageProps {
@@ -19,9 +20,11 @@ export async function generateMetadata({
   return { title: `${recipe.metadata.schema.name} — Ingredients` };
 }
 
-// Login-gated curation surface for a recipe's normalized ingredient layer.
-// The data-plane routes are session-only regardless (routePolicy), so this
-// gate is UX, not the security boundary.
+// Login-gated curation surface for a recipe's normalized ingredient layer,
+// except in local development where the whole nutrition layer is open (see
+// src/lib/devAccess.ts). The data-plane routes enforce the same `session-or-dev`
+// posture themselves (routePolicy), so this gate is UX, not the security
+// boundary.
 export default async function RecipeIngredientsPage({
   params,
 }: RecipeIngredientsPageProps) {
@@ -32,7 +35,7 @@ export default async function RecipeIngredientsPage({
     notFound();
   }
 
-  if (!isLoggedIn) {
+  if (!canCurateNutrition(isLoggedIn)) {
     return (
       <section className="py-16 text-center">
         <h1 className="text-3xl mb-3">Nutrition Breakdown</h1>

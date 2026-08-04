@@ -214,3 +214,39 @@ describe("CookingMode — cooking notes", () => {
     expect((textareas[0] as HTMLTextAreaElement).value).toBe("add more garlic");
   });
 });
+
+describe("CookingMode — nutrition source badge", () => {
+  const nutritious = () =>
+    makeRecipe({
+      nutrition: { calories: "200 kcal" },
+      cookingNotes: "less salt next time",
+    });
+  // The badge's title is the stable hook — its visible text ("recipe") is a
+  // common word that collides elsewhere in the modal.
+  const BADGE_TITLE = /from the recipe's own nutrition data/i;
+
+  it("hides the badge from an anonymous viewer", () => {
+    render(<CookingMode recipe={nutritious()} onClose={vi.fn()} />);
+    expect(screen.queryByTitle(BADGE_TITLE)).toBeNull();
+  });
+
+  it("shows the badge when logged in", () => {
+    render(<CookingMode recipe={nutritious()} onClose={vi.fn()} isLoggedIn />);
+    expect(screen.getAllByTitle(BADGE_TITLE).length).toBeGreaterThanOrEqual(1);
+  });
+
+  // The dev-door contract in cook mode: nutrition provenance opens for a
+  // logged-out viewer, cooking notes stay shut.
+  it("shows the badge but not cooking notes when canCurateNutrition without a login", () => {
+    render(
+      <CookingMode
+        recipe={nutritious()}
+        onClose={vi.fn()}
+        isLoggedIn={false}
+        canCurateNutrition
+      />,
+    );
+    expect(screen.getAllByTitle(BADGE_TITLE).length).toBeGreaterThanOrEqual(1);
+    expect(screen.queryByPlaceholderText(/note changes for next time/i)).toBeNull();
+  });
+});

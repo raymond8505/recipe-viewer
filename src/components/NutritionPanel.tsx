@@ -14,13 +14,14 @@ interface NutritionPanelProps {
   /**
    * Link target for the NutritionDetail screen (/recipes/[id]/ingredients).
    * The panel receives a ScalableRecipe (no id), so the caller builds the
-   * href — and only passes it for logged-in users.
+   * href — and only passes it for callers that may curate nutrition.
    */
   ingredientsHref?: string;
   /**
    * Whether to show the source badge (ingredients vs recipe) in the header.
-   * Gated to logged-in users — the provenance distinction is an editor
-   * concern, not something to surface to anonymous visitors.
+   * The provenance distinction is an editor concern, not something to surface
+   * to anonymous visitors in production — so callers pass their
+   * `canCurateNutrition` value here, not `isLoggedIn`.
    */
   showSources?: boolean;
 }
