@@ -12,6 +12,10 @@ import {
   type RecipeIngredientInsert,
 } from "@/lib/ingredients";
 import { importUsdaIngredient } from "@/lib/ingredientImport";
+import {
+  accreteAliasesFromLines,
+  ingredientQueryText,
+} from "@/lib/ingredientAliases";
 import { explicitWeightGrams, gramsForLine } from "@/lib/nutritionMath";
 import { getRecipeById } from "@/lib/recipes";
 import { parseIngredient, unitKeyForAlias } from "@/lib/units";
@@ -189,10 +193,13 @@ async function embedAndMatch(state: State): Promise<Partial<State>> {
   const errors: string[] = [];
   const uniqueNames = [...new Set(state.parsed.map((line) => line.name))];
 
+  // ingredientQueryText, not the bare name: catalog vectors are built from
+  // lowercased name + aliases, and both sides of a cosine comparison have to
+  // fold case the same way or the normalization makes matching worse.
   const embeddings = new Map<string, number[] | null>();
   await Promise.all(
     uniqueNames.map(async (name) => {
-      embeddings.set(name, await generateEmbedding(name));
+      embeddings.set(name, await generateEmbedding(ingredientQueryText(name)));
     }),
   );
 
@@ -333,11 +340,12 @@ function pickPrompt(name: string, foods: Array<{ fdcId: number; description: str
   ].join("\n");
 }
 
-// Create one catalog ingredient from USDA. Returns the new (or, after losing a
-// unique-name race, existing) ingredient id — or null when USDA has nothing
-// usable (the line stays unmatched). The food → catalog-row conversion lives
-// in importUsdaIngredient (shared with the NutritionDetail manual import);
-// this wrapper owns the automated parts: analytical-only search + LLM pick.
+// Resolve one catalog ingredient from USDA. Returns the new — or, when this
+// food is already cataloged, existing — ingredient id, or null when USDA has
+// nothing usable (the line stays unmatched). The food → catalog-row conversion
+// lives in importUsdaIngredient (shared with the NutritionDetail manual
+// import); this wrapper owns the automated parts: analytical-only search +
+// LLM pick.
 async function createFromUsda(name: string, errors: string[]): Promise<string | null> {
   const foods = await searchFoods(name);
   if (foods.length === 0) {
@@ -538,6 +546,16 @@ async function persist(state: State): Promise<Partial<State>> {
   });
 
   await replaceRecipeIngredients(state.recipeId, rows);
+
+  // Teach the catalog the recipe language these lines actually used. This is
+  // the single accretion point for the whole workflow — it covers auto-accepted
+  // matches, LLM adjudications, novel rows just minted from USDA, and manual
+  // associations carried forward — which is why fetchNovel has no hook of its
+  // own. Batched per ingredient, and after the rows land: the catalog should
+  // only learn from associations that were actually persisted (in particular,
+  // never from a run the supersede guard above rejected).
+  await accreteAliasesFromLines(rows);
+
   await setRecipeNormalization(state.recipeId, {
     status: "completed",
     error: state.errors.length > 0 ? state.errors.join("; ") : null,

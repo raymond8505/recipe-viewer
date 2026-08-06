@@ -3,6 +3,7 @@ import { DELETE, PATCH } from "@/app/api/ingredients/[id]/route";
 import {
   IngredientRepoError,
   deleteIngredientRow,
+  getIngredientById,
   updateIngredientRow,
 } from "@/lib/ingredients";
 import { generateEmbedding } from "@/lib/embedding";
@@ -12,7 +13,14 @@ import { makeJsonRequest } from "@/fixtures/request";
 
 vi.mock("@/lib/ingredients", async (orig) => {
   const actual = await orig<typeof import("@/lib/ingredients")>();
-  return { ...actual, updateIngredientRow: vi.fn(), deleteIngredientRow: vi.fn() };
+  return {
+    ...actual,
+    updateIngredientRow: vi.fn(),
+    deleteIngredientRow: vi.fn(),
+    // The re-embed branch reads the row so a one-sided name/aliases patch can
+    // embed both fields together.
+    getIngredientById: vi.fn(),
+  };
 });
 
 vi.mock("@/lib/embedding", () => ({ generateEmbedding: vi.fn() }));
@@ -32,22 +40,38 @@ describe("PATCH /api/ingredients/[id]", () => {
     vi.clearAllMocks();
     vi.mocked(getIsLoggedIn).mockResolvedValue(true);
     vi.mocked(generateEmbedding).mockResolvedValue([0.3, 0.4]);
+    vi.mocked(getIngredientById).mockResolvedValue(
+      makeIngredient("ing-1", "Spices, cumin seed", { aliases: ["cumin"] }),
+    );
     vi.mocked(updateIngredientRow).mockResolvedValue(
       makeIngredient("ing-1", "cumin seed"),
     );
   });
 
-  it("re-embeds when the name changes", async () => {
+  it("re-embeds name AND aliases when the name changes", async () => {
+    // The vector spans both fields, so a rename has to carry the row's current
+    // aliases into the embedded text or they'd silently drop out of matching.
     const res = await PATCH(
-      makeJsonRequest({ name: "cumin seed" }, { method: "PATCH" }),
+      makeJsonRequest({ name: "Cumin Seed" }, { method: "PATCH" }),
       makeParams(),
     );
 
     expect(res.status).toBe(200);
-    expect(generateEmbedding).toHaveBeenCalledWith("cumin seed");
+    expect(generateEmbedding).toHaveBeenCalledWith("cumin seed, cumin");
     expect(updateIngredientRow).toHaveBeenCalledWith(
       "ing-1",
-      expect.objectContaining({ name: "cumin seed", embedding: [0.3, 0.4] }),
+      expect.objectContaining({ name: "Cumin Seed", embedding: [0.3, 0.4] }),
+    );
+  });
+
+  it("re-embeds when only the aliases change", async () => {
+    await PATCH(
+      makeJsonRequest({ aliases: ["jeera", "comino"] }, { method: "PATCH" }),
+      makeParams(),
+    );
+
+    expect(generateEmbedding).toHaveBeenCalledWith(
+      "spices, cumin seed, jeera, comino",
     );
   });
 

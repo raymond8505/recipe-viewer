@@ -14,6 +14,7 @@ import {
 import { ScalableRecipe } from "@/lib/ScalableRecipe";
 import { nutrientValuesToSchema } from "@/lib/nutritionMath";
 import { generateEmbedding } from "@/lib/embedding";
+import { ingredientQueryText } from "@/lib/ingredientAliases";
 import { RECIPE_TOKEN_TTL_SECONDS, signRecipeToken } from "./recipeToken";
 import { env } from "@/env";
 import {
@@ -78,7 +79,10 @@ export async function searchRecipes(
 export async function searchIngredients(
   args: IngredientSearchInput,
 ): Promise<{ data: IngredientMatch[] }> {
-  const embedding = await generateEmbedding(args.query);
+  // ingredientQueryText, not the raw query: catalog vectors are built from
+  // lowercased name + aliases, so the query side has to fold case identically
+  // or the normalization works against the match instead of for it.
+  const embedding = await generateEmbedding(ingredientQueryText(args.query));
   if (!embedding) {
     throw new ToolError(
       "embedding_unavailable",

@@ -73,9 +73,11 @@ export async function searchUsdaFoods(q: string): Promise<UsdaSearchFood[]> {
 }
 
 /**
- * Mint a catalog ingredient from a picked USDA food. `name` becomes the
- * catalog's canonical (recipe-language) name. Returns the new row — or the
- * existing one if the name was already taken.
+ * Resolve a picked USDA food to its catalog ingredient, creating the row if
+ * this is the first time that food has been imported. `name` is the recipe
+ * line's parsed name and becomes an alias; the row's canonical name is USDA's
+ * description. Idempotent on `fdcId` — re-picking the same food returns the
+ * existing row.
  */
 export async function importUsdaIngredient(
   fdcId: number,

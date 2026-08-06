@@ -85,8 +85,9 @@ export const usdaSearchQuerySchema = z.object({
   q: z.string().min(1).max(200),
 });
 
-// POST /api/ingredients/import-usda — mint a catalog row from a picked USDA
-// food. `name` is the recipe-language canonical name for the new ingredient.
+// POST /api/ingredients/import-usda — resolve a picked USDA food to its
+// catalog row. `name` is the recipe line's parsed name, which becomes an ALIAS
+// on that row; the canonical name is USDA's own description.
 export const usdaImportInputSchema = z.object({
   fdcId: z.number().int().positive(),
   name: z.string().min(1).max(200),
