@@ -340,6 +340,65 @@ export async function searchIngredientsKeyword(
   return (data as IngredientKeywordMatch[]) ?? [];
 }
 
+// Result of an alias mutation RPC (db/migrations/0010). `changed` is the
+// caller's signal to spend a Gemini embedding call: the embedding encodes
+// name + aliases, so it only needs regenerating when the array actually moved.
+export interface AliasMutationResult {
+  id: string;
+  name: string;
+  aliases: string[];
+  changed: boolean;
+}
+
+// Atomically append aliases to a catalog ingredient, case-insensitively
+// deduped against both the canonical name and the existing array — but stored
+// with the CALLER'S casing (aliases are display data; the fold is only a
+// comparison). An RPC rather than a read-modify-write here because many recipe
+// lines resolve to one ingredient and normalization runs concurrently with the
+// manual re-point route: a read-modify-write would silently drop one append.
+//
+// Returns null when the ingredient no longer exists (deleted mid-flight) —
+// not an error. Throws ("update_failed") on RPC failure.
+export async function addIngredientAliases(
+  id: string,
+  aliases: string[],
+): Promise<AliasMutationResult | null> {
+  const supabase = getSupabaseAdminClient();
+
+  const { data, error } = await supabase.rpc("ingredient_add_aliases", {
+    p_id: id,
+    p_aliases: aliases,
+  });
+
+  if (error) {
+    throw new IngredientRepoError("update_failed", error.message);
+  }
+  const rows = (data as AliasMutationResult[]) ?? [];
+  return rows[0] ?? null;
+}
+
+// Drop one alias, whatever its stored casing. Unconditional by design: the
+// only caller is an explicit user re-point/un-link, which is a statement that
+// this recipe wording does not mean this ingredient. Same null/throw contract
+// as addIngredientAliases.
+export async function removeIngredientAlias(
+  id: string,
+  alias: string,
+): Promise<AliasMutationResult | null> {
+  const supabase = getSupabaseAdminClient();
+
+  const { data, error } = await supabase.rpc("ingredient_remove_alias", {
+    p_id: id,
+    p_alias: alias,
+  });
+
+  if (error) {
+    throw new IngredientRepoError("update_failed", error.message);
+  }
+  const rows = (data as AliasMutationResult[]) ?? [];
+  return rows[0] ?? null;
+}
+
 export async function getRecipeIngredients(
   recipeId: string,
 ): Promise<RecipeIngredientRow[]> {
