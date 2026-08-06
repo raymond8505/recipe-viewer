@@ -3,7 +3,7 @@
 - A recipe viewing tool built for use in the kitchen during cooking.
 - A barebones recipe CMS with MCP tools and agent skill for authoring recipes
 
-## Watch the demo
+## Watch a demo
 
 [![Watch the video](https://raw.githubusercontent.com/raymond8505/recipe-viewer/main/video.png)](https://www.youtube.com/watch?v=qOG80UKUkFI)
 
