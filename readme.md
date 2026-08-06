@@ -34,11 +34,6 @@ I want to know my macros for my home cooking, I don't want to have to fill out a
 ### Effortless recipe iteration
 Take notes during the cook and during first taste, tell your agent to address them in the recipe- re-formulate ingredients, re-write instructions, update nutrition, or any other boring thing that isn't cooking food or eating food.
 
-### Basic publishing
-This 
-
----
-
 ## Features
 
 ### Cooking Mode
