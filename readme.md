@@ -8,7 +8,7 @@
 [![Watch the video](https://raw.githubusercontent.com/raymond8505/recipe-viewer/main/video.png)](https://www.youtube.com/watch?v=qOG80UKUkFI)
 
 ## Try the app
-[try the latest build with my recipes](https://new.raymonds.recipes)
+[Try the latest build with my recipes](https://new.raymonds.recipes)
 ---
 
 ## Why this exists
