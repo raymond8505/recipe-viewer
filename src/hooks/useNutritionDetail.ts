@@ -82,14 +82,21 @@ export function useNutritionDetail(
         lines: items.map(({ ingredient: schemaIngredient, index }) => {
           const text = getIngredientText(schemaIngredient);
           const row = rowsByPosition.get(index) ?? null;
-          // A stale line (no row, or text edited since normalization) shows no
-          // match; lineComputationForSchema returns the matching "stale"
-          // exclusion for it.
-          const isStale = !row || row.raw_text !== text;
-          const ingredient =
-            !isStale && row?.ingredient_id
-              ? (ingredientsById.get(row.ingredient_id) ?? null)
-              : null;
+          // Resolve the catalog row purely from ingredient_id, the same join
+          // computeRecipeNutrition does. Staleness deliberately does NOT gate
+          // this: lineComputationForSchema re-derives it and returns the
+          // "stale" exclusion before ever reading `ingredient`, so totals are
+          // unaffected either way — but the association is a fact about the
+          // row regardless of whether its text has moved on.
+          //
+          // Gating it here meant a manual re-match on an edited line rendered
+          // as "(unknown ingredient)" and stayed that way: the association
+          // PATCH only moves ingredient_id, never raw_text, so the line is
+          // still stale when the picked row comes back, and nothing short of
+          // a reload could clear it.
+          const ingredient = row?.ingredient_id
+            ? (ingredientsById.get(row.ingredient_id) ?? null)
+            : null;
           return {
             index,
             text,

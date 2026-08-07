@@ -256,6 +256,73 @@ describe("NutritionDetail", () => {
     ).toBeInTheDocument();
   });
 
+  // Regression: after an inline text edit the row's raw_text still holds the
+  // OLD text, so the line reads stale — and the association PATCH only moves
+  // ingredient_id, never raw_text. A manual re-match therefore stayed stale,
+  // and the hook was nulling the catalog lookup for stale lines, so the picked
+  // ingredient rendered as "(unknown ingredient)" until a refresh pulled
+  // re-normalized rows. Staleness governs TOTALS (lineComputationForSchema
+  // decides that itself), never whether we know which row is associated.
+  it("shows the picked ingredient's name on a stale line, not '(unknown ingredient)'", async () => {
+    const user = userEvent.setup();
+    const rows = makeRows();
+    // Edited since normalization, and unmatched — the state the repro lands in.
+    rows[0] = {
+      ...rows[0],
+      raw_text: "200 g butter, softened",
+      ingredient_id: null,
+      match_status: "unmatched",
+    };
+    // USDA-style canonical name: distinct from the typed query, so the option
+    // regex can't also match the pinned `Search USDA for "butter"` action.
+    const butterMatch: IngredientKeywordMatch = {
+      id: "ing-butter",
+      name: "Butter, without salt",
+      aliases: ["butter"],
+      nutrition: { calories_kcal: 717, fat_g: 81 },
+      density_g_per_ml: null,
+      similarity: 0.98,
+    };
+    search.mockResolvedValue([butterMatch]);
+    // The PATCH returns the row with the new association — raw_text unchanged,
+    // so the line is still stale afterwards.
+    vi.mocked(updateRecipeIngredientAssociation).mockResolvedValue({
+      ...rows[0],
+      ingredient_id: "ing-butter",
+      match_status: "manual",
+    });
+    renderDetail({ rows });
+
+    await user.click(screen.getByLabelText("Change match for 100 g butter"));
+    await user.type(screen.getByRole("combobox"), "butter");
+    await user.click(
+      await screen.findByRole("option", { name: /Butter, without salt/ }),
+    );
+
+    await waitFor(() =>
+      expect(updateRecipeIngredientAssociation).toHaveBeenCalledWith(
+        "r-1",
+        "ri-0",
+        "ing-butter",
+      ),
+    );
+    await waitFor(() =>
+      expect(
+        within(rowFor("100 g butter")).getByText("Butter, without salt"),
+      ).toBeInTheDocument(),
+    );
+    expect(screen.queryByText("(unknown ingredient)")).not.toBeInTheDocument();
+
+    // The line is still stale, so it must stay out of the totals — the fix is
+    // about what we display, not about what counts.
+    expect(
+      within(rowFor("100 g butter")).getByTitle(
+        "Line changed since normalization — re-run normalization",
+      ),
+    ).toBeInTheDocument();
+    expect(rowFor("Recipe total")).not.toHaveTextContent("724.76");
+  });
+
   it("saves an edited line text, marks it stale, and flips Normalize to queued", async () => {
     const user = userEvent.setup();
     const updatedLines: Array<string | RecipeIngredient> = [
