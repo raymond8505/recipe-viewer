@@ -187,6 +187,10 @@ export function makeRecipeIngredient(
   return {
     id: `ri-${recipeId}-${position}`,
     recipe_id: recipeId,
+    // Null by default so fixtures exercise the legacy path (rows predating
+    // db/migrations/0013, joined by position). Tests covering the line-id
+    // join set it explicitly.
+    line_id: null,
     ingredient_id: null,
     raw_text: "1 tsp cumin seed",
     quantity: 1,

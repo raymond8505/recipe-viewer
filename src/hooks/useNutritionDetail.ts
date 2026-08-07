@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { getIngredientText, groupIngredientsWithIndex } from "@/lib/format";
+import { lineId } from "@/lib/ingredientLines";
 import {
   lineComputationForSchema,
   perPortionNutrition,
@@ -75,13 +76,25 @@ export function useNutritionDetail(
   const [error, setError] = useState<string | null>(null);
 
   const groups = useMemo<NutritionDetailGroup[]>(() => {
+    const rowsByLineId = new Map(
+      rows.filter((row) => row.line_id != null).map((row) => [row.line_id!, row]),
+    );
     const rowsByPosition = new Map(rows.map((row) => [row.position, row]));
     return groupIngredientsWithIndex(schemaLines).map(
       ({ heading, items }) => ({
         heading,
         lines: items.map(({ ingredient: schemaIngredient, index }) => {
           const text = getIngredientText(schemaIngredient);
-          const row = rowsByPosition.get(index) ?? null;
+          // Join on the line's stable id when it has one, and DON'T fall back
+          // to position in that case: once ids are in play, an id with no row
+          // means a genuinely new line, whereas position would hand it a
+          // neighbour's row after any reorder. Position is only for legacy
+          // lines that predate ids (db/migrations/0013).
+          const id = lineId(schemaIngredient);
+          const row =
+            (id != null
+              ? rowsByLineId.get(id)
+              : rowsByPosition.get(index)) ?? null;
           // Resolve the catalog row purely from ingredient_id, the same join
           // computeRecipeNutrition does. Staleness deliberately does NOT gate
           // this: lineComputationForSchema re-derives it and returns the

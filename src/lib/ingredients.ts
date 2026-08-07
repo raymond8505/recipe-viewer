@@ -61,6 +61,7 @@ const INGREDIENT_COLUMNS = selectColumns<IngredientRow>()([
 const RECIPE_INGREDIENT_COLUMNS = selectColumns<RecipeIngredientRow>()([
   "id",
   "recipe_id",
+  "line_id",
   "ingredient_id",
   "raw_text",
   "quantity",
@@ -551,15 +552,94 @@ export async function setRecipeIngredientGrams(
 
 export type RecipeIngredientInsert = Omit<RecipeIngredientRow, "id" | "recipe_id">;
 
-// Replace a recipe's parsed-ingredient rows wholesale (normalization runs are
-// idempotent per fingerprint). Delete-then-insert without a transaction is a
-// known PostgREST limitation — acceptable while writes come from a single
-// normalization run at a time; a SQL function is the upgrade path.
+// The parse-derived half of a row: everything that follows from the line's
+// TEXT. Deliberately excludes ingredient_id / match_status / estimated_grams —
+// re-reading a reworded line must never disturb the association on it.
+export type RecipeIngredientParsePatch = Partial<
+  Pick<
+    RecipeIngredientRow,
+    | "raw_text"
+    | "quantity"
+    | "unit"
+    | "name_text"
+    | "position"
+    | "estimated_grams"
+    | "grams_source"
+  >
+>;
+
+/**
+ * Re-point one row's parse fields at edited line text. Scoped on recipe_id as
+ * well as row id so a row can't be moved through another recipe's request.
+ * Throws ("update_failed"); a missing row is not an error — the line simply
+ * has no derived row yet.
+ */
+export async function updateRecipeIngredientParse(
+  recipeId: string,
+  rowId: string,
+  patch: RecipeIngredientParsePatch,
+): Promise<void> {
+  if (Object.keys(patch).length === 0) return;
+  const supabase = getSupabaseAdminClient();
+
+  const { error } = await supabase
+    .from("recipe_ingredients")
+    .update(patch)
+    .eq("id", rowId)
+    .eq("recipe_id", recipeId);
+
+  if (error) {
+    throw new IngredientRepoError("update_failed", error.message);
+  }
+}
+
+/**
+ * Write a recipe's parsed-ingredient rows.
+ *
+ * When every incoming row carries a `line_id` this is an UPSERT on
+ * (recipe_id, line_id) plus a prune of the lines that no longer exist. That
+ * keeps a surviving line's row — and therefore its `id` — stable across runs,
+ * which matters because the UI PATCHes associations by row id: under the old
+ * delete-then-insert, a run completing between page load and a click left the
+ * client holding an id that no longer existed.
+ *
+ * Rows without a line_id (recipes not yet backfilled) can't key on that index,
+ * so they take the original delete-then-insert path. Neither path is
+ * transactional — a known PostgREST limitation, acceptable while writes come
+ * from one normalization run at a time; a SQL function is the upgrade path.
+ */
 export async function replaceRecipeIngredients(
   recipeId: string,
   rows: RecipeIngredientInsert[],
 ): Promise<void> {
   const supabase = getSupabaseAdminClient();
+
+  const lineIds = rows.map((row) => row.line_id).filter((id): id is string => id != null);
+  if (rows.length > 0 && lineIds.length === rows.length) {
+    // Drop rows whose line is gone. `not.in` with an empty list is invalid
+    // PostgREST, but lineIds is non-empty here by construction.
+    const { error: pruneError } = await supabase
+      .from("recipe_ingredients")
+      .delete()
+      .eq("recipe_id", recipeId)
+      .not("line_id", "in", `(${lineIds.map((id) => `"${id}"`).join(",")})`);
+
+    if (pruneError) {
+      throw new IngredientRepoError("delete_failed", pruneError.message);
+    }
+
+    const { error: upsertError } = await supabase
+      .from("recipe_ingredients")
+      .upsert(
+        rows.map((row) => ({ ...row, recipe_id: recipeId })),
+        { onConflict: "recipe_id,line_id" },
+      );
+
+    if (upsertError) {
+      throw new IngredientRepoError("insert_failed", upsertError.message);
+    }
+    return;
+  }
 
   const { error: deleteError } = await supabase
     .from("recipe_ingredients")

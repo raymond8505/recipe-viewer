@@ -117,6 +117,9 @@ describe("runNormalization — matching", () => {
 
     expect(persistedRows()).toEqual([
       {
+        // The base fixture's lines are plain strings with no id, so this row
+        // carries none either — the legacy shape, still supported.
+        line_id: null,
         ingredient_id: "ing-1",
         raw_text: "1 tsp cumin seed",
         quantity: 1,
@@ -167,11 +170,14 @@ describe("runNormalization — matching", () => {
     ]);
   });
 
-  it("does not carry a manual association onto a line whose text changed", async () => {
-    // The manual match was for different text — the automated result wins.
+  // The association is a claim about which FOOD a line means. Rewording the
+  // line doesn't change that claim, so a run must not overrule it — this used
+  // to be keyed on raw_text, which meant fixing a typo silently discarded the
+  // user's pick and re-guessed.
+  it("keeps an existing association when the line's text changed", async () => {
     vi.mocked(getRecipeIngredients).mockResolvedValue([
       makeRecipeIngredient("r-1", 0, {
-        raw_text: "1 tsp ground cumin",
+        raw_text: "1 tsp ground cumin", // recipe now says "1 tsp cumin seed"
         ingredient_id: "ing-manual",
         match_status: "manual",
       }),
@@ -184,10 +190,58 @@ describe("runNormalization — matching", () => {
 
     expect(persistedRows()).toEqual([
       expect.objectContaining({
-        ingredient_id: "ing-auto",
-        match_status: "matched",
+        ingredient_id: "ing-manual",
+        match_status: "manual",
+        // The parse fields DO follow the new text — only the association is
+        // held fixed.
+        raw_text: "1 tsp cumin seed",
       }),
     ]);
+  });
+
+  it("inherits by line_id, not position, when a line moves", async () => {
+    // Two lines, reordered in the schema. Position would hand each line the
+    // other's association; line_id follows the line.
+    vi.mocked(getRecipeById).mockResolvedValue(
+      makeTestRecipe([
+        { name: "2 cups rice", id: "L2" },
+        { name: "1 tsp cumin seed", id: "L1" },
+      ]),
+    );
+    vi.mocked(getRecipeIngredients).mockResolvedValue([
+      makeRecipeIngredient("r-1", 0, {
+        id: "ri-cumin",
+        line_id: "L1",
+        raw_text: "1 tsp cumin seed",
+        ingredient_id: "ing-cumin",
+        match_status: "manual",
+      }),
+      makeRecipeIngredient("r-1", 1, {
+        id: "ri-rice",
+        line_id: "L2",
+        raw_text: "2 cups rice",
+        ingredient_id: "ing-rice",
+        match_status: "manual",
+      }),
+    ]);
+    vi.mocked(matchIngredients).mockResolvedValue([
+      candidate("ing-auto", "something else", 0.9),
+    ]);
+
+    await runNormalization("r-1");
+
+    const rows = persistedRows() ?? [];
+    expect(rows).toHaveLength(2);
+    expect(rows[0]).toMatchObject({
+      line_id: "L2",
+      position: 0,
+      ingredient_id: "ing-rice",
+    });
+    expect(rows[1]).toMatchObject({
+      line_id: "L1",
+      position: 1,
+      ingredient_id: "ing-cumin",
+    });
   });
 
   it("falls back to the deterministic parser when the LLM parse is unavailable", async () => {

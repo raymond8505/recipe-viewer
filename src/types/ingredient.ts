@@ -63,6 +63,16 @@ export interface IngredientRow {
 export interface RecipeIngredientRow {
   id: string;
   recipe_id: string;
+  /**
+   * The schema line this row derives from (SchemaRecipe.recipeIngredient[].id).
+   * THE join key — `position` and `raw_text` are display data that move freely
+   * as people reorder and reword, and keying on either is what used to throw
+   * away curated associations (db/migrations/0013).
+   *
+   * Null only on rows written before 0013 / for recipes whose lines predate
+   * ids; `yarn backfill:line-ids` fills them.
+   */
+  line_id: string | null;
   ingredient_id: string | null;
   raw_text: string;
   quantity: number | null;

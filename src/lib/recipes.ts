@@ -2,9 +2,16 @@ import { getSupabaseClient, selectColumns, toVectorLiteral } from "./supabase";
 import { getFeatures } from "./features";
 import { normalizeRecipeInstructions, schemaToMarkdown } from "./format";
 import { generateEmbedding } from "./embedding";
+import { lineIdSetKey, withLineIds } from "./ingredientLines";
 import { ingredientFingerprint } from "./normalization/fingerprint";
+import { syncRecipeIngredientText } from "./normalization/syncLines";
 import { scheduleNormalization } from "./normalization/trigger";
-import type { RecipeRow, RecipesResult, SchemaRecipe } from "@/types/recipe";
+import type {
+  RecipeIngredient,
+  RecipeRow,
+  RecipesResult,
+  SchemaRecipe,
+} from "@/types/recipe";
 
 export type RecipeStatus = "published" | "archived" | "draft";
 
@@ -173,19 +180,27 @@ export async function getRecipeById(id: string): Promise<RecipeRow | null> {
 // + embedding columns" note in .claude/CLAUDE.md.
 export async function createRecipeRow(input: CreateRecipeInput): Promise<RecipeRow> {
   const supabase = getSupabaseClient();
-  const content = schemaToMarkdown(input.schema);
+  // Every persisted ingredient line carries a stable id from the moment it
+  // exists — that id, not the text or the index, is what recipe_ingredients
+  // keys on. Minting here (rather than at first normalization) means no row
+  // is ever written without one.
+  const schema =
+    input.schema.recipeIngredient !== undefined
+      ? { ...input.schema, recipeIngredient: withLineIds(input.schema.recipeIngredient) }
+      : input.schema;
+  const content = schemaToMarkdown(schema);
   const embedding = await generateEmbedding(content);
   const { data, error } = await supabase
     .from("recipes")
     .insert({
       ...(input.id !== undefined ? { id: input.id } : {}),
-      name: input.schema.name,
+      name: schema.name,
       content,
       ...(embedding ? { embedding: toVectorLiteral(embedding) } : {}),
       url: input.url,
       source: input.source,
       status: input.status ?? "draft",
-      metadata: { schema: input.schema },
+      metadata: { schema },
     })
     .select(RECIPE_COLUMNS)
     .single();
@@ -197,7 +212,7 @@ export async function createRecipeRow(input: CreateRecipeInput): Promise<RecipeR
   // Post-response ingredient normalization (see src/lib/normalization/).
   // scheduleNormalization never throws — a normalization problem must not
   // fail the insert that just succeeded.
-  if ((input.schema.recipeIngredient ?? []).length > 0) {
+  if ((schema.recipeIngredient ?? []).length > 0) {
     scheduleNormalization(row.id);
   }
   return row;
@@ -239,19 +254,49 @@ export async function updateRecipeRow(
   if (patch.url !== undefined) writePatch.url = patch.url;
   if (patch.source !== undefined) writePatch.source = patch.source;
   if (patch.status !== undefined) writePatch.status = patch.status;
-  // Re-normalize only when the patch actually changes the ingredient TEXT set
-  // — this naturally skips the notes/upload-image/clear-notes callers and
-  // no-op ingredient patches.
+  // Normalization exists to GUESS an association for a line that has none, so
+  // it only has work when the set of line ids changes — a line was added or
+  // removed. Rewording or reordering leaves every id (and therefore every
+  // derived row and every curated association) exactly where it was, so it
+  // must not re-run: re-guessing there would overwrite the user's own
+  // corrections with the matcher's opinion, which is precisely backwards.
+  //
+  // Line text still has to reach the rows, but that's a deterministic re-parse
+  // (syncRecipeIngredientText below), not a matcher run.
   let shouldNormalize = false;
+  let syncLines: Array<string | RecipeIngredient> | null = null;
   if (patch.schema !== undefined) {
+    // Ids on the incoming lines win; id-less lines inherit from the current
+    // array by text where possible. Skipping this would re-key every row on
+    // any save that round-trips lines as bare strings.
+    const patchSchema =
+      patch.schema.recipeIngredient !== undefined
+        ? {
+            ...patch.schema,
+            recipeIngredient: withLineIds(
+              patch.schema.recipeIngredient,
+              current.metadata.schema.recipeIngredient ?? [],
+            ),
+          }
+        : patch.schema;
     const mergedSchema = {
       ...current.metadata.schema,
-      ...patch.schema,
+      ...patchSchema,
     } as SchemaRecipe;
-    shouldNormalize =
-      patch.schema.recipeIngredient !== undefined &&
-      ingredientFingerprint(current.metadata.schema) !==
-        ingredientFingerprint(mergedSchema);
+    if (patchSchema.recipeIngredient !== undefined) {
+      shouldNormalize =
+        lineIdSetKey(current.metadata.schema.recipeIngredient ?? []) !==
+        lineIdSetKey(mergedSchema.recipeIngredient ?? []);
+      // Text moved but the line set didn't: re-parse the surviving rows in
+      // place so quantities and totals track the edit, association untouched.
+      if (
+        !shouldNormalize &&
+        ingredientFingerprint(current.metadata.schema) !==
+          ingredientFingerprint(mergedSchema)
+      ) {
+        syncLines = mergedSchema.recipeIngredient ?? [];
+      }
+    }
     writePatch.metadata = { ...current.metadata, schema: mergedSchema };
     // Keep the top-level name in sync when the schema patch touches it —
     // otherwise list/search views keep showing the old value.
@@ -279,6 +324,13 @@ export async function updateRecipeRow(
   }
   if (shouldNormalize) {
     scheduleNormalization(id);
+  } else if (syncLines) {
+    // Deterministic and local: no model, no catalog lookup, no association
+    // change. Best-effort like the alias upkeep — a re-parse failing must not
+    // fail the recipe save that already succeeded.
+    await syncRecipeIngredientText(id, syncLines).catch((err) => {
+      console.error(`Failed to re-sync ingredient lines for ${id}:`, err);
+    });
   }
   return data as RecipeRow;
 }

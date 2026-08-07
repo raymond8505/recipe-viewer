@@ -6,6 +6,7 @@
 
 import { convert, isVolumeUnit, roundDecimal, unitKeyForAlias } from "./units";
 import { getIngredientText } from "./format";
+import { lineId } from "./ingredientLines";
 import type {
   IngredientNutrition,
   IngredientRow,
@@ -291,10 +292,18 @@ export function computeRecipeNutrition(
   rows: RecipeIngredientRow[],
   ingredientsById: Map<string, CatalogNutritionSource>,
 ): RecipeNutritionResult {
+  // Same join rule as useNutritionDetail: the line's stable id when it has
+  // one (and no positional fallback in that case — see there), position only
+  // for legacy lines that predate ids.
+  const rowsByLineId = new Map(
+    rows.filter((row) => row.line_id != null).map((row) => [row.line_id!, row]),
+  );
   const rowsByPosition = new Map(rows.map((row) => [row.position, row]));
   const computations = schemaIngredients.map((ingredient, index) => {
     const text = getIngredientText(ingredient);
-    const row = rowsByPosition.get(index) ?? null;
+    const id = lineId(ingredient);
+    const row =
+      (id != null ? rowsByLineId.get(id) : rowsByPosition.get(index)) ?? null;
     const catalog =
       row?.ingredient_id != null
         ? (ingredientsById.get(row.ingredient_id) ?? null)
