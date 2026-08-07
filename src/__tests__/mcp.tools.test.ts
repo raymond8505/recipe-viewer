@@ -94,7 +94,8 @@ describe("searchIngredients", () => {
     const matches = [
       {
         id: "ing-1",
-        name: "cumin seed",
+        name: "Spices, cumin seed",
+        aliases: ["cumin", "whole cumin"],
         nutrition: { calories_kcal: 375 },
         density_g_per_ml: 0.42,
         semantic_similarity: 0.91,
@@ -109,6 +110,10 @@ describe("searchIngredients", () => {
     expect(generateEmbedding).toHaveBeenCalledWith("cumin");
     expect(matchIngredients).toHaveBeenCalledWith("cumin", [0.1, 0.2], 3);
     expect(out).toEqual({ data: matches });
+    // Aliases must survive to the agent (db/migrations/0012): the catalog is
+    // named in USDA wording, so they are what identifies a row as the caller's
+    // ingredient, and they're what an alias-adding update has to pass back.
+    expect(out.data[0].aliases).toEqual(["cumin", "whole cumin"]);
   });
 
   it("throws ToolError(embedding_unavailable) when embedding fails", async () => {

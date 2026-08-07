@@ -304,7 +304,11 @@ describe("matchIngredients", () => {
     const matches = [
       {
         id: "ing-1",
-        name: "cumin seed",
+        name: "Spices, cumin seed",
+        // Returned as of db/migrations/0012 — keyword_similarity is a best-of
+        // over name AND aliases, so withholding them handed callers a score
+        // derived from data they couldn't see.
+        aliases: ["cumin seed", "whole cumin"],
         nutrition: null,
         density_g_per_ml: null,
         semantic_similarity: 0.91,
@@ -317,6 +321,7 @@ describe("matchIngredients", () => {
     const result = await matchIngredients("cumin seed", [0.5, 0.25], 3);
 
     expect(result).toEqual(matches);
+    expect(result[0].aliases).toEqual(["cumin seed", "whole cumin"]);
     expect(client.rpc).toHaveBeenCalledWith("match_ingredients", {
       query_text: "cumin seed",
       query_embedding: "[0.5,0.25]",

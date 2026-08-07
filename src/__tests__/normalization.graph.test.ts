@@ -74,6 +74,7 @@ function candidate(id: string, name: string, similarity: number): IngredientMatc
   return {
     id,
     name,
+    aliases: [],
     nutrition: null,
     density_g_per_ml: null,
     semantic_similarity: similarity,

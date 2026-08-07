@@ -83,10 +83,16 @@ export interface RecipeIngredientRow {
 }
 
 // A match_ingredients RPC result row (hybrid keyword + semantic search,
-// db/migrations/0007).
+// db/migrations/0007; aliases added in 0012).
 export interface IngredientMatch {
   id: string;
+  // USDA's description for a sourced row ("Butter, without salt").
   name: string;
+  // The recipe-language names this row answers to ("unsalted butter"). Since
+  // `name` is USDA wording, these are usually what actually identifies a row
+  // as the caller's ingredient — and they're what keyword_similarity scores
+  // against, so returning them keeps that number explicable.
+  aliases: string[];
   nutrition: IngredientNutrition | null;
   density_g_per_ml: number | null;
   // Raw cosine similarity of the query embedding (1 - cosine distance).

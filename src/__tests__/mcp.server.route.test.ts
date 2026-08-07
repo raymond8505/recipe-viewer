@@ -142,9 +142,25 @@ describe("/api/mcp/server", () => {
       // teach an existing row a name — not to mint a near-duplicate.
       expect(create.description).toContain("search_ingredients");
       expect(create.description).toContain("update_ingredient");
-      // aliases replaces the array; both tools must say to read it back first.
-      expect(create.description).toContain("get_ingredient");
-      expect(update.description).toContain("get_ingredient");
+      // aliases replaces the whole array, so the destructive-by-default nature
+      // of the field has to be stated wherever it can be passed.
+      expect(create.description).toContain("aliases");
+      expect(update.description).toMatch(/REPLACES the whole array/);
+    });
+
+    it("tells search_ingredients callers the results carry aliases", async () => {
+      const res = await POST(
+        rpc({ jsonrpc: "2.0", id: 5, method: JsonRpcMethod.TOOLS_LIST }, { authorization: auth }),
+      );
+      const body = await res.json();
+      const tools: Array<{ name: string; description: string }> = body.result.tools;
+      const search = tools.find((t) => t.name === "search_ingredients")!;
+      const get = tools.find((t) => t.name === "get_ingredient")!;
+
+      // 0012 put aliases in the search results, so the alias-editing flow no
+      // longer needs a get_ingredient round trip per candidate.
+      expect(search.description).toContain("aliases");
+      expect(get.description).not.toMatch(/results omit \(aliases/i);
     });
 
     it("executes search_recipes via tools/call", async () => {
