@@ -4,22 +4,23 @@ import { makeRecipeIngredient } from "@/fixtures";
 
 vi.mock("@/lib/ingredients", () => ({
   getRecipeIngredients: vi.fn(),
-  updateRecipeIngredientParse: vi.fn(),
+  updateRecipeIngredientRows: vi.fn(),
 }));
 
 import { syncRecipeIngredientText } from "@/lib/normalization/syncLines";
 import {
   getRecipeIngredients,
-  updateRecipeIngredientParse,
+  updateRecipeIngredientRows,
 } from "@/lib/ingredients";
 
 beforeEach(() => vi.clearAllMocks());
 
+function written() {
+  return vi.mocked(updateRecipeIngredientRows).mock.calls[0]?.[1] ?? [];
+}
+
 function patchFor(rowId: string) {
-  const call = vi
-    .mocked(updateRecipeIngredientParse)
-    .mock.calls.find(([, id]) => id === rowId);
-  return call?.[2];
+  return written().find((row) => row.id === rowId);
 }
 
 describe("syncRecipeIngredientText", () => {
@@ -50,9 +51,11 @@ describe("syncRecipeIngredientText", () => {
       position: 0,
     });
     // The association is the user's claim about which food this is; a reword
-    // is not a reason to revisit it, so it must not appear in the patch at all.
-    expect(patch).not.toHaveProperty("ingredient_id");
-    expect(patch).not.toHaveProperty("match_status");
+    // is not a reason to revisit it, so it rides through untouched.
+    expect(patch).toMatchObject({
+      ingredient_id: "ing-cumin",
+      match_status: "manual",
+    });
   });
 
   it("drops a stored gram weight when the amount moves", async () => {
@@ -98,9 +101,12 @@ describe("syncRecipeIngredientText", () => {
       { name: "2 eggs, beaten", id: "L1" },
     ]);
 
-    const patch = patchFor("ri-0");
-    expect(patch).toMatchObject({ raw_text: "2 eggs, beaten", quantity: 2 });
-    expect(patch).not.toHaveProperty("estimated_grams");
+    expect(patchFor("ri-0")).toMatchObject({
+      raw_text: "2 eggs, beaten",
+      quantity: 2,
+      estimated_grams: 100,
+      grams_source: "manual",
+    });
   });
 
   it("re-points position when lines are reordered", async () => {
@@ -116,6 +122,11 @@ describe("syncRecipeIngredientText", () => {
 
     expect(patchFor("ri-1")).toMatchObject({ position: 0 });
     expect(patchFor("ri-0")).toMatchObject({ position: 1 });
+    // Both halves of the swap must go in ONE call. unique (recipe_id,
+    // position) is only INITIALLY DEFERRED, so split across statements the
+    // first update would collide with the row that hasn't moved yet.
+    expect(updateRecipeIngredientRows).toHaveBeenCalledTimes(1);
+    expect(written()).toHaveLength(2);
   });
 
   it("writes nothing when text and order are unchanged", async () => {
@@ -125,7 +136,7 @@ describe("syncRecipeIngredientText", () => {
 
     await syncRecipeIngredientText("r-1", [{ name: "1 tsp cumin", id: "L1" }]);
 
-    expect(updateRecipeIngredientParse).not.toHaveBeenCalled();
+    expect(written()).toEqual([]);
   });
 
   it("skips lines with no id and ids with no row", async () => {
@@ -138,6 +149,6 @@ describe("syncRecipeIngredientText", () => {
       { name: "2 cups rice", id: "L-unknown" }, // id with no row yet
     ]);
 
-    expect(updateRecipeIngredientParse).not.toHaveBeenCalled();
+    expect(written()).toEqual([]);
   });
 });

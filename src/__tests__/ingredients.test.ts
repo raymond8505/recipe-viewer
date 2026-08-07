@@ -635,6 +635,47 @@ describe("replaceRecipeIngredients", () => {
     expect(client.from).toHaveBeenCalledTimes(1);
   });
 
+  describe("when every row carries a line_id", () => {
+    const keyed = { ...insertRow, line_id: "L1" };
+
+    it("upserts on (recipe_id, line_id) instead of re-inserting", async () => {
+      useQueue([{ error: null }, { error: null }]);
+
+      await replaceRecipeIngredients("r-1", [keyed]);
+
+      // Upsert, not delete-then-insert: a surviving line keeps its row id, and
+      // the UI PATCHes associations by row id.
+      expect(builderAt(1).upsert).toHaveBeenCalledWith(
+        [{ ...keyed, recipe_id: "r-1" }],
+        { onConflict: "recipe_id,line_id" },
+      );
+    });
+
+    it("prunes rows for removed lines AND legacy null-line_id rows", async () => {
+      useQueue([{ error: null }, { error: null }]);
+
+      await replaceRecipeIngredients("r-1", [keyed]);
+
+      // `not.in` alone would spare every legacy row, because SQL NOT IN is
+      // NULL — not true — for a NULL left operand. Those rows are stale: their
+      // line now has a properly keyed row, so leaving them behind means two
+      // rows per line and a collision on unique (recipe_id, position).
+      expect(builderAt(0).or).toHaveBeenCalledWith(
+        'line_id.is.null,line_id.not.in.("L1")',
+      );
+      expect(builderAt(0).eq).toHaveBeenCalledWith("recipe_id", "r-1");
+    });
+
+    it("falls back to delete-then-insert when any row lacks a line_id", async () => {
+      useQueue([{ error: null }, { error: null }]);
+
+      await replaceRecipeIngredients("r-1", [keyed, insertRow]);
+
+      expect(builderAt(0).or).not.toHaveBeenCalled();
+      expect(builderAt(1).insert).toHaveBeenCalled();
+    });
+  });
+
   it("throws delete_failed when the delete fails", async () => {
     useQueue([{ error: { message: "boom" } }]);
 

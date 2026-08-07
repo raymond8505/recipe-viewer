@@ -2,9 +2,10 @@ import { getIngredientText } from "@/lib/format";
 import { lineId } from "@/lib/ingredientLines";
 import {
   getRecipeIngredients,
-  updateRecipeIngredientParse,
+  updateRecipeIngredientRows,
   type RecipeIngredientParsePatch,
 } from "@/lib/ingredients";
+import type { RecipeIngredientRow } from "@/types/ingredient";
 import type { RecipeIngredient } from "@/types/recipe";
 import { parseLineDeterministic } from "./parseLine";
 
@@ -36,7 +37,7 @@ export async function syncRecipeIngredientText(
       .map((row) => [row.line_id!, row]),
   );
 
-  const updates: Array<{ rowId: string; patch: RecipeIngredientParsePatch }> = [];
+  const updated: RecipeIngredientRow[] = [];
   lines.forEach((line, index) => {
     const id = lineId(line);
     if (id == null) return;
@@ -63,12 +64,11 @@ export async function syncRecipeIngredientText(
       patch.estimated_grams = null;
       patch.grams_source = null;
     }
-    updates.push({ rowId: row.id, patch });
+    // Merge onto the whole row: the write is an upsert on the primary key, in
+    // one statement, because a reorder swaps positions and the uniqueness
+    // check on (recipe_id, position) only defers to COMMIT.
+    updated.push({ ...row, ...patch });
   });
 
-  await Promise.all(
-    updates.map(({ rowId, patch }) =>
-      updateRecipeIngredientParse(recipeId, rowId, patch),
-    ),
-  );
+  await updateRecipeIngredientRows(recipeId, updated);
 }

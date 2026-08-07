@@ -569,24 +569,28 @@ export type RecipeIngredientParsePatch = Partial<
 >;
 
 /**
- * Re-point one row's parse fields at edited line text. Scoped on recipe_id as
- * well as row id so a row can't be moved through another recipe's request.
- * Throws ("update_failed"); a missing row is not an error — the line simply
- * has no derived row yet.
+ * Re-point rows' parse fields at edited line text, in ONE statement.
+ *
+ * The single statement is load-bearing, not an optimisation. Reordering two
+ * lines swaps their `position` values, and unique (recipe_id, position) is
+ * only INITIALLY DEFERRED (db/migrations/0014) — the check is skipped
+ * mid-statement but still runs at commit, and PostgREST gives each request
+ * exactly one transaction. Issued as separate updates, the first half of a
+ * swap would collide with the row that hasn't moved yet.
+ *
+ * Upserts on the primary key, so callers pass whole rows (patch already
+ * merged). Throws ("update_failed").
  */
-export async function updateRecipeIngredientParse(
+export async function updateRecipeIngredientRows(
   recipeId: string,
-  rowId: string,
-  patch: RecipeIngredientParsePatch,
+  rows: RecipeIngredientRow[],
 ): Promise<void> {
-  if (Object.keys(patch).length === 0) return;
+  if (rows.length === 0) return;
   const supabase = getSupabaseAdminClient();
 
   const { error } = await supabase
     .from("recipe_ingredients")
-    .update(patch)
-    .eq("id", rowId)
-    .eq("recipe_id", recipeId);
+    .upsert(rows.map((row) => ({ ...row, recipe_id: recipeId })));
 
   if (error) {
     throw new IngredientRepoError("update_failed", error.message);
@@ -616,13 +620,22 @@ export async function replaceRecipeIngredients(
 
   const lineIds = rows.map((row) => row.line_id).filter((id): id is string => id != null);
   if (rows.length > 0 && lineIds.length === rows.length) {
-    // Drop rows whose line is gone. `not.in` with an empty list is invalid
-    // PostgREST, but lineIds is non-empty here by construction.
+    // Keep only rows whose line still exists; everything else goes, so the
+    // upsert below is writing into a clean set.
+    //
+    // The `line_id.is.null` half is not redundant: SQL `NOT IN` yields NULL —
+    // not true — for a NULL left operand, so a bare `not.in` silently spares
+    // every legacy row. Those rows ARE stale (their line now has an id and a
+    // properly keyed row is about to be inserted), and leaving them behind
+    // means two rows per line and a collision on unique (recipe_id, position).
+    // persist has already inherited their associations by position before we
+    // get here, so dropping them loses nothing.
+    const quoted = lineIds.map((id) => `"${id}"`).join(",");
     const { error: pruneError } = await supabase
       .from("recipe_ingredients")
       .delete()
       .eq("recipe_id", recipeId)
-      .not("line_id", "in", `(${lineIds.map((id) => `"${id}"`).join(",")})`);
+      .or(`line_id.is.null,line_id.not.in.(${quoted})`);
 
     if (pruneError) {
       throw new IngredientRepoError("delete_failed", pruneError.message);
