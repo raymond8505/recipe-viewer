@@ -104,6 +104,49 @@ describe("/api/mcp/server", () => {
       );
     });
 
+    // The descriptions are the agent's whole instruction surface, and two
+    // claims in them are load-bearing enough to regress badly if reworded.
+    it("tells the agent to judge on semantic_similarity, not the RRF score", async () => {
+      const res = await POST(
+        rpc({ jsonrpc: "2.0", id: 3, method: JsonRpcMethod.TOOLS_LIST }, { authorization: auth }),
+      );
+      const body = await res.json();
+      const search = body.result.tools.find(
+        (t: { name: string }) => t.name === "search_ingredients",
+      );
+
+      // match_ingredients fuses by RRF (rrf_k=50, weights 1/1), so a perfect
+      // match scores ~0.04. An agent told "similarity, 1.0 = identical" reads
+      // that as a 4% match and creates a duplicate row instead.
+      expect(search.description).toContain("semantic_similarity");
+      expect(search.description).toContain("RANKING ONLY");
+      expect(search.description).not.toContain("1.0 = identical");
+
+      // SIM_AUTO_ACCEPT/SIM_NOVEL_FLOOR are self-described guesses set before
+      // catalog names became USDA descriptions, which lowered recipe-phrase
+      // similarity across the board. Quoting them as cutoffs would bias the
+      // agent toward "no match" — i.e. toward minting duplicate rows.
+      expect(search.description).not.toMatch(/0\.85|0\.6\b/);
+    });
+
+    it("points create_ingredient at aliasing an existing row before creating", async () => {
+      const res = await POST(
+        rpc({ jsonrpc: "2.0", id: 4, method: JsonRpcMethod.TOOLS_LIST }, { authorization: auth }),
+      );
+      const body = await res.json();
+      const tools: Array<{ name: string; description: string }> = body.result.tools;
+      const create = tools.find((t) => t.name === "create_ingredient")!;
+      const update = tools.find((t) => t.name === "update_ingredient")!;
+
+      // Recipe wording lives in aliases now, so the common correct move is to
+      // teach an existing row a name — not to mint a near-duplicate.
+      expect(create.description).toContain("search_ingredients");
+      expect(create.description).toContain("update_ingredient");
+      // aliases replaces the array; both tools must say to read it back first.
+      expect(create.description).toContain("get_ingredient");
+      expect(update.description).toContain("get_ingredient");
+    });
+
     it("executes search_recipes via tools/call", async () => {
       const { getRecipes } = await import("@/lib/recipes");
       vi.mocked(getRecipes).mockResolvedValueOnce({ data: recipeFixtures.slice(0, 1), count: 1 });
