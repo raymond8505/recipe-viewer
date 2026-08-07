@@ -74,6 +74,7 @@ describe("generateStructured", () => {
   });
 
   it("returns null on a non-retryable non-200", async () => {
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
     mockFetch.mockResolvedValueOnce(
       new Response("bad request", { status: 400 }),
     );
@@ -81,9 +82,14 @@ describe("generateStructured", () => {
     expect(
       await generateStructured({ prompt: "p", responseSchema: SCHEMA }),
     ).toBeNull();
+    expect(errorSpy).toHaveBeenCalledWith(
+      expect.stringContaining("Structured generation failed (400)"),
+    );
+    errorSpy.mockRestore();
   });
 
   it("returns null when the candidate text is missing", async () => {
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
     mockFetch.mockResolvedValueOnce(
       new Response(JSON.stringify({ candidates: [] }), { status: 200 }),
     );
@@ -91,14 +97,24 @@ describe("generateStructured", () => {
     expect(
       await generateStructured({ prompt: "p", responseSchema: SCHEMA }),
     ).toBeNull();
+    expect(errorSpy).toHaveBeenCalledWith(
+      "Structured generation response missing candidate text",
+    );
+    errorSpy.mockRestore();
   });
 
   it("returns null when the candidate text is not valid JSON", async () => {
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
     mockFetch.mockResolvedValueOnce(candidateResponse("not json at all"));
 
     expect(
       await generateStructured({ prompt: "p", responseSchema: SCHEMA }),
     ).toBeNull();
+    expect(errorSpy).toHaveBeenCalledWith(
+      "Structured generation threw:",
+      expect.any(SyntaxError),
+    );
+    errorSpy.mockRestore();
   });
 
   // Transient failures now go through fetchWithRetry. Fake timers drive the
@@ -108,6 +124,7 @@ describe("generateStructured", () => {
     afterEach(() => vi.useRealTimers());
 
     it("retries then returns null (never throws) on a persistent network error", async () => {
+      const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
       mockFetch.mockRejectedValue(new TypeError("fetch failed"));
 
       const p = generateStructured({ prompt: "p", responseSchema: SCHEMA });
@@ -115,9 +132,15 @@ describe("generateStructured", () => {
 
       expect(await p).toBeNull();
       expect(mockFetch).toHaveBeenCalledTimes(3);
+      expect(errorSpy).toHaveBeenCalledWith(
+        "Structured generation threw:",
+        expect.any(TypeError),
+      );
+      errorSpy.mockRestore();
     });
 
     it("retries then returns null when the API keeps returning 429", async () => {
+      const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
       mockFetch.mockResolvedValue(new Response("quota exceeded", { status: 429 }));
 
       const p = generateStructured({ prompt: "p", responseSchema: SCHEMA });
@@ -125,6 +148,10 @@ describe("generateStructured", () => {
 
       expect(await p).toBeNull();
       expect(mockFetch).toHaveBeenCalledTimes(3); // 1 attempt + 2 retries
+      expect(errorSpy).toHaveBeenCalledWith(
+        expect.stringContaining("Structured generation failed (429)"),
+      );
+      errorSpy.mockRestore();
     });
 
     it("recovers when a transient 503 is followed by success", async () => {

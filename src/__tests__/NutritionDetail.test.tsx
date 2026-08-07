@@ -7,6 +7,7 @@ import {
   normalizeRecipe,
   setIngredientGrams,
   updateRecipeIngredientAssociation,
+  updateRecipeIngredientLine,
 } from "@/lib/api/recipes";
 import { importUsdaIngredient } from "@/lib/api/ingredients";
 import { makeIngredient, makeRecipeIngredient } from "@/fixtures";
@@ -20,6 +21,7 @@ import type { RecipeIngredient } from "@/types/recipe";
 vi.mock("@/lib/api/recipes", () => ({
   normalizeRecipe: vi.fn(),
   updateRecipeIngredientAssociation: vi.fn(),
+  updateRecipeIngredientLine: vi.fn(),
   estimateIngredientGrams: vi.fn(),
   setIngredientGrams: vi.fn(),
 }));
@@ -252,6 +254,98 @@ describe("NutritionDetail", () => {
     expect(
       screen.getByText(/changed since the last normalization run/),
     ).toBeInTheDocument();
+  });
+
+  it("saves an edited line text, marks it stale, and flips Normalize to queued", async () => {
+    const user = userEvent.setup();
+    const updatedLines: Array<string | RecipeIngredient> = [
+      ...schemaIngredients.slice(0, 3),
+      "6 g magic dust",
+    ];
+    vi.mocked(updateRecipeIngredientLine).mockResolvedValue(updatedLines);
+    renderDetail();
+
+    await user.click(screen.getByLabelText("Edit 5 g magic dust"));
+    const field = screen.getByLabelText("Edit line 5 g magic dust");
+    await user.clear(field);
+    await user.type(field, "6 g magic dust{Enter}");
+
+    // Index 3 is the line's schema position, not a row id — a stale line may
+    // have no row at all.
+    expect(updateRecipeIngredientLine).toHaveBeenCalledWith("r-1", 3, "6 g magic dust");
+    const editedRow = await screen.findByText("6 g magic dust");
+    // The stored row still says "5 g magic dust", so the edited line reads
+    // stale until the auto-queued re-normalization rebuilds it…
+    expect(
+      within(rowFor("6 g magic dust")).getByTitle(
+        "Line changed since normalization — re-run normalization",
+      ),
+    ).toBeInTheDocument();
+    expect(editedRow).toBeInTheDocument();
+    // …and the Normalize button reflects that a run is already queued.
+    expect(
+      screen.getByRole("button", { name: "Queued — check again" }),
+    ).toBeInTheDocument();
+  });
+
+  it("cancels an edit on Escape without saving", async () => {
+    const user = userEvent.setup();
+    renderDetail();
+
+    await user.click(screen.getByLabelText("Edit 5 g magic dust"));
+    const field = screen.getByLabelText("Edit line 5 g magic dust");
+    await user.clear(field);
+    await user.type(field, "something else");
+    await user.keyboard("{Escape}");
+
+    expect(updateRecipeIngredientLine).not.toHaveBeenCalled();
+    expect(screen.getByText("5 g magic dust")).toBeInTheDocument();
+    expect(
+      screen.queryByLabelText("Edit line 5 g magic dust"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("treats an empty or unchanged commit as a cancel", async () => {
+    const user = userEvent.setup();
+    renderDetail();
+
+    // Unchanged text → no save.
+    await user.click(screen.getByLabelText("Edit 5 g magic dust"));
+    await user.type(
+      screen.getByLabelText("Edit line 5 g magic dust"),
+      "{Enter}",
+    );
+    expect(updateRecipeIngredientLine).not.toHaveBeenCalled();
+
+    // Blanked-out text → no save either.
+    await user.click(screen.getByLabelText("Edit 5 g magic dust"));
+    const field = screen.getByLabelText("Edit line 5 g magic dust");
+    await user.clear(field);
+    await user.type(field, "{Enter}");
+    expect(updateRecipeIngredientLine).not.toHaveBeenCalled();
+    expect(screen.getByText("5 g magic dust")).toBeInTheDocument();
+  });
+
+  it("surfaces a line-save failure in the error banner", async () => {
+    const user = userEvent.setup();
+    vi.mocked(updateRecipeIngredientLine).mockRejectedValue(
+      new Error("Ingredient line update failed with status 500"),
+    );
+    renderDetail();
+
+    await user.click(screen.getByLabelText("Edit 5 g magic dust"));
+    const field = screen.getByLabelText("Edit line 5 g magic dust");
+    await user.clear(field);
+    await user.type(field, "6 g magic dust{Enter}");
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Ingredient line update failed with status 500",
+    );
+    // The line keeps its stored text — the save never landed.
+    expect(screen.getByText("5 g magic dust")).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Queued — check again" }),
+    ).not.toBeInTheDocument();
   });
 
   it("persists an association change and recomputes the row and totals", async () => {

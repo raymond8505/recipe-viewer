@@ -126,11 +126,17 @@ export default function IngredientAutocomplete({
     // Pre-fill with the current name so a small correction is one keystroke
     // away; selecting the text keeps "type a new name" equally cheap.
     setQuery(value?.name ?? "");
-    requestAnimationFrame(() => {
-      inputRef.current?.focus();
-      inputRef.current?.select();
-    });
   };
+
+  // Focus + select must land in the same commit that mounts the input.
+  // Deferring through a timer (requestAnimationFrame) let fast typing race
+  // it: the late select() highlighted the first typed character and the next
+  // keystroke replaced it.
+  useEffect(() => {
+    if (!open) return;
+    inputRef.current?.focus();
+    inputRef.current?.select();
+  }, [open]);
 
   const select = (option: AutocompleteOption | undefined) => {
     if (!option) return;

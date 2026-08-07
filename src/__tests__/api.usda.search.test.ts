@@ -51,10 +51,16 @@ describe("GET /api/usda/search", () => {
   });
 
   it("maps UsdaError to 502", async () => {
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
     vi.mocked(searchFoodsMixed).mockRejectedValueOnce(new UsdaError(500, "down"));
 
     const res = await GET(makeRequest("?q=chickpeas"));
 
     expect(res.status).toBe(502);
+    // The client message is generic; the real upstream status must be logged.
+    expect(errorSpy).toHaveBeenCalledWith(
+      expect.stringContaining("UsdaError (status 500)"),
+    );
+    errorSpy.mockRestore();
   });
 });

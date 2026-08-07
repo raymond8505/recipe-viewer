@@ -7,12 +7,20 @@ import {
   updateRecipeRow,
 } from "@/lib/recipes";
 import {
+  createIngredientRow,
+  deleteIngredientRow,
+  getIngredientById,
   getRecipeNormalizedNutrition,
   IngredientRepoError,
   matchIngredients,
+  updateIngredientRow,
+  type UpdateIngredientPatch,
 } from "@/lib/ingredients";
 import { ScalableRecipe } from "@/lib/ScalableRecipe";
-import { nutrientValuesToSchema } from "@/lib/nutritionMath";
+import {
+  nutrientValuesToSchema,
+  scalePortionNutritionToPer100g,
+} from "@/lib/nutritionMath";
 import { generateEmbedding } from "@/lib/embedding";
 import { RECIPE_TOKEN_TTL_SECONDS, signRecipeToken } from "./recipeToken";
 import { env } from "@/env";
@@ -29,13 +37,18 @@ import type {
   RecipeSearchInput,
   RecipeUpdateInput,
 } from "@/lib/schemas/recipe";
-import type { IngredientSearchInput } from "@/lib/schemas/ingredient";
-import type { IngredientMatch } from "@/types/ingredient";
+import type {
+  IngredientCreateToolInput,
+  IngredientIdInput,
+  IngredientSearchInput,
+  IngredientUpdateToolInput,
+} from "@/lib/schemas/ingredient";
+import type { IngredientMatch, IngredientRow } from "@/types/ingredient";
 
-// All five tools are thin wrappers over `@/lib/recipes` helpers. They handle
-// argument typing + translate RecipeRepoError into ToolError so the MCP
-// dispatcher can render a uniform isError content envelope. Supabase calls
-// live in the recipes module — see CR feedback on PR #13.
+// Every tool here is a thin wrapper over a repo helper (`@/lib/recipes`,
+// `@/lib/ingredients`). They handle argument typing + translate repo errors
+// into ToolError so the MCP dispatcher can render a uniform isError content
+// envelope. Supabase calls live in the repo modules — see CR feedback on PR #13.
 
 // Trimmed search hit. Search returns enough to identify/disambiguate a recipe
 // without shipping the full schema (ingredients, instructions, nutrition, …) for
@@ -93,6 +106,92 @@ export async function searchIngredients(
       throw new ToolError("search_failed", err.detail);
     }
     throw err;
+  }
+}
+
+// Ingredient CRUD — mirrors the session-gated HTTP routes (/api/ingredients,
+// /api/ingredients/[id]) so OAuth-authenticated agents can maintain the
+// catalog. The embedding is never client-settable: it is derived from `name`
+// here, exactly like those routes do.
+//
+// Nutrition arrives AS MEASURED for the accompanying `nutrition_portion`
+// (agents think in "1 tbsp = 14 g", not storage units) and is scaled to the
+// per-100g storage form here — the same deterministic conversion the manager
+// UI's create form does client-side (IngredientCreateForm →
+// scalePortionNutritionToPer100g).
+
+export async function getIngredient(args: IngredientIdInput): Promise<IngredientRow> {
+  const row = await getIngredientById(args.id);
+  if (!row) throw new ToolError("not_found", `Ingredient ${args.id} not found`);
+  return row;
+}
+
+export async function createIngredient(
+  args: IngredientCreateToolInput,
+): Promise<IngredientRow> {
+  // The column is NOT NULL (db/migrations/0006) — an embedding-less row can't
+  // exist (it would be invisible to matching), so a failed embedding is a
+  // retryable error rather than a partial create.
+  const embedding = await generateEmbedding(args.name);
+  if (!embedding) {
+    throw new ToolError(
+      "embedding_unavailable",
+      "Could not generate an embedding for this ingredient — retry shortly.",
+    );
+  }
+
+  const { nutrition_portion: portion, ...fields } = args;
+  const input = { ...fields, embedding };
+  if (portion) {
+    // The portion is real data, not just a math basis — persist it (first, as
+    // the nutrition-entry basis) like the UI stores its portion list.
+    input.food_portions = [portion, ...(fields.food_portions ?? [])];
+    if (fields.nutrition) {
+      input.nutrition = scalePortionNutritionToPer100g(fields.nutrition, portion.gramWeight);
+    }
+  }
+
+  try {
+    return await createIngredientRow(input);
+  } catch (err) {
+    throw toIngredientToolError(err, "create_failed");
+  }
+}
+
+export async function updateIngredient(
+  args: IngredientUpdateToolInput,
+): Promise<IngredientRow> {
+  const { id, nutrition_portion: portion, ...fields } = args;
+  const patch: UpdateIngredientPatch = { ...fields };
+  // Unlike create, the portion here is only the math basis for the new
+  // nutrition values — food_portions changes only when passed explicitly.
+  if (fields.nutrition && portion) {
+    patch.nutrition = scalePortionNutritionToPer100g(fields.nutrition, portion.gramWeight);
+  }
+  // The embedding IS the name (that's what matching searches), so a rename
+  // must re-embed. Best-effort: on null the repo keeps the old vector, which
+  // still points at the previous name — re-saving the name retries.
+  if (fields.name !== undefined) {
+    patch.embedding = (await generateEmbedding(fields.name)) ?? undefined;
+  }
+
+  try {
+    return await updateIngredientRow(id, patch);
+  } catch (err) {
+    throw toIngredientToolError(err, "update_failed");
+  }
+}
+
+export async function deleteIngredient(
+  args: IngredientIdInput,
+): Promise<{ id: string; deleted: true }> {
+  try {
+    await deleteIngredientRow(args.id);
+    // Referencing recipe_ingredients rows keep their parsed data; their
+    // ingredient_id nulls out via the FK (see db/migrations/0003).
+    return { id: args.id, deleted: true };
+  } catch (err) {
+    throw toIngredientToolError(err, "delete_failed");
   }
 }
 
@@ -246,6 +345,21 @@ export async function uploadRecipeImage(
   } catch (err) {
     throw toToolError(err, "update_failed");
   }
+}
+
+function toIngredientToolError(err: unknown, fallbackCode: string): ToolError {
+  if (err instanceof IngredientRepoError) {
+    if (err.kind === "not_found") return new ToolError("not_found", err.detail);
+    if (err.kind === "conflict") {
+      return new ToolError(
+        "conflict",
+        `${err.detail} — names are unique case-insensitively; search_ingredients first, then update_ingredient the existing row.`,
+      );
+    }
+    return new ToolError(fallbackCode, err.detail);
+  }
+  if (err instanceof Error) return new ToolError(fallbackCode, err.message);
+  return new ToolError(fallbackCode, "Unknown error");
 }
 
 function toToolError(err: unknown, fallbackCode: string): ToolError {

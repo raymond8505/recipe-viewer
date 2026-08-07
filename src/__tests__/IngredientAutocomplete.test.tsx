@@ -85,6 +85,37 @@ describe("IngredientAutocomplete", () => {
     expect(search).not.toHaveBeenCalled();
   });
 
+  it("does not lose the first keystroke when a deferred focus lands mid-typing", async () => {
+    // Regression for a CI-load flake: focus/select of the freshly-mounted
+    // input must happen in the same commit that mounts it. When it was
+    // deferred through requestAnimationFrame (a ~16ms wall-clock timer in
+    // jsdom), a loaded runner could process the first keystroke before the
+    // callback ran — select() then highlighted that character and the next
+    // keystroke replaced it ("gochujang" → "ochujang"). Queue rAF callbacks
+    // and flush them between keystrokes to force that ordering
+    // deterministically; the component must not care.
+    const queued: FrameRequestCallback[] = [];
+    const raf = vi
+      .spyOn(window, "requestAnimationFrame")
+      .mockImplementation((cb) => {
+        queued.push(cb);
+        return queued.length;
+      });
+
+    const user = userEvent.setup();
+    renderClosed();
+    await user.click(screen.getByLabelText("Change match for 1 tsp cumin"));
+    const input = screen.getByRole("combobox");
+    await user.type(input, "g");
+    queued.splice(0).forEach((cb) => cb(0));
+    // keyboard(), not type(): type() would click first, collapsing the
+    // selection — mid-word keystrokes in the real flake have no such click.
+    await user.keyboard("ochujang");
+
+    raf.mockRestore();
+    expect(input).toHaveValue("gochujang");
+  });
+
   it("selects with Enter after arrow-key navigation (wrapping)", async () => {
     const user = userEvent.setup();
     const matches = [makeMatch("ing-1", "yellow onion"), makeMatch("ing-2", "red onion")];

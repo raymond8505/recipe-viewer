@@ -50,6 +50,42 @@ export const ingredientCreateInputSchema = z.object({
 
 export const ingredientUpdateInputSchema = ingredientCreateInputSchema.partial();
 
+export const ingredientIdInputSchema = z.object({
+  id: z.string().min(1),
+});
+
+// MCP tool inputs. Unlike the HTTP routes (whose UI does the conversion
+// client-side), agents pass nutrition AS MEASURED for an accompanying
+// `nutrition_portion`; the tool scales to the per-100g storage form
+// deterministically. Setting nutrition therefore requires a nutrition_portion;
+// clearing (null) does not.
+//
+// The field is named nutrition_portion (not `portion`) and the error names it
+// explicitly with a path: an agent conflated the bare word "portion" with
+// food_portions and burned 13 calls varying that field's shape before giving
+// up. The message must be a recovery instruction, not a description.
+const nutritionRequiresPortion = (d: {
+  nutrition?: unknown;
+  nutrition_portion?: unknown;
+}) => d.nutrition == null || d.nutrition_portion != null;
+const NUTRITION_REQUIRES_PORTION_ISSUE = {
+  message:
+    "Pass nutrition_portion ({ gramWeight, amount?, modifier? }) describing what the nutrition values are measured for. This is a separate field from food_portions — food_portions does not satisfy it.",
+  path: ["nutrition_portion"],
+};
+
+export const ingredientCreateToolInputSchema = ingredientCreateInputSchema
+  .extend({ nutrition_portion: foodPortionSchema.optional() })
+  .refine(nutritionRequiresPortion, NUTRITION_REQUIRES_PORTION_ISSUE);
+
+// MCP update_ingredient — flat { id, ...patch }, matching update_recipe's shape.
+export const ingredientUpdateToolInputSchema = ingredientUpdateInputSchema
+  .extend({
+    id: z.string().min(1),
+    nutrition_portion: foodPortionSchema.optional(),
+  })
+  .refine(nutritionRequiresPortion, NUTRITION_REQUIRES_PORTION_ISSUE);
+
 export const ingredientListQuerySchema = z.object({
   q: z.string().max(200).optional(),
   page: z.coerce.number().int().positive().default(1),
@@ -74,6 +110,15 @@ export const recipeIngredientPatchSchema = z.object({
   ingredient_id: z.uuid().nullable(),
 });
 
+// PATCH /api/recipes/[id]/ingredients — edit one schema ingredient line's
+// text in place (the NutritionDetail inline edit). Index-addressed because
+// the schema line, not the recipe_ingredients row, is the edit target — a
+// stale or never-normalized line has no row to key on.
+export const recipeLineTextPatchSchema = z.object({
+  index: z.number().int().min(0),
+  text: z.string().trim().min(1).max(500),
+});
+
 // PATCH /api/recipes/[id]/ingredients/[riId]/grams — user-typed per-line gram
 // override. null clears the estimate (line reverts to the derived value).
 export const recipeIngredientGramsPatchSchema = z.object({
@@ -94,4 +139,7 @@ export const usdaImportInputSchema = z.object({
 
 export type IngredientCreateInput = z.infer<typeof ingredientCreateInputSchema>;
 export type IngredientUpdateInput = z.infer<typeof ingredientUpdateInputSchema>;
+export type IngredientIdInput = z.infer<typeof ingredientIdInputSchema>;
+export type IngredientCreateToolInput = z.infer<typeof ingredientCreateToolInputSchema>;
+export type IngredientUpdateToolInput = z.infer<typeof ingredientUpdateToolInputSchema>;
 export type IngredientSearchInput = z.infer<typeof ingredientSearchInputSchema>;
