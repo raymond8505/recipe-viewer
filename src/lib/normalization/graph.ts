@@ -20,9 +20,12 @@ import { explicitWeightGrams, gramsForLine } from "@/lib/nutritionMath";
 import { getRecipeById } from "@/lib/recipes";
 import { parseIngredient, unitKeyForAlias } from "@/lib/units";
 import { UsdaError, searchFoods } from "@/lib/usda";
-import type { IngredientMatch, MatchStatus } from "@/types/ingredient";
+import type { GramsSource, IngredientMatch, MatchStatus } from "@/types/ingredient";
 import { estimateLineGrams } from "./estimateGrams";
 import { ingredientFingerprint } from "./fingerprint";
+import { parseLineDeterministic, type ParsedLine } from "./parseLine";
+
+export type { ParsedLine };
 
 // The ingredient-normalization workflow: parse the recipe's ingredient lines
 // (Flash-Lite structured output, deterministic parseIngredient fallback),
@@ -45,16 +48,6 @@ import { ingredientFingerprint } from "./fingerprint";
 export const SIM_AUTO_ACCEPT = 0.85;
 export const SIM_NOVEL_FLOOR = 0.6;
 
-export interface ParsedLine {
-  position: number;
-  rawText: string;
-  quantity: number | null;
-  // Canonical UNIT_DEFS key or null (count/unitless).
-  unit: string | null;
-  name: string;
-  note: string | null;
-}
-
 export interface LineMatch {
   position: number;
   // "ambiguous" is graph-internal (persist writes it as "unmatched"): it means
@@ -65,6 +58,14 @@ export interface LineMatch {
   candidates?: IngredientMatch[];
 }
 
+// A resolved gram weight plus where it came from. Kept together because the
+// two are only meaningful as a pair — grams_source is non-null exactly when
+// estimated_grams is.
+interface LineEstimate {
+  grams: number;
+  source: GramsSource;
+}
+
 const NormalizationState = Annotation.Root({
   recipeId: Annotation<string>,
   fingerprint: Annotation<string>,
@@ -73,8 +74,9 @@ const NormalizationState = Annotation.Root({
   matches: Annotation<LineMatch[]>,
   // position → resolved gram weight for lines the density path can't convert
   // (see the estimate node, which always runs before persist). Persisted as
-  // estimated_grams / grams_source.
-  estimates: Annotation<Record<number, number>>,
+  // estimated_grams / grams_source — the source travels WITH the value so a
+  // carried user-typed weight isn't written back as an LLM estimate.
+  estimates: Annotation<Record<number, LineEstimate>>,
   errors: Annotation<string[]>({
     reducer: (a, b) => a.concat(b),
     default: () => [],
@@ -122,35 +124,6 @@ function parsePrompt(lines: string[]): string {
     "Lines:",
     numbered,
   ].join("\n");
-}
-
-// Deterministic fallback: src/lib/units.ts parseIngredient handles the
-// amount + unit prefix; whatever remains is the name (it can't split out
-// preparation notes — that's the LLM's added value).
-function parseLineDeterministic(rawText: string, position: number): ParsedLine {
-  const parsed = parseIngredient(rawText);
-  if (!parsed) {
-    return {
-      position,
-      rawText,
-      quantity: null,
-      unit: null,
-      name: rawText.trim().toLowerCase(),
-      note: null,
-    };
-  }
-  const quantity =
-    parsed.amount.kind === "single"
-      ? parsed.amount.value
-      : (parsed.amount.min + parsed.amount.max) / 2;
-  return {
-    position,
-    rawText,
-    quantity,
-    unit: parsed.unit,
-    name: (parsed.rest.trim() || rawText.trim()).toLowerCase(),
-    note: null,
-  };
 }
 
 async function parseLines(state: State): Promise<Partial<State>> {
@@ -436,10 +409,18 @@ async function fetchNovel(state: State): Promise<Partial<State>> {
 // hit the LLM. Best-effort: a failed estimate simply leaves the line excluded.
 async function estimate(state: State): Promise<Partial<State>> {
   const existing = await getRecipeIngredients(state.recipeId);
+  // Carry the SOURCE with the value. A user-typed gram weight and an LLM guess
+  // are not interchangeable — the UI marks one "est." and the other not — so
+  // re-labelling a carried value as "llm" quietly destroys the distinction on
+  // every run. `?? "llm"` only covers legacy rows: grams_source is non-null
+  // exactly when estimated_grams is.
   const carriedByRawText = new Map(
     existing
       .filter((row) => row.estimated_grams != null)
-      .map((row) => [row.raw_text, row.estimated_grams!]),
+      .map((row): [string, LineEstimate] => [
+        row.raw_text,
+        { grams: row.estimated_grams!, source: row.grams_source ?? "llm" },
+      ]),
   );
 
   const matchByPosition = new Map(state.matches.map((m) => [m.position, m]));
@@ -455,7 +436,7 @@ async function estimate(state: State): Promise<Partial<State>> {
     ingredients.map((ing) => [ing.id, ing.density_g_per_ml]),
   );
 
-  const estimates: Record<number, number> = {};
+  const estimates: Record<number, LineEstimate> = {};
   await Promise.all(
     state.parsed.map(async (line) => {
       const carried = carriedByRawText.get(line.rawText);
@@ -475,7 +456,7 @@ async function estimate(state: State): Promise<Partial<State>> {
         quantity: line.quantity,
         unit: line.unit,
       });
-      if (grams != null) estimates[line.position] = grams;
+      if (grams != null) estimates[line.position] = { grams, source: "llm" };
     }),
   );
 
@@ -509,8 +490,10 @@ async function persist(state: State): Promise<Partial<State>> {
   const matchByPosition = new Map(state.matches.map((m) => [m.position, m]));
   const rows: RecipeIngredientInsert[] = state.parsed.map((line) => {
     // The estimate node carries prior values forward by raw_text and only adds
-    // new ones for grams-less lines, so this covers both.
-    const estimatedGrams = state.estimates[line.position] ?? null;
+    // new ones for grams-less lines, so this covers both. Its `source` rides
+    // along: writing a flat "llm" here would re-label every carried
+    // user-entered weight as a machine guess.
+    const estimate = state.estimates[line.position] ?? null;
     const manualId = manualIdByRawText.get(line.rawText);
     if (manualId) {
       return {
@@ -523,8 +506,8 @@ async function persist(state: State): Promise<Partial<State>> {
         match_status: "manual" as MatchStatus,
         confidence: null,
         position: line.position,
-        estimated_grams: estimatedGrams,
-        grams_source: estimatedGrams != null ? "llm" : null,
+        estimated_grams: estimate?.grams ?? null,
+        grams_source: estimate?.source ?? null,
       };
     }
     const match = matchByPosition.get(line.position);
@@ -540,8 +523,8 @@ async function persist(state: State): Promise<Partial<State>> {
       match_status: status,
       confidence: match?.confidence ?? null,
       position: line.position,
-      estimated_grams: estimatedGrams,
-      grams_source: estimatedGrams != null ? "llm" : null,
+      estimated_grams: estimate?.grams ?? null,
+      grams_source: estimate?.source ?? null,
     };
   });
 

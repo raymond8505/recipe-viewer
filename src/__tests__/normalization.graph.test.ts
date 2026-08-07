@@ -536,8 +536,35 @@ describe("runNormalization — grams estimation", () => {
 
     await runNormalization("r-1");
 
-    expect(persistedRows()?.[0]).toMatchObject({ estimated_grams: 40 });
+    // The SOURCE has to ride along with the value. Persisting a flat "llm"
+    // would silently demote a weight the user typed to a machine guess — the
+    // value looks right, but the UI starts marking it "est." and the next
+    // reader can't tell curation from estimation.
+    expect(persistedRows()?.[0]).toMatchObject({
+      estimated_grams: 40,
+      grams_source: "manual",
+    });
     expect(generateStructured).toHaveBeenCalledTimes(1);
+  });
+
+  it("labels a newly estimated weight 'llm'", async () => {
+    vi.mocked(matchIngredients).mockResolvedValue([
+      candidate("ing-1", "cumin seed", 0.9),
+    ]);
+    vi.mocked(getIngredientsByIds).mockResolvedValue([
+      makeIngredient("ing-1", "cumin seed", { density_g_per_ml: null }),
+    ]);
+    vi.mocked(getRecipeIngredients).mockResolvedValue([]);
+    vi.mocked(generateStructured)
+      .mockResolvedValueOnce(CUMIN_PARSE)
+      .mockResolvedValueOnce({ grams: 26 });
+
+    await runNormalization("r-1");
+
+    expect(persistedRows()?.[0]).toMatchObject({
+      estimated_grams: 26,
+      grams_source: "llm",
+    });
   });
 });
 
