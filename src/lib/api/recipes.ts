@@ -3,6 +3,7 @@
 // place and tests/stories can mock a single module.
 
 import type { IngredientRow, RecipeIngredientRow } from "@/types/ingredient";
+import type { RecipeIngredient } from "@/types/recipe";
 
 export interface RecipeIngredientsPayload {
   rows: RecipeIngredientRow[];
@@ -26,6 +27,32 @@ export async function fetchRecipeIngredients(
     throw new Error("Recipe ingredients fetch returned no rows");
   }
   return body;
+}
+
+/**
+ * Edit one schema ingredient line's text in place (the NutritionDetail inline
+ * edit). This edits the RECIPE — the server merges the patched line into the
+ * schema and auto-queues re-normalization. Returns the full updated
+ * recipeIngredient array (the edited line keeps its string/object shape).
+ */
+export async function updateRecipeIngredientLine(
+  recipeId: string,
+  index: number,
+  text: string,
+): Promise<Array<string | RecipeIngredient>> {
+  const res = await fetch(`/api/recipes/${recipeId}/ingredients`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ index, text }),
+  });
+  if (!res.ok) {
+    throw new Error(`Ingredient line update failed with status ${res.status}`);
+  }
+  const body = await res.json();
+  if (!Array.isArray(body.recipeIngredient)) {
+    throw new Error("Ingredient line update returned no lines");
+  }
+  return body.recipeIngredient;
 }
 
 /**

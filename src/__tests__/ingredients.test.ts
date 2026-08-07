@@ -100,11 +100,17 @@ describe("getIngredients", () => {
   });
 
   it("returns empty data and zero count on supabase error", async () => {
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
     useQueue([{ data: null, error: { message: "DB error" }, count: null }]);
 
     const result = await getIngredients();
 
     expect(result).toEqual({ data: [], count: 0 });
+    expect(errorSpy).toHaveBeenCalledWith(
+      "Supabase error fetching ingredients:",
+      expect.anything(),
+    );
+    errorSpy.mockRestore();
   });
 });
 
@@ -398,9 +404,15 @@ describe("getRecipeIngredients", () => {
   });
 
   it("returns an empty array on supabase error", async () => {
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
     useQueue([{ data: null, error: { message: "DB error" } }]);
 
     expect(await getRecipeIngredients("r-1")).toEqual([]);
+    expect(errorSpy).toHaveBeenCalledWith(
+      "Supabase error fetching recipe ingredients:",
+      expect.anything(),
+    );
+    errorSpy.mockRestore();
   });
 });
 
@@ -424,9 +436,15 @@ describe("getIngredientsByIds", () => {
   });
 
   it("returns an empty array on supabase error", async () => {
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
     useQueue([{ data: null, error: { message: "DB error" } }]);
 
     expect(await getIngredientsByIds(["ing-1"])).toEqual([]);
+    expect(errorSpy).toHaveBeenCalledWith(
+      "Supabase error fetching ingredients by ids:",
+      expect.anything(),
+    );
+    errorSpy.mockRestore();
   });
 });
 

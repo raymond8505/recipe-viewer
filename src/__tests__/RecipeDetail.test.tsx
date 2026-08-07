@@ -228,7 +228,9 @@ describe("RecipeDetail — shopping list", () => {
     fireEvent.click(screen.getByRole("checkbox", { name: "2 cups flour" }));
     fireEvent.click(screen.getByRole("checkbox", { name: "1 tsp salt" }));
     fireEvent.click(screen.getByRole("button", { name: /copy shopping list/i }));
-    await vi.waitFor(() => {
+    // RTL's waitFor (not vi.waitFor): it suspends the act environment while
+    // polling, so the post-clipboard "copied" state update doesn't warn.
+    await waitFor(() => {
       expect(navigator.clipboard.writeText).toHaveBeenCalledWith("2 cups flour\n1 tsp salt");
     });
   });
@@ -302,7 +304,11 @@ describe("RecipeDetail — controls section", () => {
     expect(screen.getByRole("button", { name: /re-scraping/i })).toBeTruthy();
     expect(screen.getByRole("button", { name: /re-scraping/i })).toBeDisabled();
 
-    resolve!(new Response(JSON.stringify({ schema: rescrapeFixture }), { status: 200 }));
+    // Flush the response continuation (json parse + state updates) inside act
+    // so the post-resolve setState doesn't fire after the test as a warning.
+    await act(async () => {
+      resolve!(new Response(JSON.stringify({ schema: rescrapeFixture }), { status: 200 }));
+    });
   });
 
   it("enters edit mode with rescraped data after a successful re-scrape", async () => {

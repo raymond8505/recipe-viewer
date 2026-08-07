@@ -243,6 +243,7 @@ describe("runNormalization — matching", () => {
   });
 
   it("fails the run without persisting when the match RPC is broken", async () => {
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
     // A broken RPC must not read as "no matches" — that would classify every
     // line as novel and mint duplicate ingredients.
     vi.mocked(matchIngredients).mockRejectedValue(
@@ -253,6 +254,11 @@ describe("runNormalization — matching", () => {
 
     expect(replaceRecipeIngredients).not.toHaveBeenCalled();
     expect(statusWrites().at(-1)).toMatchObject({ status: "failed" });
+    expect(errorSpy).toHaveBeenCalledWith(
+      "Normalization failed for r-1:",
+      expect.any(IngredientRepoError),
+    );
+    errorSpy.mockRestore();
   });
 });
 
@@ -451,6 +457,7 @@ describe("runNormalization — alias accretion", () => {
   it("does NOT accrete when a newer save superseded the run", async () => {
     // The supersede guard skips the write entirely; the catalog must not learn
     // recipe language from lines that were never persisted.
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
     vi.mocked(matchIngredients).mockResolvedValue([
       candidate("ing-1", "Spices, cumin seed", 0.9),
     ]);
@@ -462,6 +469,10 @@ describe("runNormalization — alias accretion", () => {
 
     expect(replaceRecipeIngredients).not.toHaveBeenCalled();
     expect(accreteAliasesFromLines).not.toHaveBeenCalled();
+    expect(warnSpy).toHaveBeenCalledWith(
+      expect.stringContaining("superseded mid-run — skipping persist"),
+    );
+    warnSpy.mockRestore();
   });
 });
 
@@ -531,6 +542,7 @@ describe("runNormalization — grams estimation", () => {
 
 describe("runNormalization — lifecycle", () => {
   it("aborts persist when a newer save changed the ingredients mid-run", async () => {
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
     const newerRecipe = makeTestRecipe(["3 cups rice"]);
     vi.mocked(getRecipeById)
       .mockResolvedValueOnce(recipe) // run start
@@ -544,6 +556,10 @@ describe("runNormalization — lifecycle", () => {
     expect(replaceRecipeIngredients).not.toHaveBeenCalled();
     // Only "running" was written — the newer save's own run owns the outcome.
     expect(statusWrites()).toEqual([{ status: "running", error: null }]);
+    expect(warnSpy).toHaveBeenCalledWith(
+      expect.stringContaining("superseded mid-run — skipping persist"),
+    );
+    warnSpy.mockRestore();
   });
 
   it("clears rows and completes immediately for an ingredient-less recipe", async () => {

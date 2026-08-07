@@ -87,6 +87,14 @@ describe("POST /api/ingredients/import-usda", () => {
 
       expect(res.status).toBe(502);
     }
+    // Both upstream failures land in the server log (a null status logs as
+    // "network") — the client-facing message stays generic.
+    expect(errorSpy).toHaveBeenCalledWith(
+      expect.stringContaining("UsdaError (status 500)"),
+    );
+    expect(errorSpy).toHaveBeenCalledWith(
+      expect.stringContaining("UsdaError (status network)"),
+    );
     errorSpy.mockRestore();
   });
 

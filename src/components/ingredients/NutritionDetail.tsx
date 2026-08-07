@@ -45,10 +45,11 @@ interface NutritionDetailProps {
 /**
  * Nutrition breakdown of a recipe's normalized ingredient lines, grouped like
  * the recipe display. Each row shows the line's contribution (per-100g catalog
- * nutrition scaled by the parsed amount converted to grams); the only editable
- * cell is the normalized-ingredient autocomplete, which persists the
- * association and recomputes the row + totals. Table chrome (frozen columns,
- * sticky header, capped scroll box) mirrors IngredientsTable.
+ * nutrition scaled by the parsed amount converted to grams). Editable cells:
+ * the recipe line text (edits the recipe schema itself and auto-queues
+ * re-normalization) and the normalized-ingredient autocomplete, which persists
+ * the association and recomputes the row + totals. Table chrome (frozen
+ * columns, sticky header, capped scroll box) mirrors IngredientsTable.
  *
  * @summary per-line nutrition table with manual match curation
  */
@@ -73,9 +74,11 @@ export default function NutritionDetail({
     excludedCount,
     hasStaleLines,
     savingRowId,
+    savingLineIndex,
     error,
     selectIngredient,
     importUsda,
+    updateLineText,
     estimateGrams,
     setGrams,
   } = useNutritionDetail(
@@ -85,6 +88,13 @@ export default function NutritionDetail({
     initialRows,
     initialIngredients,
   );
+
+  // Saving an edited line writes the recipe, which auto-queues a
+  // re-normalization run server-side — reflect that in the Normalize button
+  // so the curator sees "Queued — check again" instead of a stale prompt.
+  async function handleEditText(index: number, text: string) {
+    if (await updateLineText(index, text)) setNormalizeState("queued");
+  }
 
   async function handleRenormalize() {
     setNormalizeState("queueing");
@@ -183,11 +193,15 @@ export default function NutritionDetail({
                     <NutritionDetailRow
                       key={line.index}
                       line={line}
-                      saving={savingRowId != null && savingRowId === line.row?.id}
+                      saving={
+                        (savingRowId != null && savingRowId === line.row?.id) ||
+                        savingLineIndex === line.index
+                      }
                       search={search}
                       usdaSearch={usdaSearch}
                       onSelect={selectIngredient}
                       onImportUsda={importUsda}
+                      onEditText={handleEditText}
                       onEstimateGrams={estimateGrams}
                       onSetGrams={setGrams}
                     />

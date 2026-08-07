@@ -13,6 +13,7 @@ import {
   estimateIngredientGrams,
   setIngredientGrams,
   updateRecipeIngredientAssociation,
+  updateRecipeIngredientLine,
 } from "@/lib/api/recipes";
 import { importUsdaIngredient } from "@/lib/api/ingredients";
 import type { UsdaSearchFood } from "@/lib/usda";
@@ -60,15 +61,22 @@ export function useNutritionDetail(
   initialIngredients: IngredientRow[],
 ) {
   const [rows, setRows] = useState(initialRows);
+  // Local copy of the schema lines so an inline text edit re-renders without a
+  // server round-trip for the whole page (same init-from-props convention as
+  // `rows`).
+  const [schemaLines, setSchemaLines] = useState(schemaIngredients);
   const [ingredientsById, setIngredientsById] = useState<
     Map<string, CatalogIngredientSummary>
   >(() => new Map(initialIngredients.map((ing) => [ing.id, ing])));
   const [savingRowId, setSavingRowId] = useState<string | null>(null);
+  // Line-text saves key on the schema index, not a row id — a stale or
+  // never-normalized line has no row.
+  const [savingLineIndex, setSavingLineIndex] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const groups = useMemo<NutritionDetailGroup[]>(() => {
     const rowsByPosition = new Map(rows.map((row) => [row.position, row]));
-    return groupIngredientsWithIndex(schemaIngredients).map(
+    return groupIngredientsWithIndex(schemaLines).map(
       ({ heading, items }) => ({
         heading,
         lines: items.map(({ ingredient: schemaIngredient, index }) => {
@@ -92,7 +100,7 @@ export function useNutritionDetail(
         }),
       }),
     );
-  }, [rows, ingredientsById, schemaIngredients]);
+  }, [rows, ingredientsById, schemaLines]);
 
   const lines = useMemo(() => groups.flatMap((g) => g.lines), [groups]);
 
@@ -184,6 +192,26 @@ export function useNutritionDetail(
     }
   }
 
+  // Save an edited line text into the recipe schema. Non-optimistic like the
+  // other mutations: await the PATCH, then swap in the server's line array.
+  // The edited line then reads as stale (row.raw_text no longer matches) and
+  // drops out of totals until the auto-queued re-normalization rebuilds it —
+  // returns true on success so the caller can surface that "queued" state.
+  async function updateLineText(index: number, text: string): Promise<boolean> {
+    setSavingLineIndex(index);
+    setError(null);
+    try {
+      const lines = await updateRecipeIngredientLine(recipeId, index, text);
+      setSchemaLines(lines);
+      return true;
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to update line");
+      return false;
+    } finally {
+      setSavingLineIndex(null);
+    }
+  }
+
   // Run the LLM estimator for one line and store the result. The returned row
   // carries the new estimated_grams; totals recompute via useMemo.
   async function estimateGrams(rowId: string) {
@@ -221,9 +249,11 @@ export function useNutritionDetail(
     excludedCount,
     hasStaleLines,
     savingRowId,
+    savingLineIndex,
     error,
     selectIngredient,
     importUsda,
+    updateLineText,
     estimateGrams,
     setGrams,
   };

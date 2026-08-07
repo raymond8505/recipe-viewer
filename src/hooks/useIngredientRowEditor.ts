@@ -3,8 +3,9 @@ import { parseNumeric } from "@/lib/format";
 import { formatAmount } from "@/lib/units";
 import { deleteIngredient, updateIngredient } from "@/lib/api/ingredients";
 import type { IngredientUpdateInput } from "@/lib/schemas/ingredient";
-import type { IngredientNutrition, IngredientRow } from "@/types/ingredient";
+import type { IngredientRow } from "@/types/ingredient";
 import { NUTRITION_COLUMNS } from "@/components/ingredients/nutritionColumns";
+import { parseDraftNutrition } from "@/components/ingredients/nutritionFacts";
 import {
   fromPortionDrafts,
   toPortionDrafts,
@@ -116,12 +117,9 @@ export function useIngredientRowEditor(
     if (nutritionChanged) {
       // The nutrition jsonb is replaced whole, so send every non-empty field —
       // not just the edited ones — or untouched values would be dropped.
-      const nutrition: IngredientNutrition = {};
-      for (const col of NUTRITION_COLUMNS) {
-        const value = parseNumeric(draft.nutrition[col.key]);
-        if (typeof value === "number") nutrition[col.key] = value;
-      }
-      patch.nutrition = nutrition;
+      // parseDraftNutrition is shared with the label preview, so what the
+      // label shows and what a save persists can never parse differently.
+      patch.nutrition = parseDraftNutrition(draft.nutrition);
     }
     if (!portionsEqual(draft.portions, initial.portions)) {
       // Replaced whole, like nutrition: send every valid portion so untouched

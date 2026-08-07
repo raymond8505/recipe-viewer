@@ -127,19 +127,37 @@ describe("addAliasesAndReembed", () => {
   it("never throws when the RPC fails", async () => {
     // Alias upkeep runs AFTER the association it describes is committed, so it
     // must not be able to fail the caller's request or normalization run.
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
     vi.mocked(addIngredientAliases).mockRejectedValue(
       new IngredientRepoError("update_failed", "rpc down"),
     );
 
     await expect(addAliasesAndReembed("ing-1", ["x"])).resolves.toBeNull();
+
+    // Swallowed, but not silently — the log is the only trace this failed.
+    expect(errorSpy).toHaveBeenCalledWith(
+      expect.stringContaining("Failed to add aliases to ingredient ing-1"),
+      expect.anything(),
+    );
+    errorSpy.mockRestore();
   });
 
   it("never throws when the embedding write fails", async () => {
-    vi.mocked(updateIngredientRow).mockRejectedValue(
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    // Once, not persistent: updateIngredientRow isn't re-stubbed in beforeEach
+    // (clearAllMocks resets calls, not implementations), so a sticky rejection
+    // here leaks into every later test in the file.
+    vi.mocked(updateIngredientRow).mockRejectedValueOnce(
       new IngredientRepoError("update_failed", "db down"),
     );
 
     await expect(addAliasesAndReembed("ing-1", ["x"])).resolves.toBeNull();
+
+    expect(errorSpy).toHaveBeenCalledWith(
+      expect.stringContaining("Failed to add aliases to ingredient ing-1"),
+      expect.anything(),
+    );
+    errorSpy.mockRestore();
   });
 });
 
@@ -167,11 +185,18 @@ describe("removeAliasAndReembed", () => {
   });
 
   it("never throws when the RPC fails", async () => {
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
     vi.mocked(removeIngredientAlias).mockRejectedValue(
       new IngredientRepoError("update_failed", "rpc down"),
     );
 
     await expect(removeAliasAndReembed("ing-1", "x")).resolves.toBeNull();
+
+    expect(errorSpy).toHaveBeenCalledWith(
+      expect.stringContaining("Failed to remove alias from ingredient ing-1"),
+      expect.anything(),
+    );
+    errorSpy.mockRestore();
   });
 });
 
@@ -221,6 +246,7 @@ describe("accreteAliasesFromLines", () => {
   });
 
   it("never throws when one ingredient's mutation fails", async () => {
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
     vi.mocked(addIngredientAliases).mockRejectedValue(
       new IngredientRepoError("update_failed", "rpc down"),
     );
@@ -228,5 +254,11 @@ describe("accreteAliasesFromLines", () => {
     await expect(
       accreteAliasesFromLines([{ ingredient_id: "ing-1", name_text: "cilantro" }]),
     ).resolves.toBeUndefined();
+
+    expect(errorSpy).toHaveBeenCalledWith(
+      expect.stringContaining("Failed to add aliases to ingredient ing-1"),
+      expect.anything(),
+    );
+    errorSpy.mockRestore();
   });
 });

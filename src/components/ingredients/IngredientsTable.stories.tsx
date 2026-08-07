@@ -55,10 +55,12 @@ export const EditingARow: Story = {
 };
 
 /**
- * Expanding a row (chevron in Actions) reveals the full nutrition set — the six
- * columns hidden from the main table plus density — all editable, with the USDA
- * provenance beneath. `expanded` is internal row state, so the click genuinely
- * changes what's shown.
+ * Expanding a row (chevron in Actions) reveals the detail drawer: a live
+ * FDA-style label preview on the left (with a portion selector, so entered
+ * amounts can be checked against the physical package label) and the full
+ * editable nutrition set — the six columns hidden from the main table plus
+ * density — with portions and USDA provenance on the right. `expanded` is
+ * internal row state, so the click genuinely changes what's shown.
  */
 export const ExpandedDetail: Story = {
   args: {

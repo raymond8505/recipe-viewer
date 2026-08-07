@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { GET } from "@/app/api/recipes/[id]/ingredients/route";
+import { GET, PATCH as PATCH_LINE } from "@/app/api/recipes/[id]/ingredients/route";
 import { PATCH } from "@/app/api/recipes/[id]/ingredients/[riId]/route";
 import {
   IngredientRepoError,
@@ -12,7 +12,7 @@ import {
   addAliasesAndReembed,
   removeAliasAndReembed,
 } from "@/lib/ingredientAliases";
-import { getRecipeById } from "@/lib/recipes";
+import { RecipeRepoError, getRecipeById, updateRecipeRow } from "@/lib/recipes";
 import { getIsLoggedIn } from "@/lib/auth";
 import { makeIngredient, makeRecipe, makeRecipeIngredient } from "@/fixtures";
 import { makeJsonRequest } from "@/fixtures/request";
@@ -35,7 +35,7 @@ vi.mock("@/lib/ingredientAliases", () => ({
 
 vi.mock("@/lib/recipes", async (orig) => {
   const actual = await orig<typeof import("@/lib/recipes")>();
-  return { ...actual, getRecipeById: vi.fn() };
+  return { ...actual, getRecipeById: vi.fn(), updateRecipeRow: vi.fn() };
 });
 
 vi.mock("@/lib/auth", () => ({
@@ -86,6 +86,111 @@ describe("GET /api/recipes/[id]/ingredients", () => {
 
     expect(res.status).toBe(404);
     expect(getRecipeIngredients).not.toHaveBeenCalled();
+  });
+});
+
+describe("PATCH /api/recipes/[id]/ingredients (line text)", () => {
+  const makeParams = (id = "r-1") => ({ params: Promise.resolve({ id }) });
+  const lines = [
+    { name: "100 g butter", group: "Cake" },
+    "5 g magic dust",
+  ];
+
+  function recipeWithLines() {
+    return makeRecipe("r-1", "Test Recipe", {
+      metadata: { schema: { name: "Test Recipe", recipeIngredient: lines } },
+    });
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(getIsLoggedIn).mockResolvedValue(true);
+    vi.mocked(getRecipeById).mockResolvedValue(recipeWithLines());
+    vi.mocked(updateRecipeRow).mockImplementation(async (id, patch) =>
+      makeRecipe(id, "Test Recipe", {
+        metadata: {
+          schema: {
+            name: "Test Recipe",
+            recipeIngredient: patch.schema?.recipeIngredient,
+          },
+        },
+      }),
+    );
+  });
+
+  it("replaces a string line and returns the updated array", async () => {
+    const res = await PATCH_LINE(
+      makeJsonRequest({ index: 1, text: "6 g magic dust" }, { method: "PATCH" }),
+      makeParams(),
+    );
+
+    expect(res.status).toBe(200);
+    expect((await res.json()).recipeIngredient).toEqual([
+      { name: "100 g butter", group: "Cake" },
+      "6 g magic dust",
+    ]);
+    expect(updateRecipeRow).toHaveBeenCalledWith("r-1", {
+      schema: {
+        recipeIngredient: [{ name: "100 g butter", group: "Cake" }, "6 g magic dust"],
+      },
+    });
+  });
+
+  it("edits an object line's name while preserving its group", async () => {
+    const res = await PATCH_LINE(
+      makeJsonRequest({ index: 0, text: "150 g butter" }, { method: "PATCH" }),
+      makeParams(),
+    );
+
+    expect(res.status).toBe(200);
+    expect((await res.json()).recipeIngredient[0]).toEqual({
+      name: "150 g butter",
+      group: "Cake",
+    });
+  });
+
+  it("rejects an out-of-range index with 400", async () => {
+    const res = await PATCH_LINE(
+      makeJsonRequest({ index: 2, text: "anything" }, { method: "PATCH" }),
+      makeParams(),
+    );
+
+    expect(res.status).toBe(400);
+    expect(updateRecipeRow).not.toHaveBeenCalled();
+  });
+
+  it("rejects blank text with 400", async () => {
+    const res = await PATCH_LINE(
+      makeJsonRequest({ index: 0, text: "   " }, { method: "PATCH" }),
+      makeParams(),
+    );
+
+    expect(res.status).toBe(400);
+    expect(updateRecipeRow).not.toHaveBeenCalled();
+  });
+
+  it("404s for an unknown recipe", async () => {
+    vi.mocked(getRecipeById).mockResolvedValue(null);
+
+    const res = await PATCH_LINE(
+      makeJsonRequest({ index: 0, text: "150 g butter" }, { method: "PATCH" }),
+      makeParams("nope"),
+    );
+
+    expect(res.status).toBe(404);
+  });
+
+  it("maps repo failures to 500", async () => {
+    vi.mocked(updateRecipeRow).mockRejectedValueOnce(
+      new RecipeRepoError("update_failed", "boom"),
+    );
+
+    const res = await PATCH_LINE(
+      makeJsonRequest({ index: 0, text: "150 g butter" }, { method: "PATCH" }),
+      makeParams(),
+    );
+
+    expect(res.status).toBe(500);
   });
 });
 

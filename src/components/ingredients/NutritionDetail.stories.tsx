@@ -284,6 +284,46 @@ export const StaleNormalization: Story = {
 };
 
 /**
+ * The inline line-text editor: the play() clicks a line's pencil and retypes
+ * the amount, showing the underline edit field in place of the frozen recipe
+ * text. Committing is not demonstrated — it PATCHes the recipe through the
+ * real API wrapper (no DI seam), same reason the Default story stops at the
+ * USDA list.
+ */
+export const EditingLineText: Story = {
+  args: {
+    schemaIngredients: ["2 tsp cumin seed", "1 tbsp olive oil"],
+    recipeYield: "2 servings",
+    initialRows: [
+      makeRecipeIngredient("story-recipe", 0, {
+        raw_text: "2 tsp cumin seed",
+        quantity: 2,
+        unit: "tsp",
+        name_text: "cumin seed",
+        ingredient_id: cumin.id,
+        match_status: "matched",
+      }),
+      makeRecipeIngredient("story-recipe", 1, {
+        raw_text: "1 tbsp olive oil",
+        quantity: 1,
+        unit: "tbsp",
+        name_text: "olive oil",
+        ingredient_id: oliveOil.id,
+        match_status: "matched",
+      }),
+    ],
+    initialIngredients: [cumin, oliveOil],
+  },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await userEvent.click(canvas.getByLabelText("Edit 2 tsp cumin seed"));
+    const field = canvas.getByLabelText("Edit line 2 tsp cumin seed");
+    await userEvent.clear(field);
+    await userEvent.type(field, "1 tbsp cumin seed");
+  },
+};
+
+/**
  * recipeYield has no parseable number, so the per-portion row renders dashes
  * with a title explaining why; the recipe-total row still works.
  */
