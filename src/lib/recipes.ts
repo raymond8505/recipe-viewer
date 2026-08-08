@@ -2,11 +2,26 @@ import { getSupabaseClient, selectColumns, toVectorLiteral } from "./supabase";
 import { getFeatures } from "./features";
 import { normalizeRecipeInstructions, schemaToMarkdown } from "./format";
 import { generateEmbedding } from "./embedding";
+import { lineId, lineSetChanged, withLineIds } from "./ingredientLines";
 import { ingredientFingerprint } from "./normalization/fingerprint";
+import { syncRecipeIngredientText } from "./normalization/syncLines";
 import { scheduleNormalization } from "./normalization/trigger";
-import type { RecipeRow, RecipesResult, SchemaRecipe } from "@/types/recipe";
+import {
+  ARCHIVED_RECIPE_STATUS,
+  DEFAULT_RECIPE_STATUS,
+  PUBLISHED_RECIPE_STATUS,
+  RECIPE_STATUSES,
+} from "./schemas/recipe";
+import type {
+  RecipeIngredient,
+  RecipeRow,
+  RecipesResult,
+  SchemaRecipe,
+} from "@/types/recipe";
 
-export type RecipeStatus = "published" | "archived" | "draft";
+// Derived from the zod enum in ./schemas/recipe rather than restated, so the
+// column's valid values live in exactly one place.
+export type RecipeStatus = (typeof RECIPE_STATUSES)[number];
 
 // Discriminated error type for the write helpers. Lets callers (routes, MCP
 // tools) branch on `kind` instead of inspecting error messages.
@@ -119,11 +134,13 @@ export async function getRecipes(opts?: {
     .order(column, { ascending });
 
   if (features.filterByStatus) {
-    queryBuilder = queryBuilder.eq("status", "published");
+    queryBuilder = queryBuilder.eq("status", PUBLISHED_RECIPE_STATUS);
   } else if (opts?.status) {
     queryBuilder = queryBuilder.eq("status", opts.status);
   } else {
-    queryBuilder = queryBuilder.or("status.neq.archived,status.is.null");
+    queryBuilder = queryBuilder.or(
+      `status.neq.${ARCHIVED_RECIPE_STATUS},status.is.null`,
+    );
   }
 
   if (opts?.source) {
@@ -167,25 +184,34 @@ export async function getRecipeById(id: string): Promise<RecipeRow | null> {
   return row;
 }
 
-// Insert a new recipe row. Defaults status to "draft" if not provided.
+// Insert a new recipe row. Defaults status to DEFAULT_RECIPE_STATUS if not
+// provided.
 // Throws RecipeRepoError("insert_failed") on Supabase failure. Derives the
 // `content` and `embedding` columns from the schema — see the "Derived content
 // + embedding columns" note in .claude/CLAUDE.md.
 export async function createRecipeRow(input: CreateRecipeInput): Promise<RecipeRow> {
   const supabase = getSupabaseClient();
-  const content = schemaToMarkdown(input.schema);
+  // Every persisted ingredient line carries a stable id from the moment it
+  // exists — that id, not the text or the index, is what recipe_ingredients
+  // keys on. Minting here (rather than at first normalization) means no row
+  // is ever written without one.
+  const schema =
+    input.schema.recipeIngredient !== undefined
+      ? { ...input.schema, recipeIngredient: withLineIds(input.schema.recipeIngredient) }
+      : input.schema;
+  const content = schemaToMarkdown(schema);
   const embedding = await generateEmbedding(content);
   const { data, error } = await supabase
     .from("recipes")
     .insert({
       ...(input.id !== undefined ? { id: input.id } : {}),
-      name: input.schema.name,
+      name: schema.name,
       content,
       ...(embedding ? { embedding: toVectorLiteral(embedding) } : {}),
       url: input.url,
       source: input.source,
-      status: input.status ?? "draft",
-      metadata: { schema: input.schema },
+      status: input.status ?? DEFAULT_RECIPE_STATUS,
+      metadata: { schema },
     })
     .select(RECIPE_COLUMNS)
     .single();
@@ -197,7 +223,7 @@ export async function createRecipeRow(input: CreateRecipeInput): Promise<RecipeR
   // Post-response ingredient normalization (see src/lib/normalization/).
   // scheduleNormalization never throws — a normalization problem must not
   // fail the insert that just succeeded.
-  if ((input.schema.recipeIngredient ?? []).length > 0) {
+  if ((schema.recipeIngredient ?? []).length > 0) {
     scheduleNormalization(row.id);
   }
   return row;
@@ -239,19 +265,56 @@ export async function updateRecipeRow(
   if (patch.url !== undefined) writePatch.url = patch.url;
   if (patch.source !== undefined) writePatch.source = patch.source;
   if (patch.status !== undefined) writePatch.status = patch.status;
-  // Re-normalize only when the patch actually changes the ingredient TEXT set
-  // — this naturally skips the notes/upload-image/clear-notes callers and
-  // no-op ingredient patches.
+  // Normalization exists to GUESS an association for a line that has none, so
+  // it only has work when the set of line ids changes — a line was added or
+  // removed. Rewording or reordering leaves every id (and therefore every
+  // derived row and every curated association) exactly where it was, so it
+  // must not re-run: re-guessing there would overwrite the user's own
+  // corrections with the matcher's opinion, which is precisely backwards.
+  //
+  // Line text still has to reach the rows, but that's a deterministic re-parse
+  // (syncRecipeIngredientText below), not a matcher run.
   let shouldNormalize = false;
+  let syncLines: Array<string | RecipeIngredient> | null = null;
   if (patch.schema !== undefined) {
+    // Ids on the incoming lines win; id-less lines inherit from the current
+    // array by text where possible. Skipping this would re-key every row on
+    // any save that round-trips lines as bare strings.
+    const patchSchema =
+      patch.schema.recipeIngredient !== undefined
+        ? {
+            ...patch.schema,
+            recipeIngredient: withLineIds(
+              patch.schema.recipeIngredient,
+              current.metadata.schema.recipeIngredient ?? [],
+            ),
+          }
+        : patch.schema;
     const mergedSchema = {
       ...current.metadata.schema,
-      ...patch.schema,
+      ...patchSchema,
     } as SchemaRecipe;
-    shouldNormalize =
-      patch.schema.recipeIngredient !== undefined &&
-      ingredientFingerprint(current.metadata.schema) !==
-        ingredientFingerprint(mergedSchema);
+    if (patchSchema.recipeIngredient !== undefined) {
+      const before = current.metadata.schema.recipeIngredient ?? [];
+      const after = mergedSchema.recipeIngredient ?? [];
+      shouldNormalize = lineSetChanged(before, after);
+      // Text moved but the line set didn't: re-parse the surviving rows in
+      // place so quantities and totals track the edit, association untouched.
+      //
+      // The second half is the legacy case. `withLineIds` just minted ids for
+      // lines that had none, and those ids have to reach the rows or the next
+      // read joins by an id nothing carries. Sync stamps them, and it has to
+      // run whether or not the text also moved.
+      const minted = before.some((line) => lineId(line) == null);
+      if (
+        !shouldNormalize &&
+        (minted ||
+          ingredientFingerprint(current.metadata.schema) !==
+            ingredientFingerprint(mergedSchema))
+      ) {
+        syncLines = after;
+      }
+    }
     writePatch.metadata = { ...current.metadata, schema: mergedSchema };
     // Keep the top-level name in sync when the schema patch touches it —
     // otherwise list/search views keep showing the old value.
@@ -279,11 +342,19 @@ export async function updateRecipeRow(
   }
   if (shouldNormalize) {
     scheduleNormalization(id);
+  } else if (syncLines) {
+    // Deterministic and local: no model, no catalog lookup, no association
+    // change. Best-effort like the alias upkeep — a re-parse failing must not
+    // fail the recipe save that already succeeded.
+    await syncRecipeIngredientText(id, syncLines).catch((err) => {
+      console.error(`Failed to re-sync ingredient lines for ${id}:`, err);
+    });
   }
   return data as RecipeRow;
 }
 
-// Soft-delete by setting status="archived". Verifies the row exists first so
+// Soft-delete by setting status to ARCHIVED_RECIPE_STATUS. Verifies the row
+// exists first so
 // callers can return 404 vs 500. Throws RecipeRepoError("not_found") or
 // ("update_failed") accordingly.
 export async function archiveRecipe(id: string): Promise<void> {
@@ -301,7 +372,7 @@ export async function archiveRecipe(id: string): Promise<void> {
 
   const { error } = await supabase
     .from("recipes")
-    .update({ status: "archived" })
+    .update({ status: ARCHIVED_RECIPE_STATUS })
     .eq("id", id);
 
   if (error) {

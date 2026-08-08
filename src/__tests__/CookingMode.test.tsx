@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, fireEvent } from "@testing-library/react";
+import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import CookingMode from "@/components/CookingMode";
 import type { RecipeRow, SchemaRecipe } from "@/types/recipe";
 
@@ -177,7 +177,9 @@ describe("CookingMode — shopping list", () => {
     fireEvent.click(screen.getByRole("checkbox", { name: "2 cups flour" }));
     fireEvent.click(screen.getByRole("checkbox", { name: "1 tsp salt" }));
     fireEvent.click(screen.getByRole("button", { name: /copy shopping list/i }));
-    await vi.waitFor(() => {
+    // RTL's waitFor (not vi.waitFor): it suspends the act environment while
+    // polling, so the post-clipboard "copied" state update doesn't warn.
+    await waitFor(() => {
       expect(navigator.clipboard.writeText).toHaveBeenCalledWith("2 cups flour\n1 tsp salt");
     });
   });

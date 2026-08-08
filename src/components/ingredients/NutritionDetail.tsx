@@ -46,10 +46,15 @@ interface NutritionDetailProps {
 /**
  * Nutrition breakdown of a recipe's normalized ingredient lines, grouped like
  * the recipe display. Each row shows the line's contribution (per-100g catalog
- * nutrition scaled by the parsed amount converted to grams); the only editable
- * cell is the normalized-ingredient autocomplete, which persists the
- * association and recomputes the row + totals. Table chrome (frozen columns,
- * sticky header, capped scroll box) mirrors IngredientsTable.
+ * nutrition scaled by the parsed amount converted to grams). Editable cells:
+ * the recipe line text (edits the recipe schema itself — a deterministic
+ * re-parse, never a re-match) and the normalized-ingredient autocomplete, which
+ * persists the association and recomputes the row + totals. Table chrome
+ * (frozen columns, sticky header, capped scroll box) mirrors IngredientsTable.
+ *
+ * Re-matching is only ever something the CURATOR asks for: the autocomplete,
+ * the Estimate action, or the Normalize button. Rewording a line is not a
+ * claim about which food it is, so it changes nothing but the words.
  *
  * Every line and every group also carries an include toggle, so the totals can
  * answer "what are the macros if I skip this component of the recipe?". Those
@@ -79,9 +84,11 @@ export default function NutritionDetail({
     hasStaleLines,
     disabledCount,
     savingRowId,
+    savingLineIndex,
     error,
     selectIngredient,
     importUsda,
+    updateLineText,
     estimateGrams,
     setGrams,
     toggleLine,
@@ -111,8 +118,8 @@ export default function NutritionDetail({
         {hasStaleLines ? (
           <p className="flex items-center gap-2 text-sm text-muted-foreground">
             <WarningIcon />
-            Some lines changed since the last normalization run and are
-            excluded from totals — normalize to rebuild them.
+            Some lines have never been normalized and are excluded from totals —
+            normalize to build their rows.
           </p>
         ) : (
           <span />
@@ -192,11 +199,15 @@ export default function NutritionDetail({
                     <NutritionDetailRow
                       key={line.index}
                       line={line}
-                      saving={savingRowId != null && savingRowId === line.row?.id}
+                      saving={
+                        (savingRowId != null && savingRowId === line.row?.id) ||
+                        savingLineIndex === line.index
+                      }
                       search={search}
                       usdaSearch={usdaSearch}
                       onSelect={selectIngredient}
                       onImportUsda={importUsda}
+                      onEditText={updateLineText}
                       onEstimateGrams={estimateGrams}
                       onSetGrams={setGrams}
                       onToggle={toggleLine}

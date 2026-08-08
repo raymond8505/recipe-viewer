@@ -270,17 +270,31 @@ export const Flat: Story = {
 };
 
 /**
- * The recipe text was edited after the last normalization run: the first
- * line's stored row no longer matches ("2 tsp" vs "1 tsp") and the second
- * has no row at all. Both are flagged stale, and the ever-present Normalize
- * button (manual matches survive re-runs) rebuilds them.
+ * The three states a line's join can be in, side by side.
+ *
+ * - **Cumin** was reworded after its last normalization run — the row still
+ *   says "1 tsp cumin seed". The line is keyed by a stable id, so the reword
+ *   costs it neither its match nor its place in the totals. Text is display
+ *   copy; only the curator changes an association.
+ * - **Saffron** has no normalized row at all, so it is flagged and excluded.
+ * - **Olive oil** is a legacy line with no id: its row can only be found by
+ *   position, which makes the text the sole evidence the row belongs to it —
+ *   and the recipe has moved past what the row says. Still flagged.
+ *
+ * The ever-present Normalize button (manual matches survive re-runs) builds
+ * the missing rows.
  */
 export const StaleNormalization: Story = {
   args: {
-    schemaIngredients: ["2 tsp cumin seed", "1 pinch saffron", "1 tbsp olive oil"],
+    schemaIngredients: [
+      { name: "2 tsp cumin seed", id: "line-cumin" },
+      { name: "1 pinch saffron", id: "line-saffron" },
+      "1 tbsp olive oil, warmed",
+    ],
     recipeYield: "2 servings",
     initialRows: [
       makeRecipeIngredient("story-recipe", 0, {
+        line_id: "line-cumin",
         raw_text: "1 tsp cumin seed",
         quantity: 1,
         unit: "tsp",
@@ -298,6 +312,46 @@ export const StaleNormalization: Story = {
       }),
     ],
     initialIngredients: [cumin, oliveOil],
+  },
+};
+
+/**
+ * The inline line-text editor: the play() clicks a line's pencil and retypes
+ * the amount, showing the underline edit field in place of the frozen recipe
+ * text. Committing is not demonstrated — it PATCHes the recipe through the
+ * real API wrapper (no DI seam), same reason the Default story stops at the
+ * USDA list.
+ */
+export const EditingLineText: Story = {
+  args: {
+    schemaIngredients: ["2 tsp cumin seed", "1 tbsp olive oil"],
+    recipeYield: "2 servings",
+    initialRows: [
+      makeRecipeIngredient("story-recipe", 0, {
+        raw_text: "2 tsp cumin seed",
+        quantity: 2,
+        unit: "tsp",
+        name_text: "cumin seed",
+        ingredient_id: cumin.id,
+        match_status: "matched",
+      }),
+      makeRecipeIngredient("story-recipe", 1, {
+        raw_text: "1 tbsp olive oil",
+        quantity: 1,
+        unit: "tbsp",
+        name_text: "olive oil",
+        ingredient_id: oliveOil.id,
+        match_status: "matched",
+      }),
+    ],
+    initialIngredients: [cumin, oliveOil],
+  },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await userEvent.click(canvas.getByLabelText("Edit 2 tsp cumin seed"));
+    const field = canvas.getByLabelText("Edit line 2 tsp cumin seed");
+    await userEvent.clear(field);
+    await userEvent.type(field, "1 tbsp cumin seed");
   },
 };
 

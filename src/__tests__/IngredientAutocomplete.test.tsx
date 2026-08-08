@@ -55,6 +55,24 @@ describe("IngredientAutocomplete", () => {
     expect(screen.getByText("unmatched")).toBeInTheDocument();
   });
 
+  it("focuses and selects the pre-filled name on open, so one keystroke replaces it", async () => {
+    const user = userEvent.setup();
+    renderClosed({ id: "ing-0", name: "shallot" });
+
+    await user.click(screen.getByLabelText("Change match for 1 tsp cumin"));
+    const input = screen.getByRole("combobox");
+    const { selectionStart, selectionEnd } = input as HTMLInputElement;
+
+    expect(input).toHaveFocus();
+    expect([selectionStart, selectionEnd]).toEqual([0, "shallot".length]);
+
+    // The selection is the point. Typed via keyboard, not `type()`: the real
+    // user's click landed on the trigger, so nothing re-clicks the input and
+    // collapses the selection — the next keystroke replaces the whole name.
+    await user.keyboard("onion");
+    expect(input).toHaveValue("onion");
+  });
+
   it("debounces typing into one search and lists the results", async () => {
     const user = userEvent.setup();
     search.mockResolvedValue([
@@ -83,6 +101,37 @@ describe("IngredientAutocomplete", () => {
 
     expect(await screen.findByText("Type to search…")).toBeInTheDocument();
     expect(search).not.toHaveBeenCalled();
+  });
+
+  it("does not lose the first keystroke when a deferred focus lands mid-typing", async () => {
+    // Regression for a CI-load flake: focus/select of the freshly-mounted
+    // input must happen in the same commit that mounts it. When it was
+    // deferred through requestAnimationFrame (a ~16ms wall-clock timer in
+    // jsdom), a loaded runner could process the first keystroke before the
+    // callback ran — select() then highlighted that character and the next
+    // keystroke replaced it ("gochujang" → "ochujang"). Queue rAF callbacks
+    // and flush them between keystrokes to force that ordering
+    // deterministically; the component must not care.
+    const queued: FrameRequestCallback[] = [];
+    const raf = vi
+      .spyOn(window, "requestAnimationFrame")
+      .mockImplementation((cb) => {
+        queued.push(cb);
+        return queued.length;
+      });
+
+    const user = userEvent.setup();
+    renderClosed();
+    await user.click(screen.getByLabelText("Change match for 1 tsp cumin"));
+    const input = screen.getByRole("combobox");
+    await user.type(input, "g");
+    queued.splice(0).forEach((cb) => cb(0));
+    // keyboard(), not type(): type() would click first, collapsing the
+    // selection — mid-word keystrokes in the real flake have no such click.
+    await user.keyboard("ochujang");
+
+    raf.mockRestore();
+    expect(input).toHaveValue("gochujang");
   });
 
   it("selects with Enter after arrow-key navigation (wrapping)", async () => {
@@ -174,8 +223,6 @@ describe("IngredientAutocomplete", () => {
     await user.click(screen.getByLabelText("Change match for 1 tsp cumin"));
     expect(onOpenChange).toHaveBeenLastCalledWith(true);
 
-    // Focus moves to the input on a rAF after the click, so target it
-    // directly rather than relying on document focus.
     await user.type(screen.getByRole("combobox"), "{Escape}");
     expect(onOpenChange).toHaveBeenLastCalledWith(false);
   });

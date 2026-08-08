@@ -79,7 +79,7 @@ describe("/api/mcp/server", () => {
       expect(body.result.serverInfo.name).toBe("recipe-viewer-mcp");
     });
 
-    it("lists 9 tools", async () => {
+    it("lists 13 tools", async () => {
       const res = await POST(
         rpc({ jsonrpc: "2.0", id: 2, method: JsonRpcMethod.TOOLS_LIST }, { authorization: auth }),
       );
@@ -88,16 +88,79 @@ describe("/api/mcp/server", () => {
       expect(names).toEqual(
         [
           "clear_cooking_notes",
+          "create_ingredient",
           "create_recipe",
+          "delete_ingredient",
           "delete_recipe",
+          "get_ingredient",
           "get_recipe",
           "get_token",
           "search_ingredients",
           "search_recipes",
+          "update_ingredient",
           "update_recipe",
           "upload_recipe_image",
         ],
       );
+    });
+
+    // The descriptions are the agent's whole instruction surface, and two
+    // claims in them are load-bearing enough to regress badly if reworded.
+    it("tells the agent to judge on semantic_similarity, not the RRF score", async () => {
+      const res = await POST(
+        rpc({ jsonrpc: "2.0", id: 3, method: JsonRpcMethod.TOOLS_LIST }, { authorization: auth }),
+      );
+      const body = await res.json();
+      const search = body.result.tools.find(
+        (t: { name: string }) => t.name === "search_ingredients",
+      );
+
+      // match_ingredients fuses by RRF (rrf_k=50, weights 1/1), so a perfect
+      // match scores ~0.04. An agent told "similarity, 1.0 = identical" reads
+      // that as a 4% match and creates a duplicate row instead.
+      expect(search.description).toContain("semantic_similarity");
+      expect(search.description).toContain("RANKING ONLY");
+      expect(search.description).not.toContain("1.0 = identical");
+
+      // SIM_AUTO_ACCEPT/SIM_NOVEL_FLOOR are self-described guesses set before
+      // catalog names became USDA descriptions, which lowered recipe-phrase
+      // similarity across the board. Quoting them as cutoffs would bias the
+      // agent toward "no match" — i.e. toward minting duplicate rows.
+      expect(search.description).not.toMatch(/0\.85|0\.6\b/);
+    });
+
+    it("points create_ingredient at aliasing an existing row before creating", async () => {
+      const res = await POST(
+        rpc({ jsonrpc: "2.0", id: 4, method: JsonRpcMethod.TOOLS_LIST }, { authorization: auth }),
+      );
+      const body = await res.json();
+      const tools: Array<{ name: string; description: string }> = body.result.tools;
+      const create = tools.find((t) => t.name === "create_ingredient")!;
+      const update = tools.find((t) => t.name === "update_ingredient")!;
+
+      // Recipe wording lives in aliases now, so the common correct move is to
+      // teach an existing row a name — not to mint a near-duplicate.
+      expect(create.description).toContain("search_ingredients");
+      expect(create.description).toContain("update_ingredient");
+      // aliases replaces the whole array, so the destructive-by-default nature
+      // of the field has to be stated wherever it can be passed.
+      expect(create.description).toContain("aliases");
+      expect(update.description).toMatch(/REPLACES the whole array/);
+    });
+
+    it("tells search_ingredients callers the results carry aliases", async () => {
+      const res = await POST(
+        rpc({ jsonrpc: "2.0", id: 5, method: JsonRpcMethod.TOOLS_LIST }, { authorization: auth }),
+      );
+      const body = await res.json();
+      const tools: Array<{ name: string; description: string }> = body.result.tools;
+      const search = tools.find((t) => t.name === "search_ingredients")!;
+      const get = tools.find((t) => t.name === "get_ingredient")!;
+
+      // 0012 put aliases in the search results, so the alias-editing flow no
+      // longer needs a get_ingredient round trip per candidate.
+      expect(search.description).toContain("aliases");
+      expect(get.description).not.toMatch(/results omit \(aliases/i);
     });
 
     it("executes search_recipes via tools/call", async () => {
@@ -119,6 +182,36 @@ describe("/api/mcp/server", () => {
       expect(body.result.content[0].type).toBe("text");
       const parsed = JSON.parse(body.result.content[0].text);
       expect(parsed.count).toBe(1);
+    });
+
+    it("formats argument-validation failures with tool name and field paths", async () => {
+      // Regression for the food_portions spiral: nutrition without
+      // nutrition_portion must fail with a message that names the tool and
+      // the missing field — not a raw zod issues array with path [].
+      const res = await POST(
+        rpc(
+          {
+            jsonrpc: "2.0",
+            id: 7,
+            method: JsonRpcMethod.TOOLS_CALL,
+            params: {
+              name: "create_ingredient",
+              arguments: {
+                name: "PC Maple Breakfast Pork Sausages",
+                nutrition: { calories_kcal: 237.5 },
+                food_portions: [{ gramWeight: 80, amount: 3, modifier: "sausages" }],
+              },
+            },
+          },
+          { authorization: auth },
+        ),
+      );
+      const body = await res.json();
+      expect(body.result.isError).toBe(true);
+      const text = body.result.content[0].text as string;
+      expect(text).toMatch(/^invalid_arguments: create_ingredient/);
+      expect(text).toMatch(/nutrition_portion:/);
+      expect(text).toMatch(/food_portions does not satisfy/);
     });
 
     it("returns isError result when the tool throws", async () => {

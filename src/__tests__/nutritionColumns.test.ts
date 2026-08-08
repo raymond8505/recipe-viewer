@@ -6,6 +6,7 @@ import {
   PRIMARY_NUTRITION_COLUMNS,
   nutritionLabel,
 } from "@/components/ingredients/nutritionColumns";
+import { NUTRITION_FIELDS } from "@/lib/nutritionFields";
 import type { IngredientNutrition } from "@/types/ingredient";
 
 // The nutrient labeling system is the single source of what each value is
@@ -50,6 +51,10 @@ describe("nutritionLabel", () => {
     expect(NUTRITION_COLUMNS.map((c) => c.key).sort()).toEqual(
       (Object.keys(EXPECTED_LABELS) as (keyof IngredientNutrition)[]).sort(),
     );
+  });
+
+  it("follows NUTRITION_FIELDS' order, so the UI and the MCP prose agree", () => {
+    expect(NUTRITION_COLUMNS.map((c) => c.key)).toEqual([...NUTRITION_FIELDS]);
   });
 
   it("never resurfaces the verbose USDA names", () => {

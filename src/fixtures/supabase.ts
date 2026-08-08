@@ -57,10 +57,13 @@ export function makeSupabaseQueue(responses: SupabaseQueueResponse[]) {
     for (const method of [
       "select",
       "insert",
+      "upsert",
       "update",
       "delete",
       "eq",
       "in",
+      "not",
+      "is",
       "or",
       "ilike",
       "order",

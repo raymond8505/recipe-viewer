@@ -66,7 +66,8 @@ export default async function RecipeIngredientsPage({
         <p className="text-muted-foreground mt-1">
           Each line&apos;s contribution to the recipe, computed from the ingredient
           catalog (per 100 g × parsed amount). Fix a wrong match by picking a
-          different catalog ingredient.
+          different catalog ingredient, or edit a line&apos;s text to fix the
+          recipe itself.
         </p>
       </div>
       <NutritionDetail

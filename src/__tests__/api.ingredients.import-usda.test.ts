@@ -28,18 +28,16 @@ describe("POST /api/ingredients/import-usda", () => {
     );
   });
 
-  it("imports with the recipe-language name and returns the row", async () => {
+  it("passes the line's parsed name through as the alias source", async () => {
     const res = await POST(
       makeJsonRequest({ fdcId: 123, name: "gochujang" }, { method: "POST" }),
     );
 
     expect(res.status).toBe(201);
     expect((await res.json()).id).toBe("ing-new");
-    // The manual pick is authoritative for this line — a same-name collision
-    // with a different food forks a new row instead of clobbering the old one.
-    expect(importUsdaIngredient).toHaveBeenCalledWith("gochujang", 123, {
-      onConflict: "fork",
-    });
+    // No conflict mode: fdcId is the identity, so the same food always
+    // resolves to the same row and there is nothing to fork.
+    expect(importUsdaIngredient).toHaveBeenCalledWith("gochujang", 123);
   });
 
   it("rejects an invalid body with 400", async () => {
@@ -89,6 +87,14 @@ describe("POST /api/ingredients/import-usda", () => {
 
       expect(res.status).toBe(502);
     }
+    // Both upstream failures land in the server log (a null status logs as
+    // "network") — the client-facing message stays generic.
+    expect(errorSpy).toHaveBeenCalledWith(
+      expect.stringContaining("UsdaError (status 500)"),
+    );
+    expect(errorSpy).toHaveBeenCalledWith(
+      expect.stringContaining("UsdaError (status network)"),
+    );
     errorSpy.mockRestore();
   });
 

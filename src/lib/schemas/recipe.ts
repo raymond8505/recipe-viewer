@@ -11,7 +11,14 @@ import { METRIC_YIELD_UNITS } from "@/lib/units";
 
 export const ingredientSchema = z.union([
   z.string(),
-  z.object({ name: z.string(), group: z.string().optional() }),
+  z.object({
+    name: z.string(),
+    group: z.string().optional(),
+    // Stable line identity (see RecipeIngredient.id). Accepted so a client
+    // that read a recipe can hand its lines back unchanged and keep each
+    // line's derived row; the write path mints one when it's absent.
+    id: z.string().optional(),
+  }),
 ]);
 
 // Schema.org/QuantitativeValue — the structured form of recipeYield. Top level:
@@ -101,6 +108,13 @@ export const schemaRecipeSchema = z
 // JSON-Schema export for MCP tool descriptors.
 export const recipeStatusSchema = z.enum(["published", "archived", "draft"]);
 export const RECIPE_STATUSES = recipeStatusSchema.options;
+
+// The two statuses the app applies on its own — named so the repo writes, the
+// JSON-Schema export and the MCP tool prose that documents them all move
+// together when a status is renamed.
+export const DEFAULT_RECIPE_STATUS = recipeStatusSchema.enum.draft;
+export const PUBLISHED_RECIPE_STATUS = recipeStatusSchema.enum.published;
+export const ARCHIVED_RECIPE_STATUS = recipeStatusSchema.enum.archived;
 
 // Input shapes for the recipe CRUD operations. Defined here (not in
 // `lib/mcp/schemas.ts`) so non-MCP callers — API route handlers, form

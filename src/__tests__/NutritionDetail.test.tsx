@@ -7,6 +7,7 @@ import {
   normalizeRecipe,
   setIngredientGrams,
   updateRecipeIngredientAssociation,
+  updateRecipeIngredientLine,
 } from "@/lib/api/recipes";
 import { importUsdaIngredient } from "@/lib/api/ingredients";
 import { makeIngredient, makeRecipeIngredient } from "@/fixtures";
@@ -20,6 +21,7 @@ import type { RecipeIngredient } from "@/types/recipe";
 vi.mock("@/lib/api/recipes", () => ({
   normalizeRecipe: vi.fn(),
   updateRecipeIngredientAssociation: vi.fn(),
+  updateRecipeIngredientLine: vi.fn(),
   estimateIngredientGrams: vi.fn(),
   setIngredientGrams: vi.fn(),
 }));
@@ -34,12 +36,14 @@ const search = vi.fn<(q: string) => Promise<IngredientKeywordMatch[]>>();
 const usdaSearch = vi.fn<(q: string) => Promise<UsdaSearchFood[]>>();
 
 // Interleaved groups: Cake (indices 0 + 2), Frosting (1), ungrouped (3).
-// Grouping reorders these, so passing tests prove position-index alignment.
+// Grouping reorders these, so passing tests prove index alignment. Every line
+// carries a stable id — the shape every persisted recipe has had since
+// db/migrations/0013; the legacy fixtures below opt out on purpose.
 const schemaIngredients: Array<string | RecipeIngredient> = [
-  { name: "100 g butter", group: "Cake" },
-  { name: "2 eggs", group: "Frosting" },
-  { name: "1 tsp cumin", group: "Cake" },
-  "5 g magic dust",
+  { name: "100 g butter", group: "Cake", id: "L0" },
+  { name: "2 eggs", group: "Frosting", id: "L1" },
+  { name: "1 tsp cumin", group: "Cake", id: "L2" },
+  { name: "5 g magic dust", id: "L3" },
 ];
 
 const butter = makeIngredient("ing-butter", "butter", {
@@ -57,6 +61,7 @@ function makeRows(): RecipeIngredientRow[] {
   return [
     makeRecipeIngredient("r-1", 0, {
       id: "ri-0",
+      line_id: "L0",
       raw_text: "100 g butter",
       quantity: 100,
       unit: "g",
@@ -65,6 +70,7 @@ function makeRows(): RecipeIngredientRow[] {
     }),
     makeRecipeIngredient("r-1", 1, {
       id: "ri-1",
+      line_id: "L1",
       raw_text: "2 eggs",
       quantity: 2,
       unit: null,
@@ -73,6 +79,7 @@ function makeRows(): RecipeIngredientRow[] {
     }),
     makeRecipeIngredient("r-1", 2, {
       id: "ri-2",
+      line_id: "L2",
       raw_text: "1 tsp cumin",
       quantity: 1,
       unit: "tsp",
@@ -81,6 +88,7 @@ function makeRows(): RecipeIngredientRow[] {
     }),
     makeRecipeIngredient("r-1", 3, {
       id: "ri-3",
+      line_id: "L3",
       raw_text: "5 g magic dust",
       quantity: 5,
       unit: "g",
@@ -93,12 +101,13 @@ function makeRows(): RecipeIngredientRow[] {
 
 function renderDetail(overrides?: {
   rows?: RecipeIngredientRow[];
+  schemaIngredients?: Array<string | RecipeIngredient>;
   recipeYield?: string | undefined;
 }) {
   return render(
     <NutritionDetail
       recipeId="r-1"
-      schemaIngredients={schemaIngredients}
+      schemaIngredients={overrides?.schemaIngredients ?? schemaIngredients}
       recipeYield={
         overrides && "recipeYield" in overrides
           ? overrides.recipeYield
@@ -235,23 +244,240 @@ describe("NutritionDetail", () => {
     ).toBeInTheDocument();
   });
 
-  it("marks edited lines stale and excludes them from totals", () => {
+  // The line text is display copy; the line id is the identity. Someone
+  // dropping a brand name from "100 g Acme brand butter" has said nothing
+  // about which food the line is, so the association it was curated onto —
+  // and its share of the totals — must survive untouched.
+  it("keeps a reworded line matched and counted", () => {
     const rows = makeRows();
-    rows[0] = { ...rows[0], raw_text: "200 g butter, softened" };
+    rows[0] = { ...rows[0], raw_text: "100 g Acme brand butter" };
     renderDetail({ rows });
 
     const butterRow = rowFor("100 g butter");
     expect(
-      within(butterRow).getByTitle(
-        "Line changed since normalization — re-run normalization",
+      within(butterRow).queryByTitle(
+        "No normalized row for this line — run normalization",
+      ),
+    ).not.toBeInTheDocument();
+    expect(butterRow).toHaveTextContent("717");
+    expect(rowFor("Recipe total")).toHaveTextContent("724.76");
+    expect(
+      screen.queryByText(/have never been normalized/),
+    ).not.toBeInTheDocument();
+  });
+
+  it("flags a line with no normalized row and excludes it from totals", () => {
+    // Every row but butter's — the state a line lands in before its first
+    // normalization run.
+    renderDetail({ rows: makeRows().slice(1) });
+
+    expect(
+      within(rowFor("100 g butter")).getByTitle(
+        "No normalized row for this line — run normalization",
       ),
     ).toBeInTheDocument();
-    // The stale line's contribution is out of the totals.
     expect(rowFor("Recipe total")).toHaveTextContent("7.76");
     expect(rowFor("Recipe total")).not.toHaveTextContent("724.76");
     expect(
-      screen.getByText(/changed since the last normalization run/),
+      screen.getByText(/have never been normalized/),
     ).toBeInTheDocument();
+  });
+
+  // Legacy: rows written before line ids can only be found by position, so
+  // there the text IS the only evidence the row belongs to this line.
+  it("still flags a position-joined legacy row whose text has moved on", () => {
+    const rows = makeRows().map((row) => ({ ...row, line_id: null }));
+    rows[0] = { ...rows[0], raw_text: "200 g butter, softened" };
+    renderDetail({
+      rows,
+      schemaIngredients: schemaIngredients.map((line) =>
+        typeof line === "string" ? line : { name: line.name, group: line.group },
+      ),
+    });
+
+    expect(
+      within(rowFor("100 g butter")).getByTitle(
+        "No normalized row for this line — run normalization",
+      ),
+    ).toBeInTheDocument();
+    expect(rowFor("Recipe total")).not.toHaveTextContent("724.76");
+  });
+
+  // Regression: the association PATCH only moves ingredient_id, never
+  // raw_text, so on a stale line the picked ingredient stayed "(unknown
+  // ingredient)" — the hook was nulling the catalog lookup for stale lines and
+  // nothing short of a reload could clear it. Staleness governs TOTALS
+  // (lineComputationForSchema decides that itself), never whether we know
+  // which row is associated. Legacy-shaped, since that is where a line can
+  // still be both stale and have a row.
+  it("shows the picked ingredient's name on a stale line, not '(unknown ingredient)'", async () => {
+    const user = userEvent.setup();
+    const legacyLines = schemaIngredients.map((line) =>
+      typeof line === "string" ? line : { name: line.name, group: line.group },
+    );
+    const rows = makeRows().map((row) => ({ ...row, line_id: null }));
+    // Edited since normalization, and unmatched — the state the repro lands in.
+    rows[0] = {
+      ...rows[0],
+      raw_text: "200 g butter, softened",
+      ingredient_id: null,
+      match_status: "unmatched",
+    };
+    // USDA-style canonical name: distinct from the typed query, so the option
+    // regex can't also match the pinned `Search USDA for "butter"` action.
+    const butterMatch: IngredientKeywordMatch = {
+      id: "ing-butter",
+      name: "Butter, without salt",
+      aliases: ["butter"],
+      nutrition: { calories_kcal: 717, fat_g: 81 },
+      density_g_per_ml: null,
+      similarity: 0.98,
+    };
+    search.mockResolvedValue([butterMatch]);
+    // The PATCH returns the row with the new association — raw_text unchanged,
+    // so the line is still stale afterwards.
+    vi.mocked(updateRecipeIngredientAssociation).mockResolvedValue({
+      ...rows[0],
+      ingredient_id: "ing-butter",
+      match_status: "manual",
+    });
+    renderDetail({ rows, schemaIngredients: legacyLines });
+
+    await user.click(screen.getByLabelText("Change match for 100 g butter"));
+    await user.type(screen.getByRole("combobox"), "butter");
+    await user.click(
+      await screen.findByRole("option", { name: /Butter, without salt/ }),
+    );
+
+    await waitFor(() =>
+      expect(updateRecipeIngredientAssociation).toHaveBeenCalledWith(
+        "r-1",
+        "ri-0",
+        "ing-butter",
+      ),
+    );
+    await waitFor(() =>
+      expect(
+        within(rowFor("100 g butter")).getByText("Butter, without salt"),
+      ).toBeInTheDocument(),
+    );
+    expect(screen.queryByText("(unknown ingredient)")).not.toBeInTheDocument();
+
+    // The line is still stale, so it must stay out of the totals — the fix is
+    // about what we display, not about what counts.
+    expect(
+      within(rowFor("100 g butter")).getByTitle(
+        "No normalized row for this line — run normalization",
+      ),
+    ).toBeInTheDocument();
+    expect(rowFor("Recipe total")).not.toHaveTextContent("724.76");
+  });
+
+  // Rewording is not a re-match request. The server re-parses the derived rows
+  // in-band and hands them back, so the edited line keeps its ingredient and
+  // its contribution — and nothing here may imply a matcher run was queued.
+  it("saves an edited line text and keeps it matched and counted", async () => {
+    const user = userEvent.setup();
+    const syncedRows = makeRows();
+    syncedRows[2] = { ...syncedRows[2], raw_text: "1 tsp cumin, toasted" };
+    vi.mocked(updateRecipeIngredientLine).mockResolvedValue({
+      recipeIngredient: [
+        ...schemaIngredients.slice(0, 2),
+        { name: "1 tsp cumin, toasted", id: "L2" },
+        schemaIngredients[3],
+      ],
+      rows: syncedRows,
+    });
+    renderDetail();
+
+    await user.click(screen.getByLabelText("Edit 1 tsp cumin"));
+    const field = screen.getByLabelText("Edit line 1 tsp cumin");
+    await user.clear(field);
+    await user.type(field, "1 tsp cumin, toasted{Enter}");
+
+    // Index 2 is the line's schema position, not a row id — a line with no row
+    // yet still has to be addressable.
+    expect(updateRecipeIngredientLine).toHaveBeenCalledWith(
+      "r-1",
+      2,
+      "1 tsp cumin, toasted",
+    );
+    await screen.findByText("1 tsp cumin, toasted");
+    const editedRow = rowFor("1 tsp cumin, toasted");
+    expect(
+      within(editedRow).queryByTitle(
+        "No normalized row for this line — run normalization",
+      ),
+    ).not.toBeInTheDocument();
+    expect(editedRow).toHaveTextContent("7.76");
+    expect(rowFor("Recipe total")).toHaveTextContent("724.76");
+    // No run was queued, so the button must not claim one was.
+    expect(
+      screen.queryByRole("button", { name: "Queued — check again" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Normalize" }),
+    ).toBeInTheDocument();
+  });
+
+  it("cancels an edit on Escape without saving", async () => {
+    const user = userEvent.setup();
+    renderDetail();
+
+    await user.click(screen.getByLabelText("Edit 5 g magic dust"));
+    const field = screen.getByLabelText("Edit line 5 g magic dust");
+    await user.clear(field);
+    await user.type(field, "something else");
+    await user.keyboard("{Escape}");
+
+    expect(updateRecipeIngredientLine).not.toHaveBeenCalled();
+    expect(screen.getByText("5 g magic dust")).toBeInTheDocument();
+    expect(
+      screen.queryByLabelText("Edit line 5 g magic dust"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("treats an empty or unchanged commit as a cancel", async () => {
+    const user = userEvent.setup();
+    renderDetail();
+
+    // Unchanged text → no save.
+    await user.click(screen.getByLabelText("Edit 5 g magic dust"));
+    await user.type(
+      screen.getByLabelText("Edit line 5 g magic dust"),
+      "{Enter}",
+    );
+    expect(updateRecipeIngredientLine).not.toHaveBeenCalled();
+
+    // Blanked-out text → no save either.
+    await user.click(screen.getByLabelText("Edit 5 g magic dust"));
+    const field = screen.getByLabelText("Edit line 5 g magic dust");
+    await user.clear(field);
+    await user.type(field, "{Enter}");
+    expect(updateRecipeIngredientLine).not.toHaveBeenCalled();
+    expect(screen.getByText("5 g magic dust")).toBeInTheDocument();
+  });
+
+  it("surfaces a line-save failure in the error banner", async () => {
+    const user = userEvent.setup();
+    vi.mocked(updateRecipeIngredientLine).mockRejectedValue(
+      new Error("Ingredient line update failed with status 500"),
+    );
+    renderDetail();
+
+    await user.click(screen.getByLabelText("Edit 5 g magic dust"));
+    const field = screen.getByLabelText("Edit line 5 g magic dust");
+    await user.clear(field);
+    await user.type(field, "6 g magic dust{Enter}");
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Ingredient line update failed with status 500",
+    );
+    // The line keeps its stored text — the save never landed.
+    expect(screen.getByText("5 g magic dust")).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Queued — check again" }),
+    ).not.toBeInTheDocument();
   });
 
   it("persists an association change and recomputes the row and totals", async () => {
@@ -268,6 +494,7 @@ describe("NutritionDetail", () => {
     vi.mocked(updateRecipeIngredientAssociation).mockResolvedValue(
       makeRecipeIngredient("r-1", 3, {
         id: "ri-3",
+        line_id: "L3",
         raw_text: "5 g magic dust",
         quantity: 5,
         unit: "g",
@@ -314,6 +541,7 @@ describe("NutritionDetail", () => {
     vi.mocked(updateRecipeIngredientAssociation).mockResolvedValue(
       makeRecipeIngredient("r-1", 3, {
         id: "ri-3",
+        line_id: "L3",
         raw_text: "5 g magic dust",
         quantity: 5,
         unit: "g",
@@ -354,6 +582,7 @@ describe("NutritionDetail", () => {
     vi.mocked(estimateIngredientGrams).mockResolvedValue(
       makeRecipeIngredient("r-1", 1, {
         id: "ri-1",
+        line_id: "L1",
         raw_text: "2 eggs",
         quantity: 2,
         unit: null,
@@ -501,6 +730,7 @@ describe("NutritionDetail", () => {
     vi.mocked(setIngredientGrams).mockResolvedValue(
       makeRecipeIngredient("r-1", 1, {
         id: "ri-1",
+        line_id: "L1",
         raw_text: "2 eggs",
         quantity: 2,
         unit: null,

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireSessionOrDev } from "@/lib/api/guard";
 import { generateEmbedding } from "@/lib/embedding";
+import { ingredientEmbeddingText } from "@/lib/ingredientAliases";
 import {
   IngredientRepoError,
   createIngredientRow,
@@ -37,7 +38,13 @@ export const POST = requireSessionOrDev(async (req: Request) => {
   // Manual entries need an embedding to be matchable, and the column is NOT
   // NULL (db/migrations/0006), so a failed embedding can't produce a row.
   // Surface it as a transient failure the client can retry rather than a 500.
-  const embedding = await generateEmbedding(parsed.data.name);
+  //
+  // A hand-entered name is canonical as given (unlike a USDA import, which is
+  // named by the food's description) — but the vector still spans name +
+  // aliases, so any aliases supplied here have to be in the embedded text.
+  const embedding = await generateEmbedding(
+    ingredientEmbeddingText(parsed.data.name, parsed.data.aliases ?? []),
+  );
   if (!embedding) {
     return NextResponse.json(
       { error: "Could not generate an embedding for this ingredient — try again shortly." },
@@ -50,9 +57,12 @@ export const POST = requireSessionOrDev(async (req: Request) => {
     return NextResponse.json(row, { status: 201 });
   } catch (err) {
     if (err instanceof IngredientRepoError) {
+      // Two unique indexes can raise this now: lower(name), and fdc_id
+      // (db/migrations/0011) — the create schema accepts an fdc_id, so a user
+      // can collide with an already-imported USDA record under another name.
       return err.kind === "conflict"
         ? NextResponse.json(
-            { error: "An ingredient with that name already exists" },
+            { error: "An ingredient with that name or USDA record already exists" },
             { status: 409 },
           )
         : NextResponse.json({ error: "Failed to create ingredient" }, { status: 500 });

@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import IngredientsTable from "@/components/ingredients/IngredientsTable";
 import {
   createIngredient,
@@ -178,6 +178,33 @@ describe("IngredientsTable", () => {
         }),
       );
     });
+  });
+
+  it("previews a live nutrition label in the drawer with a portion selector", () => {
+    renderTable();
+
+    fireEvent.click(screen.getByLabelText("Details for cumin seed"));
+
+    // Scope to the label panel: the drawer also renders bare numbers as
+    // inputs, and the same figures appear at other scales in the main row.
+    const label = within(screen.getByText("Nutrition Facts").parentElement!);
+    // Opens on the 100 g baseline — the big calories number is the stored value.
+    expect(label.getByText("375")).toBeInTheDocument();
+
+    // The label tracks the draft, not the saved row: a keystroke in the
+    // nutrition grid re-renders it immediately.
+    fireEvent.change(screen.getByLabelText("Calories (kcal) for cumin seed"), {
+      target: { value: "400" },
+    });
+    expect(label.getByText("400")).toBeInTheDocument();
+
+    // Switching to the tbsp portion (6 g) rescales: 400 × 0.06 = 24.
+    fireEvent.change(
+      screen.getByLabelText("Nutrition label portion for cumin seed"),
+      { target: { value: "p1" } },
+    );
+    expect(label.getByText("24")).toBeInTheDocument();
+    expect(label.queryByText("400")).not.toBeInTheDocument();
   });
 
   it("edits portions in the expanded row and sends the whole list on save", async () => {

@@ -3,8 +3,10 @@
 import { useMemo, useState } from "react";
 import { getIngredientText, groupIngredientsWithIndex } from "@/lib/format";
 import {
+  indexRowsForLines,
   lineComputationForSchema,
   perPortionNutrition,
+  resolveLineRow,
   sumNutrition,
   type LineComputation,
 } from "@/lib/nutritionMath";
@@ -13,6 +15,7 @@ import {
   estimateIngredientGrams,
   setIngredientGrams,
   updateRecipeIngredientAssociation,
+  updateRecipeIngredientLine,
 } from "@/lib/api/recipes";
 import { importUsdaIngredient } from "@/lib/api/ingredients";
 import type { UsdaSearchFood } from "@/lib/usda";
@@ -54,10 +57,10 @@ export interface NutritionDetailGroup {
 }
 
 // State + derived math for the NutritionDetail screen. Rows join to schema
-// lines by position index; a line whose stored raw_text no longer equals the
-// schema text is "stale" (the recipe was edited after the last normalization
-// run) and is excluded from totals. Association changes are non-optimistic:
-// await the PATCH, then update local state — totals recompute via useMemo.
+// lines via `resolveLineRow` (stable line id, position only for legacy lines);
+// a line with no row is "stale" and excluded from totals until normalization
+// gives it one. Association changes are non-optimistic: await the PATCH, then
+// update local state — totals recompute via useMemo.
 //
 // The per-line enable/disable toggles are a what-if lens ("what are the macros
 // if I skip the pasta?"), deliberately session-only: nothing persists, and
@@ -71,40 +74,56 @@ export function useNutritionDetail(
   initialIngredients: IngredientRow[],
 ) {
   const [rows, setRows] = useState(initialRows);
+  // Local copy of the schema lines so an inline text edit re-renders without a
+  // server round-trip for the whole page (same init-from-props convention as
+  // `rows`).
+  const [schemaLines, setSchemaLines] = useState(schemaIngredients);
   const [ingredientsById, setIngredientsById] = useState<
     Map<string, CatalogIngredientSummary>
   >(() => new Map(initialIngredients.map((ing) => [ing.id, ing])));
   const [savingRowId, setSavingRowId] = useState<string | null>(null);
+  // Line-text saves key on the schema index, not a row id — a stale or
+  // never-normalized line has no row.
+  const [savingLineIndex, setSavingLineIndex] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
-  // Keyed by schema position — the same index that joins schema lines to
-  // recipe_ingredients rows. Stable for the page's lifetime: schemaIngredients
-  // is a server prop, and every mutation below replaces entries in `rows`
-  // rather than reordering them.
+  // Keyed by schema position — the same index the row join falls back to, and
+  // the one `updateLineText` addresses a line by. Stable for the page's
+  // lifetime even though `schemaLines` is now local state: an inline edit
+  // rewrites one line's text in place and never reorders, adds, or removes, so
+  // a switched-off line can't silently change identity under the user mid-edit.
   const [disabledIndexes, setDisabledIndexes] = useState<Set<number>>(
     () => new Set(),
   );
 
   const groups = useMemo<NutritionDetailGroup[]>(() => {
-    const rowsByPosition = new Map(rows.map((row) => [row.position, row]));
-    return groupIngredientsWithIndex(schemaIngredients).map(
+    const rowIndex = indexRowsForLines(rows);
+    return groupIngredientsWithIndex(schemaLines).map(
       ({ heading, items }) => {
         const lines = items.map(({ ingredient: schemaIngredient, index }) => {
           const text = getIngredientText(schemaIngredient);
-          const row = rowsByPosition.get(index) ?? null;
-          // A stale line (no row, or text edited since normalization) shows no
-          // match; lineComputationForSchema returns the matching "stale"
-          // exclusion for it.
-          const isStale = !row || row.raw_text !== text;
-          const ingredient =
-            !isStale && row?.ingredient_id
-              ? (ingredientsById.get(row.ingredient_id) ?? null)
-              : null;
+          const resolved = resolveLineRow(schemaIngredient, index, rowIndex);
+          const row = resolved.row;
+          // Resolve the catalog row purely from ingredient_id, the same join
+          // computeRecipeNutrition does. Staleness deliberately does NOT gate
+          // this: lineComputationForSchema re-derives it and returns the
+          // "stale" exclusion before ever reading `ingredient`, so totals are
+          // unaffected either way — but the association is a fact about the
+          // row regardless of whether its text has moved on.
+          //
+          // Gating it here meant a manual re-match on an edited line rendered
+          // as "(unknown ingredient)" and stayed that way: the association
+          // PATCH only moves ingredient_id, never raw_text, so the line is
+          // still stale when the picked row comes back, and nothing short of
+          // a reload could clear it.
+          const ingredient = row?.ingredient_id
+            ? (ingredientsById.get(row.ingredient_id) ?? null)
+            : null;
           return {
             index,
             text,
             row,
             ingredient,
-            computation: lineComputationForSchema(text, row, ingredient),
+            computation: lineComputationForSchema(text, resolved, ingredient),
             enabled: !disabledIndexes.has(index),
           };
         });
@@ -121,7 +140,7 @@ export function useNutritionDetail(
         };
       },
     );
-  }, [rows, ingredientsById, schemaIngredients, disabledIndexes]);
+  }, [rows, ingredientsById, schemaLines, disabledIndexes]);
 
   const lines = useMemo(() => groups.flatMap((g) => g.lines), [groups]);
   const enabledLines = useMemo(() => lines.filter((l) => l.enabled), [lines]);
@@ -208,12 +227,12 @@ export function useNutritionDetail(
     }
   }
 
-  // Mint a catalog row from a user-picked USDA food, then associate the line
-  // with it. Canonical name = the line's PARSED name (recipe language, e.g.
-  // "gochujang"), per the normalization convention — the USDA description
-  // lands as an alias server-side. Re-picking a different food for a line
-  // whose name is already cataloged forks a NEW row (named by the USDA
-  // description), so this association lands on whatever row the API returns.
+  // Resolve a user-picked USDA food to its catalog row, then associate the
+  // line with it. The row is named by the USDA description; this line's parsed
+  // name rides along as an alias server-side. One USDA food is one catalog row,
+  // so picking a food someone already imported reuses it rather than creating a
+  // rival — and the association call below is what teaches that row this
+  // recipe's wording.
   async function importUsda(rowId: string, food: UsdaSearchFood) {
     const row = rows.find((r) => r.id === rowId);
     if (!row) return;
@@ -241,6 +260,28 @@ export function useNutritionDetail(
       );
     } finally {
       setSavingRowId(null);
+    }
+  }
+
+  // Save an edited line text into the recipe schema. Non-optimistic like the
+  // other mutations: await the PATCH, then swap in the server's line array AND
+  // its re-parsed rows.
+  //
+  // Both halves, together. A reword doesn't re-match — the line keeps the
+  // ingredient it was curated onto — so the edited line must keep contributing
+  // to the totals right through the edit. Taking the new text without the new
+  // rows is what used to make it look like the match had been thrown away.
+  async function updateLineText(index: number, text: string): Promise<void> {
+    setSavingLineIndex(index);
+    setError(null);
+    try {
+      const updated = await updateRecipeIngredientLine(recipeId, index, text);
+      setSchemaLines(updated.recipeIngredient);
+      setRows(updated.rows);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to update line");
+    } finally {
+      setSavingLineIndex(null);
     }
   }
 
@@ -282,9 +323,11 @@ export function useNutritionDetail(
     hasStaleLines,
     disabledCount,
     savingRowId,
+    savingLineIndex,
     error,
     selectIngredient,
     importUsda,
+    updateLineText,
     estimateGrams,
     setGrams,
     toggleLine,
