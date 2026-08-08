@@ -1,3 +1,4 @@
+import { NUTRITION_FIELDS, type NutritionField } from "@/lib/nutritionFields";
 import type { IngredientNutrition } from "@/types/ingredient";
 
 // Catalog nutrition is stored on a fixed per-100 g basis (USDA analytical
@@ -27,20 +28,29 @@ export function nutritionLabel(col: NutritionColumn): string {
   return `${col.name} (${col.unit})`;
 }
 
-export const NUTRITION_COLUMNS: NutritionColumn[] = [
-  { key: "calories_kcal", name: "Calories", unit: "kcal" },
-  { key: "protein_g", name: "Protein", unit: "g" },
-  { key: "fat_g", name: "Fat", unit: "g" },
-  { key: "saturated_fat_g", name: "Saturated fat", unit: "g" },
-  { key: "carbs_g", name: "Carbs", unit: "g" },
-  { key: "fiber_g", name: "Fiber", unit: "g" },
-  { key: "sugars_g", name: "Sugars", unit: "g" },
-  { key: "sodium_mg", name: "Sodium", unit: "mg" },
-  { key: "cholesterol_mg", name: "Cholesterol", unit: "mg" },
-  { key: "calcium_mg", name: "Calcium", unit: "mg" },
-  { key: "iron_mg", name: "Iron", unit: "mg" },
-  { key: "potassium_mg", name: "Potassium", unit: "mg" },
-];
+// Labels only — which nutrients exist and in what order comes from
+// NUTRITION_FIELDS, so this table and the MCP tool prose can't disagree about
+// the catalog. `satisfies Record<NutritionField, …>` is exhaustive in both
+// directions: a nutrient with no label and a label for no nutrient are both
+// compile errors.
+const NUTRITION_LABELS = {
+  calories_kcal: { name: "Calories", unit: "kcal" },
+  protein_g: { name: "Protein", unit: "g" },
+  fat_g: { name: "Fat", unit: "g" },
+  saturated_fat_g: { name: "Saturated fat", unit: "g" },
+  carbs_g: { name: "Carbs", unit: "g" },
+  fiber_g: { name: "Fiber", unit: "g" },
+  sugars_g: { name: "Sugars", unit: "g" },
+  sodium_mg: { name: "Sodium", unit: "mg" },
+  cholesterol_mg: { name: "Cholesterol", unit: "mg" },
+  calcium_mg: { name: "Calcium", unit: "mg" },
+  iron_mg: { name: "Iron", unit: "mg" },
+  potassium_mg: { name: "Potassium", unit: "mg" },
+} satisfies Record<NutritionField, Omit<NutritionColumn, "key">>;
+
+export const NUTRITION_COLUMNS: NutritionColumn[] = NUTRITION_FIELDS.map(
+  (key) => ({ key, ...NUTRITION_LABELS[key] }),
+);
 
 // The subset shown as always-visible columns in the manager table (the rest
 // live in the expandable detail row). Ordered as the user reads a label:
