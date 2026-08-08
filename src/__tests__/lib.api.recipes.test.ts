@@ -1,6 +1,10 @@
 // @vitest-environment node
 import { afterEach, describe, it, expect, vi } from "vitest";
-import { uploadRecipeImageFile } from "@/lib/api/recipes";
+import {
+  normalizeRecipe,
+  updateRecipeIngredientLine,
+  uploadRecipeImageFile,
+} from "@/lib/api/recipes";
 
 function mockFetchOnce(status: number, body: object) {
   const mock = vi.fn().mockResolvedValue(
@@ -60,5 +64,61 @@ describe("uploadRecipeImageFile", () => {
     await expect(uploadRecipeImageFile("recipe-1", file)).rejects.toThrow(
       /no image URL/,
     );
+  });
+});
+
+describe("updateRecipeIngredientLine", () => {
+  it("PATCHes the line and returns both the lines and the re-parsed rows", async () => {
+    const rows = [{ id: "ri-1", line_id: "L1", raw_text: "6 g magic dust" }];
+    const mock = mockFetchOnce(200, {
+      recipeIngredient: [{ name: "6 g magic dust", id: "L1" }],
+      rows,
+    });
+
+    const out = await updateRecipeIngredientLine("recipe-1", 1, "6 g magic dust");
+
+    expect(out.recipeIngredient).toEqual([{ name: "6 g magic dust", id: "L1" }]);
+    expect(out.rows).toEqual(rows);
+    const [requestUrl, init] = mock.mock.calls[0];
+    expect(requestUrl).toBe("/api/recipes/recipe-1/ingredients");
+    expect(init.method).toBe("PATCH");
+    expect(JSON.parse(init.body)).toEqual({ index: 1, text: "6 g magic dust" });
+  });
+
+  // A 200 without the rows would leave the caller holding its pre-edit copy —
+  // the edited line would render as though its match had been dropped. Fail at
+  // the boundary rather than let that reach state.
+  it("throws when a 200 response omits the rows", async () => {
+    mockFetchOnce(200, { recipeIngredient: ["6 g magic dust"] });
+
+    await expect(
+      updateRecipeIngredientLine("recipe-1", 1, "6 g magic dust"),
+    ).rejects.toThrow(/no lines/);
+  });
+
+  it("throws when the response is not ok", async () => {
+    mockFetchOnce(500, { error: "boom" });
+
+    await expect(
+      updateRecipeIngredientLine("recipe-1", 1, "6 g magic dust"),
+    ).rejects.toThrow(/500/);
+  });
+});
+
+describe("normalizeRecipe", () => {
+  it("POSTs to the normalize route", async () => {
+    const mock = mockFetchOnce(200, { status: "queued" });
+
+    await normalizeRecipe("recipe-1");
+
+    const [requestUrl, init] = mock.mock.calls[0];
+    expect(requestUrl).toBe("/api/recipes/recipe-1/normalize");
+    expect(init.method).toBe("POST");
+  });
+
+  it("throws when the response is not ok", async () => {
+    mockFetchOnce(500, { error: "boom" });
+
+    await expect(normalizeRecipe("recipe-1")).rejects.toThrow(/500/);
   });
 });
