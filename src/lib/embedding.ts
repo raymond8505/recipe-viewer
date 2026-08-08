@@ -1,4 +1,5 @@
 import { env } from "@/env";
+import { fetchWithRetry } from "./retry";
 
 // Google Gemini embedding model. We store the raw vector as returned by the API
 // (no normalization). Vectors are queried with pgvector cosine distance (<=>),
@@ -23,7 +24,7 @@ interface EmbedContentResponse {
  */
 export async function generateEmbedding(text: string): Promise<number[] | null> {
   try {
-    const res = await fetch(ENDPOINT, {
+    const res = await fetchWithRetry(ENDPOINT, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
