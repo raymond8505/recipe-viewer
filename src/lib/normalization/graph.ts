@@ -12,13 +12,21 @@ import {
   type RecipeIngredientInsert,
 } from "@/lib/ingredients";
 import { importUsdaIngredient } from "@/lib/ingredientImport";
+import { lineId } from "@/lib/ingredientLines";
+import {
+  accreteAliasesFromLines,
+  ingredientQueryText,
+} from "@/lib/ingredientAliases";
 import { explicitWeightGrams, gramsForLine } from "@/lib/nutritionMath";
 import { getRecipeById } from "@/lib/recipes";
 import { parseIngredient, unitKeyForAlias } from "@/lib/units";
 import { UsdaError, searchFoods } from "@/lib/usda";
-import type { IngredientMatch, MatchStatus } from "@/types/ingredient";
+import type { GramsSource, IngredientMatch, MatchStatus } from "@/types/ingredient";
 import { estimateLineGrams } from "./estimateGrams";
 import { ingredientFingerprint } from "./fingerprint";
+import { parseLineDeterministic, type ParsedLine } from "./parseLine";
+
+export type { ParsedLine };
 
 // The ingredient-normalization workflow: parse the recipe's ingredient lines
 // (Flash-Lite structured output, deterministic parseIngredient fallback),
@@ -41,16 +49,6 @@ import { ingredientFingerprint } from "./fingerprint";
 export const SIM_AUTO_ACCEPT = 0.85;
 export const SIM_NOVEL_FLOOR = 0.6;
 
-export interface ParsedLine {
-  position: number;
-  rawText: string;
-  quantity: number | null;
-  // Canonical UNIT_DEFS key or null (count/unitless).
-  unit: string | null;
-  name: string;
-  note: string | null;
-}
-
 export interface LineMatch {
   position: number;
   // "ambiguous" is graph-internal (persist writes it as "unmatched"): it means
@@ -61,16 +59,29 @@ export interface LineMatch {
   candidates?: IngredientMatch[];
 }
 
+// A resolved gram weight plus where it came from. Kept together because the
+// two are only meaningful as a pair — grams_source is non-null exactly when
+// estimated_grams is.
+interface LineEstimate {
+  grams: number;
+  source: GramsSource;
+}
+
 const NormalizationState = Annotation.Root({
   recipeId: Annotation<string>,
   fingerprint: Annotation<string>,
   rawLines: Annotation<string[]>,
+  // Stable schema-line id per position (null for legacy lines that predate
+  // them). This is what a persisted row keys on, so it — not raw_text, not
+  // position — decides which prior row a line inherits from.
+  lineIds: Annotation<Array<string | null>>,
   parsed: Annotation<ParsedLine[]>,
   matches: Annotation<LineMatch[]>,
   // position → resolved gram weight for lines the density path can't convert
   // (see the estimate node, which always runs before persist). Persisted as
-  // estimated_grams / grams_source.
-  estimates: Annotation<Record<number, number>>,
+  // estimated_grams / grams_source — the source travels WITH the value so a
+  // carried user-typed weight isn't written back as an LLM estimate.
+  estimates: Annotation<Record<number, LineEstimate>>,
   errors: Annotation<string[]>({
     reducer: (a, b) => a.concat(b),
     default: () => [],
@@ -120,35 +131,6 @@ function parsePrompt(lines: string[]): string {
   ].join("\n");
 }
 
-// Deterministic fallback: src/lib/units.ts parseIngredient handles the
-// amount + unit prefix; whatever remains is the name (it can't split out
-// preparation notes — that's the LLM's added value).
-function parseLineDeterministic(rawText: string, position: number): ParsedLine {
-  const parsed = parseIngredient(rawText);
-  if (!parsed) {
-    return {
-      position,
-      rawText,
-      quantity: null,
-      unit: null,
-      name: rawText.trim().toLowerCase(),
-      note: null,
-    };
-  }
-  const quantity =
-    parsed.amount.kind === "single"
-      ? parsed.amount.value
-      : (parsed.amount.min + parsed.amount.max) / 2;
-  return {
-    position,
-    rawText,
-    quantity,
-    unit: parsed.unit,
-    name: (parsed.rest.trim() || rawText.trim()).toLowerCase(),
-    note: null,
-  };
-}
-
 async function parseLines(state: State): Promise<Partial<State>> {
   const llm = await generateStructured<LlmParsedLine[]>({
     prompt: parsePrompt(state.rawLines),
@@ -189,10 +171,13 @@ async function embedAndMatch(state: State): Promise<Partial<State>> {
   const errors: string[] = [];
   const uniqueNames = [...new Set(state.parsed.map((line) => line.name))];
 
+  // ingredientQueryText, not the bare name: catalog vectors are built from
+  // lowercased name + aliases, and both sides of a cosine comparison have to
+  // fold case the same way or the normalization makes matching worse.
   const embeddings = new Map<string, number[] | null>();
   await Promise.all(
     uniqueNames.map(async (name) => {
-      embeddings.set(name, await generateEmbedding(name));
+      embeddings.set(name, await generateEmbedding(ingredientQueryText(name)));
     }),
   );
 
@@ -333,11 +318,12 @@ function pickPrompt(name: string, foods: Array<{ fdcId: number; description: str
   ].join("\n");
 }
 
-// Create one catalog ingredient from USDA. Returns the new (or, after losing a
-// unique-name race, existing) ingredient id — or null when USDA has nothing
-// usable (the line stays unmatched). The food → catalog-row conversion lives
-// in importUsdaIngredient (shared with the NutritionDetail manual import);
-// this wrapper owns the automated parts: analytical-only search + LLM pick.
+// Resolve one catalog ingredient from USDA. Returns the new — or, when this
+// food is already cataloged, existing — ingredient id, or null when USDA has
+// nothing usable (the line stays unmatched). The food → catalog-row conversion
+// lives in importUsdaIngredient (shared with the NutritionDetail manual
+// import); this wrapper owns the automated parts: analytical-only search +
+// LLM pick.
 async function createFromUsda(name: string, errors: string[]): Promise<string | null> {
   const foods = await searchFoods(name);
   if (foods.length === 0) {
@@ -428,11 +414,33 @@ async function fetchNovel(state: State): Promise<Partial<State>> {
 // hit the LLM. Best-effort: a failed estimate simply leaves the line excluded.
 async function estimate(state: State): Promise<Partial<State>> {
   const existing = await getRecipeIngredients(state.recipeId);
-  const carriedByRawText = new Map(
-    existing
-      .filter((row) => row.estimated_grams != null)
-      .map((row) => [row.raw_text, row.estimated_grams!]),
+  const priorByLineId = new Map(
+    existing.filter((row) => row.line_id != null).map((row) => [row.line_id!, row]),
   );
+  const priorByPosition = new Map(
+    existing.filter((row) => row.line_id == null).map((row) => [row.position, row]),
+  );
+
+  // Carry a stored weight forward when the AMOUNT it was measured against
+  // hasn't moved. That condition used to be approximated by "raw_text is
+  // byte-identical", which was both too strict (a typo fix dropped a perfectly
+  // good weight) and beside the point. quantity+unit is the thing that
+  // actually invalidates a gram weight — the same rule syncLines applies.
+  //
+  // The SOURCE travels with the value: a user-typed weight and an LLM guess
+  // are not interchangeable (the UI marks one "est."), so re-labelling a
+  // carried value would quietly destroy the distinction. `?? "llm"` only
+  // covers legacy rows — grams_source is non-null exactly when
+  // estimated_grams is.
+  const carriedFor = (line: ParsedLine): LineEstimate | undefined => {
+    const id = state.lineIds[line.position] ?? null;
+    const prior =
+      (id != null ? priorByLineId.get(id) : undefined) ??
+      priorByPosition.get(line.position);
+    if (!prior || prior.estimated_grams == null) return undefined;
+    if (prior.quantity !== line.quantity || prior.unit !== line.unit) return undefined;
+    return { grams: prior.estimated_grams, source: prior.grams_source ?? "llm" };
+  };
 
   const matchByPosition = new Map(state.matches.map((m) => [m.position, m]));
   const matchedIds = [
@@ -447,10 +455,10 @@ async function estimate(state: State): Promise<Partial<State>> {
     ingredients.map((ing) => [ing.id, ing.density_g_per_ml]),
   );
 
-  const estimates: Record<number, number> = {};
+  const estimates: Record<number, LineEstimate> = {};
   await Promise.all(
     state.parsed.map(async (line) => {
-      const carried = carriedByRawText.get(line.rawText);
+      const carried = carriedFor(line);
       if (carried != null) {
         estimates[line.position] = carried;
         return;
@@ -467,7 +475,7 @@ async function estimate(state: State): Promise<Partial<State>> {
         quantity: line.quantity,
         unit: line.unit,
       });
-      if (grams != null) estimates[line.position] = grams;
+      if (grams != null) estimates[line.position] = { grams, source: "llm" };
     }),
   );
 
@@ -487,57 +495,84 @@ async function persist(state: State): Promise<Partial<State>> {
     return {};
   }
 
-  // Manual associations are human decisions — they beat whatever the
-  // automated matcher concluded this run. Carried forward by raw_text (the
-  // stable key across the delete-then-insert replace) so re-normalizing to
-  // fill in unmatched lines never wipes curation on unchanged ones.
+  // Normalization GUESSES an association for a line that hasn't got one. A
+  // line that already has one — however it got there — is not a question this
+  // run is entitled to re-answer: the user may have picked it deliberately,
+  // and there is no signal here that would justify overruling them. So an
+  // existing association always survives, and the matcher's opinion is used
+  // only to fill gaps.
+  //
+  // Inheritance is by line_id (db/migrations/0013). It used to be by raw_text,
+  // which meant fixing a typo silently orphaned the row and threw the curation
+  // away. Rows written before 0013 have no line_id, so they fall back to
+  // position — the old behaviour, for recipes not yet backfilled.
   const existingRows = await getRecipeIngredients(state.recipeId);
-  const manualIdByRawText = new Map(
+  const priorByLineId = new Map(
     existingRows
-      .filter((row) => row.match_status === "manual" && row.ingredient_id != null)
-      .map((row) => [row.raw_text, row.ingredient_id!]),
+      .filter((row) => row.line_id != null)
+      .map((row) => [row.line_id!, row]),
+  );
+  const priorByPosition = new Map(
+    existingRows
+      .filter((row) => row.line_id == null)
+      .map((row) => [row.position, row]),
   );
 
   const matchByPosition = new Map(state.matches.map((m) => [m.position, m]));
   const rows: RecipeIngredientInsert[] = state.parsed.map((line) => {
-    // The estimate node carries prior values forward by raw_text and only adds
-    // new ones for grams-less lines, so this covers both.
-    const estimatedGrams = state.estimates[line.position] ?? null;
-    const manualId = manualIdByRawText.get(line.rawText);
-    if (manualId) {
-      return {
-        ingredient_id: manualId,
-        raw_text: line.rawText,
-        quantity: line.quantity,
-        unit: line.unit,
-        name_text: line.name,
-        note: line.note,
-        match_status: "manual" as MatchStatus,
-        confidence: null,
-        position: line.position,
-        estimated_grams: estimatedGrams,
-        grams_source: estimatedGrams != null ? "llm" : null,
-      };
-    }
-    const match = matchByPosition.get(line.position);
-    const status: MatchStatus =
-      !match || match.status === "ambiguous" ? "unmatched" : match.status;
-    return {
-      ingredient_id: match?.ingredientId ?? null,
+    const id = state.lineIds[line.position] ?? null;
+    const prior =
+      (id != null ? priorByLineId.get(id) : undefined) ??
+      priorByPosition.get(line.position);
+
+    // The estimate node carries prior values forward and only adds new ones
+    // for grams-less lines, so this covers both. Its `source` rides along:
+    // writing a flat "llm" here would re-label every carried user-entered
+    // weight as a machine guess.
+    const estimate = state.estimates[line.position] ?? null;
+    const parseFields = {
+      line_id: id,
       raw_text: line.rawText,
       quantity: line.quantity,
       unit: line.unit,
       name_text: line.name,
       note: line.note,
+      position: line.position,
+      estimated_grams: estimate?.grams ?? null,
+      grams_source: estimate?.source ?? null,
+    };
+
+    if (prior?.ingredient_id != null) {
+      return {
+        ...parseFields,
+        ingredient_id: prior.ingredient_id,
+        match_status: prior.match_status,
+        confidence: prior.confidence,
+      };
+    }
+
+    const match = matchByPosition.get(line.position);
+    const status: MatchStatus =
+      !match || match.status === "ambiguous" ? "unmatched" : match.status;
+    return {
+      ...parseFields,
+      ingredient_id: match?.ingredientId ?? null,
       match_status: status,
       confidence: match?.confidence ?? null,
-      position: line.position,
-      estimated_grams: estimatedGrams,
-      grams_source: estimatedGrams != null ? "llm" : null,
     };
   });
 
   await replaceRecipeIngredients(state.recipeId, rows);
+
+  // Teach the catalog the recipe language these lines actually used. This is
+  // the single accretion point for the whole workflow — it covers auto-accepted
+  // matches, LLM adjudications, novel rows just minted from USDA, and manual
+  // associations carried forward — which is why fetchNovel has no hook of its
+  // own. Batched per ingredient, and after the rows land: the catalog should
+  // only learn from associations that were actually persisted (in particular,
+  // never from a run the supersede guard above rejected).
+  await accreteAliasesFromLines(rows);
+
   await setRecipeNormalization(state.recipeId, {
     status: "completed",
     error: state.errors.length > 0 ? state.errors.join("; ") : null,
@@ -587,7 +622,9 @@ export async function runNormalization(recipeId: string): Promise<void> {
     if (!recipe) return; // deleted between schedule and run
 
     const schema = recipe.metadata.schema;
-    const rawLines = (schema.recipeIngredient ?? []).map(getIngredientText);
+    const schemaLines = schema.recipeIngredient ?? [];
+    const rawLines = schemaLines.map(getIngredientText);
+    const lineIds = schemaLines.map(lineId);
     const fingerprint = ingredientFingerprint(schema);
 
     if (rawLines.length === 0) {
@@ -602,7 +639,7 @@ export async function runNormalization(recipeId: string): Promise<void> {
     }
 
     await setRecipeNormalization(recipeId, { status: "running", error: null });
-    await graph.invoke({ recipeId, fingerprint, rawLines });
+    await graph.invoke({ recipeId, fingerprint, rawLines, lineIds });
   } catch (err) {
     console.error(`Normalization failed for ${recipeId}:`, err);
     try {

@@ -1,63 +1,65 @@
 import { generateEmbedding } from "./embedding";
+import { ingredientEmbeddingText } from "./ingredientAliases";
 import {
   IngredientRepoError,
   createIngredientRow,
   getIngredientByFdcId,
-  getIngredients,
 } from "./ingredients";
 import { getFoodDetail, deriveDensity, extractNutrition } from "./usda";
 import { estimateDensity } from "./normalization/estimateDensity";
 import type { IngredientRow } from "@/types/ingredient";
 
-// How importUsdaIngredient resolves a lower(name) collision with an existing
-// catalog row:
-// - "reuse" (default, automated normalization): a concurrent create won the
-//   unique index — take theirs, never clobber a possibly-curated row from an
-//   automated run.
-// - "fork" (manual NutritionDetail import): the user deliberately picked THIS
-//   USDA food for one recipe line. If the same-name row is already that food
-//   (same fdc_id, anywhere in the catalog) it's reused; otherwise a NEW row is
-//   created, named by the USDA description with the recipe-language name as an
-//   alias. The same-name row is never updated in place: it may be referenced
-//   by other recipes' lines (overwriting would silently swap their nutrition),
-//   and a re-pick is usually a correction — both foods must remain available.
-export type ImportConflictMode = "reuse" | "fork";
-
-// Create one catalog ingredient from a chosen USDA food — shared by the
-// normalization workflow (LLM picks the fdcId) and the NutritionDetail manual
-// import (the user picks it), so the two paths can never diverge on how a
-// USDA food becomes a catalog row.
+// Find — or create — the one catalog ingredient for a USDA food. Shared by the
+// normalization workflow (an LLM picks the fdcId) and the NutritionDetail
+// manual import (the user picks it), so the two paths can never diverge on how
+// a USDA food becomes a catalog row.
 //
-// The catalog's canonical name is the RECIPE-language name ("gochujang"), not
-// USDA's description — future matching embeds recipe language, so the catalog
-// should speak it. The USDA description is kept as an alias for provenance.
-// (A "fork" collision row inverts this: description as name, recipe-language
-// name as alias — the recipe-language name is already taken.)
+// `fdcId` is the identity: one USDA food is one catalog row, forever
+// (db/migrations/0011). The canonical name is USDA's `description`, and
+// `nameText` — the recipe line's parsed, quantity-stripped name — rides along
+// as an alias. That direction matters: naming rows in recipe language made the
+// SAME food reachable under many names, so "cilantro", "coriander" and
+// "reserved cilantro and mint" each minted their own duplicate of fdc 169997.
+// Recipe language belongs in `aliases`, which match_ingredients (0007) and
+// search_ingredients_keyword (0008) already score best-of over.
+//
+// Idempotent: a second call for the same fdcId returns the existing row without
+// spending USDA budget (1,000 req/hr) or minting a duplicate.
+//
+// This function performs no alias MUTATION — it only seeds `aliases` in the
+// initial insert. Both callers re-point a recipe line immediately afterwards,
+// and that path accretes; see src/__tests__/ingredient-alias-call-sites.test.ts.
 //
 // Returns null when no embedding could be generated (the column is NOT NULL,
-// db/migrations/0006) — callers surface that as a retryable condition. A
-// lower(name) collision resolves per `onConflict` (above); UsdaError and
-// unresolvable conflicts (no matching row found) propagate.
+// db/migrations/0006) — callers surface that as retryable. UsdaError propagates.
 export async function importUsdaIngredient(
-  name: string,
+  nameText: string,
   fdcId: number,
-  opts: { onConflict?: ImportConflictMode } = {},
 ): Promise<IngredientRow | null> {
+  // Before the USDA round trip: this food may already be cataloged under a
+  // name nobody would have guessed from `nameText`.
+  const existing = await getIngredientByFdcId(fdcId);
+  if (existing) return existing;
+
   const detail = await getFoodDetail(fdcId);
 
-  const embedding = await generateEmbedding(name);
+  const aliases = sameFold(nameText, detail.description) ? [] : [nameText];
+
+  const embedding = await generateEmbedding(
+    ingredientEmbeddingText(detail.description, aliases),
+  );
   if (!embedding) return null;
 
   // USDA portions first (real measured data), LLM estimate second — the
   // abridged detail format never carries foodPortions, so without the
   // estimate every import would land density-less and push volume lines onto
   // per-line gram estimates. Best-effort: a declined estimate leaves null.
+  // The estimator gets `nameText` because its prompt reasons in recipe
+  // language ("chopped fresh herbs ~0.1"), not USDA's.
   const density =
     deriveDensity(detail.foodPortions) ??
-    (await estimateDensity({ name, usdaDescription: detail.description }));
+    (await estimateDensity({ name: nameText, usdaDescription: detail.description }));
 
-  // The USDA-derived values, shared by the create and fork paths so a
-  // brand-new row and a forked collision row carry identical data.
   const usdaFields = {
     fdc_id: detail.fdcId,
     fdc_data_type: detail.dataType,
@@ -69,8 +71,8 @@ export async function importUsdaIngredient(
 
   try {
     return await createIngredientRow({
-      name,
-      aliases: [detail.description],
+      name: detail.description,
+      aliases,
       ...usdaFields,
       embedding,
     });
@@ -79,51 +81,26 @@ export async function importUsdaIngredient(
       throw err;
     }
 
-    if (opts.onConflict === "fork") {
-      // The picked food may already be in the catalog under another name
-      // (including "the user re-picked the same food") — reuse that row
-      // instead of minting a duplicate for the same USDA record.
-      const sameFood = await getIngredientByFdcId(detail.fdcId);
-      if (sameFood) return sameFood;
+    // Two indexes can raise this. Check the fdc_id one first: a concurrent
+    // import won the race for this exact food, so take the winner's row rather
+    // than minting a rival for the same USDA record.
+    const winner = await getIngredientByFdcId(detail.fdcId);
+    if (winner) return winner;
 
-      // Different food behind the taken name → fork a new row named by the
-      // USDA description; the recipe-language name rides along as an alias so
-      // keyword/semantic matching can still surface it. The embedding embeds
-      // the row's actual name, same rule as the primary path.
-      const forkEmbedding = await generateEmbedding(detail.description);
-      if (!forkEmbedding) return null;
-
-      // The description itself can collide (e.g. the same description across
-      // USDA data types) — one retry with the fdcId spelled out; a collision
-      // beyond that propagates.
-      for (const forkName of [
-        detail.description,
-        `${detail.description} (USDA ${detail.fdcId})`,
-      ]) {
-        try {
-          return await createIngredientRow({
-            name: forkName,
-            aliases: [name],
-            ...usdaFields,
-            embedding: forkEmbedding,
-          });
-        } catch (forkErr) {
-          if (
-            !(forkErr instanceof IngredientRepoError) ||
-            forkErr.kind !== "conflict"
-          ) {
-            throw forkErr;
-          }
-        }
-      }
-      throw err;
-    }
-
-    const { data } = await getIngredients({ query: name, limit: 10 });
-    const existing = data.find(
-      (i) => i.name.toLowerCase() === name.toLowerCase(),
-    );
-    if (existing) return existing;
-    throw err;
+    // Otherwise a DIFFERENT food already owns lower(description) — FDC does
+    // reuse a description across data types. Disambiguate with the record id
+    // rather than failing the import outright, since the user has no recourse
+    // from a 500. The embedding is deliberately reused: the suffix is
+    // bookkeeping noise, so the description-derived vector is the better one.
+    return await createIngredientRow({
+      name: `${detail.description} (FDC ${detail.fdcId})`,
+      aliases,
+      ...usdaFields,
+      embedding,
+    });
   }
+}
+
+function sameFold(a: string, b: string): boolean {
+  return a.trim().toLowerCase() === b.trim().toLowerCase();
 }

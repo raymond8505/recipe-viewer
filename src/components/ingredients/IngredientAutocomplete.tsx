@@ -108,6 +108,16 @@ export default function IngredientAutocomplete({
     onOpenChange?.(false);
   };
 
+  // Focus after the commit that mounts the input — a ref read in the click
+  // handler is still null. Deliberately an effect, not requestAnimationFrame:
+  // rAF lands a frame later, which under load can fire mid-typing and
+  // select-then-overwrite characters already entered.
+  useEffect(() => {
+    if (!open) return;
+    inputRef.current?.focus();
+    inputRef.current?.select();
+  }, [open]);
+
   useEffect(() => {
     if (!open) return;
     const handler = (e: PointerEvent) => {
@@ -124,19 +134,9 @@ export default function IngredientAutocomplete({
     setOpen(true);
     onOpenChange?.(true);
     // Pre-fill with the current name so a small correction is one keystroke
-    // away; selecting the text keeps "type a new name" equally cheap.
+    // away; the open effect selects it, keeping "type a new name" as cheap.
     setQuery(value?.name ?? "");
   };
-
-  // Focus + select must land in the same commit that mounts the input.
-  // Deferring through a timer (requestAnimationFrame) let fast typing race
-  // it: the late select() highlighted the first typed character and the next
-  // keystroke replaced it.
-  useEffect(() => {
-    if (!open) return;
-    inputRef.current?.focus();
-    inputRef.current?.select();
-  }, [open]);
 
   const select = (option: AutocompleteOption | undefined) => {
     if (!option) return;

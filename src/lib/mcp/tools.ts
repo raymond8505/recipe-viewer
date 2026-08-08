@@ -22,6 +22,9 @@ import {
   scalePortionNutritionToPer100g,
 } from "@/lib/nutritionMath";
 import { generateEmbedding } from "@/lib/embedding";
+import { exhaustiveKeys } from "@/lib/exhaustive";
+import { ingredientEmbeddingText, ingredientQueryText } from "@/lib/ingredientAliases";
+import { ARCHIVED_RECIPE_STATUS } from "@/lib/schemas/recipe";
 import { RECIPE_TOKEN_TTL_SECONDS, signRecipeToken } from "./recipeToken";
 import { env } from "@/env";
 import {
@@ -60,6 +63,15 @@ export interface RecipeSearchResultItem {
   description?: string;
 }
 
+// The trimmed shape rendered into search_recipes' tool description, so the
+// documented keys can't drift from the interface above.
+export const RECIPE_SEARCH_RESULT_FIELDS = exhaustiveKeys<RecipeSearchResultItem>()([
+  "id",
+  "url",
+  "name",
+  "description",
+]);
+
 export async function searchRecipes(
   args: RecipeSearchInput,
 ): Promise<{ data: RecipeSearchResultItem[]; count: number }> {
@@ -91,7 +103,10 @@ export async function searchRecipes(
 export async function searchIngredients(
   args: IngredientSearchInput,
 ): Promise<{ data: IngredientMatch[] }> {
-  const embedding = await generateEmbedding(args.query);
+  // ingredientQueryText, not the raw query: catalog vectors are built from
+  // lowercased name + aliases, so the query side has to fold case identically
+  // or the normalization works against the match instead of for it.
+  const embedding = await generateEmbedding(ingredientQueryText(args.query));
   if (!embedding) {
     throw new ToolError(
       "embedding_unavailable",
@@ -111,8 +126,12 @@ export async function searchIngredients(
 
 // Ingredient CRUD — mirrors the session-gated HTTP routes (/api/ingredients,
 // /api/ingredients/[id]) so OAuth-authenticated agents can maintain the
-// catalog. The embedding is never client-settable: it is derived from `name`
-// here, exactly like those routes do.
+// catalog. The embedding is never client-settable: it is derived here from
+// name + aliases via ingredientEmbeddingText, exactly like those routes do.
+// Deriving it from the bare name instead would still compile and still write a
+// row — it would just be embedded differently from every other write path
+// (manager UI, USDA import, normalization accretion), so agent-created rows
+// would match worse than identical rows made anywhere else.
 //
 // Nutrition arrives AS MEASURED for the accompanying `nutrition_portion`
 // (agents think in "1 tbsp = 14 g", not storage units) and is scaled to the
@@ -132,7 +151,13 @@ export async function createIngredient(
   // The column is NOT NULL (db/migrations/0006) — an embedding-less row can't
   // exist (it would be invisible to matching), so a failed embedding is a
   // retryable error rather than a partial create.
-  const embedding = await generateEmbedding(args.name);
+  //
+  // A tool-supplied name is canonical as given (unlike a USDA import, which is
+  // named by the food's description), but the vector still spans name +
+  // aliases — any aliases passed here have to be in the embedded text.
+  const embedding = await generateEmbedding(
+    ingredientEmbeddingText(args.name, args.aliases ?? []),
+  );
   if (!embedding) {
     throw new ToolError(
       "embedding_unavailable",
@@ -168,11 +193,24 @@ export async function updateIngredient(
   if (fields.nutrition && portion) {
     patch.nutrition = scalePortionNutritionToPer100g(fields.nutrition, portion.gramWeight);
   }
-  // The embedding IS the name (that's what matching searches), so a rename
-  // must re-embed. Best-effort: on null the repo keeps the old vector, which
-  // still points at the previous name — re-saving the name retries.
-  if (fields.name !== undefined) {
-    patch.embedding = (await generateEmbedding(fields.name)) ?? undefined;
+  // The embedding spans name + aliases (that's what matching searches), so
+  // EITHER field moving invalidates it. A one-sided patch needs the other
+  // side's current value, hence the read. Best-effort: on null the repo keeps
+  // the old vector, which still describes the previous text — re-saving retries.
+  if (fields.name !== undefined || fields.aliases !== undefined) {
+    const current = await getIngredientById(id);
+    if (current) {
+      // null (embedding failed) → omit, so the repo keeps the old vector; the
+      // column is NOT NULL and can never be cleared. UpdateIngredientPatch's
+      // embedding is `number[] | undefined`, so coalesce null away.
+      patch.embedding =
+        (await generateEmbedding(
+          ingredientEmbeddingText(
+            fields.name ?? current.name,
+            fields.aliases ?? current.aliases,
+          ),
+        )) ?? undefined;
+    }
   }
 
   try {
@@ -302,10 +340,10 @@ export async function clearCookingNotes(args: RecipeIdInput): Promise<RecipeRow>
 
 export async function deleteRecipe(
   args: RecipeIdInput,
-): Promise<{ id: string; status: "archived" }> {
+): Promise<{ id: string; status: typeof ARCHIVED_RECIPE_STATUS }> {
   try {
     await archiveRecipe(args.id);
-    return { id: args.id, status: "archived" };
+    return { id: args.id, status: ARCHIVED_RECIPE_STATUS };
   } catch (err) {
     throw toToolError(err, "delete_failed");
   }
@@ -351,9 +389,13 @@ function toIngredientToolError(err: unknown, fallbackCode: string): ToolError {
   if (err instanceof IngredientRepoError) {
     if (err.kind === "not_found") return new ToolError("not_found", err.detail);
     if (err.kind === "conflict") {
+      // Two unique indexes raise this: lower(name), and fdc_id
+      // (db/migrations/0011). Naming only the first sends an agent into a
+      // rename loop against what is really an already-imported USDA record —
+      // so state both causes and the move that resolves either.
       return new ToolError(
         "conflict",
-        `${err.detail} — names are unique case-insensitively; search_ingredients first, then update_ingredient the existing row.`,
+        `${err.detail} — a row already exists with that name (unique case-insensitively) or that fdc_id. Do NOT retry with a varied name: search_ingredients to find the existing row, then update_ingredient it.`,
       );
     }
     return new ToolError(fallbackCode, err.detail);

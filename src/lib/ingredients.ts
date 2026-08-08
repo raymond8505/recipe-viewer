@@ -61,6 +61,7 @@ const INGREDIENT_COLUMNS = selectColumns<IngredientRow>()([
 const RECIPE_INGREDIENT_COLUMNS = selectColumns<RecipeIngredientRow>()([
   "id",
   "recipe_id",
+  "line_id",
   "ingredient_id",
   "raw_text",
   "quantity",
@@ -340,6 +341,65 @@ export async function searchIngredientsKeyword(
   return (data as IngredientKeywordMatch[]) ?? [];
 }
 
+// Result of an alias mutation RPC (db/migrations/0010). `changed` is the
+// caller's signal to spend a Gemini embedding call: the embedding encodes
+// name + aliases, so it only needs regenerating when the array actually moved.
+export interface AliasMutationResult {
+  id: string;
+  name: string;
+  aliases: string[];
+  changed: boolean;
+}
+
+// Atomically append aliases to a catalog ingredient, case-insensitively
+// deduped against both the canonical name and the existing array — but stored
+// with the CALLER'S casing (aliases are display data; the fold is only a
+// comparison). An RPC rather than a read-modify-write here because many recipe
+// lines resolve to one ingredient and normalization runs concurrently with the
+// manual re-point route: a read-modify-write would silently drop one append.
+//
+// Returns null when the ingredient no longer exists (deleted mid-flight) —
+// not an error. Throws ("update_failed") on RPC failure.
+export async function addIngredientAliases(
+  id: string,
+  aliases: string[],
+): Promise<AliasMutationResult | null> {
+  const supabase = getSupabaseAdminClient();
+
+  const { data, error } = await supabase.rpc("ingredient_add_aliases", {
+    p_id: id,
+    p_aliases: aliases,
+  });
+
+  if (error) {
+    throw new IngredientRepoError("update_failed", error.message);
+  }
+  const rows = (data as AliasMutationResult[]) ?? [];
+  return rows[0] ?? null;
+}
+
+// Drop one alias, whatever its stored casing. Unconditional by design: the
+// only caller is an explicit user re-point/un-link, which is a statement that
+// this recipe wording does not mean this ingredient. Same null/throw contract
+// as addIngredientAliases.
+export async function removeIngredientAlias(
+  id: string,
+  alias: string,
+): Promise<AliasMutationResult | null> {
+  const supabase = getSupabaseAdminClient();
+
+  const { data, error } = await supabase.rpc("ingredient_remove_alias", {
+    p_id: id,
+    p_alias: alias,
+  });
+
+  if (error) {
+    throw new IngredientRepoError("update_failed", error.message);
+  }
+  const rows = (data as AliasMutationResult[]) ?? [];
+  return rows[0] ?? null;
+}
+
 export async function getRecipeIngredients(
   recipeId: string,
 ): Promise<RecipeIngredientRow[]> {
@@ -492,15 +552,112 @@ export async function setRecipeIngredientGrams(
 
 export type RecipeIngredientInsert = Omit<RecipeIngredientRow, "id" | "recipe_id">;
 
-// Replace a recipe's parsed-ingredient rows wholesale (normalization runs are
-// idempotent per fingerprint). Delete-then-insert without a transaction is a
-// known PostgREST limitation — acceptable while writes come from a single
-// normalization run at a time; a SQL function is the upgrade path.
+// The parse-derived half of a row: everything that follows from the line's
+// TEXT. Deliberately excludes ingredient_id / match_status — re-reading a
+// reworded line must never disturb the association on it.
+//
+// `line_id` is the one non-parse field, and it is write-once: a legacy row
+// joined by position gets stamped with the id its line was just minted
+// (db/migrations/0013). Nothing re-points an already-stamped row.
+export type RecipeIngredientParsePatch = Partial<
+  Pick<
+    RecipeIngredientRow,
+    | "line_id"
+    | "raw_text"
+    | "quantity"
+    | "unit"
+    | "name_text"
+    | "position"
+    | "estimated_grams"
+    | "grams_source"
+  >
+>;
+
+/**
+ * Re-point rows' parse fields at edited line text, in ONE statement.
+ *
+ * The single statement is load-bearing, not an optimisation. Reordering two
+ * lines swaps their `position` values, and unique (recipe_id, position) is
+ * only INITIALLY DEFERRED (db/migrations/0014) — the check is skipped
+ * mid-statement but still runs at commit, and PostgREST gives each request
+ * exactly one transaction. Issued as separate updates, the first half of a
+ * swap would collide with the row that hasn't moved yet.
+ *
+ * Upserts on the primary key, so callers pass whole rows (patch already
+ * merged). Throws ("update_failed").
+ */
+export async function updateRecipeIngredientRows(
+  recipeId: string,
+  rows: RecipeIngredientRow[],
+): Promise<void> {
+  if (rows.length === 0) return;
+  const supabase = getSupabaseAdminClient();
+
+  const { error } = await supabase
+    .from("recipe_ingredients")
+    .upsert(rows.map((row) => ({ ...row, recipe_id: recipeId })));
+
+  if (error) {
+    throw new IngredientRepoError("update_failed", error.message);
+  }
+}
+
+/**
+ * Write a recipe's parsed-ingredient rows.
+ *
+ * When every incoming row carries a `line_id` this is an UPSERT on
+ * (recipe_id, line_id) plus a prune of the lines that no longer exist. That
+ * keeps a surviving line's row — and therefore its `id` — stable across runs,
+ * which matters because the UI PATCHes associations by row id: under the old
+ * delete-then-insert, a run completing between page load and a click left the
+ * client holding an id that no longer existed.
+ *
+ * Rows without a line_id (recipes not yet backfilled) can't key on that index,
+ * so they take the original delete-then-insert path. Neither path is
+ * transactional — a known PostgREST limitation, acceptable while writes come
+ * from one normalization run at a time; a SQL function is the upgrade path.
+ */
 export async function replaceRecipeIngredients(
   recipeId: string,
   rows: RecipeIngredientInsert[],
 ): Promise<void> {
   const supabase = getSupabaseAdminClient();
+
+  const lineIds = rows.map((row) => row.line_id).filter((id): id is string => id != null);
+  if (rows.length > 0 && lineIds.length === rows.length) {
+    // Keep only rows whose line still exists; everything else goes, so the
+    // upsert below is writing into a clean set.
+    //
+    // The `line_id.is.null` half is not redundant: SQL `NOT IN` yields NULL —
+    // not true — for a NULL left operand, so a bare `not.in` silently spares
+    // every legacy row. Those rows ARE stale (their line now has an id and a
+    // properly keyed row is about to be inserted), and leaving them behind
+    // means two rows per line and a collision on unique (recipe_id, position).
+    // persist has already inherited their associations by position before we
+    // get here, so dropping them loses nothing.
+    const quoted = lineIds.map((id) => `"${id}"`).join(",");
+    const { error: pruneError } = await supabase
+      .from("recipe_ingredients")
+      .delete()
+      .eq("recipe_id", recipeId)
+      .or(`line_id.is.null,line_id.not.in.(${quoted})`);
+
+    if (pruneError) {
+      throw new IngredientRepoError("delete_failed", pruneError.message);
+    }
+
+    const { error: upsertError } = await supabase
+      .from("recipe_ingredients")
+      .upsert(
+        rows.map((row) => ({ ...row, recipe_id: recipeId })),
+        { onConflict: "recipe_id,line_id" },
+      );
+
+    if (upsertError) {
+      throw new IngredientRepoError("insert_failed", upsertError.message);
+    }
+    return;
+  }
 
   const { error: deleteError } = await supabase
     .from("recipe_ingredients")

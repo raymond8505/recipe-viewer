@@ -94,7 +94,8 @@ describe("searchIngredients", () => {
     const matches = [
       {
         id: "ing-1",
-        name: "cumin seed",
+        name: "Spices, cumin seed",
+        aliases: ["cumin", "whole cumin"],
         nutrition: { calories_kcal: 375 },
         density_g_per_ml: 0.42,
         semantic_similarity: 0.91,
@@ -109,6 +110,10 @@ describe("searchIngredients", () => {
     expect(generateEmbedding).toHaveBeenCalledWith("cumin");
     expect(matchIngredients).toHaveBeenCalledWith("cumin", [0.1, 0.2], 3);
     expect(out).toEqual({ data: matches });
+    // Aliases must survive to the agent (db/migrations/0012): the catalog is
+    // named in USDA wording, so they are what identifies a row as the caller's
+    // ingredient, and they're what an alias-adding update has to pass back.
+    expect(out.data[0].aliases).toEqual(["cumin", "whole cumin"]);
   });
 
   it("throws ToolError(embedding_unavailable) when embedding fails", async () => {
@@ -186,6 +191,26 @@ describe("createIngredient", () => {
     expect(out).toEqual(row);
   });
 
+  // The vector has to span name + aliases like every other write path, or
+  // agent-made rows match worse than identical rows made through the manager
+  // UI. Asserted WITH aliases on purpose: with none, ingredientEmbeddingText
+  // returns the bare name, so a name-only implementation passes either way.
+  it("embeds name + aliases, not the bare name", async () => {
+    const row = makeIngredient("ing-1", "Butter, without salt", { source: "manual" });
+    vi.mocked(generateEmbedding).mockResolvedValueOnce([0.1]);
+    vi.mocked(createIngredientRow).mockResolvedValueOnce(row);
+
+    await createIngredient({
+      name: "Butter, without salt",
+      aliases: ["unsalted butter", "Sweet Butter"],
+      source: "manual",
+    });
+
+    expect(generateEmbedding).toHaveBeenCalledWith(
+      "butter, without salt, unsalted butter, sweet butter",
+    );
+  });
+
   it("prepends the nutrition-basis portion to caller-passed food_portions", async () => {
     const row = makeIngredient("ing-1", "smoked paprika", { source: "manual" });
     vi.mocked(generateEmbedding).mockResolvedValueOnce([0.1]);
@@ -228,18 +253,41 @@ describe("createIngredient", () => {
       createIngredient({ name: "smoked paprika", source: "manual" }),
     ).rejects.toMatchObject({ name: "ToolError", code: "conflict" });
   });
+
+  // Since db/migrations/0011 an fdc_id collision raises the same repo kind as
+  // a name collision. The message is the agent's only clue which one it hit —
+  // if it names only the name, the agent retries with a varied name forever
+  // against a USDA record that is already in the catalog.
+  it("names both conflict causes and points at the recovery move", async () => {
+    vi.mocked(generateEmbedding).mockResolvedValueOnce([0.1]);
+    vi.mocked(createIngredientRow).mockRejectedValueOnce(
+      new IngredientRepoError("conflict", 'Ingredient "Butter, without salt" already exists'),
+    );
+
+    const err = await createIngredient({
+      name: "Butter, without salt",
+      fdc_id: 173410,
+      source: "manual",
+    }).catch((e: ToolError) => e);
+
+    expect(err).toMatchObject({ name: "ToolError", code: "conflict" });
+    expect((err as ToolError).message).toContain("name");
+    expect((err as ToolError).message).toContain("fdc_id");
+    expect((err as ToolError).message).toContain("search_ingredients");
+  });
 });
 
 describe("updateIngredient", () => {
   beforeEach(() => vi.clearAllMocks());
 
-  it("patches without touching the embedding when name is absent", async () => {
+  it("patches without touching the embedding when neither name nor aliases moves", async () => {
     const row = makeIngredient("ing-1", "cumin seed", { density_g_per_ml: 0.42 });
     vi.mocked(updateIngredientRow).mockResolvedValueOnce(row);
 
     const out = await updateIngredient({ id: "ing-1", density_g_per_ml: 0.42 });
 
     expect(generateEmbedding).not.toHaveBeenCalled();
+    expect(getIngredientById).not.toHaveBeenCalled();
     expect(updateIngredientRow).toHaveBeenCalledWith("ing-1", { density_g_per_ml: 0.42 });
     expect(out).toEqual(row);
   });
@@ -261,22 +309,62 @@ describe("updateIngredient", () => {
     });
   });
 
-  it("re-embeds on rename", async () => {
+  // The embedded text spans name + aliases, so a one-sided patch has to read
+  // the row for the side the caller left out — otherwise renaming would drop
+  // the aliases out of the vector and changing aliases wouldn't re-embed at all.
+  it("re-embeds on rename, carrying the row's existing aliases into the text", async () => {
+    const current = makeIngredient("ing-1", "cumin seed", { aliases: ["Ground Cumin"] });
     const row = makeIngredient("ing-1", "ground cumin");
+    vi.mocked(getIngredientById).mockResolvedValueOnce(current);
     vi.mocked(generateEmbedding).mockResolvedValueOnce([0.3, 0.4]);
     vi.mocked(updateIngredientRow).mockResolvedValueOnce(row);
 
     await updateIngredient({ id: "ing-1", name: "ground cumin" });
 
-    expect(generateEmbedding).toHaveBeenCalledWith("ground cumin");
+    expect(generateEmbedding).toHaveBeenCalledWith("ground cumin, ground cumin");
     expect(updateIngredientRow).toHaveBeenCalledWith("ing-1", {
       name: "ground cumin",
       embedding: [0.3, 0.4],
     });
   });
 
+  it("re-embeds on an aliases-only patch, carrying the row's existing name", async () => {
+    const current = makeIngredient("ing-1", "Butter, without salt", { aliases: [] });
+    vi.mocked(getIngredientById).mockResolvedValueOnce(current);
+    vi.mocked(generateEmbedding).mockResolvedValueOnce([0.5]);
+    vi.mocked(updateIngredientRow).mockResolvedValueOnce(current);
+
+    await updateIngredient({ id: "ing-1", aliases: ["unsalted butter"] });
+
+    expect(generateEmbedding).toHaveBeenCalledWith(
+      "butter, without salt, unsalted butter",
+    );
+    expect(updateIngredientRow).toHaveBeenCalledWith("ing-1", {
+      aliases: ["unsalted butter"],
+      embedding: [0.5],
+    });
+  });
+
+  it("embeds both sides when name and aliases move together, without a read", async () => {
+    const row = makeIngredient("ing-1", "Butter, without salt");
+    vi.mocked(getIngredientById).mockResolvedValueOnce(row);
+    vi.mocked(generateEmbedding).mockResolvedValueOnce([0.6]);
+    vi.mocked(updateIngredientRow).mockResolvedValueOnce(row);
+
+    await updateIngredient({
+      id: "ing-1",
+      name: "Butter, without salt",
+      aliases: ["unsalted butter", "sweet butter"],
+    });
+
+    expect(generateEmbedding).toHaveBeenCalledWith(
+      "butter, without salt, unsalted butter, sweet butter",
+    );
+  });
+
   it("keeps the old vector (embedding undefined) when re-embedding fails", async () => {
     const row = makeIngredient("ing-1", "ground cumin");
+    vi.mocked(getIngredientById).mockResolvedValueOnce(row);
     vi.mocked(generateEmbedding).mockResolvedValueOnce(null);
     vi.mocked(updateIngredientRow).mockResolvedValueOnce(row);
 
@@ -296,6 +384,7 @@ describe("updateIngredient", () => {
       updateIngredient({ id: "missing", density_g_per_ml: 1 }),
     ).rejects.toMatchObject({ name: "ToolError", code: "not_found" });
 
+    vi.mocked(getIngredientById).mockResolvedValueOnce(makeIngredient("ing-1", "sea salt"));
     vi.mocked(generateEmbedding).mockResolvedValueOnce([0.1]);
     vi.mocked(updateIngredientRow).mockRejectedValueOnce(
       new IngredientRepoError("conflict", 'Ingredient "salt" already exists'),

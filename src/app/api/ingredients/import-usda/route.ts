@@ -5,14 +5,15 @@ import { IngredientRepoError } from "@/lib/ingredients";
 import { UsdaError } from "@/lib/usda";
 import { usdaImportInputSchema } from "@/lib/schemas/ingredient";
 
-// Mint a catalog ingredient from a user-picked USDA food (the NutritionDetail
-// manual-import flow). `name` is the recipe-language canonical name; the USDA
-// description becomes an alias. Shares importUsdaIngredient with automated
-// normalization so the two paths produce identical rows — but here the pick is
-// authoritative FOR THIS LINE: `onConflict: "fork"` makes a same-name
-// collision with a different food create a new row (named by the USDA
-// description) instead of clobbering the existing one, which other recipes'
-// lines may reference.
+// Resolve a user-picked USDA food to its catalog ingredient (the
+// NutritionDetail manual-import flow). `name` is the recipe line's parsed name
+// and becomes an alias; the row's canonical name is the USDA description.
+// Shares importUsdaIngredient with automated normalization so the two paths
+// can't diverge.
+//
+// Idempotent on fdcId: picking a food that's already cataloged returns the
+// existing row rather than minting a rival for the same USDA record. The
+// caller then re-points the line at it, which is where the alias accretes.
 export const POST = requireSession(async (req: Request) => {
   const body = await req.json().catch(() => null);
   const parsed = usdaImportInputSchema.safeParse(body);
@@ -21,9 +22,7 @@ export const POST = requireSession(async (req: Request) => {
   }
 
   try {
-    const row = await importUsdaIngredient(parsed.data.name, parsed.data.fdcId, {
-      onConflict: "fork",
-    });
+    const row = await importUsdaIngredient(parsed.data.name, parsed.data.fdcId);
     if (!row) {
       // Embedding generation failed — the column is NOT NULL, so no row can
       // exist without one. Transient; the client can retry.

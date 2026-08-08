@@ -29,9 +29,14 @@ export const GET = requireSession(
 
 // Edit one schema ingredient line's text in place (the NutritionDetail inline
 // edit). This writes the RECIPE — updateRecipeRow merges the patched
-// recipeIngredient array into metadata.schema, recomputes content/embedding,
-// and auto-queues re-normalization because the ingredient-text fingerprint
-// changed. Object lines keep their `group`; string lines stay strings.
+// recipeIngredient array into metadata.schema and recomputes content/embedding.
+// Object lines keep their `group` (and their `id`); string lines stay strings.
+//
+// Rewording does NOT re-normalize: updateRecipeRow runs the deterministic
+// re-parse instead, in-band, so the derived rows are already current here. They
+// come back with the response because the client's copy of them is now stale in
+// exactly the fields the edit moved — and without them the edited line would
+// render as if it had lost its match.
 export const PATCH = requireSession(
   async (req: Request, { params }: RouteContext<"/api/recipes/[id]/ingredients">) => {
     const { id } = await params;
@@ -61,6 +66,7 @@ export const PATCH = requireSession(
       });
       return NextResponse.json({
         recipeIngredient: saved.metadata.schema.recipeIngredient ?? lines,
+        rows: await getRecipeIngredients(id),
       });
     } catch (err) {
       if (err instanceof RecipeRepoError) {

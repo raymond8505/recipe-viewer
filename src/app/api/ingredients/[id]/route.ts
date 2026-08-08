@@ -1,9 +1,11 @@
 import { NextResponse } from "next/server";
 import { requireSession } from "@/lib/api/guard";
 import { generateEmbedding } from "@/lib/embedding";
+import { ingredientEmbeddingText } from "@/lib/ingredientAliases";
 import {
   IngredientRepoError,
   deleteIngredientRow,
+  getIngredientById,
   updateIngredientRow,
   type UpdateIngredientPatch,
 } from "@/lib/ingredients";
@@ -34,14 +36,24 @@ export const PATCH = requireSession(
     }
 
     const patch: UpdateIngredientPatch = { ...parsed.data };
-    // The embedding IS the name (that's what matching searches), so a rename
-    // must re-embed. Best-effort: on null the repo keeps the old vector, which
-    // still points at the previous name — re-saving the name retries.
-    if (parsed.data.name !== undefined) {
-      // null (embedding failed) → omit, so the repo keeps the old vector; the
-      // column is NOT NULL and can never be cleared. UpdateIngredientPatch's
-      // embedding is `number[] | undefined`, so coalesce null away.
-      patch.embedding = (await generateEmbedding(parsed.data.name)) ?? undefined;
+    // The embedding spans name + aliases (that's what matching searches), so
+    // EITHER field moving invalidates it. A one-sided patch needs the other
+    // side's current value, hence the read. Best-effort: on null the repo keeps
+    // the old vector, which still describes the previous text — re-saving retries.
+    if (parsed.data.name !== undefined || parsed.data.aliases !== undefined) {
+      const current = await getIngredientById(id);
+      if (current) {
+        // null (embedding failed) → omit, so the repo keeps the old vector; the
+        // column is NOT NULL and can never be cleared. UpdateIngredientPatch's
+        // embedding is `number[] | undefined`, so coalesce null away.
+        patch.embedding =
+          (await generateEmbedding(
+            ingredientEmbeddingText(
+              parsed.data.name ?? current.name,
+              parsed.data.aliases ?? current.aliases,
+            ),
+          )) ?? undefined;
+      }
     }
 
     try {

@@ -6,6 +6,8 @@
 
 import { convert, isVolumeUnit, roundDecimal, unitKeyForAlias } from "./units";
 import { getIngredientText } from "./format";
+import { lineId } from "./ingredientLines";
+import { NUTRITION_FIELDS as NUTRITION_KEYS } from "./nutritionFields";
 import type {
   IngredientNutrition,
   IngredientRow,
@@ -23,8 +25,8 @@ export type CatalogNutritionSource = Pick<
 >;
 
 // Why a line is excluded from nutrition totals. "stale" is assigned by the
-// caller (schema text no longer matches the normalized row) — the math here
-// can only detect the other reasons.
+// join (no normalized row for this line, or a legacy position-joined row whose
+// text has moved on) — the math here can only detect the other reasons.
 export type ExclusionReason =
   | "unmatched"
   | "no_quantity"
@@ -47,21 +49,6 @@ export type LineComputation =
       nutrition: IngredientNutrition;
     }
   | { kind: "excluded"; reason: ExclusionReason };
-
-const NUTRITION_KEYS = [
-  "calories_kcal",
-  "protein_g",
-  "fat_g",
-  "saturated_fat_g",
-  "carbs_g",
-  "fiber_g",
-  "sugars_g",
-  "sodium_mg",
-  "cholesterol_mg",
-  "calcium_mg",
-  "iron_mg",
-  "potassium_mg",
-] as const satisfies readonly (keyof IngredientNutrition)[];
 
 /**
  * Convert a parsed quantity + unit to grams. Weight units convert directly;
@@ -246,20 +233,75 @@ export function perPortionNutrition(
 
 // ─── Recipe-wide aggregation + recipe-nutrition source resolution ──────────
 
+/** Rows keyed both ways, so a batch of lines resolves without rescanning. */
+export interface LineRowIndex {
+  byLineId: Map<string, RecipeIngredientRow>;
+  byPosition: Map<number, RecipeIngredientRow>;
+}
+
+/** The row a schema line joins to, and which key found it. */
+export interface ResolvedLineRow {
+  row: RecipeIngredientRow | null;
+  /** True when the row was found by the line's stable id. */
+  joinedById: boolean;
+}
+
+export function indexRowsForLines(
+  rows: readonly RecipeIngredientRow[],
+): LineRowIndex {
+  return {
+    byLineId: new Map(
+      rows
+        .filter((row) => row.line_id != null)
+        .map((row) => [row.line_id!, row]),
+    ),
+    byPosition: new Map(rows.map((row) => [row.position, row])),
+  };
+}
+
 /**
- * The line computation for a schema line joined to its normalized row. A line
- * is "stale" when there is no row for its position, or the stored `raw_text` no
- * longer equals the recipe's display text (the recipe was edited after the last
- * normalization run) — such a line can't be trusted and is excluded. Otherwise
- * defers to `computeLineNutrition`. Shared by the NutritionDetail hook and the
- * recipe-wide total so the two paths can never disagree.
+ * Join a schema line to its normalized row.
+ *
+ * By the line's stable id when it has one, and DON'T fall back to position in
+ * that case: once ids are in play, an id with no row means a genuinely new
+ * line, whereas position would hand it a neighbour's row after any reorder.
+ * Position is only for legacy lines that predate ids (db/migrations/0013).
+ */
+export function resolveLineRow(
+  line: string | RecipeIngredient,
+  index: number,
+  rowIndex: LineRowIndex,
+): ResolvedLineRow {
+  const id = lineId(line);
+  if (id != null) {
+    return { row: rowIndex.byLineId.get(id) ?? null, joinedById: true };
+  }
+  return { row: rowIndex.byPosition.get(index) ?? null, joinedById: false };
+}
+
+/**
+ * The line computation for a schema line joined to its normalized row.
+ *
+ * A line with no row at all is "stale" — it has never been normalized, so
+ * there is nothing to compute and normalization is what fixes it.
+ *
+ * A row found BY ID is the right row no matter what its text says. Line text
+ * is display copy; the id is the identity. Rewording is exactly the edit that
+ * must not disturb a line's association or its contribution to the totals, and
+ * `syncRecipeIngredientText` has already carried the new words onto the row.
+ * The text comparison survives only for a row joined by POSITION, where text
+ * is the only evidence the row belongs to this line at all.
+ *
+ * Otherwise defers to `computeLineNutrition`. Shared by the NutritionDetail
+ * hook and the recipe-wide total so the two paths can never disagree.
  */
 export function lineComputationForSchema(
   schemaText: string,
-  row: RecipeIngredientRow | null,
+  resolved: ResolvedLineRow,
   ingredient: CatalogNutritionSource | null,
 ): LineComputation {
-  if (!row || row.raw_text !== schemaText) {
+  const { row, joinedById } = resolved;
+  if (!row || (!joinedById && row.raw_text !== schemaText)) {
     return { kind: "excluded", reason: "stale" };
   }
   return computeLineNutrition(row, ingredient);
@@ -281,8 +323,7 @@ export interface RecipeNutritionResult {
 
 /**
  * Aggregate a recipe's normalized ingredient nutrition. Schema lines join to
- * `recipe_ingredients` rows by position (the array index — see
- * `groupIngredientsWithIndex`), each line is computed via
+ * `recipe_ingredients` rows via `resolveLineRow`, each line is computed via
  * `lineComputationForSchema`, and the `ok` lines are summed into a whole-recipe
  * total. `ingredientsById` maps `ingredient_id` → catalog nutrition/density.
  */
@@ -291,15 +332,15 @@ export function computeRecipeNutrition(
   rows: RecipeIngredientRow[],
   ingredientsById: Map<string, CatalogNutritionSource>,
 ): RecipeNutritionResult {
-  const rowsByPosition = new Map(rows.map((row) => [row.position, row]));
+  const rowIndex = indexRowsForLines(rows);
   const computations = schemaIngredients.map((ingredient, index) => {
     const text = getIngredientText(ingredient);
-    const row = rowsByPosition.get(index) ?? null;
+    const resolved = resolveLineRow(ingredient, index, rowIndex);
     const catalog =
-      row?.ingredient_id != null
-        ? (ingredientsById.get(row.ingredient_id) ?? null)
+      resolved.row?.ingredient_id != null
+        ? (ingredientsById.get(resolved.row.ingredient_id) ?? null)
         : null;
-    return lineComputationForSchema(text, row, catalog);
+    return lineComputationForSchema(text, resolved, catalog);
   });
 
   const total = sumNutrition(

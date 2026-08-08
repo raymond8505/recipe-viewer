@@ -517,11 +517,17 @@ describe("toSchemaOrgJsonLd", () => {
   });
 
   it("normalizes ingredient objects to strings", () => {
+    // `group` and `id` are both app-level fields with no Schema.org meaning —
+    // flattening to text is what keeps them out of the public JSON-LD.
     const result = toSchemaOrgJsonLd({
       name: "Pasta",
-      recipeIngredient: [{ name: "2 cups flour", group: "Dough" }, "1 tsp salt"],
+      recipeIngredient: [
+        { name: "2 cups flour", group: "Dough", id: "L1" },
+        "1 tsp salt",
+      ],
     }) as Record<string, unknown>;
     expect(result.recipeIngredient).toEqual(["2 cups flour", "1 tsp salt"]);
+    expect(JSON.stringify(result)).not.toContain("L1");
   });
 
   it("passes a QuantitativeValue recipeYield through unchanged", () => {
