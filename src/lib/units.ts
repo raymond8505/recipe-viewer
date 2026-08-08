@@ -50,6 +50,18 @@ function escapeRe(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
+const ALIAS_TO_KEY = new Map(ALIAS_ENTRIES);
+
+/**
+ * Exact alias → unit key lookup (case-insensitive, trimmed). Unlike
+ * parseIngredient's prefix matching this takes the whole token — used by the
+ * USDA client to recognize household-measure text like "tbsp" or "Cup" in
+ * foodPortions. Returns null for unknown text (e.g. "undetermined").
+ */
+export function unitKeyForAlias(text: string): string | null {
+  return ALIAS_TO_KEY.get(text.trim().toLowerCase()) ?? null;
+}
+
 export function convert(amount: number, fromUnit: string | null, toUnit: string | null): number {
   if (!fromUnit || !toUnit) return amount;
   const from = UNIT_DEFS[fromUnit];

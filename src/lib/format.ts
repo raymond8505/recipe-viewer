@@ -61,6 +61,38 @@ export function parseMS(raw: string): { minutes: number; seconds: number } {
   return { minutes: Math.max(0, parseInt(text, 10) || 0), seconds: 0 };
 }
 
+// "" → null (clear the value); anything unparseable → undefined (field
+// dropped from a patch rather than sent as garbage).
+export function parseNumeric(raw: string): number | null | undefined {
+  const trimmed = raw.trim();
+  if (trimmed === "") return null;
+  const value = Number(trimmed);
+  return Number.isFinite(value) ? value : undefined;
+}
+
+/**
+ * Nutrition-panel display rounding: values over 1 round to the nearest
+ * integer (9.96 → "10 g", 12.4 → "12 g"); values ≤ 1 round to 2dp (0.2 →
+ * "0.2 g") — integer-rounding those would erase them entirely. Display-only:
+ * JSON-LD/MCP serialization keeps its own (1dp) precision.
+ */
+export function formatNutrientDisplay(nv: NutrientValue): string {
+  const rounded =
+    nv.value > 1 ? Math.round(nv.value) : Math.round(nv.value * 100) / 100;
+  return nv.unit ? `${rounded} ${nv.unit}` : String(rounded);
+}
+
+/** Pick the singular or plural form of a noun for a count. Returns the word
+ *  only — callers render the count separately. Defaults the plural to the
+ *  singular + "s"; pass an explicit plural for irregular nouns. */
+export function pluralize(
+  count: number,
+  singular: string,
+  plural = `${singular}s`,
+): string {
+  return count === 1 ? singular : plural;
+}
+
 /**
  * Format an ISO 8601 date string to a human-readable date.
  * e.g. "2026-02-25" → "February 25, 2026"
@@ -78,6 +110,7 @@ export function formatDate(iso: string | undefined | null): string | null {
 }
 
 import { nanoid } from "nanoid";
+import type { NutrientValue } from "./nutritionMath";
 import type {
   HowToSection,
   HowToStep,
@@ -100,6 +133,44 @@ export function getIngredientText(
   return typeof ingredient === "string" ? ingredient : ingredient.name;
 }
 
+export interface IndexedIngredient {
+  ingredient: string | RecipeIngredient;
+  /**
+   * Position in the original recipeIngredient array. Grouping reorders
+   * interleaved groups, so this is the only stable join key back to derived
+   * per-line data (recipe_ingredients.position uses the same index).
+   */
+  index: number;
+}
+
+/**
+ * Group an ingredient list by group, carrying each item's original array
+ * index through the grouping. Returns a single group with a null heading
+ * when no ingredient defines group.
+ */
+export function groupIngredientsWithIndex(
+  ingredients: Array<string | RecipeIngredient>,
+): Array<{ heading: string | null; items: IndexedIngredient[] }> {
+  const indexed = ingredients.map((ingredient, index) => ({ ingredient, index }));
+  const hasGroups = ingredients.some(
+    (i) => typeof i !== "string" && i.group != null,
+  );
+  if (!hasGroups) return [{ heading: null, items: indexed }];
+
+  const order: Array<string | null> = [];
+  const map = new Map<string | null, IndexedIngredient[]>();
+  for (const item of indexed) {
+    const ing = item.ingredient;
+    const group = typeof ing === "string" ? null : (ing.group ?? null);
+    if (!map.has(group)) {
+      order.push(group);
+      map.set(group, []);
+    }
+    map.get(group)!.push(item);
+  }
+  return order.map((heading) => ({ heading, items: map.get(heading)! }));
+}
+
 /**
  * Group an ingredient list by group. Returns a single group with
  * a null heading when no ingredient defines group.
@@ -107,22 +178,10 @@ export function getIngredientText(
 export function groupIngredients(
   ingredients: Array<string | RecipeIngredient>,
 ): Array<{ heading: string | null; items: Array<string | RecipeIngredient> }> {
-  const hasGroups = ingredients.some(
-    (i) => typeof i !== "string" && i.group != null,
-  );
-  if (!hasGroups) return [{ heading: null, items: ingredients }];
-
-  const order: Array<string | null> = [];
-  const map = new Map<string | null, Array<string | RecipeIngredient>>();
-  for (const ing of ingredients) {
-    const group = typeof ing === "string" ? null : (ing.group ?? null);
-    if (!map.has(group)) {
-      order.push(group);
-      map.set(group, []);
-    }
-    map.get(group)!.push(ing);
-  }
-  return order.map((heading) => ({ heading, items: map.get(heading)! }));
+  return groupIngredientsWithIndex(ingredients).map(({ heading, items }) => ({
+    heading,
+    items: items.map((item) => item.ingredient),
+  }));
 }
 
 /**
@@ -196,13 +255,22 @@ export function getYieldUnit(
  * Return a Schema.org-compliant JSON-LD object for a recipe.
  * Strips custom extensions (notes, cookingNotes, ingredient group objects) so
  * external tools that validate against the spec can parse the output cleanly.
+ *
+ * `nutritionOverride` replaces the schema's own `nutrition` in the output when
+ * provided — used to emit the normalized-ingredient nutrition (already
+ * per-serving, Schema.org-shaped) in place of the hand-entered fields. It still
+ * flows through the same allowlist, so no custom fields leak.
  */
-export function toSchemaOrgJsonLd(schema: SchemaRecipe): object {
+export function toSchemaOrgJsonLd(
+  schema: SchemaRecipe,
+  options?: { nutritionOverride?: SchemaRecipe["nutrition"] },
+): object {
   const result: Record<string, unknown> = {
     "@context": schema["@context"] ?? "https://schema.org",
     "@type": schema["@type"] ?? "Recipe",
     name: schema.name,
   };
+  const nutrition = options?.nutritionOverride ?? schema.nutrition;
   const optionalFields = [
     "description",
     "image",
@@ -214,13 +282,13 @@ export function toSchemaOrgJsonLd(schema: SchemaRecipe): object {
     "recipeCuisine",
     "recipeCategory",
     "keywords",
-    "nutrition",
     "datePublished",
     "recipeInstructions",
   ] as const;
   for (const key of optionalFields) {
     if (schema[key] != null) result[key] = schema[key];
   }
+  if (nutrition != null) result.nutrition = nutrition;
   if (schema.recipeIngredient?.length) {
     result.recipeIngredient = schema.recipeIngredient.map(getIngredientText);
   }
