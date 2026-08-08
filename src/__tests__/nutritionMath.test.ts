@@ -5,7 +5,9 @@ import {
   explicitWeightGrams,
   gramsForLine,
   formatNutrientString,
+  indexRowsForLines,
   lineComputationForSchema,
+  resolveLineRow,
   normalizedTotalToPerServing,
   nutrientValuesToSchema,
   parseNutrientValue,
@@ -25,6 +27,8 @@ function makeRow(
   return {
     id: `ri-${position}`,
     recipe_id: "r-1",
+    // Legacy by default — the tests that care about id-keying opt in.
+    line_id: null,
     ingredient_id: `ing-${position}`,
     raw_text: overrides.raw_text ?? `${position} g thing`,
     quantity: 100,
@@ -391,25 +395,89 @@ describe("perPortionNutrition", () => {
   });
 });
 
-describe("lineComputationForSchema", () => {
-  it("excludes a line with no row as stale", () => {
-    expect(lineComputationForSchema("2 cups flour", null, null)).toEqual({
-      kind: "excluded",
-      reason: "stale",
-    });
+describe("resolveLineRow", () => {
+  it("joins by the line's stable id, ignoring position", () => {
+    const rows = [
+      makeRow(0, { id: "ri-0", line_id: "L1" }),
+      makeRow(1, { id: "ri-1", line_id: "L2" }),
+    ];
+    const resolved = resolveLineRow(
+      { name: "1 tsp cumin", id: "L2" },
+      0,
+      indexRowsForLines(rows),
+    );
+    expect(resolved).toMatchObject({ joinedById: true });
+    expect(resolved.row?.id).toBe("ri-1");
   });
 
-  it("excludes a line whose stored text no longer matches the schema", () => {
-    const row = makeRow(0, { raw_text: "1 cup flour" });
+  // An id with no row is a genuinely new line. Falling back to position would
+  // hand it whichever row happens to sit at that index.
+  it("does not fall back to position for a line that has an id", () => {
+    const rows = [makeRow(0, { id: "ri-0", line_id: "L1" })];
     expect(
-      lineComputationForSchema("2 cups flour", row, catalog({ calories_kcal: 100 })),
+      resolveLineRow({ name: "new", id: "L-unknown" }, 0, indexRowsForLines(rows)),
+    ).toEqual({ row: null, joinedById: true });
+  });
+
+  it("falls back to position for a legacy line with no id", () => {
+    const rows = [makeRow(0, { id: "ri-0", line_id: null })];
+    const resolved = resolveLineRow("1 tsp cumin", 0, indexRowsForLines(rows));
+    expect(resolved).toMatchObject({ joinedById: false });
+    expect(resolved.row?.id).toBe("ri-0");
+  });
+});
+
+describe("lineComputationForSchema", () => {
+  it("excludes a line with no row as stale", () => {
+    expect(
+      lineComputationForSchema(
+        "2 cups flour",
+        { row: null, joinedById: true },
+        null,
+      ),
+    ).toEqual({ kind: "excluded", reason: "stale" });
+  });
+
+  // The whole point of keying rows to line ids: the words are display copy,
+  // the id is the identity. Rewording must not cost the line its association
+  // or its place in the totals — only the curator changes a match.
+  it("computes normally for an id-joined row whose stored text has moved", () => {
+    const row = makeRow(0, {
+      line_id: "L1",
+      raw_text: "100 g Acme brand thing",
+      quantity: 100,
+      unit: "g",
+    });
+    expect(
+      lineComputationForSchema(
+        "100 g thing",
+        { row, joinedById: true },
+        catalog({ calories_kcal: 50 }),
+      ),
+    ).toMatchObject({ kind: "ok", nutrition: { calories_kcal: 50 } });
+  });
+
+  // Position-joined is the legacy case, where text is the only evidence the
+  // row belongs to this line at all.
+  it("excludes a position-joined row whose stored text no longer matches", () => {
+    const row = makeRow(0, { line_id: null, raw_text: "1 cup flour" });
+    expect(
+      lineComputationForSchema(
+        "2 cups flour",
+        { row, joinedById: false },
+        catalog({ calories_kcal: 100 }),
+      ),
     ).toEqual({ kind: "excluded", reason: "stale" });
   });
 
   it("defers to computeLineNutrition when the text matches", () => {
     const row = makeRow(0, { raw_text: "100 g thing", quantity: 100, unit: "g" });
     expect(
-      lineComputationForSchema("100 g thing", row, catalog({ calories_kcal: 50 })),
+      lineComputationForSchema(
+        "100 g thing",
+        { row, joinedById: false },
+        catalog({ calories_kcal: 50 }),
+      ),
     ).toMatchObject({ kind: "ok", nutrition: { calories_kcal: 50 } });
   });
 });
@@ -447,15 +515,42 @@ describe("computeRecipeNutrition", () => {
     expect(result).toMatchObject({ excludedCount: 1, fullyCovered: false });
   });
 
-  it("is not fully covered when a schema line was edited after normalization", () => {
+  // Legacy: no line ids anywhere, so the row is only reachable by position and
+  // its text is the sole evidence it belongs to this line.
+  it("is not fully covered when a legacy schema line was edited after normalization", () => {
     const schema = ["2 cups flour"];
-    const rows = [makeRow(0, { raw_text: "1 cup flour", ingredient_id: "a" })];
+    const rows = [
+      makeRow(0, { line_id: null, raw_text: "1 cup flour", ingredient_id: "a" }),
+    ];
     const byId = new Map([["a", catalog({ calories_kcal: 100 })]]);
     const result = computeRecipeNutrition(schema, rows, byId);
     expect(result).toMatchObject({
       hasStaleLines: true,
       excludedCount: 1,
       fullyCovered: false,
+    });
+  });
+
+  // Once the line has an id, a reword is invisible to the totals — the row
+  // followed the edit and the association is untouched.
+  it("stays fully covered when an id-keyed line is reworded", () => {
+    const schema = [{ name: "100 g thing", id: "L1" }];
+    const rows = [
+      makeRow(0, {
+        line_id: "L1",
+        raw_text: "100 g Acme brand thing",
+        quantity: 100,
+        unit: "g",
+        ingredient_id: "a",
+      }),
+    ];
+    const byId = new Map([["a", catalog({ calories_kcal: 100 })]]);
+    const result = computeRecipeNutrition(schema, rows, byId);
+    expect(result.total).toEqual({ calories_kcal: 100 });
+    expect(result).toMatchObject({
+      hasStaleLines: false,
+      excludedCount: 0,
+      fullyCovered: true,
     });
   });
 

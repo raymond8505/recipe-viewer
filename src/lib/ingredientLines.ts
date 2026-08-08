@@ -64,20 +64,40 @@ export function withLineIds(
 }
 
 /**
- * The set of line ids in a recipe, as a stable string.
+ * Did a save ADD or REMOVE a line — i.e. did normalization gain work?
  *
- * This is what decides whether normalization has work to do: guessing is only
- * needed for lines that don't have a row yet. Rewording or reordering leaves
- * this untouched, so neither re-runs the matcher — which is the whole point of
- * keying on ids. Adding or removing a line changes it.
+ * Guessing is only needed for a line that has no row yet, so rewording,
+ * reordering and regrouping all answer false: every id (and therefore every
+ * derived row and every curated association) stays exactly where it was.
+ *
+ * `after` is the post-`withLineIds` array, so every line there has an id.
+ * That makes minting look like an addition, which it is NOT when the line
+ * simply never had an id — a recipe written before ids existed gets one per
+ * line on its first save, and treating that as "N new lines" would re-run the
+ * matcher over a recipe nobody edited structurally. Hence the comparison is
+ * against how many lines were id-less to begin with, rather than a set key.
  */
-export function lineIdSetKey(
-  lines: ReadonlyArray<string | RecipeIngredient>,
-): string {
-  return JSON.stringify(
-    lines
-      .map(lineId)
-      .filter((id): id is string => id != null)
-      .sort(),
+export function lineSetChanged(
+  before: ReadonlyArray<string | RecipeIngredient>,
+  after: ReadonlyArray<string | RecipeIngredient>,
+): boolean {
+  const beforeIds = new Set(
+    before.map(lineId).filter((id): id is string => id != null),
   );
+  const afterIds = after.map(lineId).filter((id): id is string => id != null);
+
+  // A known line vanished. The length test catches the same thing for legacy
+  // arrays, where there are no ids to go missing — and removal must stay
+  // detectable there, because pruning the orphaned row is normalization's job.
+  const afterIdSet = new Set(afterIds);
+  const removed =
+    [...beforeIds].some((id) => !afterIdSet.has(id)) ||
+    after.length < before.length;
+
+  // Ids in `after` that weren't in `before` are either genuinely new lines or
+  // ids minted for lines that never had one. Only the excess is new.
+  const idless = before.length - beforeIds.size;
+  const added = afterIds.filter((id) => !beforeIds.has(id)).length > idless;
+
+  return removed || added;
 }

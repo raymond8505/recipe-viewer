@@ -553,11 +553,16 @@ export async function setRecipeIngredientGrams(
 export type RecipeIngredientInsert = Omit<RecipeIngredientRow, "id" | "recipe_id">;
 
 // The parse-derived half of a row: everything that follows from the line's
-// TEXT. Deliberately excludes ingredient_id / match_status / estimated_grams —
-// re-reading a reworded line must never disturb the association on it.
+// TEXT. Deliberately excludes ingredient_id / match_status — re-reading a
+// reworded line must never disturb the association on it.
+//
+// `line_id` is the one non-parse field, and it is write-once: a legacy row
+// joined by position gets stamped with the id its line was just minted
+// (db/migrations/0013). Nothing re-points an already-stamped row.
 export type RecipeIngredientParsePatch = Partial<
   Pick<
     RecipeIngredientRow,
+    | "line_id"
     | "raw_text"
     | "quantity"
     | "unit"

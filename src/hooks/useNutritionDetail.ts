@@ -2,10 +2,11 @@
 
 import { useMemo, useState } from "react";
 import { getIngredientText, groupIngredientsWithIndex } from "@/lib/format";
-import { lineId } from "@/lib/ingredientLines";
 import {
+  indexRowsForLines,
   lineComputationForSchema,
   perPortionNutrition,
+  resolveLineRow,
   sumNutrition,
   type LineComputation,
 } from "@/lib/nutritionMath";
@@ -50,10 +51,10 @@ export interface NutritionDetailGroup {
 }
 
 // State + derived math for the NutritionDetail screen. Rows join to schema
-// lines by position index; a line whose stored raw_text no longer equals the
-// schema text is "stale" (the recipe was edited after the last normalization
-// run) and is excluded from totals. Association changes are non-optimistic:
-// await the PATCH, then update local state — totals recompute via useMemo.
+// lines via `resolveLineRow` (stable line id, position only for legacy lines);
+// a line with no row is "stale" and excluded from totals until normalization
+// gives it one. Association changes are non-optimistic: await the PATCH, then
+// update local state — totals recompute via useMemo.
 export function useNutritionDetail(
   recipeId: string,
   schemaIngredients: Array<string | RecipeIngredient>,
@@ -76,25 +77,14 @@ export function useNutritionDetail(
   const [error, setError] = useState<string | null>(null);
 
   const groups = useMemo<NutritionDetailGroup[]>(() => {
-    const rowsByLineId = new Map(
-      rows.filter((row) => row.line_id != null).map((row) => [row.line_id!, row]),
-    );
-    const rowsByPosition = new Map(rows.map((row) => [row.position, row]));
+    const rowIndex = indexRowsForLines(rows);
     return groupIngredientsWithIndex(schemaLines).map(
       ({ heading, items }) => ({
         heading,
         lines: items.map(({ ingredient: schemaIngredient, index }) => {
           const text = getIngredientText(schemaIngredient);
-          // Join on the line's stable id when it has one, and DON'T fall back
-          // to position in that case: once ids are in play, an id with no row
-          // means a genuinely new line, whereas position would hand it a
-          // neighbour's row after any reorder. Position is only for legacy
-          // lines that predate ids (db/migrations/0013).
-          const id = lineId(schemaIngredient);
-          const row =
-            (id != null
-              ? rowsByLineId.get(id)
-              : rowsByPosition.get(index)) ?? null;
+          const resolved = resolveLineRow(schemaIngredient, index, rowIndex);
+          const row = resolved.row;
           // Resolve the catalog row purely from ingredient_id, the same join
           // computeRecipeNutrition does. Staleness deliberately does NOT gate
           // this: lineComputationForSchema re-derives it and returns the
@@ -115,7 +105,7 @@ export function useNutritionDetail(
             text,
             row,
             ingredient,
-            computation: lineComputationForSchema(text, row, ingredient),
+            computation: lineComputationForSchema(text, resolved, ingredient),
           };
         }),
       }),
@@ -213,20 +203,22 @@ export function useNutritionDetail(
   }
 
   // Save an edited line text into the recipe schema. Non-optimistic like the
-  // other mutations: await the PATCH, then swap in the server's line array.
-  // The edited line then reads as stale (row.raw_text no longer matches) and
-  // drops out of totals until the auto-queued re-normalization rebuilds it —
-  // returns true on success so the caller can surface that "queued" state.
-  async function updateLineText(index: number, text: string): Promise<boolean> {
+  // other mutations: await the PATCH, then swap in the server's line array AND
+  // its re-parsed rows.
+  //
+  // Both halves, together. A reword doesn't re-match — the line keeps the
+  // ingredient it was curated onto — so the edited line must keep contributing
+  // to the totals right through the edit. Taking the new text without the new
+  // rows is what used to make it look like the match had been thrown away.
+  async function updateLineText(index: number, text: string): Promise<void> {
     setSavingLineIndex(index);
     setError(null);
     try {
-      const lines = await updateRecipeIngredientLine(recipeId, index, text);
-      setSchemaLines(lines);
-      return true;
+      const updated = await updateRecipeIngredientLine(recipeId, index, text);
+      setSchemaLines(updated.recipeIngredient);
+      setRows(updated.rows);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to update line");
-      return false;
     } finally {
       setSavingLineIndex(null);
     }

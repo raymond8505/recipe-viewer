@@ -2,7 +2,7 @@ import { getSupabaseClient, selectColumns, toVectorLiteral } from "./supabase";
 import { getFeatures } from "./features";
 import { normalizeRecipeInstructions, schemaToMarkdown } from "./format";
 import { generateEmbedding } from "./embedding";
-import { lineIdSetKey, withLineIds } from "./ingredientLines";
+import { lineId, lineSetChanged, withLineIds } from "./ingredientLines";
 import { ingredientFingerprint } from "./normalization/fingerprint";
 import { syncRecipeIngredientText } from "./normalization/syncLines";
 import { scheduleNormalization } from "./normalization/trigger";
@@ -284,17 +284,24 @@ export async function updateRecipeRow(
       ...patchSchema,
     } as SchemaRecipe;
     if (patchSchema.recipeIngredient !== undefined) {
-      shouldNormalize =
-        lineIdSetKey(current.metadata.schema.recipeIngredient ?? []) !==
-        lineIdSetKey(mergedSchema.recipeIngredient ?? []);
+      const before = current.metadata.schema.recipeIngredient ?? [];
+      const after = mergedSchema.recipeIngredient ?? [];
+      shouldNormalize = lineSetChanged(before, after);
       // Text moved but the line set didn't: re-parse the surviving rows in
       // place so quantities and totals track the edit, association untouched.
+      //
+      // The second half is the legacy case. `withLineIds` just minted ids for
+      // lines that had none, and those ids have to reach the rows or the next
+      // read joins by an id nothing carries. Sync stamps them, and it has to
+      // run whether or not the text also moved.
+      const minted = before.some((line) => lineId(line) == null);
       if (
         !shouldNormalize &&
-        ingredientFingerprint(current.metadata.schema) !==
-          ingredientFingerprint(mergedSchema)
+        (minted ||
+          ingredientFingerprint(current.metadata.schema) !==
+            ingredientFingerprint(mergedSchema))
       ) {
-        syncLines = mergedSchema.recipeIngredient ?? [];
+        syncLines = after;
       }
     }
     writePatch.metadata = { ...current.metadata, schema: mergedSchema };

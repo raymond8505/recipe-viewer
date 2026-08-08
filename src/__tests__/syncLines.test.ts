@@ -139,6 +139,92 @@ describe("syncRecipeIngredientText", () => {
     expect(written()).toEqual([]);
   });
 
+  // A row written before line ids existed is reachable only by position. The
+  // first save of that recipe mints an id for the line, and this is the one
+  // chance to key the row to it — miss it and the line joins by an id no row
+  // carries, which reads as "never normalized" forever.
+  it("stamps a freshly minted id onto the legacy row at that position", async () => {
+    vi.mocked(getRecipeIngredients).mockResolvedValue([
+      makeRecipeIngredient("r-1", 0, {
+        id: "ri-0",
+        line_id: null,
+        raw_text: "1 tsp cumin",
+        quantity: 1,
+        unit: "tsp",
+        name_text: "cumin",
+        ingredient_id: "ing-cumin",
+        match_status: "matched",
+        estimated_grams: 2,
+        grams_source: "llm",
+      }),
+    ]);
+
+    await syncRecipeIngredientText("r-1", [
+      { name: "1 tsp ground cumin", id: "U1" },
+    ]);
+
+    expect(patchFor("ri-0")).toMatchObject({
+      line_id: "U1",
+      raw_text: "1 tsp ground cumin",
+      name_text: "ground cumin",
+      // Stamping is bookkeeping — the curated association and its weight are
+      // no more up for revision here than on any other reword.
+      ingredient_id: "ing-cumin",
+      estimated_grams: 2,
+    });
+  });
+
+  // Stamping is the whole reason to write when nothing else moved.
+  it("stamps a legacy row even when the text is unchanged", async () => {
+    vi.mocked(getRecipeIngredients).mockResolvedValue([
+      makeRecipeIngredient("r-1", 0, {
+        id: "ri-0",
+        line_id: null,
+        raw_text: "1 tsp cumin",
+        quantity: 1,
+        unit: "tsp",
+        name_text: "cumin",
+      }),
+    ]);
+
+    await syncRecipeIngredientText("r-1", [{ name: "1 tsp cumin", id: "U1" }]);
+
+    expect(written()).toHaveLength(1);
+    expect(patchFor("ri-0")).toMatchObject({ line_id: "U1" });
+  });
+
+  // The stored parse came from the model; the deterministic parser is a
+  // fallback. Re-reading unchanged words through it can only lose information
+  // — and a quantity/unit disagreement would take the gram weight with it.
+  it("does not re-parse a stamped row whose text never moved", async () => {
+    vi.mocked(getRecipeIngredients).mockResolvedValue([
+      makeRecipeIngredient("r-1", 0, {
+        id: "ri-0",
+        line_id: null,
+        raw_text: "a good handful of parsley",
+        quantity: 1,
+        unit: "handful",
+        name_text: "parsley",
+        estimated_grams: 15,
+        grams_source: "manual",
+      }),
+    ]);
+
+    await syncRecipeIngredientText("r-1", [
+      { name: "a good handful of parsley", id: "U1" },
+    ]);
+
+    expect(patchFor("ri-0")).toMatchObject({
+      line_id: "U1",
+      position: 0,
+      quantity: 1,
+      unit: "handful",
+      name_text: "parsley",
+      estimated_grams: 15,
+      grams_source: "manual",
+    });
+  });
+
   it("skips lines with no id and ids with no row", async () => {
     vi.mocked(getRecipeIngredients).mockResolvedValue([
       makeRecipeIngredient("r-1", 0, { id: "ri-0", line_id: "L1", raw_text: "1 tsp cumin" }),

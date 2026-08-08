@@ -1,6 +1,6 @@
 // @vitest-environment node
 import { describe, expect, it } from "vitest";
-import { lineId, lineIdSetKey, withLineIds } from "@/lib/ingredientLines";
+import { lineId, lineSetChanged, withLineIds } from "@/lib/ingredientLines";
 
 describe("withLineIds", () => {
   it("mints an id for every line and converts strings to objects", () => {
@@ -76,29 +76,75 @@ describe("withLineIds", () => {
   });
 });
 
-describe("lineIdSetKey", () => {
-  it("is unchanged by rewording — a reword gives normalization nothing to do", () => {
+describe("lineSetChanged", () => {
+  it("is false for a reword — a reword gives normalization nothing to do", () => {
     const before = [{ name: "1 tsp cumin", id: "L1" }];
     const after = [{ name: "1 tsp ground cumin, toasted", id: "L1" }];
 
-    expect(lineIdSetKey(after)).toBe(lineIdSetKey(before));
+    expect(lineSetChanged(before, after)).toBe(false);
   });
 
-  it("is unchanged by reordering", () => {
+  it("is false for a reorder", () => {
     const before = [
       { name: "1 tsp cumin", id: "L1" },
       { name: "2 cups rice", id: "L2" },
     ];
 
-    expect(lineIdSetKey([before[1], before[0]])).toBe(lineIdSetKey(before));
+    expect(lineSetChanged(before, [before[1], before[0]])).toBe(false);
   });
 
-  it("changes when a line is added or removed", () => {
+  it("is true when a line is added or removed", () => {
     const before = [{ name: "1 tsp cumin", id: "L1" }];
-    const added = [...before, { name: "2 cups rice", id: "L2" }];
 
-    expect(lineIdSetKey(added)).not.toBe(lineIdSetKey(before));
-    expect(lineIdSetKey([])).not.toBe(lineIdSetKey(before));
+    expect(
+      lineSetChanged(before, [...before, { name: "2 cups rice", id: "L2" }]),
+    ).toBe(true);
+    expect(lineSetChanged(before, [])).toBe(true);
+  });
+
+  // A recipe written before ids existed gets one minted per line on its first
+  // save. Reading that as "every line is new" would re-run the matcher over a
+  // recipe nobody restructured — and re-matching is precisely what a reword
+  // must not cause.
+  it("is false when a legacy line is only reworded and stamped with an id", () => {
+    expect(
+      lineSetChanged(["1 tsp cumin"], [{ name: "2 tsp cumin", id: "U1" }]),
+    ).toBe(false);
+  });
+
+  it("is true when a legacy array gains a line", () => {
+    expect(
+      lineSetChanged(
+        ["1 tsp cumin"],
+        [
+          { name: "1 tsp cumin", id: "U1" },
+          { name: "2 cups rice", id: "U2" },
+        ],
+      ),
+    ).toBe(true);
+  });
+
+  // Removal still has to be detected without ids: the orphaned row needs
+  // pruning, and that is normalization's job.
+  it("is true when a legacy array loses a line", () => {
+    expect(
+      lineSetChanged(
+        ["1 tsp cumin", "2 cups rice"],
+        [{ name: "1 tsp cumin", id: "U1" }],
+      ),
+    ).toBe(true);
+  });
+
+  it("is false for a mixed array where only the id-less line is stamped", () => {
+    expect(
+      lineSetChanged(
+        [{ name: "1 tsp cumin", id: "L1" }, "2 cups rice"],
+        [
+          { name: "1 tsp cumin", id: "L1" },
+          { name: "2 cups long-grain rice", id: "U2" },
+        ],
+      ),
+    ).toBe(false);
   });
 });
 

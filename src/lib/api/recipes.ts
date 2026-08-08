@@ -29,17 +29,27 @@ export async function fetchRecipeIngredients(
   return body;
 }
 
+export interface RecipeLineTextUpdate {
+  /** The full updated array — the edited line keeps its string/object shape. */
+  recipeIngredient: Array<string | RecipeIngredient>;
+  /** The derived rows after the server's deterministic re-parse. */
+  rows: RecipeIngredientRow[];
+}
+
 /**
  * Edit one schema ingredient line's text in place (the NutritionDetail inline
  * edit). This edits the RECIPE — the server merges the patched line into the
- * schema and auto-queues re-normalization. Returns the full updated
- * recipeIngredient array (the edited line keeps its string/object shape).
+ * schema and deterministically re-parses the derived rows. It does NOT
+ * re-match: the line's catalog association is the user's, not the matcher's.
+ *
+ * The re-parsed rows come back with the lines so the caller can replace its
+ * copy of both at once — holding the old rows would misreport the edited line.
  */
 export async function updateRecipeIngredientLine(
   recipeId: string,
   index: number,
   text: string,
-): Promise<Array<string | RecipeIngredient>> {
+): Promise<RecipeLineTextUpdate> {
   const res = await fetch(`/api/recipes/${recipeId}/ingredients`, {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
@@ -49,10 +59,10 @@ export async function updateRecipeIngredientLine(
     throw new Error(`Ingredient line update failed with status ${res.status}`);
   }
   const body = await res.json();
-  if (!Array.isArray(body.recipeIngredient)) {
+  if (!Array.isArray(body.recipeIngredient) || !Array.isArray(body.rows)) {
     throw new Error("Ingredient line update returned no lines");
   }
-  return body.recipeIngredient;
+  return { recipeIngredient: body.recipeIngredient, rows: body.rows };
 }
 
 /**

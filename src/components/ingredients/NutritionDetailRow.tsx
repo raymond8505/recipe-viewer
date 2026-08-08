@@ -24,7 +24,7 @@ const EXCLUSION_TITLES: Record<ExclusionReason, string> = {
   no_quantity: "No parsed amount — can't convert to grams",
   no_unit: "No unit (count line) — can't convert to grams",
   no_density: "Volume unit but the ingredient has no density",
-  stale: "Line changed since normalization — re-run normalization",
+  stale: "No normalized row for this line — run normalization",
 };
 
 /**
@@ -32,6 +32,9 @@ const EXCLUSION_TITLES: Record<ExclusionReason, string> = {
  * place — this edits the recipe schema itself, with an exclusion flag when
  * the line can't contribute to totals), the frozen normalized-ingredient
  * autocomplete, then read-only nutrition cells.
+ *
+ * Editing the text does not re-match the line. The autocomplete is where the
+ * association changes, and it is the only thing here that changes it.
  *
  * @summary nutrition row with editable line text and match cells
  */
@@ -58,8 +61,10 @@ export default function NutritionDetailRow({
 }) {
   const { row, ingredient, computation } = line;
   const excluded = computation.kind === "excluded";
-  // Grams only matter for a matched line, and a stale line's row is about to be
-  // rebuilt — hide the editor in both cases.
+  // Grams only matter for a matched line. "stale" now means the line has no row
+  // of its own — either none at all, or a legacy positional one about to be
+  // rebuilt — so there is nothing to edit a weight on either way. A reworded
+  // line is NOT stale: its row followed the edit and keeps its grams.
   const isStale =
     computation.kind === "excluded" && computation.reason === "stale";
   const showGrams = row != null && row.ingredient_id != null && !isStale;
@@ -118,7 +123,7 @@ export default function NutritionDetailRow({
               onClick={() => setDraft(line.text)}
               disabled={saving}
               aria-label={`Edit ${line.text}`}
-              title="Edit this recipe line — saves to the recipe and re-normalizes"
+              title="Edit this recipe line — the matched ingredient is kept"
               className="shrink-0 text-muted-foreground hover:text-brand disabled:opacity-50 [&_svg]:size-3.5"
             >
               <EditIcon />

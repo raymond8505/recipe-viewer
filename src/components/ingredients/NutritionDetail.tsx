@@ -46,10 +46,14 @@ interface NutritionDetailProps {
  * Nutrition breakdown of a recipe's normalized ingredient lines, grouped like
  * the recipe display. Each row shows the line's contribution (per-100g catalog
  * nutrition scaled by the parsed amount converted to grams). Editable cells:
- * the recipe line text (edits the recipe schema itself and auto-queues
- * re-normalization) and the normalized-ingredient autocomplete, which persists
- * the association and recomputes the row + totals. Table chrome (frozen
- * columns, sticky header, capped scroll box) mirrors IngredientsTable.
+ * the recipe line text (edits the recipe schema itself — a deterministic
+ * re-parse, never a re-match) and the normalized-ingredient autocomplete, which
+ * persists the association and recomputes the row + totals. Table chrome
+ * (frozen columns, sticky header, capped scroll box) mirrors IngredientsTable.
+ *
+ * Re-matching is only ever something the CURATOR asks for: the autocomplete,
+ * the Estimate action, or the Normalize button. Rewording a line is not a
+ * claim about which food it is, so it changes nothing but the words.
  *
  * @summary per-line nutrition table with manual match curation
  */
@@ -89,13 +93,6 @@ export default function NutritionDetail({
     initialIngredients,
   );
 
-  // Saving an edited line writes the recipe, which auto-queues a
-  // re-normalization run server-side — reflect that in the Normalize button
-  // so the curator sees "Queued — check again" instead of a stale prompt.
-  async function handleEditText(index: number, text: string) {
-    if (await updateLineText(index, text)) setNormalizeState("queued");
-  }
-
   async function handleRenormalize() {
     setNormalizeState("queueing");
     try {
@@ -112,8 +109,8 @@ export default function NutritionDetail({
         {hasStaleLines ? (
           <p className="flex items-center gap-2 text-sm text-muted-foreground">
             <WarningIcon />
-            Some lines changed since the last normalization run and are
-            excluded from totals — normalize to rebuild them.
+            Some lines have never been normalized and are excluded from totals —
+            normalize to build their rows.
           </p>
         ) : (
           <span />
@@ -201,7 +198,7 @@ export default function NutritionDetail({
                       usdaSearch={usdaSearch}
                       onSelect={selectIngredient}
                       onImportUsda={importUsda}
-                      onEditText={handleEditText}
+                      onEditText={updateLineText}
                       onEstimateGrams={estimateGrams}
                       onSetGrams={setGrams}
                     />

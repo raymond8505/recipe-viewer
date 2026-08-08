@@ -106,6 +106,7 @@ describe("PATCH /api/recipes/[id]/ingredients (line text)", () => {
     vi.clearAllMocks();
     vi.mocked(getIsLoggedIn).mockResolvedValue(true);
     vi.mocked(getRecipeById).mockResolvedValue(recipeWithLines());
+    vi.mocked(getRecipeIngredients).mockResolvedValue([]);
     vi.mocked(updateRecipeRow).mockImplementation(async (id, patch) =>
       makeRecipe(id, "Test Recipe", {
         metadata: {
@@ -134,6 +135,32 @@ describe("PATCH /api/recipes/[id]/ingredients (line text)", () => {
         recipeIngredient: [{ name: "100 g butter", group: "Cake" }, "6 g magic dust"],
       },
     });
+  });
+
+  // updateRecipeRow re-parses the derived rows in-band (no matcher run), so
+  // they are already current here. Sending them back is what lets the client
+  // show the edited line still carrying its match instead of blanking it.
+  it("returns the re-parsed rows alongside the lines", async () => {
+    const rows = [
+      makeRecipeIngredient("r-1", 1, {
+        line_id: "L2",
+        raw_text: "6 g magic dust",
+        ingredient_id: "ing-dust",
+      }),
+    ];
+    vi.mocked(getRecipeIngredients).mockResolvedValue(rows);
+
+    const res = await PATCH_LINE(
+      makeJsonRequest({ index: 1, text: "6 g magic dust" }, { method: "PATCH" }),
+      makeParams(),
+    );
+
+    expect((await res.json()).rows).toEqual(rows);
+    // Read AFTER the write, or the response carries the pre-edit rows.
+    expect(getRecipeIngredients).toHaveBeenCalledWith("r-1");
+    expect(vi.mocked(updateRecipeRow).mock.invocationCallOrder[0]).toBeLessThan(
+      vi.mocked(getRecipeIngredients).mock.invocationCallOrder[0],
+    );
   });
 
   it("edits an object line's name while preserving its group", async () => {

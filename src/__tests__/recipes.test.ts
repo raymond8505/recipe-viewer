@@ -558,8 +558,13 @@ describe("updateRecipeRow", () => {
     expect(mockGenerateEmbedding).not.toHaveBeenCalled();
   });
 
-  it("schedules normalization when the patch changes the ingredient text set", async () => {
+  // A recipe written before line ids existed gets one minted per line on its
+  // first save. That is bookkeeping, not a structural edit — reading it as "N
+  // new lines" would re-run the matcher over a reword, which is exactly what
+  // ids were introduced to stop. Sync carries the text AND stamps the ids.
+  it("does not schedule normalization when a legacy id-less line is reworded", async () => {
     mockScheduleNormalization.mockClear();
+    mockSyncRecipeIngredientText.mockClear();
     makeWriteSupabaseMock({
       selectSingle: {
         data: {
@@ -573,6 +578,80 @@ describe("updateRecipeRow", () => {
 
     await updateRecipeRow("r1", {
       schema: { recipeIngredient: ["2 tsp cumin"] },
+    });
+
+    expect(mockScheduleNormalization).not.toHaveBeenCalled();
+    expect(mockSyncRecipeIngredientText).toHaveBeenCalledWith("r1", [
+      { name: "2 tsp cumin", id: expect.any(String) },
+    ]);
+  });
+
+  // Minting also has to reach the rows, which only sync can do — so it runs
+  // even though the text itself never moved.
+  it("syncs a legacy line whose text is unchanged, to stamp its new id", async () => {
+    mockScheduleNormalization.mockClear();
+    mockSyncRecipeIngredientText.mockClear();
+    makeWriteSupabaseMock({
+      selectSingle: {
+        data: {
+          ...existing,
+          metadata: { schema: { name: "Original", recipeIngredient: ["1 tsp cumin"] } },
+        },
+        error: null,
+      },
+      updateSingle: { data: existing, error: null },
+    });
+
+    await updateRecipeRow("r1", {
+      schema: { recipeIngredient: ["1 tsp cumin"] },
+    });
+
+    expect(mockScheduleNormalization).not.toHaveBeenCalled();
+    expect(mockSyncRecipeIngredientText).toHaveBeenCalledWith("r1", [
+      { name: "1 tsp cumin", id: expect.any(String) },
+    ]);
+  });
+
+  it("schedules normalization when a legacy array gains a line", async () => {
+    mockScheduleNormalization.mockClear();
+    makeWriteSupabaseMock({
+      selectSingle: {
+        data: {
+          ...existing,
+          metadata: { schema: { name: "Original", recipeIngredient: ["1 tsp cumin"] } },
+        },
+        error: null,
+      },
+      updateSingle: { data: existing, error: null },
+    });
+
+    await updateRecipeRow("r1", {
+      schema: { recipeIngredient: ["1 tsp cumin", "2 cups rice"] },
+    });
+
+    expect(mockScheduleNormalization).toHaveBeenCalledWith("r1");
+  });
+
+  it("schedules normalization when a legacy array loses a line", async () => {
+    mockScheduleNormalization.mockClear();
+    makeWriteSupabaseMock({
+      selectSingle: {
+        data: {
+          ...existing,
+          metadata: {
+            schema: {
+              name: "Original",
+              recipeIngredient: ["1 tsp cumin", "2 cups rice"],
+            },
+          },
+        },
+        error: null,
+      },
+      updateSingle: { data: existing, error: null },
+    });
+
+    await updateRecipeRow("r1", {
+      schema: { recipeIngredient: ["1 tsp cumin"] },
     });
 
     expect(mockScheduleNormalization).toHaveBeenCalledWith("r1");
