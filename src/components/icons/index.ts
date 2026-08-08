@@ -18,3 +18,4 @@ export { SearchIcon } from "./SearchIcon";
 export { SmallPlusIcon } from "./SmallPlusIcon";
 export { SpinnerIcon } from "./SpinnerIcon";
 export { TrashIcon } from "./TrashIcon";
+export { WarningIcon } from "./WarningIcon";
