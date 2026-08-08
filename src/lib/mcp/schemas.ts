@@ -8,8 +8,19 @@
 // only thing here that is genuinely MCP-protocol-specific — it describes the
 // wire format that MCP `tools/list` emits.
 
-import { RECIPE_STATUSES } from "@/lib/schemas/recipe";
+import {
+  DEFAULT_INGREDIENT_SOURCE,
+  INGREDIENT_SOURCES,
+} from "@/lib/schemas/ingredient";
+import { ARCHIVED_RECIPE_STATUS, RECIPE_STATUSES } from "@/lib/schemas/recipe";
+import { NUTRITION_FIELDS, type NutritionField } from "@/lib/nutritionFields";
 import { METRIC_YIELD_UNITS } from "@/lib/units";
+import {
+  METRIC_UNIT_OR_LIST,
+  METRIC_UNIT_SLASHES,
+  TBSP_ML_EXAMPLE,
+} from "./copy";
+import { TOOL, type ToolName } from "./toolNames";
 
 const schemaRecipeJsonSchema = {
   type: "object",
@@ -27,8 +38,7 @@ const schemaRecipeJsonSchema = {
     prepTime: { type: "string", description: "ISO 8601 duration" },
     totalTime: { type: "string", description: "ISO 8601 duration" },
     recipeYield: {
-      description:
-        'Recipe yield. PREFERRED: a QuantitativeValue object — value = serving count, unitText = its label (e.g. 4 / "kebabs"); optional valueReference = the recipe\'s raw weight/volume in METRIC units (value + unitText, e.g. 454 / "g"; unitText must be g/kg/ml/l), which drives the per-serving nutrition basis shown in the app. A plain string like "4 servings" is still accepted but DEPRECATED — prefer the structured object.',
+      description: `Recipe yield. PREFERRED: a QuantitativeValue object — value = serving count, unitText = its label (e.g. 4 / "kebabs"); optional valueReference = the recipe's raw weight/volume in METRIC units (value + unitText, e.g. 454 / "g"; unitText must be ${METRIC_UNIT_SLASHES}), which drives the per-serving nutrition basis shown in the app. A plain string like "4 servings" is still accepted but DEPRECATED — prefer the structured object.`,
       oneOf: [
         {
           type: "object",
@@ -47,7 +57,7 @@ const schemaRecipeJsonSchema = {
                 unitText: {
                   type: "string",
                   enum: [...METRIC_YIELD_UNITS],
-                  description: 'Metric unit only: "g", "kg", "ml", or "l".',
+                  description: `Metric unit only: ${METRIC_UNIT_OR_LIST}.`,
                 },
               },
             },
@@ -83,8 +93,7 @@ const schemaRecipeJsonSchema = {
     notes: { type: "string", description: "App-internal notes (not part of Schema.org/Recipe)" },
     cookingNotes: {
       type: "string",
-      description:
-        "App-internal cooking notes — READ-ONLY for agents. Ignored by create_recipe/update_recipe (the call still succeeds with a warning). Authored by users in cooking mode; clear it via the clear_cooking_notes tool.",
+      description: `App-internal cooking notes — READ-ONLY for agents. Ignored by ${TOOL.create_recipe}/${TOOL.update_recipe} (the call still succeeds with a warning). Authored by users in cooking mode; clear it via the ${TOOL.clear_cooking_notes} tool.`,
     },
   },
   additionalProperties: true,
@@ -99,21 +108,18 @@ const ingredientNutritionJsonSchema = {
   type: "object",
   description:
     "Nutrition values AS MEASURED for the accompanying `nutrition_portion`. Passing this makes `nutrition_portion` REQUIRED — the call is rejected without it, and food_portions does NOT satisfy it (exception: nutrition null on update, which clears stored values and needs no nutrition_portion). The server converts to its storage form deterministically. All fields optional non-negative numbers; omit what you don't know.",
-  properties: {
-    calories_kcal: { type: "number", minimum: 0 },
-    protein_g: { type: "number", minimum: 0 },
-    fat_g: { type: "number", minimum: 0 },
-    saturated_fat_g: { type: "number", minimum: 0 },
-    carbs_g: { type: "number", minimum: 0 },
-    fiber_g: { type: "number", minimum: 0 },
-    sugars_g: { type: "number", minimum: 0 },
-    sodium_mg: { type: "number", minimum: 0 },
-    cholesterol_mg: { type: "number", minimum: 0 },
-    calcium_mg: { type: "number", minimum: 0 },
-    iron_mg: { type: "number", minimum: 0 },
-    potassium_mg: { type: "number", minimum: 0 },
-  },
-} as const;
+  // Derived from NUTRITION_FIELDS so the wire schema can't omit a nutrient the
+  // zod validator accepts. (This object loses `as const` as a result — nothing
+  // indexes these property names at the type level, so that's free.)
+  properties: Object.fromEntries(
+    NUTRITION_FIELDS.map(
+      (field): [NutritionField, { type: "number"; minimum: 0 }] => [
+        field,
+        { type: "number", minimum: 0 },
+      ],
+    ),
+  ) as Record<NutritionField, { type: "number"; minimum: 0 }>,
+};
 
 const ingredientFieldsJsonSchema = {
   name: {
@@ -155,8 +161,7 @@ const ingredientFieldsJsonSchema = {
   },
   density_g_per_ml: {
     type: ["number", "null"],
-    description:
-      "Density in g/ml for volume↔weight conversion: grams = ml × density_g_per_ml (e.g. 1 tbsp = 14.79 ml).",
+    description: `Density in g/ml for volume↔weight conversion: grams = ml × density_g_per_ml (e.g. ${TBSP_ML_EXAMPLE}).`,
   },
   food_portions: {
     type: "array",
@@ -179,8 +184,8 @@ const ingredientFieldsJsonSchema = {
   },
   source: {
     type: "string",
-    enum: ["usda", "manual"],
-    description: 'Provenance of the row. Defaults to "manual" for agent-created rows.',
+    enum: INGREDIENT_SOURCES,
+    description: `Provenance of the row. Defaults to "${DEFAULT_INGREDIENT_SOURCE}" for agent-created rows.`,
   },
 } as const;
 
@@ -210,7 +215,7 @@ export const TOOL_SCHEMAS = {
     type: "object",
     required: ["id"],
     properties: {
-      id: { type: "string", description: "Ingredient UUID (from search_ingredients results)" },
+      id: { type: "string", description: `Ingredient UUID (from ${TOOL.search_ingredients} results)` },
     },
   },
   create_ingredient: {
@@ -299,7 +304,10 @@ export const TOOL_SCHEMAS = {
     type: "object",
     required: ["id"],
     properties: {
-      id: { type: "string", description: "Recipe UUID — soft-deleted by setting status=archived" },
+      id: {
+        type: "string",
+        description: `Recipe UUID — soft-deleted by setting status=${ARCHIVED_RECIPE_STATUS}`,
+      },
     },
   },
   upload_recipe_image: {
@@ -315,4 +323,7 @@ export const TOOL_SCHEMAS = {
       },
     },
   },
-} as const;
+  // `satisfies Record<ToolName, …>` is bidirectional: a tool missing here fails
+  // the Record, and one that isn't in TOOL_NAMES fails the freshness check.
+  // `as const` still applies first, so each entry keeps its literal type.
+} as const satisfies Record<ToolName, object>;

@@ -1,4 +1,7 @@
 import { z } from "zod";
+import { NUTRITION_FIELDS, type NutritionField } from "@/lib/nutritionFields";
+import type { Assert, Assignable } from "@/lib/exhaustive";
+import type { IngredientNutrition, IngredientSource } from "@/types/ingredient";
 
 // Zod validators for the ingredient CRUD/search surface. Shared by the HTTP
 // routes and the MCP search tool so both agree on the allowed shapes.
@@ -18,22 +21,48 @@ const foodPortionSchema = z.object({
   measureUnit: z.object({ name: z.string().max(100).optional() }).optional(),
 });
 
-const nutritionSchema = z
-  .object({
-    calories_kcal: z.number().nonnegative(),
-    protein_g: z.number().nonnegative(),
-    fat_g: z.number().nonnegative(),
-    saturated_fat_g: z.number().nonnegative(),
-    carbs_g: z.number().nonnegative(),
-    fiber_g: z.number().nonnegative(),
-    sugars_g: z.number().nonnegative(),
-    sodium_mg: z.number().nonnegative(),
-    cholesterol_mg: z.number().nonnegative(),
-    calcium_mg: z.number().nonnegative(),
-    iron_mg: z.number().nonnegative(),
-    potassium_mg: z.number().nonnegative(),
-  })
-  .partial();
+// The nutrient FIELD LIST lives in @/lib/nutritionFields — grep there, not
+// here. Deriving the shape from it is what keeps the validator, the MCP JSON
+// schema and the tool prose from disagreeing about which nutrients exist. All
+// twelve share one rule (optional non-negative number); if one ever needs its
+// own, switch to a literal object with `satisfies Record<NutritionField,
+// z.ZodNumber>`, which is exhaustive both ways too, just more verbose.
+const nutritionShape = Object.fromEntries(
+  NUTRITION_FIELDS.map((field): [NutritionField, z.ZodNumber] => [
+    field,
+    z.number().nonnegative(),
+  ]),
+) as Record<NutritionField, z.ZodNumber>;
+
+const nutritionSchema = z.object(nutritionShape).partial();
+
+// The check the cast above can't give us: the parsed shape and the hand-written
+// IngredientNutrition interface must stay mutually assignable. (Mutual
+// assignability rather than strict identity — zod runs inferred object types
+// through its own optional-key machinery. Note this parity depends on
+// exactOptionalPropertyTypes being off.)
+export type NutritionSchemaCoversType = Assert<
+  Assignable<z.infer<typeof nutritionSchema>, IngredientNutrition>
+>;
+export type NutritionTypeCoversSchema = Assert<
+  Assignable<IngredientNutrition, z.infer<typeof nutritionSchema>>
+>;
+
+// The catalog's provenance enum. Mirrors the CHECK in
+// db/migrations/0002_ingredients.sql; this is the app-side source the JSON
+// schema, the create default and the MCP tool prose all derive from.
+export const ingredientSourceSchema = z.enum(["usda", "manual"]);
+export const INGREDIENT_SOURCES = ingredientSourceSchema.options;
+export const DEFAULT_INGREDIENT_SOURCE = ingredientSourceSchema.enum.manual;
+
+// Parity with the hand-written union in @/types/ingredient. The check lives on
+// this side because a value import back the other way would be a cycle.
+export type SourceEnumCoversType = Assert<
+  Assignable<IngredientSource, z.infer<typeof ingredientSourceSchema>>
+>;
+export type SourceTypeCoversEnum = Assert<
+  Assignable<z.infer<typeof ingredientSourceSchema>, IngredientSource>
+>;
 
 export const ingredientCreateInputSchema = z.object({
   name: z.string().min(1).max(200),
@@ -45,7 +74,7 @@ export const ingredientCreateInputSchema = z.object({
   food_portions: z.array(foodPortionSchema).max(50).nullish(),
   // The UI creates hand-entered rows; the workflow's USDA rows go through the
   // repo layer directly.
-  source: z.enum(["usda", "manual"]).default("manual"),
+  source: ingredientSourceSchema.default(DEFAULT_INGREDIENT_SOURCE),
 });
 
 export const ingredientUpdateInputSchema = ingredientCreateInputSchema.partial();

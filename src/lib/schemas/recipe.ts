@@ -109,6 +109,13 @@ export const schemaRecipeSchema = z
 export const recipeStatusSchema = z.enum(["published", "archived", "draft"]);
 export const RECIPE_STATUSES = recipeStatusSchema.options;
 
+// The two statuses the app applies on its own — named so the repo writes, the
+// JSON-Schema export and the MCP tool prose that documents them all move
+// together when a status is renamed.
+export const DEFAULT_RECIPE_STATUS = recipeStatusSchema.enum.draft;
+export const PUBLISHED_RECIPE_STATUS = recipeStatusSchema.enum.published;
+export const ARCHIVED_RECIPE_STATUS = recipeStatusSchema.enum.archived;
+
 // Input shapes for the recipe CRUD operations. Defined here (not in
 // `lib/mcp/schemas.ts`) so non-MCP callers — API route handlers, form
 // validators, future migrations — can reuse the same validators rather than

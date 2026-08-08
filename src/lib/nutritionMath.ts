@@ -7,6 +7,7 @@
 import { convert, isVolumeUnit, roundDecimal, unitKeyForAlias } from "./units";
 import { getIngredientText } from "./format";
 import { lineId } from "./ingredientLines";
+import { NUTRITION_FIELDS as NUTRITION_KEYS } from "./nutritionFields";
 import type {
   IngredientNutrition,
   IngredientRow,
@@ -48,21 +49,6 @@ export type LineComputation =
       nutrition: IngredientNutrition;
     }
   | { kind: "excluded"; reason: ExclusionReason };
-
-const NUTRITION_KEYS = [
-  "calories_kcal",
-  "protein_g",
-  "fat_g",
-  "saturated_fat_g",
-  "carbs_g",
-  "fiber_g",
-  "sugars_g",
-  "sodium_mg",
-  "cholesterol_mg",
-  "calcium_mg",
-  "iron_mg",
-  "potassium_mg",
-] as const satisfies readonly (keyof IngredientNutrition)[];
 
 /**
  * Convert a parsed quantity + unit to grams. Weight units convert directly;

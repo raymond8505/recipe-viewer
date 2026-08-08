@@ -6,6 +6,12 @@ import { lineId, lineSetChanged, withLineIds } from "./ingredientLines";
 import { ingredientFingerprint } from "./normalization/fingerprint";
 import { syncRecipeIngredientText } from "./normalization/syncLines";
 import { scheduleNormalization } from "./normalization/trigger";
+import {
+  ARCHIVED_RECIPE_STATUS,
+  DEFAULT_RECIPE_STATUS,
+  PUBLISHED_RECIPE_STATUS,
+  RECIPE_STATUSES,
+} from "./schemas/recipe";
 import type {
   RecipeIngredient,
   RecipeRow,
@@ -13,7 +19,9 @@ import type {
   SchemaRecipe,
 } from "@/types/recipe";
 
-export type RecipeStatus = "published" | "archived" | "draft";
+// Derived from the zod enum in ./schemas/recipe rather than restated, so the
+// column's valid values live in exactly one place.
+export type RecipeStatus = (typeof RECIPE_STATUSES)[number];
 
 // Discriminated error type for the write helpers. Lets callers (routes, MCP
 // tools) branch on `kind` instead of inspecting error messages.
@@ -126,11 +134,13 @@ export async function getRecipes(opts?: {
     .order(column, { ascending });
 
   if (features.filterByStatus) {
-    queryBuilder = queryBuilder.eq("status", "published");
+    queryBuilder = queryBuilder.eq("status", PUBLISHED_RECIPE_STATUS);
   } else if (opts?.status) {
     queryBuilder = queryBuilder.eq("status", opts.status);
   } else {
-    queryBuilder = queryBuilder.or("status.neq.archived,status.is.null");
+    queryBuilder = queryBuilder.or(
+      `status.neq.${ARCHIVED_RECIPE_STATUS},status.is.null`,
+    );
   }
 
   if (opts?.source) {
@@ -174,7 +184,8 @@ export async function getRecipeById(id: string): Promise<RecipeRow | null> {
   return row;
 }
 
-// Insert a new recipe row. Defaults status to "draft" if not provided.
+// Insert a new recipe row. Defaults status to DEFAULT_RECIPE_STATUS if not
+// provided.
 // Throws RecipeRepoError("insert_failed") on Supabase failure. Derives the
 // `content` and `embedding` columns from the schema — see the "Derived content
 // + embedding columns" note in .claude/CLAUDE.md.
@@ -199,7 +210,7 @@ export async function createRecipeRow(input: CreateRecipeInput): Promise<RecipeR
       ...(embedding ? { embedding: toVectorLiteral(embedding) } : {}),
       url: input.url,
       source: input.source,
-      status: input.status ?? "draft",
+      status: input.status ?? DEFAULT_RECIPE_STATUS,
       metadata: { schema },
     })
     .select(RECIPE_COLUMNS)
@@ -342,7 +353,8 @@ export async function updateRecipeRow(
   return data as RecipeRow;
 }
 
-// Soft-delete by setting status="archived". Verifies the row exists first so
+// Soft-delete by setting status to ARCHIVED_RECIPE_STATUS. Verifies the row
+// exists first so
 // callers can return 404 vs 500. Throws RecipeRepoError("not_found") or
 // ("update_failed") accordingly.
 export async function archiveRecipe(id: string): Promise<void> {
@@ -360,7 +372,7 @@ export async function archiveRecipe(id: string): Promise<void> {
 
   const { error } = await supabase
     .from("recipes")
-    .update({ status: "archived" })
+    .update({ status: ARCHIVED_RECIPE_STATUS })
     .eq("id", id);
 
   if (error) {

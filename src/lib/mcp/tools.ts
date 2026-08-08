@@ -22,7 +22,9 @@ import {
   scalePortionNutritionToPer100g,
 } from "@/lib/nutritionMath";
 import { generateEmbedding } from "@/lib/embedding";
+import { exhaustiveKeys } from "@/lib/exhaustive";
 import { ingredientEmbeddingText, ingredientQueryText } from "@/lib/ingredientAliases";
+import { ARCHIVED_RECIPE_STATUS } from "@/lib/schemas/recipe";
 import { RECIPE_TOKEN_TTL_SECONDS, signRecipeToken } from "./recipeToken";
 import { env } from "@/env";
 import {
@@ -60,6 +62,15 @@ export interface RecipeSearchResultItem {
   name: string;
   description?: string;
 }
+
+// The trimmed shape rendered into search_recipes' tool description, so the
+// documented keys can't drift from the interface above.
+export const RECIPE_SEARCH_RESULT_FIELDS = exhaustiveKeys<RecipeSearchResultItem>()([
+  "id",
+  "url",
+  "name",
+  "description",
+]);
 
 export async function searchRecipes(
   args: RecipeSearchInput,
@@ -329,10 +340,10 @@ export async function clearCookingNotes(args: RecipeIdInput): Promise<RecipeRow>
 
 export async function deleteRecipe(
   args: RecipeIdInput,
-): Promise<{ id: string; status: "archived" }> {
+): Promise<{ id: string; status: typeof ARCHIVED_RECIPE_STATUS }> {
   try {
     await archiveRecipe(args.id);
-    return { id: args.id, status: "archived" };
+    return { id: args.id, status: ARCHIVED_RECIPE_STATUS };
   } catch (err) {
     throw toToolError(err, "delete_failed");
   }
