@@ -127,9 +127,11 @@ describe("RecipeDetail", () => {
       />
     );
     expect(screen.getByText("350 kcal")).toBeTruthy();
-    expect(screen.getByText("20g")).toBeTruthy();
-    expect(screen.getByText("40g")).toBeTruthy();
-    expect(screen.getByText("10g")).toBeTruthy();
+    // Attached units ("20g") normalize to spaced display — values are
+    // re-rendered from parsed NutrientValues, not echoed from the raw string.
+    expect(screen.getByText("20 g")).toBeTruthy();
+    expect(screen.getByText("40 g")).toBeTruthy();
+    expect(screen.getByText("10 g")).toBeTruthy();
   });
 
   it("hides nutrition section when only non-counted fields are present (e.g. servingSize)", () => {
@@ -226,7 +228,9 @@ describe("RecipeDetail — shopping list", () => {
     fireEvent.click(screen.getByRole("checkbox", { name: "2 cups flour" }));
     fireEvent.click(screen.getByRole("checkbox", { name: "1 tsp salt" }));
     fireEvent.click(screen.getByRole("button", { name: /copy shopping list/i }));
-    await vi.waitFor(() => {
+    // RTL's waitFor (not vi.waitFor): it suspends the act environment while
+    // polling, so the post-clipboard "copied" state update doesn't warn.
+    await waitFor(() => {
       expect(navigator.clipboard.writeText).toHaveBeenCalledWith("2 cups flour\n1 tsp salt");
     });
   });
@@ -274,6 +278,19 @@ describe("RecipeDetail — controls section", () => {
     expect(screen.getByRole("button", { name: /re-scrape/i })).toBeTruthy();
   });
 
+  it("links to the nutrition breakdown only when logged in", () => {
+    const { unmount } = render(
+      <RecipeDetail recipe={makeRecipe()} isLoggedIn={true} />,
+    );
+    expect(
+      screen.getByRole("link", { name: "Ingredient breakdown" }),
+    ).toHaveAttribute("href", "/recipes/1/ingredients");
+    unmount();
+
+    render(<RecipeDetail recipe={makeRecipe()} isLoggedIn={false} />);
+    expect(screen.queryByRole("link", { name: "Ingredient breakdown" })).toBeNull();
+  });
+
   it("shows loading state while re-scraping", async () => {
     let resolve: (value: Response) => void;
     const pending = new Promise<Response>((res) => { resolve = res; });
@@ -287,7 +304,11 @@ describe("RecipeDetail — controls section", () => {
     expect(screen.getByRole("button", { name: /re-scraping/i })).toBeTruthy();
     expect(screen.getByRole("button", { name: /re-scraping/i })).toBeDisabled();
 
-    resolve!(new Response(JSON.stringify({ schema: rescrapeFixture }), { status: 200 }));
+    // Flush the response continuation (json parse + state updates) inside act
+    // so the post-resolve setState doesn't fire after the test as a warning.
+    await act(async () => {
+      resolve!(new Response(JSON.stringify({ schema: rescrapeFixture }), { status: 200 }));
+    });
   });
 
   it("enters edit mode with rescraped data after a successful re-scrape", async () => {

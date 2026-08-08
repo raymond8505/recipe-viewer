@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import { getRecipeById } from "@/lib/recipes";
+import { getRecipeNormalizedNutrition } from "@/lib/ingredients";
 import { getFirstImage } from "@/lib/format";
 import { getIsLoggedIn } from "@/lib/auth";
 import { env } from "@/env";
@@ -49,11 +50,19 @@ export default async function RecipePage({ params }: RecipePageProps) {
     notFound();
   }
 
+  // Normalized ingredient nutrition (null when the recipe was never normalized).
+  // Preferred over the schema's own nutrition fields when fully covered.
+  const normalizedNutrition = await getRecipeNormalizedNutrition(
+    id,
+    recipe.metadata.schema.recipeIngredient ?? [],
+  );
+
   return (
     <RecipeDetail
       recipe={recipe}
       isLoggedIn={isLoggedIn}
       maxImageBytes={env.MAX_IMAGE_BYTES}
+      normalizedNutrition={normalizedNutrition}
     />
   );
 }

@@ -17,6 +17,7 @@ const meta: Meta<typeof RecipeControls> = {
     isUploadImageReview: false,
     rescrapeState: "idle",
     regenImageState: "idle",
+    normalizeState: "idle",
     canRescrape: true,
     uploadError: false,
     fileInputRef: { current: null },
@@ -27,6 +28,7 @@ const meta: Meta<typeof RecipeControls> = {
     onEditCancel: fn(),
     onRescrape: fn(),
     onRegenImage: fn(),
+    onNormalize: fn(),
     onUploadOpen: fn(),
     onFileSelected: fn(),
   },
@@ -35,8 +37,18 @@ const meta: Meta<typeof RecipeControls> = {
 export default meta;
 type Story = StoryObj<typeof RecipeControls>;
 
-/** Default (not editing): Edit / Re-scrape / Regen Image / Upload Image. */
+/** Default (not editing): Edit / Re-scrape / Regen Image / Upload Image / Normalize. */
 export const ViewMode: Story = {};
+
+/** Normalization request in flight — the button reads "Normalizing…" and disables. */
+export const Normalizing: Story = {
+  args: { normalizeState: "loading" },
+};
+
+/** Normalization queued — transient success confirmation next to the button. */
+export const NormalizeQueued: Story = {
+  args: { normalizeState: "success" },
+};
 
 /** Editing: source URL + status + Save/Cancel. */
 export const Editing: Story = {
