@@ -1,3 +1,4 @@
+import { ZodError } from "zod";
 import { TOOL_SCHEMAS } from "./schemas";
 import { RECIPE_TOKEN_TTL_LABEL } from "./recipeToken";
 import {
@@ -8,13 +9,24 @@ import {
   recipeUpdateInputSchema,
 } from "@/lib/schemas/recipe";
 import {
+  ingredientCreateToolInputSchema,
+  ingredientIdInputSchema,
+  ingredientSearchInputSchema,
+  ingredientUpdateToolInputSchema,
+} from "@/lib/schemas/ingredient";
+import {
   clearCookingNotes,
+  createIngredient,
   createRecipe,
+  deleteIngredient,
   deleteRecipe,
+  getIngredient,
   getRecipe,
   getToken,
+  searchIngredients,
   searchRecipes,
   ToolError,
+  updateIngredient,
   updateRecipe,
   uploadRecipeImage,
 } from "./tools";
@@ -46,6 +58,41 @@ export const TOOLS: ToolDefinition[] = [
       "Search recipes by name, source, or status. Returns a paginated list with total count; each result is trimmed to { id, url, name, description } — call get_recipe with an id for the full schema. Use this before get_recipe when you only have a name.",
     inputSchema: TOOL_SCHEMAS.search_recipes,
     call: (args) => searchRecipes(recipeSearchInputSchema.parse(args)),
+  },
+  {
+    name: "search_ingredients",
+    description:
+      "Hybrid keyword + semantic search over the known-ingredient catalog — the FIRST call to make before creating or updating any ingredient. Returns up to `limit` rows, each with its aliases, per-100g nutrition (calories_kcal, protein_g, fat_g, saturated_fat_g, carbs_g, fiber_g, sugars_g, sodium_mg, cholesterol_mg, calcium_mg, iron_mg, potassium_mg) and density_g_per_ml. Density converts volume↔weight: grams = ml × density_g_per_ml (e.g. 1 tbsp = 14.79 ml). Data is USDA FoodData Central or manually curated; null fields mean not yet known.\n\nJUDGING RESULTS — each row carries THREE numbers, and picking the wrong one is the common failure:\n• semantic_similarity (0–1) — meaning-based, the closest thing to a match signal: higher is a better match, and the top result is usually the right food. There is no calibrated cutoff, so treat it as a ranking aid and DECIDE BY READING THE NAME, not by a threshold.\n• keyword_similarity (0–1) — spelling overlap against the name and every alias. ~1.0 means a near-exact name/alias hit, which is strong evidence. Low is NOT disqualifying: the catalog names foods the way USDA does (\"Butter, without salt\") and recipes don't.\n• score — RANKING ONLY. It is a reciprocal-rank fusion of the two, so it is a tiny number by construction: a PERFECT match scores about 0.04, never near 1.0. Use it to order results and for nothing else.\n\nWHEN UNSURE, PREFER THE EXISTING ROW. The two mistakes are not equal: adding an alias to the wrong row is cheap and reversible, while creating a row for a food already in the catalog splits its nutrition across duplicates and is invisible until someone notices. Judge on whether the name denotes the same food (\"Butter, without salt\" IS unsalted butter; \"Butter oil, anhydrous\" is not) and do not let a low number alone talk you out of a match.\n\nCheck the aliases on each result: if your recipe's wording is already there, that row is definitively your ingredient and needs no edit. If the row is the right food but your wording is missing, add it with update_ingredient (pass the aliases you see here back alongside the new one — the field replaces the whole array).",
+    inputSchema: TOOL_SCHEMAS.search_ingredients,
+    call: (args) => searchIngredients(ingredientSearchInputSchema.parse(args)),
+  },
+  {
+    name: "get_ingredient",
+    description:
+      "Fetch the full catalog row for an ingredient UUID — includes fields search_ingredients results omit (fdc_id, fdc_data_type, food_portions, source, timestamps). Get ids from search_ingredients. You do NOT need this just to edit aliases: search_ingredients already returns them, so you can pass those straight back to update_ingredient. Reach for it when you need the USDA provenance or portion list, or when working from an id you did not just search for.",
+    inputSchema: TOOL_SCHEMAS.get_ingredient,
+    call: (args) => getIngredient(ingredientIdInputSchema.parse(args)),
+  },
+  {
+    name: "create_ingredient",
+    description:
+      "Add a NEW ingredient to the known-ingredient catalog — the last resort, not the first move. Both name (case-insensitively) and fdc_id are unique.\n\nBEFORE CALLING THIS, call search_ingredients. The catalog names foods the way USDA does, so the row you want usually already exists under wording you would not have guessed — \"Butter, without salt\" is the row for \"unsalted butter\". Check each result's aliases first — if your recipe's wording is already among them, that row is your ingredient and there is nothing to do. If a result is the same food (see search_ingredients on judging semantic_similarity) but lacks your wording, that IS still your ingredient: do NOT create a second row. Instead call update_ingredient adding your wording to the aliases the search already returned. Teaching an existing row a new alias is the normal, expected outcome — it is how the catalog learns recipe language, and it is nearly always right when create feels tempting.\n\nOnly create when nothing in the catalog is the same food. Put the canonical name in name and the recipe-language wording in aliases: matching searches both, so the aliases are what make the row findable from a recipe line. Nutrition values are given as measured for a portion: whenever you pass nutrition, the nutrition_portion field is REQUIRED (the call is rejected without it — note this is its own field; food_portions does NOT satisfy it); omit both to create the row with no nutrition, in which case nutrition_portion is not needed. Example: calories per 1 tbsp with nutrition_portion { gramWeight: 14, amount: 1, modifier: \"tbsp\" }. The server converts deterministically for storage and saves the portion on the ingredient. density_g_per_ml converts volume↔weight (grams = ml × density). The matching embedding is derived server-side from name + aliases — you never supply it. source defaults to 'manual'.",
+    inputSchema: TOOL_SCHEMAS.create_ingredient,
+    call: (args) => createIngredient(ingredientCreateToolInputSchema.parse(args)),
+  },
+  {
+    name: "update_ingredient",
+    description:
+      "Patch fields on a catalog ingredient — only the fields you pass change. This is also how you TEACH THE CATALOG A NEW NAME: when search_ingredients found the right food under wording a recipe would not use, add that recipe wording to this row's aliases rather than creating a second row. Renaming OR changing aliases re-derives the matching embedding server-side (it spans both), which is what makes the new wording findable afterwards. aliases REPLACES the whole array rather than appending — ALWAYS pass the row's existing aliases back alongside the one you are adding, or you will silently delete the names the catalog already learned. search_ingredients returns them, so no extra call is needed; use get_ingredient if you are working from an id you did not just search for. To change nutrition, pass nutrition as measured for a portion: whenever you pass nutrition values, the nutrition_portion field is REQUIRED (the call is rejected without it — note this is its own field; food_portions does NOT satisfy it); the one exception is nutrition: null, which clears the stored nutrition and needs no nutrition_portion. The stored nutrition is replaced to match the given values + nutrition_portion (whole object, deterministic conversion; the portion itself is not saved). Fails with 'conflict' if the new name (case-insensitive) or fdc_id collides with another row.",
+    inputSchema: TOOL_SCHEMAS.update_ingredient,
+    call: (args) => updateIngredient(ingredientUpdateToolInputSchema.parse(args)),
+  },
+  {
+    name: "delete_ingredient",
+    description:
+      "PERMANENTLY delete a catalog ingredient (hard delete — there is no archive state, unlike delete_recipe). Recipe lines that referenced it keep their parsed text/quantities but detach (their ingredient_id nulls out), so those recipes lose ingredient-derived nutrition until re-matched. Prefer update_ingredient to fix a bad row.",
+    inputSchema: TOOL_SCHEMAS.delete_ingredient,
+    call: (args) => deleteIngredient(ingredientIdInputSchema.parse(args)),
   },
   {
     name: "get_recipe",
@@ -160,6 +207,25 @@ export async function handleJsonRpc(req: JsonRpcRequest): Promise<JsonRpcRespons
           result: {
             isError: true,
             content: [{ type: "text", text: `${err.code}: ${err.message}` }],
+          },
+        };
+      }
+      // Argument validation failures otherwise surface as a raw JSON issues
+      // array with no framing — an agent got stuck retrying against exactly
+      // that. Name the tool and each offending field so the caller can fix
+      // the arguments instead of guessing.
+      if (err instanceof ZodError) {
+        const detail = err.issues
+          .map((i) => `${i.path.length > 0 ? i.path.join(".") : "(arguments)"}: ${i.message}`)
+          .join("; ");
+        return {
+          jsonrpc: "2.0",
+          id,
+          result: {
+            isError: true,
+            content: [
+              { type: "text", text: `invalid_arguments: ${params.name} — ${detail}` },
+            ],
           },
         };
       }
