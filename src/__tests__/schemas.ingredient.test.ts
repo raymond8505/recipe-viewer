@@ -5,6 +5,7 @@ import {
   ingredientCreateInputSchema,
 } from "@/lib/schemas/ingredient";
 import { NUTRITION_FIELDS } from "@/lib/nutritionFields";
+import { nutritionSchema } from "@/lib/schemas/nutrition";
 
 // The nutrition validator's shape is generated from NUTRITION_FIELDS, so these
 // exercise it behaviourally — the object itself is module-private, and a
@@ -14,6 +15,15 @@ import { NUTRITION_FIELDS } from "@/lib/nutritionFields";
 const allNutrients = Object.fromEntries(
   NUTRITION_FIELDS.map((field, i) => [field, i + 1]),
 );
+
+describe("NUTRITION_FIELDS vs the schema that declares the nutrients", () => {
+  // exhaustiveKeys makes a MISSING or UNKNOWN nutrient a compile error, but key
+  // order isn't visible to the type system — and order is read by humans in the
+  // MCP tool prose and the manager's columns. So it's pinned here.
+  it("lists exactly the schema's nutrients, in the schema's order", () => {
+    expect([...NUTRITION_FIELDS]).toEqual(Object.keys(nutritionSchema.shape));
+  });
+});
 
 describe("ingredient nutrition validator", () => {
   it("accepts and preserves every nutrient the catalog declares", () => {

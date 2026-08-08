@@ -1,19 +1,21 @@
 import { exhaustiveKeys } from "@/lib/exhaustive";
-import type { IngredientNutrition } from "@/types/ingredient";
+import type { IngredientNutrition } from "@/lib/schemas/nutrition";
 
 /**
- * The catalog's per-100g nutrient fields, in USDA label order. THE single
- * source: the zod validator, the MCP JSON schema, the MCP tool descriptions,
- * the nutrition math and the manager's column list all derive from this, so
- * adding a nutrient is one edit here plus one label in nutritionColumns.ts.
+ * The catalog's per-100g nutrient fields as an ORDERED RUNTIME LIST — what the
+ * MCP tool prose, the MCP JSON schema, the nutrition math and the manager's
+ * columns all iterate.
  *
- * Order is read by humans — it drives the field list in the search_ingredients
- * tool description and the manager's column order — so keep it USDA-label
- * order rather than sorting it.
+ * The nutrients themselves are declared by the zod schema
+ * (@/lib/schemas/nutrition); this is that set in a form the client can iterate.
+ * It exists separately, and stays dependency-free, because those consumers ship
+ * to the browser and zod is otherwise server-only here — reading
+ * `Object.keys(nutritionSchema.shape)` instead would pull zod into the recipe
+ * page's bundle to learn twelve strings.
  *
- * Built with `exhaustiveKeys` rather than `satisfies readonly (keyof T)[]`:
- * satisfies only rejects unknown keys, so it would silently accept a field
- * added to IngredientNutrition and forgotten here.
+ * `exhaustiveKeys` is what keeps the two honest: a nutrient added to the schema
+ * and missing here fails the build, naming it. Order isn't type-visible, so a
+ * reordering is pinned by a test instead.
  */
 export const NUTRITION_FIELDS = exhaustiveKeys<IngredientNutrition>()([
   "calories_kcal",

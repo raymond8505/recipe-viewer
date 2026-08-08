@@ -1,22 +1,10 @@
-// Per-100g nutrition, the "core label set" subset of a USDA FoodData Central
-// food (decided against real FDC payloads, 2026-07). Keys are the stable JSONB
-// wire format for ingredients.nutrition — the USDA nutrient id each field maps
-// to lives in src/lib/usda.ts. All fields optional: USDA coverage varies per
-// food, and manual entries may fill in only what's known.
-export interface IngredientNutrition {
-  calories_kcal?: number;
-  protein_g?: number;
-  fat_g?: number;
-  saturated_fat_g?: number;
-  carbs_g?: number;
-  fiber_g?: number;
-  sugars_g?: number;
-  sodium_mg?: number;
-  cholesterol_mg?: number;
-  calcium_mg?: number;
-  iron_mg?: number;
-  potassium_mg?: number;
-}
+// Per-100g nutrition. Inferred from the zod schema that declares the nutrients
+// (@/lib/schemas/nutrition) rather than restated here, so the validator and the
+// type cannot describe different foods. Re-exported from this module because
+// this is where the rest of the ingredient types live; the import is type-only,
+// so nothing pulls zod into a bundle by reading it.
+export type { IngredientNutrition } from "@/lib/schemas/nutrition";
+import type { IngredientNutrition } from "@/lib/schemas/nutrition";
 
 export type IngredientSource = "usda" | "manual";
 
