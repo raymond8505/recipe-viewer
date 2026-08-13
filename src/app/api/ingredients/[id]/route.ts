@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { requireSession } from "@/lib/api/guard";
+import { requireSessionOrDev } from "@/lib/api/guard";
 import { generateEmbedding } from "@/lib/embedding";
 import { ingredientEmbeddingText } from "@/lib/ingredientAliases";
 import {
@@ -25,7 +25,7 @@ function toErrorResponse(err: IngredientRepoError): Response {
   }
 }
 
-export const PATCH = requireSession(
+export const PATCH = requireSessionOrDev(
   async (req: Request, { params }: RouteContext<"/api/ingredients/[id]">) => {
     const { id } = await params;
 
@@ -66,7 +66,7 @@ export const PATCH = requireSession(
   },
 );
 
-export const DELETE = requireSession(
+export const DELETE = requireSessionOrDev(
   async (_req: Request, { params }: RouteContext<"/api/ingredients/[id]">) => {
     const { id } = await params;
 

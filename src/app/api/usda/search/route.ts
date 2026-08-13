@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { requireSession } from "@/lib/api/guard";
+import { requireSessionOrDev } from "@/lib/api/guard";
 import { UsdaError, searchFoodsMixed } from "@/lib/usda";
 import { usdaSearchQuerySchema } from "@/lib/schemas/ingredient";
 
@@ -9,7 +9,7 @@ import { usdaSearchQuerySchema } from "@/lib/schemas/ingredient";
 // pools separately and interleaves them, so the high-value Foundation/SR Legacy
 // foods surface instead of being buried under exact-name Branded matches
 // (automated normalization stays analytical-only).
-export const GET = requireSession(async (req: Request) => {
+export const GET = requireSessionOrDev(async (req: Request) => {
   const url = new URL(req.url);
   const parsed = usdaSearchQuerySchema.safeParse({
     q: url.searchParams.get("q") ?? undefined,

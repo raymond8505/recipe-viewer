@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { getIsLoggedIn } from "@/lib/auth";
+import { canCurateNutrition } from "@/lib/devAccess";
 import { getIngredients } from "@/lib/ingredients";
 import IngredientsTable from "@/components/ingredients/IngredientsTable";
 
@@ -7,13 +8,12 @@ export const metadata: Metadata = {
   title: "Ingredients",
 };
 
-// Login-gated admin surface: the data-plane routes under /api/ingredients are
-// session-only regardless (routePolicy), so this gate is UX, not the security
-// boundary.
+// Login-gated admin surface, except in local development where the whole
+// nutrition layer is open (see src/lib/devAccess.ts). The data-plane routes
+// under /api/ingredients enforce the same `session-or-dev` posture themselves
+// (routePolicy), so this gate is UX, not the security boundary.
 export default async function IngredientsPage() {
-  const isLoggedIn = await getIsLoggedIn();
-
-  if (!isLoggedIn) {
+  if (!canCurateNutrition(await getIsLoggedIn())) {
     return (
       <section className="py-16 text-center">
         <h1 className="text-3xl mb-3">Ingredient Manager</h1>

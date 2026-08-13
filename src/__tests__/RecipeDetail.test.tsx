@@ -291,6 +291,33 @@ describe("RecipeDetail — controls section", () => {
     expect(screen.queryByRole("link", { name: "Ingredient breakdown" })).toBeNull();
   });
 
+  // The whole contract of the dev-only nutrition door in one case: the nutrition
+  // layer opens for a logged-out viewer, and the edit surface does NOT come with
+  // it. The server page passes canCurateNutrition (resolved from NODE_ENV) — this
+  // component just honours it, so no env stubbing is needed here.
+  it("opens nutrition — but not editing — when canCurateNutrition without a login", () => {
+    render(
+      <RecipeDetail
+        recipe={makeRecipe()}
+        isLoggedIn={false}
+        canCurateNutrition={true}
+      />,
+    );
+
+    expect(
+      screen.getByRole("link", { name: "Ingredient breakdown" }),
+    ).toHaveAttribute("href", "/recipes/1/ingredients");
+    expect(screen.queryByRole("button", { name: /^edit$/i })).toBeNull();
+    expect(screen.queryByRole("button", { name: /re-scrape/i })).toBeNull();
+  });
+
+  it("defaults canCurateNutrition to isLoggedIn — curation is never wider than login by accident", () => {
+    render(<RecipeDetail recipe={makeRecipe()} isLoggedIn={true} />);
+    expect(
+      screen.getByRole("link", { name: "Ingredient breakdown" }),
+    ).toHaveAttribute("href", "/recipes/1/ingredients");
+  });
+
   it("shows loading state while re-scraping", async () => {
     let resolve: (value: Response) => void;
     const pending = new Promise<Response>((res) => { resolve = res; });

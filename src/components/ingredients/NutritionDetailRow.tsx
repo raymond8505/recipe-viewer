@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { TableCell, TableRow } from "@/components/ui/table";
+import { Checkbox } from "@/components/ui/checkbox";
 import { EditIcon, SpinnerIcon, WarningIcon } from "@/components/icons";
 import { cn } from "@/lib/utils";
 import { formatAmount } from "@/lib/units";
@@ -27,16 +28,25 @@ const EXCLUSION_TITLES: Record<ExclusionReason, string> = {
   stale: "No normalized row for this line — run normalization",
 };
 
+// A line the user switched off. Deliberately applied to cell *contents* rather
+// than the <tr>: opacity on the row would create a stacking context, re-rooting
+// the frozen columns' z-10 inside it and letting a faded row's sticky cells
+// paint wrong against their neighbours (see tableStyles.ts for the z-order).
+const OFF_CLASS = "opacity-60 line-through";
+
 /**
- * One recipe line in the NutritionDetail table: the recipe text (editable in
- * place — this edits the recipe schema itself, with an exclusion flag when
- * the line can't contribute to totals), the frozen normalized-ingredient
- * autocomplete, then read-only nutrition cells.
+ * One recipe line in the NutritionDetail table: an include toggle plus the
+ * frozen recipe text (editable in place — this edits the recipe schema itself,
+ * with an exclusion flag when the line can't contribute to totals), the frozen
+ * normalized-ingredient autocomplete, then read-only nutrition cells.
+ *
+ * Switching the toggle off drops the line from the totals but keeps its numbers
+ * on screen, struck through — the point of the lens is seeing what you removed.
  *
  * Editing the text does not re-match the line. The autocomplete is where the
  * association changes, and it is the only thing here that changes it.
  *
- * @summary nutrition row with editable line text and match cells
+ * @summary nutrition row with an include toggle, editable line text, and a match cell
  */
 export default function NutritionDetailRow({
   line,
@@ -48,6 +58,7 @@ export default function NutritionDetailRow({
   onEditText,
   onEstimateGrams,
   onSetGrams,
+  onToggle,
 }: {
   line: NutritionDetailLine;
   saving: boolean;
@@ -58,8 +69,9 @@ export default function NutritionDetailRow({
   onEditText: (index: number, text: string) => void;
   onEstimateGrams: (rowId: string) => void;
   onSetGrams: (rowId: string, grams: number | null) => void;
+  onToggle: (index: number) => void;
 }) {
-  const { row, ingredient, computation } = line;
+  const { row, ingredient, computation, enabled } = line;
   const excluded = computation.kind === "excluded";
   // Grams only matter for a matched line. "stale" now means the line has no row
   // of its own — either none at all, or a legacy positional one about to be
@@ -89,53 +101,82 @@ export default function NutritionDetailRow({
       <TableCell
         className={cn(STICKY_NAME_CELL, excluded && "text-muted-foreground")}
       >
-        {draft != null ? (
-          <input
-            value={draft}
-            onChange={(e) => setDraft(e.target.value)}
-            onBlur={commitDraft}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") {
-                e.preventDefault();
-                e.currentTarget.blur();
-              }
-              if (e.key === "Escape") setDraft(null);
-            }}
-            autoFocus
-            disabled={saving}
-            aria-label={`Edit line ${line.text}`}
-            className="w-full rounded-none border-0 border-b border-border bg-transparent outline-hidden focus:border-orange-400 disabled:opacity-50"
+        <span className="flex w-full min-w-0 items-center gap-1.5">
+          {/* Rides inside the existing frozen cell rather than taking a column
+              of its own — a new leading column would break the w-44/left-44
+              contract the two frozen columns share (tableStyles.ts). Sits
+              outside the edit branch below: the toggle stays live mid-edit,
+              for the same reason the match cell does on a switched-off line. */}
+          <Checkbox
+            checked={enabled}
+            onCheckedChange={() => onToggle(line.index)}
+            aria-label={`Include ${line.text}`}
+            className="mt-0.5 self-start"
           />
-        ) : (
-          <span className="flex w-full min-w-0 items-center gap-1.5">
-            {/* Wrap (same treatment as the matched-ingredient label) — the
-                column is fixed-width (w-44), so long lines must grow the row,
-                not truncate. break-words keeps unbroken tokens from widening
-                the frozen column and breaking the left-44 offset. */}
-            <span className="min-w-0 text-wrap break-words">{line.text}</span>
-            {excluded && (
-              <span title={EXCLUSION_TITLES[computation.reason]}>
-                <WarningIcon className="size-4 shrink-0 text-amber-500" />
-              </span>
-            )}
-            <button
-              type="button"
-              onClick={() => setDraft(line.text)}
+          {draft != null ? (
+            // No OFF_CLASS here even when the line is switched off — a
+            // struck-through field you are actively typing in reads as broken.
+            <input
+              value={draft}
+              onChange={(e) => setDraft(e.target.value)}
+              onBlur={commitDraft}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  e.currentTarget.blur();
+                }
+                if (e.key === "Escape") setDraft(null);
+              }}
+              autoFocus
               disabled={saving}
-              aria-label={`Edit ${line.text}`}
-              title="Edit this recipe line — the matched ingredient is kept"
-              className="shrink-0 text-muted-foreground hover:text-brand disabled:opacity-50 [&_svg]:size-3.5"
-            >
-              <EditIcon />
-            </button>
-          </span>
-        )}
+              aria-label={`Edit line ${line.text}`}
+              className="min-w-0 flex-1 rounded-none border-0 border-b border-border bg-transparent outline-hidden focus:border-orange-400 disabled:opacity-50"
+            />
+          ) : (
+            <>
+              {/* Wrap (same treatment as the matched-ingredient label) — the
+                  column is fixed-width (w-44), so long lines must grow the row,
+                  not truncate. break-words keeps unbroken tokens from widening
+                  the frozen column and breaking the left-44 offset. */}
+              <span
+                className={cn(
+                  "min-w-0 flex-1 text-wrap break-words",
+                  !enabled && OFF_CLASS,
+                )}
+              >
+                {line.text}
+              </span>
+              {excluded && (
+                <span title={EXCLUSION_TITLES[computation.reason]}>
+                  <WarningIcon className="size-4 shrink-0 text-amber-500" />
+                </span>
+              )}
+              <button
+                type="button"
+                onClick={() => setDraft(line.text)}
+                disabled={saving}
+                aria-label={`Edit ${line.text}`}
+                title="Edit this recipe line — the matched ingredient is kept"
+                className="shrink-0 text-muted-foreground hover:text-brand disabled:opacity-50 [&_svg]:size-3.5"
+              >
+                <EditIcon />
+              </button>
+            </>
+          )}
+        </span>
       </TableCell>
       <TableCell
         className={cn(STICKY_ALIASES_CELL, autocompleteOpen && "z-20")}
       >
         {row ? (
-          <span className="flex w-full min-w-0 flex-col gap-1">
+          // Recedes with the rest of the row, but no strikethrough — the match
+          // and grams stay editable while the line is switched off.
+          <span
+            className={cn(
+              "flex w-full min-w-0 flex-col gap-1",
+              !enabled && "opacity-60",
+            )}
+          >
             <span className="flex w-full min-w-0 items-center gap-1.5">
               <span className="min-w-0 flex-1 text-wrap">
                 <IngredientAutocomplete
@@ -179,7 +220,10 @@ export default function NutritionDetailRow({
             ? computation.nutrition[col.key]
             : undefined;
         return (
-          <TableCell key={col.key} className="text-right tabular-nums">
+          <TableCell
+            key={col.key}
+            className={cn("text-right tabular-nums", !enabled && OFF_CLASS)}
+          >
             {value != null ? formatAmount(value) : "—"}
           </TableCell>
         );

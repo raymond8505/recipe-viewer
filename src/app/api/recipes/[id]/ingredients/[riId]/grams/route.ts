@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { requireSession } from "@/lib/api/guard";
+import { requireSessionOrDev } from "@/lib/api/guard";
 import {
   IngredientRepoError,
   getRecipeIngredientById,
@@ -16,7 +16,7 @@ import { recipeIngredientGramsPatchSchema } from "@/lib/schemas/ingredient";
 // POST — run the Gemini estimator for this line and store the result (grams_source
 // "llm"). 422 when the model declines (best-effort, so the client can surface a
 // "couldn't estimate" message rather than a hard error).
-export const POST = requireSession(
+export const POST = requireSessionOrDev(
   async (
     _req: Request,
     { params }: RouteContext<"/api/recipes/[id]/ingredients/[riId]/grams">,
@@ -57,7 +57,7 @@ export const POST = requireSession(
 
 // PATCH — set a user-typed gram value (grams_source "manual"), or clear it with
 // null so the line reverts to the density-derived value.
-export const PATCH = requireSession(
+export const PATCH = requireSessionOrDev(
   async (
     req: Request,
     { params }: RouteContext<"/api/recipes/[id]/ingredients/[riId]/grams">,

@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { requireSession } from "@/lib/api/guard";
+import { requireSessionOrDev } from "@/lib/api/guard";
 import { importUsdaIngredient } from "@/lib/ingredientImport";
 import { IngredientRepoError } from "@/lib/ingredients";
 import { UsdaError } from "@/lib/usda";
@@ -14,7 +14,7 @@ import { usdaImportInputSchema } from "@/lib/schemas/ingredient";
 // Idempotent on fdcId: picking a food that's already cataloged returns the
 // existing row rather than minting a rival for the same USDA record. The
 // caller then re-points the line at it, which is where the alias accretes.
-export const POST = requireSession(async (req: Request) => {
+export const POST = requireSessionOrDev(async (req: Request) => {
   const body = await req.json().catch(() => null);
   const parsed = usdaImportInputSchema.safeParse(body);
   if (!parsed.success) {

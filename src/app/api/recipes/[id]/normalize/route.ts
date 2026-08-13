@@ -2,13 +2,13 @@ import { NextResponse } from "next/server";
 import { getRecipeById } from "@/lib/recipes";
 import { setRecipeNormalization } from "@/lib/ingredients";
 import { scheduleNormalization } from "@/lib/normalization/trigger";
-import { requireSessionOrRecipeToken } from "@/lib/api/guard";
+import { requireSessionOrRecipeTokenOrDev } from "@/lib/api/guard";
 
 // Manual re-run of ingredient normalization — the recovery path when a run
 // failed (USDA/Gemini outage) or thresholds were tuned. The write paths
 // trigger normalization automatically on ingredient changes; this endpoint
 // re-runs it for the CURRENT schema.
-export const POST = requireSessionOrRecipeToken(
+export const POST = requireSessionOrRecipeTokenOrDev(
   async (
     _req: Request,
     { params }: RouteContext<"/api/recipes/[id]/normalize">,

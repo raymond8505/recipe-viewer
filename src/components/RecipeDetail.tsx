@@ -38,6 +38,12 @@ import { Textarea } from "@/components/ui/textarea";
 interface RecipeDetailProps {
   recipe: RecipeRow;
   isLoggedIn?: boolean;
+  // Whether the viewer may see and curate the nutrition layer: logged in, or
+  // running locally in dev where that layer is open. Distinct from `isLoggedIn`
+  // because that still gates the edit controls, which stay login-only. Resolved
+  // by the server page — client components must not read NODE_ENV themselves
+  // (Storybook runs in development). See src/lib/devAccess.ts.
+  canCurateNutrition?: boolean;
   // Upload size cap, passed down from the server page (env.MAX_IMAGE_BYTES).
   // Client components can't import @/env — t3-env throws on server-var
   // access in the browser — so the prop is the only wiring.
@@ -50,6 +56,9 @@ interface RecipeDetailProps {
 export default function RecipeDetail({
   recipe,
   isLoggedIn = false,
+  // Defaults to `isLoggedIn` so the safe direction is the default and the
+  // "curation ⊇ login" invariant holds even for callers unaware of the prop.
+  canCurateNutrition = isLoggedIn,
   maxImageBytes = DEFAULT_MAX_IMAGE_BYTES,
   normalizedNutrition,
 }: RecipeDetailProps) {
@@ -267,6 +276,7 @@ export default function RecipeDetail({
                 <CookingModeButton
                   recipe={recipe}
                   isLoggedIn={isLoggedIn}
+                  canCurateNutrition={canCurateNutrition}
                   normalizedNutrition={normalizedNutrition}
                 />
               </>
@@ -496,8 +506,10 @@ export default function RecipeDetail({
         <NutritionPanel
           recipe={scalable}
           onSplitPortions={splitPortions}
-          ingredientsHref={isLoggedIn ? `/recipes/${recipe.id}/ingredients` : undefined}
-          showSources={isLoggedIn}
+          ingredientsHref={
+            canCurateNutrition ? `/recipes/${recipe.id}/ingredients` : undefined
+          }
+          showSources={canCurateNutrition}
         />
 
         {/* JSON-LD — Schema.org-compliant only; escape </script> sequences to prevent tag injection.

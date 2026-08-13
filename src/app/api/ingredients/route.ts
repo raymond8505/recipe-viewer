@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { requireSession } from "@/lib/api/guard";
+import { requireSessionOrDev } from "@/lib/api/guard";
 import { generateEmbedding } from "@/lib/embedding";
 import { ingredientEmbeddingText } from "@/lib/ingredientAliases";
 import {
@@ -12,7 +12,7 @@ import {
   ingredientListQuerySchema,
 } from "@/lib/schemas/ingredient";
 
-export const GET = requireSession(async (req: Request) => {
+export const GET = requireSessionOrDev(async (req: Request) => {
   const url = new URL(req.url);
   const parsed = ingredientListQuerySchema.safeParse({
     q: url.searchParams.get("q") ?? undefined,
@@ -28,7 +28,7 @@ export const GET = requireSession(async (req: Request) => {
   return NextResponse.json(result);
 });
 
-export const POST = requireSession(async (req: Request) => {
+export const POST = requireSessionOrDev(async (req: Request) => {
   const body = await req.json().catch(() => null);
   const parsed = ingredientCreateInputSchema.safeParse(body);
   if (!parsed.success) {

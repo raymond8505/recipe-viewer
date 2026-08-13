@@ -1,11 +1,11 @@
 import { NextResponse } from "next/server";
-import { requireSession } from "@/lib/api/guard";
+import { requireSessionOrDev } from "@/lib/api/guard";
 import { IngredientRepoError, searchIngredientsKeyword } from "@/lib/ingredients";
 import { ingredientKeywordSearchQuerySchema } from "@/lib/schemas/ingredient";
 
 // Keyword-only trigram autocomplete for the NutritionDetail screen. No
 // embedding call — cheap enough for per-keystroke (debounced) use.
-export const GET = requireSession(async (req: Request) => {
+export const GET = requireSessionOrDev(async (req: Request) => {
   const url = new URL(req.url);
   const parsed = ingredientKeywordSearchQuerySchema.safeParse({
     q: url.searchParams.get("q") ?? undefined,

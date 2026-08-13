@@ -4,6 +4,7 @@ import { getRecipeById } from "@/lib/recipes";
 import { getRecipeNormalizedNutrition } from "@/lib/ingredients";
 import { getFirstImage } from "@/lib/format";
 import { getIsLoggedIn } from "@/lib/auth";
+import { canCurateNutrition } from "@/lib/devAccess";
 import { env } from "@/env";
 import RecipeDetail from "@/components/RecipeDetail";
 
@@ -61,6 +62,9 @@ export default async function RecipePage({ params }: RecipePageProps) {
     <RecipeDetail
       recipe={recipe}
       isLoggedIn={isLoggedIn}
+      // Resolved server-side: a client component must never read NODE_ENV
+      // itself (Storybook runs in development). See src/lib/devAccess.ts.
+      canCurateNutrition={canCurateNutrition(isLoggedIn)}
       maxImageBytes={env.MAX_IMAGE_BYTES}
       normalizedNutrition={normalizedNutrition}
     />

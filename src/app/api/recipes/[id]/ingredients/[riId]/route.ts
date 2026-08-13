@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { requireSession } from "@/lib/api/guard";
+import { requireSessionOrDev } from "@/lib/api/guard";
 import {
   addAliasesAndReembed,
   removeAliasAndReembed,
@@ -21,7 +21,7 @@ import { recipeIngredientPatchSchema } from "@/lib/schemas/ingredient";
 // reference counting. Automated re-matching deliberately never prunes: the
 // matcher scoring differently on one run is not a claim about what the user
 // calls something.
-export const PATCH = requireSession(
+export const PATCH = requireSessionOrDev(
   async (
     req: Request,
     { params }: RouteContext<"/api/recipes/[id]/ingredients/[riId]">,

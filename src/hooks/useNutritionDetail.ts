@@ -43,11 +43,17 @@ export interface NutritionDetailLine {
   row: RecipeIngredientRow | null;
   ingredient: CatalogIngredientSummary | null;
   computation: LineComputation;
+  /** Counted in the totals. Switched off by the user, not by the data. */
+  enabled: boolean;
 }
+
+/** Tri-state for a group's toggle: every line on, every line off, or a mix. */
+export type GroupEnabledState = "all" | "none" | "some";
 
 export interface NutritionDetailGroup {
   heading: string | null;
   lines: NutritionDetailLine[];
+  enabled: GroupEnabledState;
 }
 
 // State + derived math for the NutritionDetail screen. Rows join to schema
@@ -55,6 +61,11 @@ export interface NutritionDetailGroup {
 // a line with no row is "stale" and excluded from totals until normalization
 // gives it one. Association changes are non-optimistic: await the PATCH, then
 // update local state — totals recompute via useMemo.
+//
+// The per-line enable/disable toggles are a what-if lens ("what are the macros
+// if I skip the pasta?"), deliberately session-only: nothing persists, and
+// nothing leaves this screen. The recipe page's NutritionPanel, the JSON-LD,
+// and MCP get_recipe all keep resolving through ScalableRecipe.nutrition().
 export function useNutritionDetail(
   recipeId: string,
   schemaIngredients: Array<string | RecipeIngredient>,
@@ -75,13 +86,20 @@ export function useNutritionDetail(
   // never-normalized line has no row.
   const [savingLineIndex, setSavingLineIndex] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // Keyed by schema position — the same index the row join falls back to, and
+  // the one `updateLineText` addresses a line by. Stable for the page's
+  // lifetime even though `schemaLines` is now local state: an inline edit
+  // rewrites one line's text in place and never reorders, adds, or removes, so
+  // a switched-off line can't silently change identity under the user mid-edit.
+  const [disabledIndexes, setDisabledIndexes] = useState<Set<number>>(
+    () => new Set(),
+  );
 
   const groups = useMemo<NutritionDetailGroup[]>(() => {
     const rowIndex = indexRowsForLines(rows);
     return groupIngredientsWithIndex(schemaLines).map(
-      ({ heading, items }) => ({
-        heading,
-        lines: items.map(({ ingredient: schemaIngredient, index }) => {
+      ({ heading, items }) => {
+        const lines = items.map(({ ingredient: schemaIngredient, index }) => {
           const text = getIngredientText(schemaIngredient);
           const resolved = resolveLineRow(schemaIngredient, index, rowIndex);
           const row = resolved.row;
@@ -106,23 +124,36 @@ export function useNutritionDetail(
             row,
             ingredient,
             computation: lineComputationForSchema(text, resolved, ingredient),
+            enabled: !disabledIndexes.has(index),
           };
-        }),
-      }),
+        });
+        const enabledCount = lines.filter((l) => l.enabled).length;
+        return {
+          heading,
+          lines,
+          enabled:
+            enabledCount === lines.length
+              ? "all"
+              : enabledCount === 0
+                ? "none"
+                : "some",
+        };
+      },
     );
-  }, [rows, ingredientsById, schemaLines]);
+  }, [rows, ingredientsById, schemaLines, disabledIndexes]);
 
   const lines = useMemo(() => groups.flatMap((g) => g.lines), [groups]);
+  const enabledLines = useMemo(() => lines.filter((l) => l.enabled), [lines]);
 
   const totals = useMemo<IngredientNutrition>(
     () =>
       sumNutrition(
-        lines
+        enabledLines
           .map((l) => l.computation)
           .filter((c): c is Extract<LineComputation, { kind: "ok" }> => c.kind === "ok")
           .map((c) => c.nutrition),
       ),
-    [lines],
+    [enabledLines],
   );
 
   const servings = useMemo(() => parseServings(recipeYield), [recipeYield]);
@@ -131,10 +162,40 @@ export function useNutritionDetail(
     [totals, servings],
   );
 
-  const excludedCount = lines.filter((l) => l.computation.kind === "excluded").length;
-  const hasStaleLines = lines.some(
+  // Both warnings are scoped to enabled lines: they exist to flag contributions
+  // *silently* missing from the tally, and a line the user switched off is not
+  // silent. Counting those would make the flag count climb on every toggle.
+  const excludedCount = enabledLines.filter(
+    (l) => l.computation.kind === "excluded",
+  ).length;
+  const hasStaleLines = enabledLines.some(
     (l) => l.computation.kind === "excluded" && l.computation.reason === "stale",
   );
+  const disabledCount = lines.length - enabledLines.length;
+
+  function toggleLine(index: number) {
+    setDisabledIndexes((current) => {
+      const next = new Set(current);
+      if (!next.delete(index)) next.add(index);
+      return next;
+    });
+  }
+
+  /** Batch action behind a group's checkbox. */
+  function setLinesEnabled(indexes: number[], enabled: boolean) {
+    setDisabledIndexes((current) => {
+      const next = new Set(current);
+      for (const index of indexes) {
+        if (enabled) next.delete(index);
+        else next.add(index);
+      }
+      return next;
+    });
+  }
+
+  function enableAll() {
+    setDisabledIndexes(new Set());
+  }
 
   async function selectIngredient(
     rowId: string,
@@ -260,6 +321,7 @@ export function useNutritionDetail(
     servings,
     excludedCount,
     hasStaleLines,
+    disabledCount,
     savingRowId,
     savingLineIndex,
     error,
@@ -268,5 +330,8 @@ export function useNutritionDetail(
     updateLineText,
     estimateGrams,
     setGrams,
+    toggleLine,
+    setLinesEnabled,
+    enableAll,
   };
 }

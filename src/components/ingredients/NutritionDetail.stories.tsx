@@ -115,6 +115,24 @@ export const Default: Story = {
 };
 
 /**
+ * The what-if lens: the "Sauce" group has been switched off, so its line is
+ * faded and struck through while its numbers stay readable, the group toggle
+ * reads unchecked, the recipe total and per-portion rows count only the
+ * remaining lines, and an "Enable all" reset appears below the table. This is
+ * how a user asks "what are the macros if I skip this component?" — the state
+ * is internal to the table and never persists.
+ */
+export const WithDisabledIngredients: Story = {
+  ...Default,
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await userEvent.click(
+      canvas.getByRole("checkbox", { name: "Include all Sauce ingredients" }),
+    );
+  },
+};
+
+/**
  * Every exclusion flavor at once: an unmatched line, a count line with no
  * unit, a volume line whose ingredient has no density (yellow onion), and a
  * quantity-less "to taste" line — each flagged with its reason, dashed out,

@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { requireSession } from "@/lib/api/guard";
+import { requireSessionOrDev } from "@/lib/api/guard";
 import { getIngredientsByIds, getRecipeIngredients } from "@/lib/ingredients";
 import { RecipeRepoError, getRecipeById, updateRecipeRow } from "@/lib/recipes";
 import { recipeLineTextPatchSchema } from "@/lib/schemas/ingredient";
@@ -8,7 +8,7 @@ import { recipeLineTextPatchSchema } from "@/lib/schemas/ingredient";
 // for the NutritionDetail screen. The page itself fetches repo-direct
 // server-side; this route exists for client-side refresh (e.g. after a
 // re-normalization run completes).
-export const GET = requireSession(
+export const GET = requireSessionOrDev(
   async (_req: Request, { params }: RouteContext<"/api/recipes/[id]/ingredients">) => {
     const { id } = await params;
 
@@ -37,7 +37,7 @@ export const GET = requireSession(
 // come back with the response because the client's copy of them is now stale in
 // exactly the fields the edit moved — and without them the edited line would
 // render as if it had lost its match.
-export const PATCH = requireSession(
+export const PATCH = requireSessionOrDev(
   async (req: Request, { params }: RouteContext<"/api/recipes/[id]/ingredients">) => {
     const { id } = await params;
 
