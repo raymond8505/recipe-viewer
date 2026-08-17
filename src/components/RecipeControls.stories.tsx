@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/nextjs-vite";
-import { fn } from "storybook/test";
+import { expect, fn, userEvent } from "storybook/test";
 import RecipeControls from "./RecipeControls";
 
 const meta: Meta<typeof RecipeControls> = {
@@ -39,6 +39,31 @@ type Story = StoryObj<typeof RecipeControls>;
 
 /** Default (not editing): Edit / Re-scrape / Regen Image / Upload Image / Normalize. */
 export const ViewMode: Story = {};
+
+/**
+ * Re-scrape awaiting confirmation. The three expensive actions each spend on an
+ * external service, so the whole button row swaps for a confirm bar — one
+ * decision on screen, nothing spent on a misclick. The bar is driven by the
+ * component's own state, so the click is what makes it visible.
+ */
+export const RescrapeConfirm: Story = {
+  play: async ({ canvas }) => {
+    await userEvent.click(canvas.getByRole("button", { name: "Re-scrape" }));
+    await expect(
+      canvas.getByText(/re-fetches and re-parses the source page/i),
+    ).toBeInTheDocument();
+  },
+};
+
+/** Same gate on Normalize, which queues a model run and has no undo at all. */
+export const NormalizeConfirm: Story = {
+  play: async ({ canvas }) => {
+    await userEvent.click(canvas.getByRole("button", { name: "Normalize" }));
+    await expect(
+      canvas.getByText(/re-parses every ingredient line/i),
+    ).toBeInTheDocument();
+  },
+};
 
 /** Normalization request in flight — the button reads "Normalizing…" and disables. */
 export const Normalizing: Story = {

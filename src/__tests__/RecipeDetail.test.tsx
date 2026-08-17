@@ -19,6 +19,21 @@ function makeRecipe(schema: Partial<SchemaRecipe> = {}): RecipeRow {
   };
 }
 
+/**
+ * Click a Manage-toolbar action twice: once to raise the confirm bar, once to
+ * confirm it. The three expensive actions (re-scrape / regen image / normalize)
+ * are gated up front, and the bar's confirm button reuses the trigger's label —
+ * so the same query drives both clicks.
+ */
+async function clickAndConfirm(name: RegExp) {
+  await act(async () => {
+    fireEvent.click(screen.getByRole("button", { name }));
+  });
+  await act(async () => {
+    fireEvent.click(screen.getByRole("button", { name }));
+  });
+}
+
 describe("RecipeDetail", () => {
   it("renders the recipe name", () => {
     render(<RecipeDetail recipe={makeRecipe({ name: "Spaghetti Bolognese" })} />);
@@ -318,15 +333,74 @@ describe("RecipeDetail — controls section", () => {
     ).toHaveAttribute("href", "/recipes/1/ingredients");
   });
 
+  // Each of these fires a webhook or queues a model run the moment it is
+  // invoked, so a misclick is unrecoverable spend. Re-scrape and regen-image
+  // do have an after-the-fact review to back out of, but by then the external
+  // call has already been paid for — nothing may reach the network until the
+  // second, deliberate click.
+  const EXPENSIVE_ACTIONS: [string, RegExp, RegExp][] = [
+    ["Re-scrape", /re-scrape/i, /re-fetches and re-parses the source page/i],
+    ["Regen Image", /regen image/i, /replaces the current image/i],
+    ["Normalize", /^normalize$/i, /re-parses every ingredient line/i],
+  ];
+
+  it.each(EXPENSIVE_ACTIONS)(
+    "%s asks for confirmation before spending anything",
+    async (_label, button, message) => {
+      const mockFetch = vi.fn();
+      vi.stubGlobal("fetch", mockFetch);
+
+      render(<RecipeDetail recipe={makeRecipe()} isLoggedIn={true} />);
+      await act(async () => {
+        fireEvent.click(screen.getByRole("button", { name: button }));
+      });
+
+      expect(screen.getByText(message)).toBeTruthy();
+      expect(mockFetch).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(EXPENSIVE_ACTIONS)(
+    "%s stays unspent when the confirm is cancelled",
+    async (_label, button) => {
+      const mockFetch = vi.fn();
+      vi.stubGlobal("fetch", mockFetch);
+
+      render(<RecipeDetail recipe={makeRecipe()} isLoggedIn={true} />);
+      await act(async () => {
+        fireEvent.click(screen.getByRole("button", { name: button }));
+      });
+      await act(async () => {
+        fireEvent.click(screen.getByRole("button", { name: /^cancel$/i }));
+      });
+
+      // The whole toolbar comes back, not just the trigger that was clicked.
+      expect(screen.getByRole("button", { name: button })).toBeTruthy();
+      expect(screen.getByRole("button", { name: /^edit$/i })).toBeTruthy();
+      expect(mockFetch).not.toHaveBeenCalled();
+    },
+  );
+
+  it("queues normalization once the confirm is accepted", async () => {
+    const mockFetch = vi
+      .fn()
+      .mockResolvedValue(new Response(JSON.stringify({}), { status: 200 }));
+    vi.stubGlobal("fetch", mockFetch);
+
+    render(<RecipeDetail recipe={makeRecipe()} isLoggedIn={true} />);
+    await clickAndConfirm(/^normalize$/i);
+
+    await waitFor(() => expect(mockFetch).toHaveBeenCalledTimes(1));
+    expect(String(mockFetch.mock.calls[0][0])).toContain("/normalize");
+  });
+
   it("shows loading state while re-scraping", async () => {
     let resolve: (value: Response) => void;
     const pending = new Promise<Response>((res) => { resolve = res; });
     vi.stubGlobal("fetch", vi.fn().mockReturnValue(pending));
 
     render(<RecipeDetail recipe={makeRecipe()} isLoggedIn={true} />);
-    await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: /re-scrape/i }));
-    });
+    await clickAndConfirm(/re-scrape/i);
 
     expect(screen.getByRole("button", { name: /re-scraping/i })).toBeTruthy();
     expect(screen.getByRole("button", { name: /re-scraping/i })).toBeDisabled();
@@ -349,9 +423,7 @@ describe("RecipeDetail — controls section", () => {
     render(<RecipeDetail recipe={makeRecipe({ name: "Old Recipe Name" })} isLoggedIn={true} />);
     expect(screen.getByText("Old Recipe Name")).toBeTruthy();
 
-    await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: /re-scrape/i }));
-    });
+    await clickAndConfirm(/re-scrape/i);
 
     await waitFor(() => {
       expect(screen.getByRole("button", { name: /^confirm$/i })).toBeTruthy();
@@ -372,9 +444,7 @@ describe("RecipeDetail — controls section", () => {
     );
 
     render(<RecipeDetail recipe={makeRecipe({ name: "Original Name" })} isLoggedIn={true} />);
-    await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: /re-scrape/i }));
-    });
+    await clickAndConfirm(/re-scrape/i);
     await waitFor(() => {
       expect(screen.getByRole("button", { name: /^confirm$/i })).toBeTruthy();
     });
@@ -399,9 +469,7 @@ describe("RecipeDetail — controls section", () => {
     vi.stubGlobal("fetch", mockFetch);
 
     render(<RecipeDetail recipe={makeRecipe({ name: "Old" })} isLoggedIn={true} />);
-    await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: /re-scrape/i }));
-    });
+    await clickAndConfirm(/re-scrape/i);
     await waitFor(() => {
       expect(screen.getByRole("button", { name: /^confirm$/i })).toBeTruthy();
     });
@@ -421,9 +489,7 @@ describe("RecipeDetail — controls section", () => {
     );
 
     render(<RecipeDetail recipe={makeRecipe()} isLoggedIn={true} />);
-    await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: /re-scrape/i }));
-    });
+    await clickAndConfirm(/re-scrape/i);
 
     await waitFor(() => {
       expect(screen.getByText(/re-scrape failed/i)).toBeTruthy();
@@ -439,9 +505,7 @@ describe("RecipeDetail — controls section", () => {
     );
 
     render(<RecipeDetail recipe={makeRecipe({ name: "My Recipe" })} isLoggedIn={true} />);
-    await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: /re-scrape/i }));
-    });
+    await clickAndConfirm(/re-scrape/i);
 
     await waitFor(() => {
       expect(screen.getByText(/re-scrape failed/i)).toBeTruthy();

@@ -1,6 +1,6 @@
 "use client";
 
-import { Button } from "@/components/ui/button";
+import ConfirmBar from "@/components/ConfirmBar";
 
 interface DeleteConfirmProps {
   message: string;
@@ -9,10 +9,10 @@ interface DeleteConfirmProps {
 }
 
 /**
- * Inline delete confirmation bar — Cancel / Delete. Mirrors the in-card
- * confirm pattern from `src/components/cooking/TimerCard.tsx`; used by both the
- * ingredient/step rows and the group header. Tap targets are ≥44px tall for
- * touch use (the editor follows the same touch-first rules as cook mode).
+ * Inline delete confirmation bar — Cancel / Delete. The named, destructive-toned
+ * binding of `ConfirmBar`; used by both the ingredient/step rows and the group
+ * header. Keeping it a named component (rather than spelling out the tone at
+ * each call site) is what stops the delete treatment drifting between rows.
  */
 export default function DeleteConfirm({
   message,
@@ -20,26 +20,12 @@ export default function DeleteConfirm({
   onConfirm,
 }: DeleteConfirmProps) {
   return (
-    <div className="rounded-xl border border-red-200 bg-red-50 p-3">
-      <p className="text-sm font-medium text-red-700 mb-3">{message}</p>
-      <div className="flex gap-2">
-        <Button
-          type="button"
-          variant="outline"
-          onClick={onCancel}
-          className="h-auto min-h-[44px] flex-1 py-3"
-        >
-          Cancel
-        </Button>
-        <Button
-          type="button"
-          variant="destructive"
-          onClick={onConfirm}
-          className="h-auto min-h-[44px] flex-1 py-3"
-        >
-          Delete
-        </Button>
-      </div>
-    </div>
+    <ConfirmBar
+      tone="destructive"
+      message={message}
+      confirmLabel="Delete"
+      onCancel={onCancel}
+      onConfirm={onConfirm}
+    />
   );
 }
