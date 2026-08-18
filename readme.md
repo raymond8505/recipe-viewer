@@ -3,12 +3,12 @@
 - A recipe viewing tool built for use in the kitchen during cooking.
 - A barebones recipe CMS with MCP tools and agent skill for authoring recipes
 
-## Watch the demo
+## Watch a demo
 
 [![Watch the video](https://raw.githubusercontent.com/raymond8505/recipe-viewer/main/video.png)](https://www.youtube.com/watch?v=qOG80UKUkFI)
 
 ## Try the app
-[try the latest build with my recipes](https://new.raymonds.recipes)
+[Try the latest build with my recipes](https://new.raymonds.recipes)
 ---
 
 ## Why this exists
@@ -33,11 +33,6 @@ I want to know my macros for my home cooking, I don't want to have to fill out a
 
 ### Effortless recipe iteration
 Take notes during the cook and during first taste, tell your agent to address them in the recipe- re-formulate ingredients, re-write instructions, update nutrition, or any other boring thing that isn't cooking food or eating food.
-
-### Basic publishing
-This 
-
----
 
 ## Features
 
@@ -133,3 +128,13 @@ The premise: an AI assistant should be able to use this app the way a person can
 | Component docs | **Storybook 10** (`@storybook/nextjs-vite`) | fixtures shared with tests |
 | Runtime | **Node 24** | |
 | Deploy | **Docker** (multi-stage) + **Traefik** on a VPS | per-PR staging, GitHub Actions |
+
+## Decisions
+
+### Shopping List Copy Paste
+
+Deliberately simple, the user likely has a pre-existing list solution of choice _and_ they're likely shopping for more things than just the current recipe. I don't want to force the user to use the recipe app for shopping list management or silo recipe shopping lists from their other shopping lists. List items still highlight on selection, they can use the list UI if they want, or easily export the desired items to their preferred list app.
+
+### Serving Scaling v Portion Splitting
+
+A recipe has a suggested serving size by default, when you change servings in the UI, the ingredients scale accordingly. In the nutrition panel you can split the recipe down into different portions. The use-case is a user who might want to divide the meal after cooking, for example a 4 slice personal pizza might have its serving size at 1, but the user might want to know the per slice nutrition. Early UAT suggests the UI is a bit clunky for this feature, it's a work in progress.
