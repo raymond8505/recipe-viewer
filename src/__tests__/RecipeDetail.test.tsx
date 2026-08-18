@@ -14,6 +14,7 @@ import type {
   SchemaRecipe,
 } from "@/types/recipe";
 import { rescrapeFixture } from "@/fixtures/rescrape";
+import { clickAndConfirm } from "./helpers/confirmBar";
 
 function makeRecipe(schema: Partial<SchemaRecipe> = {}): RecipeRow {
   return {
@@ -28,19 +29,6 @@ function makeRecipe(schema: Partial<SchemaRecipe> = {}): RecipeRow {
       },
     },
   };
-}
-
-/**
- * Click a Manage-toolbar action twice: once to raise the confirm bar, once to
- * confirm it.
- */
-async function clickAndConfirm(name: RegExp, confirmName: RegExp = name) {
-  await act(async () => {
-    fireEvent.click(screen.getByRole("button", { name }));
-  });
-  await act(async () => {
-    fireEvent.click(screen.getByRole("button", { name: confirmName }));
-  });
 }
 
 describe("RecipeDetail", () => {

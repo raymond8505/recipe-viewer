@@ -2,6 +2,7 @@ import type {
   IngredientRow,
   RecipeIngredientRow,
 } from "@/types/ingredient";
+import type { RecipeIngredient } from "@/types/recipe";
 
 // Realistic catalog rows. Nutrition values are real USDA per-100g figures
 // (cumin: SR Legacy fdcId 170923 — the same payload the usda.ts tests fixture);
@@ -205,3 +206,46 @@ export function makeRecipeIngredient(
     ...overrides,
   };
 }
+
+/**
+ * The plain "nothing interesting is wrong" NutritionDetail scenario: two lines,
+ * both matched to the catalog, both convertible to grams. Named and fully
+ * defined so stories about *something else* — editing a line's text, confirming
+ * a re-normalization — can state that one thing and inherit a working recipe,
+ * instead of restating an identical pair of rows each time.
+ *
+ * Reach for this whenever the recipe data is incidental to what a story shows.
+ * Scenarios where the data IS the point (interleaved groups, a stale legacy
+ * line, a missing yield) stay with their story, where the reader can see what
+ * makes them special.
+ *
+ * `recipe_id` matches the `recipeId` arg on the NutritionDetail stories' meta.
+ */
+export const matchedLinesScenario: {
+  schemaIngredients: Array<string | RecipeIngredient>;
+  recipeYield: string;
+  initialRows: RecipeIngredientRow[];
+  initialIngredients: IngredientRow[];
+} = {
+  schemaIngredients: ["2 tsp cumin seed", "1 tbsp olive oil"],
+  recipeYield: "2 servings",
+  initialRows: [
+    makeRecipeIngredient("story-recipe", 0, {
+      raw_text: "2 tsp cumin seed",
+      quantity: 2,
+      unit: "tsp",
+      name_text: "cumin seed",
+      ingredient_id: ingredientFixtures[0].id,
+      match_status: "matched",
+    }),
+    makeRecipeIngredient("story-recipe", 1, {
+      raw_text: "1 tbsp olive oil",
+      quantity: 1,
+      unit: "tbsp",
+      name_text: "olive oil",
+      ingredient_id: ingredientFixtures[2].id,
+      match_status: "matched",
+    }),
+  ],
+  initialIngredients: [ingredientFixtures[0], ingredientFixtures[2]],
+};

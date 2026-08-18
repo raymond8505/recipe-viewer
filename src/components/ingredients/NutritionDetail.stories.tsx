@@ -1,6 +1,10 @@
 import type { Meta, StoryObj } from "@storybook/nextjs-vite";
 import { userEvent, within } from "storybook/test";
-import { ingredientFixtures, makeRecipeIngredient } from "@/fixtures";
+import {
+  ingredientFixtures,
+  makeRecipeIngredient,
+  matchedLinesScenario,
+} from "@/fixtures";
 import type { IngredientKeywordMatch } from "@/types/ingredient";
 import type { UsdaSearchFood } from "@/lib/usda";
 import NutritionDetail from "./NutritionDetail";
@@ -329,29 +333,7 @@ export const StaleNormalization: Story = {
  * inside its wrapper, so the stale-lines warning opposite it stays put.
  */
 export const NormalizeConfirm: Story = {
-  args: {
-    schemaIngredients: ["2 tsp cumin seed", "1 tbsp olive oil"],
-    recipeYield: "2 servings",
-    initialRows: [
-      makeRecipeIngredient("story-recipe", 0, {
-        raw_text: "2 tsp cumin seed",
-        quantity: 2,
-        unit: "tsp",
-        name_text: "cumin seed",
-        ingredient_id: cumin.id,
-        match_status: "matched",
-      }),
-      makeRecipeIngredient("story-recipe", 1, {
-        raw_text: "1 tbsp olive oil",
-        quantity: 1,
-        unit: "tbsp",
-        name_text: "olive oil",
-        ingredient_id: oliveOil.id,
-        match_status: "matched",
-      }),
-    ],
-    initialIngredients: [cumin, oliveOil],
-  },
+  args: matchedLinesScenario,
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await userEvent.click(canvas.getByRole("button", { name: "Normalize" }));
@@ -359,29 +341,7 @@ export const NormalizeConfirm: Story = {
 };
 
 export const EditingLineText: Story = {
-  args: {
-    schemaIngredients: ["2 tsp cumin seed", "1 tbsp olive oil"],
-    recipeYield: "2 servings",
-    initialRows: [
-      makeRecipeIngredient("story-recipe", 0, {
-        raw_text: "2 tsp cumin seed",
-        quantity: 2,
-        unit: "tsp",
-        name_text: "cumin seed",
-        ingredient_id: cumin.id,
-        match_status: "matched",
-      }),
-      makeRecipeIngredient("story-recipe", 1, {
-        raw_text: "1 tbsp olive oil",
-        quantity: 1,
-        unit: "tbsp",
-        name_text: "olive oil",
-        ingredient_id: oliveOil.id,
-        match_status: "matched",
-      }),
-    ],
-    initialIngredients: [cumin, oliveOil],
-  },
+  args: matchedLinesScenario,
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await userEvent.click(canvas.getByLabelText("Edit 2 tsp cumin seed"));

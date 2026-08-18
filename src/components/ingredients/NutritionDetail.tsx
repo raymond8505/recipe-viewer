@@ -1,7 +1,6 @@
 "use client";
 
-import { Fragment, useState } from "react";
-import { useRouter } from "next/navigation";
+import { Fragment } from "react";
 import {
   Table,
   TableBody,
@@ -11,10 +10,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
-import ConfirmBar from "@/components/ConfirmBar";
 import { WarningIcon } from "@/components/icons";
-import { normalizeRecipe } from "@/lib/api/recipes";
-import { cn } from "@/lib/utils";
 import { pluralize } from "@/lib/format";
 import { useNutritionDetail } from "@/hooks/useNutritionDetail";
 import type { QuantitativeValue, RecipeIngredient } from "@/types/recipe";
@@ -23,6 +19,7 @@ import type {
   IngredientAutocompleteSearch,
   UsdaFoodSearch,
 } from "@/hooks/useIngredientAutocomplete";
+import NormalizeAction from "./NormalizeAction";
 import NutritionDetailRow from "./NutritionDetailRow";
 import NutritionGroupRow from "./NutritionGroupRow";
 import NutritionSummaryRow from "./NutritionSummaryRow";
@@ -73,14 +70,6 @@ export default function NutritionDetail({
   search,
   usdaSearch,
 }: NutritionDetailProps) {
-  const router = useRouter();
-  const [normalizeState, setNormalizeState] = useState<"idle" | "queueing" | "queued">(
-    "idle",
-  );
-  // Whether the Normalize confirm is showing. Deliberately separate from
-  // normalizeState, which tracks the *request* — this is pure view state, the
-  // same role `pending` plays in RecipeControls.
-  const [confirming, setConfirming] = useState(false);
   const {
     groups,
     totals,
@@ -108,23 +97,11 @@ export default function NutritionDetail({
     initialIngredients,
   );
 
-  async function handleRenormalize() {
-    setConfirming(false);
-    setNormalizeState("queueing");
-    try {
-      await normalizeRecipe(recipeId);
-      setNormalizeState("queued");
-    } catch {
-      setNormalizeState("idle");
-    }
-  }
-
   return (
     <div className="space-y-4">
-      {/* `ml-auto` on the action wrapper — not `justify-between` — is what
-          right-aligns the action whether or not the stale-lines warning is
-          there, and it gives the confirm bar somewhere to land in place of the
-          button rather than displacing the warning. */}
+      {/* NormalizeAction carries `ml-auto`, which is what right-aligns it
+          whether or not the stale-lines warning is there — `justify-between`
+          would need a placeholder element when the warning is absent. */}
       <div className="flex flex-wrap items-center gap-3">
         {hasStaleLines && (
           <p className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -133,46 +110,7 @@ export default function NutritionDetail({
             normalize to build their rows.
           </p>
         )}
-        <div
-          className={cn(
-            "ml-auto w-full",
-            // The bar needs room for its question; the bare button must keep
-            // its natural size, so the width is only applied while confirming.
-            confirming ? "sm:w-96" : "sm:w-auto",
-          )}
-        >
-          {confirming ? (
-            <ConfirmBar
-              message="Re-run ingredient normalization? This re-parses every ingredient line."
-              confirmLabel="Normalize"
-              onCancel={() => setConfirming(false)}
-              onConfirm={handleRenormalize}
-            />
-          ) : normalizeState === "queued" ? (
-            // A 200 from the normalize route means "queued", not "done" — the
-            // run happens post-response, so refreshing is the way to see it.
-            // No confirm on this one: it's a local refresh and costs nothing.
-            <Button
-              size="sm"
-              variant="secondary"
-              className="w-full sm:w-auto"
-              onClick={() => router.refresh()}
-            >
-              Queued — check again
-            </Button>
-          ) : (
-            <Button
-              size="sm"
-              variant="secondary"
-              className="w-full sm:w-auto"
-              disabled={normalizeState === "queueing"}
-              onClick={() => setConfirming(true)}
-              title="Re-parses and re-matches every line; manual matches are preserved"
-            >
-              Normalize
-            </Button>
-          )}
-        </div>
+        <NormalizeAction recipeId={recipeId} />
       </div>
 
       {error && (

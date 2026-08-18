@@ -11,6 +11,7 @@ import {
 } from "@/lib/api/recipes";
 import { importUsdaIngredient } from "@/lib/api/ingredients";
 import { makeIngredient, makeRecipeIngredient } from "@/fixtures";
+import { clickAndConfirm } from "./helpers/confirmBar";
 import type {
   IngredientKeywordMatch,
   RecipeIngredientRow,
@@ -236,10 +237,7 @@ describe("NutritionDetail", () => {
     renderDetail();
 
     // Present even with nothing stale — it exists to fill in unmatched lines.
-    // Two clicks: the run is gated behind a confirm whose button reuses the
-    // trigger's label (the two are never on screen together).
-    await user.click(screen.getByRole("button", { name: "Normalize" }));
-    await user.click(screen.getByRole("button", { name: "Normalize" }));
+    await clickAndConfirm("Normalize");
     expect(normalizeRecipe).toHaveBeenCalledWith("r-1");
     // A 200 means queued, not done — the button flips to a refresh affordance.
     expect(
@@ -284,8 +282,7 @@ describe("NutritionDetail", () => {
     vi.mocked(normalizeRecipe).mockResolvedValue(undefined);
     renderDetail();
 
-    await user.click(screen.getByRole("button", { name: "Normalize" }));
-    await user.click(screen.getByRole("button", { name: "Normalize" }));
+    await clickAndConfirm("Normalize");
 
     await user.click(
       await screen.findByRole("button", { name: "Queued — check again" }),
