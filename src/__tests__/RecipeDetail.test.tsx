@@ -1,7 +1,18 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { render, screen, fireEvent, waitFor, act } from "@testing-library/react";
+import {
+  render,
+  screen,
+  fireEvent,
+  waitFor,
+  act,
+} from "@testing-library/react";
 import RecipeDetail from "@/components/RecipeDetail";
-import type { RecipeRow, HowToStep, HowToSection, SchemaRecipe } from "@/types/recipe";
+import type {
+  RecipeRow,
+  HowToStep,
+  HowToSection,
+  SchemaRecipe,
+} from "@/types/recipe";
 import { rescrapeFixture } from "@/fixtures/rescrape";
 
 function makeRecipe(schema: Partial<SchemaRecipe> = {}): RecipeRow {
@@ -19,19 +30,42 @@ function makeRecipe(schema: Partial<SchemaRecipe> = {}): RecipeRow {
   };
 }
 
+/**
+ * Click a Manage-toolbar action twice: once to raise the confirm bar, once to
+ * confirm it.
+ */
+async function clickAndConfirm(name: RegExp, confirmName: RegExp = name) {
+  await act(async () => {
+    fireEvent.click(screen.getByRole("button", { name }));
+  });
+  await act(async () => {
+    fireEvent.click(screen.getByRole("button", { name: confirmName }));
+  });
+}
+
 describe("RecipeDetail", () => {
   it("renders the recipe name", () => {
-    render(<RecipeDetail recipe={makeRecipe({ name: "Spaghetti Bolognese" })} />);
+    render(
+      <RecipeDetail recipe={makeRecipe({ name: "Spaghetti Bolognese" })} />,
+    );
     expect(screen.getByText("Spaghetti Bolognese")).toBeTruthy();
   });
 
   it("renders description when present", () => {
-    render(<RecipeDetail recipe={makeRecipe({ description: "A hearty pasta dish." })} />);
+    render(
+      <RecipeDetail
+        recipe={makeRecipe({ description: "A hearty pasta dish." })}
+      />,
+    );
     expect(screen.getByText("A hearty pasta dish.")).toBeTruthy();
   });
 
   it("renders category badges", () => {
-    render(<RecipeDetail recipe={makeRecipe({ recipeCategory: ["Dinner", "Pasta"] })} />);
+    render(
+      <RecipeDetail
+        recipe={makeRecipe({ recipeCategory: ["Dinner", "Pasta"] })}
+      />,
+    );
     expect(screen.getByText("Dinner")).toBeTruthy();
     expect(screen.getByText("Pasta")).toBeTruthy();
   });
@@ -42,7 +76,11 @@ describe("RecipeDetail", () => {
   });
 
   it("renders an image when present", () => {
-    render(<RecipeDetail recipe={makeRecipe({ image: "https://example.com/pasta.jpg" })} />);
+    render(
+      <RecipeDetail
+        recipe={makeRecipe({ image: "https://example.com/pasta.jpg" })}
+      />,
+    );
     expect(screen.getByRole("img")).toBeTruthy();
   });
 
@@ -54,8 +92,12 @@ describe("RecipeDetail", () => {
   it("renders timing stats when present", () => {
     render(
       <RecipeDetail
-        recipe={makeRecipe({ prepTime: "PT10M", cookTime: "PT30M", totalTime: "PT40M" })}
-      />
+        recipe={makeRecipe({
+          prepTime: "PT10M",
+          cookTime: "PT30M",
+          totalTime: "PT40M",
+        })}
+      />,
     );
     expect(screen.getByText("10 min")).toBeTruthy();
     expect(screen.getByText("30 min")).toBeTruthy();
@@ -63,16 +105,26 @@ describe("RecipeDetail", () => {
   });
 
   it("renders servings stepper from array yield (first element)", () => {
-    render(<RecipeDetail recipe={makeRecipe({ recipeYield: ["4 servings", "8 pieces"] })} />);
+    render(
+      <RecipeDetail
+        recipe={makeRecipe({ recipeYield: ["4 servings", "8 pieces"] })}
+      />,
+    );
     expect(screen.getByText("4")).toBeTruthy();
-    expect(screen.getByRole("button", { name: /increase servings/i })).toBeTruthy();
-    expect(screen.getByRole("button", { name: /decrease servings/i })).toBeTruthy();
+    expect(
+      screen.getByRole("button", { name: /increase servings/i }),
+    ).toBeTruthy();
+    expect(
+      screen.getByRole("button", { name: /decrease servings/i }),
+    ).toBeTruthy();
   });
 
   it("renders servings stepper from string yield", () => {
     render(<RecipeDetail recipe={makeRecipe({ recipeYield: "6 servings" })} />);
     expect(screen.getByText("6")).toBeTruthy();
-    expect(screen.getByRole("button", { name: /increase servings/i })).toBeTruthy();
+    expect(
+      screen.getByRole("button", { name: /increase servings/i }),
+    ).toBeTruthy();
   });
 
   it("renders flat HowToStep instructions as a numbered list", () => {
@@ -98,7 +150,9 @@ describe("RecipeDetail", () => {
         itemListElement: [{ text: "Boil salted water." }],
       },
     ];
-    render(<RecipeDetail recipe={makeRecipe({ recipeInstructions: sections })} />);
+    render(
+      <RecipeDetail recipe={makeRecipe({ recipeInstructions: sections })} />,
+    );
     expect(screen.getByText("For the sauce")).toBeTruthy();
     expect(screen.getByText("Simmer tomatoes.")).toBeTruthy();
     expect(screen.getByText("For the pasta")).toBeTruthy();
@@ -107,7 +161,9 @@ describe("RecipeDetail", () => {
 
   it("shows nutrition section when at least one nutrient field is present", () => {
     render(
-      <RecipeDetail recipe={makeRecipe({ nutrition: { calories: "350 kcal" } })} />
+      <RecipeDetail
+        recipe={makeRecipe({ nutrition: { calories: "350 kcal" } })}
+      />,
     );
     expect(screen.getByText("Nutrition")).toBeTruthy();
     expect(screen.getByText("350 kcal")).toBeTruthy();
@@ -124,7 +180,7 @@ describe("RecipeDetail", () => {
             fatContent: "10g",
           },
         })}
-      />
+      />,
     );
     expect(screen.getByText("350 kcal")).toBeTruthy();
     expect(screen.getByText("20g")).toBeTruthy();
@@ -134,7 +190,9 @@ describe("RecipeDetail", () => {
 
   it("hides nutrition section when only non-counted fields are present (e.g. servingSize)", () => {
     render(
-      <RecipeDetail recipe={makeRecipe({ nutrition: { servingSize: "1 cup" } })} />
+      <RecipeDetail
+        recipe={makeRecipe({ nutrition: { servingSize: "1 cup" } })}
+      />,
     );
     expect(screen.queryByText("Nutrition")).toBeNull();
   });
@@ -147,8 +205,10 @@ describe("RecipeDetail", () => {
   it("renders ingredients list", () => {
     const { container } = render(
       <RecipeDetail
-        recipe={makeRecipe({ recipeIngredient: ["2 cups flour", "1 cup sugar"] })}
-      />
+        recipe={makeRecipe({
+          recipeIngredient: ["2 cups flour", "1 cup sugar"],
+        })}
+      />,
     );
     // Convertable ingredients are split into amount + unit select + rest
     expect(container.textContent).toContain("flour");
@@ -165,7 +225,7 @@ describe("RecipeDetail", () => {
             { name: "1 tsp vanilla", group: "Frosting" },
           ],
         })}
-      />
+      />,
     );
     expect(screen.getByText("Cake")).toBeTruthy();
     expect(screen.getByText("Frosting")).toBeTruthy();
@@ -174,8 +234,10 @@ describe("RecipeDetail", () => {
   it("renders ungrouped ingredients without section headings", () => {
     render(
       <RecipeDetail
-        recipe={makeRecipe({ recipeIngredient: ["2 cups flour", "1 cup sugar"] })}
-      />
+        recipe={makeRecipe({
+          recipeIngredient: ["2 cups flour", "1 cup sugar"],
+        })}
+      />,
     );
     expect(screen.queryByRole("heading", { level: 3 })).toBeNull();
   });
@@ -189,21 +251,35 @@ describe("RecipeDetail — shopping list", () => {
   });
 
   it("ingredient rows render as unchecked checkboxes", () => {
-    render(<RecipeDetail recipe={makeRecipe({ recipeIngredient: ["2 cups flour", "1 tsp salt"] })} />);
+    render(
+      <RecipeDetail
+        recipe={makeRecipe({
+          recipeIngredient: ["2 cups flour", "1 tsp salt"],
+        })}
+      />,
+    );
     const boxes = screen.getAllByRole("checkbox");
     expect(boxes[0].getAttribute("aria-checked")).toBe("false");
     expect(boxes[1].getAttribute("aria-checked")).toBe("false");
   });
 
   it("clicking an ingredient checks it", () => {
-    render(<RecipeDetail recipe={makeRecipe({ recipeIngredient: ["2 cups flour"] })} />);
+    render(
+      <RecipeDetail
+        recipe={makeRecipe({ recipeIngredient: ["2 cups flour"] })}
+      />,
+    );
     const box = screen.getByRole("checkbox", { name: "2 cups flour" });
     fireEvent.click(box);
     expect(box.getAttribute("aria-checked")).toBe("true");
   });
 
   it("clicking a checked ingredient unchecks it", () => {
-    render(<RecipeDetail recipe={makeRecipe({ recipeIngredient: ["2 cups flour"] })} />);
+    render(
+      <RecipeDetail
+        recipe={makeRecipe({ recipeIngredient: ["2 cups flour"] })}
+      />,
+    );
     const box = screen.getByRole("checkbox", { name: "2 cups flour" });
     fireEvent.click(box);
     fireEvent.click(box);
@@ -211,38 +287,68 @@ describe("RecipeDetail — shopping list", () => {
   });
 
   it("copy button is disabled when nothing is selected", () => {
-    render(<RecipeDetail recipe={makeRecipe({ recipeIngredient: ["2 cups flour"] })} />);
-    expect(screen.getByRole("button", { name: /copy shopping list/i })).toBeDisabled();
+    render(
+      <RecipeDetail
+        recipe={makeRecipe({ recipeIngredient: ["2 cups flour"] })}
+      />,
+    );
+    expect(
+      screen.getByRole("button", { name: /copy shopping list/i }),
+    ).toBeDisabled();
   });
 
   it("copy button becomes enabled when an ingredient is selected", () => {
-    render(<RecipeDetail recipe={makeRecipe({ recipeIngredient: ["2 cups flour"] })} />);
+    render(
+      <RecipeDetail
+        recipe={makeRecipe({ recipeIngredient: ["2 cups flour"] })}
+      />,
+    );
     fireEvent.click(screen.getByRole("checkbox", { name: "2 cups flour" }));
-    expect(screen.getByRole("button", { name: /copy shopping list/i })).not.toBeDisabled();
+    expect(
+      screen.getByRole("button", { name: /copy shopping list/i }),
+    ).not.toBeDisabled();
   });
 
   it("clicking copy writes selected ingredients to clipboard", async () => {
-    render(<RecipeDetail recipe={makeRecipe({ recipeIngredient: ["2 cups flour", "1 tsp salt"] })} />);
+    render(
+      <RecipeDetail
+        recipe={makeRecipe({
+          recipeIngredient: ["2 cups flour", "1 tsp salt"],
+        })}
+      />,
+    );
     fireEvent.click(screen.getByRole("checkbox", { name: "2 cups flour" }));
     fireEvent.click(screen.getByRole("checkbox", { name: "1 tsp salt" }));
-    fireEvent.click(screen.getByRole("button", { name: /copy shopping list/i }));
+    fireEvent.click(
+      screen.getByRole("button", { name: /copy shopping list/i }),
+    );
     await vi.waitFor(() => {
-      expect(navigator.clipboard.writeText).toHaveBeenCalledWith("2 cups flour\n1 tsp salt");
+      expect(navigator.clipboard.writeText).toHaveBeenCalledWith(
+        "2 cups flour\n1 tsp salt",
+      );
     });
   });
 
   it("clears the copy-feedback reset timer on unmount", async () => {
     const setSpy = vi.spyOn(globalThis, "setTimeout");
     const clearSpy = vi.spyOn(globalThis, "clearTimeout");
-    const { unmount } = render(<RecipeDetail recipe={makeRecipe({ recipeIngredient: ["2 cups flour"] })} />);
+    const { unmount } = render(
+      <RecipeDetail
+        recipe={makeRecipe({ recipeIngredient: ["2 cups flour"] })}
+      />,
+    );
     fireEvent.click(screen.getByRole("checkbox", { name: "2 cups flour" }));
 
     // The handler schedules the 2s feedback-reset timer in an async continuation
     // (after the awaited clipboard write) — flush it inside act, then wait for it.
     await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: /copy shopping list/i }));
+      fireEvent.click(
+        screen.getByRole("button", { name: /copy shopping list/i }),
+      );
       await vi.waitFor(() =>
-        expect(setSpy.mock.calls.some(([, delay]) => delay === 2000)).toBe(true),
+        expect(setSpy.mock.calls.some(([, delay]) => delay === 2000)).toBe(
+          true,
+        ),
       );
     });
     const idx = setSpy.mock.calls.findIndex(([, delay]) => delay === 2000);
@@ -265,7 +371,9 @@ describe("RecipeDetail — controls section", () => {
 
   it("hides the Manage section when isLoggedIn is false", () => {
     render(<RecipeDetail recipe={makeRecipe()} isLoggedIn={false} />);
-    expect(screen.queryByRole("region", { name: /recipe management/i })).toBeNull();
+    expect(
+      screen.queryByRole("region", { name: /recipe management/i }),
+    ).toBeNull();
     expect(screen.queryByRole("button", { name: /re-scrape/i })).toBeNull();
   });
 
@@ -274,36 +382,91 @@ describe("RecipeDetail — controls section", () => {
     expect(screen.getByRole("button", { name: /re-scrape/i })).toBeTruthy();
   });
 
+  // Each of these fires a webhook the moment it is invoked, so a misclick is
+  // unrecoverable spend. Both do have an after-the-fact review to back out of,
+  // but by then the external call has already been paid for — nothing may reach
+  // the network until the second, deliberate click.
+  const EXPENSIVE_ACTIONS: [string, RegExp, RegExp][] = [
+    ["Re-scrape", /re-scrape/i, /re-fetches and re-parses the source page/i],
+    ["Regen Image", /regen image/i, /replaces the current image/i],
+  ];
+
+  it.each(EXPENSIVE_ACTIONS)(
+    "%s asks for confirmation before spending anything",
+    async (_label, button, message) => {
+      const mockFetch = vi.fn();
+      vi.stubGlobal("fetch", mockFetch);
+
+      render(<RecipeDetail recipe={makeRecipe()} isLoggedIn={true} />);
+      await act(async () => {
+        fireEvent.click(screen.getByRole("button", { name: button }));
+      });
+
+      expect(screen.getByText(message)).toBeTruthy();
+      expect(mockFetch).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(EXPENSIVE_ACTIONS)(
+    "%s stays unspent when the confirm is cancelled",
+    async (_label, button) => {
+      const mockFetch = vi.fn();
+      vi.stubGlobal("fetch", mockFetch);
+
+      render(<RecipeDetail recipe={makeRecipe()} isLoggedIn={true} />);
+      await act(async () => {
+        fireEvent.click(screen.getByRole("button", { name: button }));
+      });
+      await act(async () => {
+        fireEvent.click(screen.getByRole("button", { name: /^cancel$/i }));
+      });
+
+      // The whole toolbar comes back, not just the trigger that was clicked.
+      expect(screen.getByRole("button", { name: button })).toBeTruthy();
+      expect(screen.getByRole("button", { name: /^edit$/i })).toBeTruthy();
+      expect(mockFetch).not.toHaveBeenCalled();
+    },
+  );
+
   it("shows loading state while re-scraping", async () => {
     let resolve: (value: Response) => void;
-    const pending = new Promise<Response>((res) => { resolve = res; });
+    const pending = new Promise<Response>((res) => {
+      resolve = res;
+    });
     vi.stubGlobal("fetch", vi.fn().mockReturnValue(pending));
 
     render(<RecipeDetail recipe={makeRecipe()} isLoggedIn={true} />);
-    await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: /re-scrape/i }));
-    });
+    await clickAndConfirm(/re-scrape/i);
 
     expect(screen.getByRole("button", { name: /re-scraping/i })).toBeTruthy();
     expect(screen.getByRole("button", { name: /re-scraping/i })).toBeDisabled();
 
-    resolve!(new Response(JSON.stringify({ schema: rescrapeFixture }), { status: 200 }));
+    resolve!(
+      new Response(JSON.stringify({ schema: rescrapeFixture }), {
+        status: 200,
+      }),
+    );
   });
 
   it("enters edit mode with rescraped data after a successful re-scrape", async () => {
     vi.stubGlobal(
       "fetch",
       vi.fn().mockResolvedValue(
-        new Response(JSON.stringify({ schema: rescrapeFixture }), { status: 200 })
-      )
+        new Response(JSON.stringify({ schema: rescrapeFixture }), {
+          status: 200,
+        }),
+      ),
     );
 
-    render(<RecipeDetail recipe={makeRecipe({ name: "Old Recipe Name" })} isLoggedIn={true} />);
+    render(
+      <RecipeDetail
+        recipe={makeRecipe({ name: "Old Recipe Name" })}
+        isLoggedIn={true}
+      />,
+    );
     expect(screen.getByText("Old Recipe Name")).toBeTruthy();
 
-    await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: /re-scrape/i }));
-    });
+    await clickAndConfirm(/re-scrape/i);
 
     await waitFor(() => {
       expect(screen.getByRole("button", { name: /^confirm$/i })).toBeTruthy();
@@ -311,7 +474,11 @@ describe("RecipeDetail — controls section", () => {
     expect(screen.getByRole("button", { name: /^cancel$/i })).toBeTruthy();
     expect(screen.getByText(/reviewing re-scraped data/i)).toBeTruthy();
     expect(
-      (screen.getByRole("textbox", { name: /recipe title/i }) as HTMLInputElement).value
+      (
+        screen.getByRole("textbox", {
+          name: /recipe title/i,
+        }) as HTMLInputElement
+      ).value,
     ).toBe(rescrapeFixture.name);
   });
 
@@ -319,14 +486,19 @@ describe("RecipeDetail — controls section", () => {
     vi.stubGlobal(
       "fetch",
       vi.fn().mockResolvedValue(
-        new Response(JSON.stringify({ schema: rescrapeFixture }), { status: 200 })
-      )
+        new Response(JSON.stringify({ schema: rescrapeFixture }), {
+          status: 200,
+        }),
+      ),
     );
 
-    render(<RecipeDetail recipe={makeRecipe({ name: "Original Name" })} isLoggedIn={true} />);
-    await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: /re-scrape/i }));
-    });
+    render(
+      <RecipeDetail
+        recipe={makeRecipe({ name: "Original Name" })}
+        isLoggedIn={true}
+      />,
+    );
+    await clickAndConfirm(/re-scrape/i);
     await waitFor(() => {
       expect(screen.getByRole("button", { name: /^confirm$/i })).toBeTruthy();
     });
@@ -341,19 +513,25 @@ describe("RecipeDetail — controls section", () => {
   });
 
   it("sends rescraped data to update endpoint when confirmed", async () => {
-    const mockFetch = vi.fn()
+    const mockFetch = vi
+      .fn()
       .mockResolvedValueOnce(
-        new Response(JSON.stringify({ schema: rescrapeFixture }), { status: 200 })
+        new Response(JSON.stringify({ schema: rescrapeFixture }), {
+          status: 200,
+        }),
       )
       .mockResolvedValueOnce(
-        new Response(JSON.stringify({ schema: rescrapeFixture, status: "draft" }), { status: 200 })
+        new Response(
+          JSON.stringify({ schema: rescrapeFixture, status: "draft" }),
+          { status: 200 },
+        ),
       );
     vi.stubGlobal("fetch", mockFetch);
 
-    render(<RecipeDetail recipe={makeRecipe({ name: "Old" })} isLoggedIn={true} />);
-    await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: /re-scrape/i }));
-    });
+    render(
+      <RecipeDetail recipe={makeRecipe({ name: "Old" })} isLoggedIn={true} />,
+    );
+    await clickAndConfirm(/re-scrape/i);
     await waitFor(() => {
       expect(screen.getByRole("button", { name: /^confirm$/i })).toBeTruthy();
     });
@@ -369,13 +547,11 @@ describe("RecipeDetail — controls section", () => {
   it("shows error message when re-scrape fails", async () => {
     vi.stubGlobal(
       "fetch",
-      vi.fn().mockResolvedValue(new Response(null, { status: 502 }))
+      vi.fn().mockResolvedValue(new Response(null, { status: 502 })),
     );
 
     render(<RecipeDetail recipe={makeRecipe()} isLoggedIn={true} />);
-    await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: /re-scrape/i }));
-    });
+    await clickAndConfirm(/re-scrape/i);
 
     await waitFor(() => {
       expect(screen.getByText(/re-scrape failed/i)).toBeTruthy();
@@ -385,15 +561,18 @@ describe("RecipeDetail — controls section", () => {
   it("does not crash when rescrape response is missing schema key", async () => {
     vi.stubGlobal(
       "fetch",
-      vi.fn().mockResolvedValue(
-        new Response(JSON.stringify({}), { status: 200 })
-      )
+      vi
+        .fn()
+        .mockResolvedValue(new Response(JSON.stringify({}), { status: 200 })),
     );
 
-    render(<RecipeDetail recipe={makeRecipe({ name: "My Recipe" })} isLoggedIn={true} />);
-    await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: /re-scrape/i }));
-    });
+    render(
+      <RecipeDetail
+        recipe={makeRecipe({ name: "My Recipe" })}
+        isLoggedIn={true}
+      />,
+    );
+    await clickAndConfirm(/re-scrape/i);
 
     await waitFor(() => {
       expect(screen.getByText(/re-scrape failed/i)).toBeTruthy();
@@ -406,11 +585,18 @@ describe("RecipeDetail — controls section", () => {
     vi.stubGlobal(
       "fetch",
       vi.fn().mockResolvedValue(
-        new Response(JSON.stringify({ status: "published" }), { status: 200 })
-      )
+        new Response(JSON.stringify({ status: "published" }), {
+          status: 200,
+        }),
+      ),
     );
 
-    render(<RecipeDetail recipe={makeRecipe({ name: "My Recipe" })} isLoggedIn={true} />);
+    render(
+      <RecipeDetail
+        recipe={makeRecipe({ name: "My Recipe" })}
+        isLoggedIn={true}
+      />,
+    );
     await act(async () => {
       fireEvent.click(screen.getByRole("button", { name: /^edit$/i }));
     });
@@ -422,7 +608,11 @@ describe("RecipeDetail — controls section", () => {
       expect(screen.getByText(/save failed/i)).toBeTruthy();
     });
     expect(
-      (screen.getByRole("textbox", { name: /recipe title/i }) as HTMLInputElement).value
+      (
+        screen.getByRole("textbox", {
+          name: /recipe title/i,
+        }) as HTMLInputElement
+      ).value,
     ).toBe("My Recipe");
   });
 
@@ -444,26 +634,36 @@ describe("RecipeDetail — controls section", () => {
   it("enters edit mode when Edit is clicked", async () => {
     render(
       <RecipeDetail
-        recipe={makeRecipe({ description: "Tasty.", notes: "Use fresh herbs." })}
+        recipe={makeRecipe({
+          description: "Tasty.",
+          notes: "Use fresh herbs.",
+        })}
         isLoggedIn={true}
-      />
+      />,
     );
     await act(async () => {
       fireEvent.click(screen.getByRole("button", { name: /^edit$/i }));
     });
     expect(screen.getByRole("button", { name: /^save$/i })).toBeTruthy();
     expect(screen.getByRole("button", { name: /^cancel$/i })).toBeTruthy();
-    expect(screen.getByRole("combobox", { name: /recipe status/i })).toBeTruthy();
+    expect(
+      screen.getByRole("combobox", { name: /recipe status/i }),
+    ).toBeTruthy();
   });
 
   it("populates description textarea with current value in edit mode", async () => {
     render(
-      <RecipeDetail recipe={makeRecipe({ description: "A hearty dish." })} isLoggedIn={true} />
+      <RecipeDetail
+        recipe={makeRecipe({ description: "A hearty dish." })}
+        isLoggedIn={true}
+      />,
     );
     await act(async () => {
       fireEvent.click(screen.getByRole("button", { name: /^edit$/i }));
     });
-    const textarea = screen.getByPlaceholderText(/description/i) as HTMLTextAreaElement;
+    const textarea = screen.getByPlaceholderText(
+      /description/i,
+    ) as HTMLTextAreaElement;
     expect(textarea.value).toBe("A hearty dish.");
   });
 
@@ -478,7 +678,12 @@ describe("RecipeDetail — controls section", () => {
   });
 
   it("cancel returns to view mode without saving", async () => {
-    render(<RecipeDetail recipe={makeRecipe({ description: "Original." })} isLoggedIn={true} />);
+    render(
+      <RecipeDetail
+        recipe={makeRecipe({ description: "Original." })}
+        isLoggedIn={true}
+      />,
+    );
     await act(async () => {
       fireEvent.click(screen.getByRole("button", { name: /^edit$/i }));
     });
@@ -490,15 +695,28 @@ describe("RecipeDetail — controls section", () => {
   });
 
   it("updates recipe state after a successful save", async () => {
-    const updatedSchema = { ...rescrapeFixture, description: "Updated description." };
+    const updatedSchema = {
+      ...rescrapeFixture,
+      description: "Updated description.",
+    };
     vi.stubGlobal(
       "fetch",
-      vi.fn().mockResolvedValue(
-        new Response(JSON.stringify({ schema: updatedSchema, status: "published" }), { status: 200 })
-      )
+      vi
+        .fn()
+        .mockResolvedValue(
+          new Response(
+            JSON.stringify({ schema: updatedSchema, status: "published" }),
+            { status: 200 },
+          ),
+        ),
     );
 
-    render(<RecipeDetail recipe={makeRecipe({ name: "Old Name" })} isLoggedIn={true} />);
+    render(
+      <RecipeDetail
+        recipe={makeRecipe({ name: "Old Name" })}
+        isLoggedIn={true}
+      />,
+    );
     await act(async () => {
       fireEvent.click(screen.getByRole("button", { name: /^edit$/i }));
     });
@@ -515,7 +733,7 @@ describe("RecipeDetail — controls section", () => {
   it("shows error message when save fails", async () => {
     vi.stubGlobal(
       "fetch",
-      vi.fn().mockResolvedValue(new Response(null, { status: 500 }))
+      vi.fn().mockResolvedValue(new Response(null, { status: 500 })),
     );
 
     render(<RecipeDetail recipe={makeRecipe()} isLoggedIn={true} />);
@@ -533,20 +751,25 @@ describe("RecipeDetail — controls section", () => {
   });
 
   it("shows Source URL input pre-filled with recipe.url in edit mode", async () => {
-    render(
-      <RecipeDetail recipe={makeRecipe()} isLoggedIn={true} />
-    );
+    render(<RecipeDetail recipe={makeRecipe()} isLoggedIn={true} />);
     await act(async () => {
       fireEvent.click(screen.getByRole("button", { name: /^edit$/i }));
     });
-    const input = screen.getByPlaceholderText(/https:\/\/example\.com\/recipe/i) as HTMLInputElement;
+    const input = screen.getByPlaceholderText(
+      /https:\/\/example\.com\/recipe/i,
+    ) as HTMLInputElement;
     expect(input.value).toBe("https://example.com");
   });
 
   it("includes url in the save request body", async () => {
-    const mockFetch = vi.fn().mockResolvedValue(
-      new Response(JSON.stringify({ schema: rescrapeFixture, status: "draft" }), { status: 200 })
-    );
+    const mockFetch = vi
+      .fn()
+      .mockResolvedValue(
+        new Response(
+          JSON.stringify({ schema: rescrapeFixture, status: "draft" }),
+          { status: 200 },
+        ),
+      );
     vi.stubGlobal("fetch", mockFetch);
 
     render(<RecipeDetail recipe={makeRecipe()} isLoggedIn={true} />);
@@ -563,21 +786,38 @@ describe("RecipeDetail — controls section", () => {
   });
 
   it("shows title input pre-filled with current name in edit mode", async () => {
-    render(<RecipeDetail recipe={makeRecipe({ name: "Original Title" })} isLoggedIn={true} />);
+    render(
+      <RecipeDetail
+        recipe={makeRecipe({ name: "Original Title" })}
+        isLoggedIn={true}
+      />,
+    );
     await act(async () => {
       fireEvent.click(screen.getByRole("button", { name: /^edit$/i }));
     });
-    const input = screen.getByRole("textbox", { name: /recipe title/i }) as HTMLInputElement;
+    const input = screen.getByRole("textbox", {
+      name: /recipe title/i,
+    }) as HTMLInputElement;
     expect(input.value).toBe("Original Title");
   });
 
   it("includes the edited name in the save request body", async () => {
-    const mockFetch = vi.fn().mockResolvedValue(
-      new Response(JSON.stringify({ schema: rescrapeFixture, status: "draft" }), { status: 200 })
-    );
+    const mockFetch = vi
+      .fn()
+      .mockResolvedValue(
+        new Response(
+          JSON.stringify({ schema: rescrapeFixture, status: "draft" }),
+          { status: 200 },
+        ),
+      );
     vi.stubGlobal("fetch", mockFetch);
 
-    render(<RecipeDetail recipe={makeRecipe({ name: "Old Title" })} isLoggedIn={true} />);
+    render(
+      <RecipeDetail
+        recipe={makeRecipe({ name: "Old Title" })}
+        isLoggedIn={true}
+      />,
+    );
     await act(async () => {
       fireEvent.click(screen.getByRole("button", { name: /^edit$/i }));
     });
