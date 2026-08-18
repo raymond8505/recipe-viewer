@@ -65,6 +65,20 @@ export const RegenImageConfirm: Story = {
   },
 };
 
+/**
+ * The same gate on Normalize. It needs it most of the three: re-scrape and
+ * regen-image land in a review state a misclick can be walked back from, while
+ * this queues a background run and returns with nothing to undo.
+ */
+export const NormalizeConfirm: Story = {
+  play: async ({ canvas }) => {
+    await userEvent.click(canvas.getByRole("button", { name: "Normalize" }));
+    await expect(
+      canvas.getByText(/re-parses every ingredient line/i),
+    ).toBeInTheDocument();
+  },
+};
+
 /** Normalization request in flight — the button reads "Normalizing…" and disables. */
 export const Normalizing: Story = {
   args: { normalizeState: "loading" },
