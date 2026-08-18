@@ -32,7 +32,7 @@ function makeRecipe(schema: Partial<SchemaRecipe> = {}): RecipeRow {
 
 /**
  * Click a Manage-toolbar action twice: once to raise the confirm bar, once to
- * confirm it. Confirm button name mirrors action button name by default
+ * confirm it.
  */
 async function clickAndConfirm(name: RegExp, confirmName: RegExp = name) {
   await act(async () => {
