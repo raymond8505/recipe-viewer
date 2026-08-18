@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/nextjs-vite";
-import { fn } from "storybook/test";
+import { expect, fn, userEvent } from "storybook/test";
 import RecipeControls from "./RecipeControls";
 
 const meta: Meta<typeof RecipeControls> = {
@@ -37,6 +37,31 @@ type Story = StoryObj<typeof RecipeControls>;
 
 /** Default (not editing): Edit / Re-scrape / Regen Image / Upload Image. */
 export const ViewMode: Story = {};
+
+/**
+ * Re-scrape awaiting confirmation. Both webhook-backed actions spend on an
+ * external service, so the whole button row swaps for a confirm bar — one
+ * decision on screen, nothing spent on a misclick. The bar is driven by the
+ * component's own state, so the click is what makes it visible.
+ */
+export const RescrapeConfirm: Story = {
+  play: async ({ canvas }) => {
+    await userEvent.click(canvas.getByRole("button", { name: "Re-scrape" }));
+    await expect(
+      canvas.getByText(/re-fetches and re-parses the source page/i),
+    ).toBeInTheDocument();
+  },
+};
+
+/** The same gate on Regen Image, whose confirm names the image replacement. */
+export const RegenImageConfirm: Story = {
+  play: async ({ canvas }) => {
+    await userEvent.click(canvas.getByRole("button", { name: "Regen Image" }));
+    await expect(
+      canvas.getByText(/replaces the current image/i),
+    ).toBeInTheDocument();
+  },
+};
 
 /** Editing: source URL + status + Save/Cancel. */
 export const Editing: Story = {

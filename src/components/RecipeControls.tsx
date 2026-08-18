@@ -1,11 +1,33 @@
 "use client";
 
-import type { ChangeEvent, MutableRefObject } from "react";
+import { useState, type ChangeEvent, type MutableRefObject } from "react";
 import type { OpState } from "@/hooks/useUndoableSchemaOp";
 import type { EditState } from "@/hooks/useRecipeEditor";
 import { ALLOWED_IMAGE_CONTENT_TYPES } from "@/lib/imageTypes";
 import { Button } from "@/components/ui/button";
+import ConfirmBar from "@/components/ConfirmBar";
 import { PrimaryActionButton } from "@/components/buttons";
+
+/**
+ * The actions that spend real money/time on an external service and so are
+ * gated behind an up-front confirm: each one fires a webhook, and a misclick is
+ * unrecoverable spend. The confirm label repeats the trigger button's label so
+ * the bar names the action rather than saying "OK".
+ */
+const CONFIRM_ACTIONS = {
+  rescrape: {
+    label: "Re-scrape",
+    message:
+      "Re-scrape this recipe? This re-fetches and re-parses the source page.",
+  },
+  regenImage: {
+    label: "Regen Image",
+    message:
+      "Generate a new image? This replaces the current image and can take a while.",
+  },
+} as const;
+
+type ConfirmAction = keyof typeof CONFIRM_ACTIONS;
 
 export interface RecipeControlsProps {
   isEditing: boolean;
@@ -41,6 +63,12 @@ export interface RecipeControlsProps {
  * upload image, plus the edit-mode source URL + status + Save/Cancel). Pure UI:
  * RecipeDetail owns all the editor/op/upload hooks and the composite handlers
  * and passes state + callbacks in. The `isLoggedIn` gate stays in RecipeDetail.
+ *
+ * The actions in `CONFIRM_ACTIONS` are gated behind an up-front confirm that
+ * swaps the whole button row for a `ConfirmBar`, so their `on*` props only fire
+ * on a second, deliberate click. Both also have an after-the-fact escape hatch
+ * (the `*Review` editor states below); this gate sits in front of it so the
+ * spend never happens on a misclick at all.
  */
 export default function RecipeControls({
   isEditing,
@@ -66,6 +94,32 @@ export default function RecipeControls({
   onUploadOpen,
   onFileSelected,
 }: RecipeControlsProps) {
+  // Which expensive action is awaiting confirmation. Pure view state — the
+  // component stays presentational for *op* state (RecipeDetail still owns
+  // every hook); this mirrors the local `confirming` flag in editor rows.
+  const [pending, setPending] = useState<ConfirmAction | null>(null);
+
+  const runPending = () => {
+    const action = pending;
+    setPending(null);
+    if (action === "rescrape") onRescrape();
+    else if (action === "regenImage") onRegenImage();
+  };
+
+  // Rendered in both view-mode branches rather than hoisted out of the ternary:
+  // the confirm swap must never unmount the upload path's file input, but edit
+  // mode should keep exactly the DOM it has always had.
+  const hiddenFileInput = (
+    <input
+      ref={fileInputRef}
+      type="file"
+      accept={ALLOWED_IMAGE_CONTENT_TYPES.join(",")}
+      onChange={onFileSelected}
+      className="hidden"
+      aria-label="Choose image file to upload"
+    />
+  );
+
   return (
     <section aria-label="Recipe management" className="mb-8">
       <h2 className="font-sans text-xs font-semibold uppercase tracking-widest text-gray-400 mb-4">
@@ -143,6 +197,18 @@ export default function RecipeControls({
               </span>
             )}
           </>
+        ) : pending ? (
+          <>
+            <div className="w-full">
+              <ConfirmBar
+                message={CONFIRM_ACTIONS[pending].message}
+                confirmLabel={CONFIRM_ACTIONS[pending].label}
+                onCancel={() => setPending(null)}
+                onConfirm={runPending}
+              />
+            </div>
+            {hiddenFileInput}
+          </>
         ) : (
           <>
             <Button variant="outline" onClick={onEditStart}>
@@ -151,7 +217,7 @@ export default function RecipeControls({
             {canRescrape && (
               <Button
                 variant="outline"
-                onClick={onRescrape}
+                onClick={() => setPending("rescrape")}
                 disabled={rescrapeState === "loading"}
               >
                 {rescrapeState === "loading" ? "Re-scraping…" : "Re-scrape"}
@@ -167,7 +233,7 @@ export default function RecipeControls({
             )}
             <Button
               variant="outline"
-              onClick={onRegenImage}
+              onClick={() => setPending("regenImage")}
               disabled={regenImageState === "loading"}
             >
               {regenImageState === "loading" ? "Generating…" : "Regen Image"}
@@ -180,14 +246,7 @@ export default function RecipeControls({
             <Button variant="outline" onClick={onUploadOpen}>
               Upload Image
             </Button>
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept={ALLOWED_IMAGE_CONTENT_TYPES.join(",")}
-              onChange={onFileSelected}
-              className="hidden"
-              aria-label="Choose image file to upload"
-            />
+            {hiddenFileInput}
             {uploadError && (
               <span className="text-sm text-red-600">
                 File must be PNG, JPEG, or WebP and under 4MB.
