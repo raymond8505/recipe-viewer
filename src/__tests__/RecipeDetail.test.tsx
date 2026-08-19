@@ -14,6 +14,7 @@ import type {
   SchemaRecipe,
 } from "@/types/recipe";
 import { rescrapeFixture } from "@/fixtures/rescrape";
+import { clickAndConfirm } from "./helpers/confirmBar";
 
 function makeRecipe(schema: Partial<SchemaRecipe> = {}): RecipeRow {
   return {
@@ -28,19 +29,6 @@ function makeRecipe(schema: Partial<SchemaRecipe> = {}): RecipeRow {
       },
     },
   };
-}
-
-/**
- * Click a Manage-toolbar action twice: once to raise the confirm bar, once to
- * confirm it.
- */
-async function clickAndConfirm(name: RegExp, confirmName: RegExp = name) {
-  await act(async () => {
-    fireEvent.click(screen.getByRole("button", { name }));
-  });
-  await act(async () => {
-    fireEvent.click(screen.getByRole("button", { name: confirmName }));
-  });
 }
 
 describe("RecipeDetail", () => {
@@ -422,13 +410,16 @@ describe("RecipeDetail — controls section", () => {
     ).toHaveAttribute("href", "/recipes/1/ingredients");
   });
 
-  // Each of these fires a webhook the moment it is invoked, so a misclick is
-  // unrecoverable spend. Both do have an after-the-fact review to back out of,
-  // but by then the external call has already been paid for — nothing may reach
-  // the network until the second, deliberate click.
+  // Each of these fires a webhook or queues a model run the moment it is
+  // invoked, so a misclick is unrecoverable spend. Re-scrape and regen-image
+  // do have an after-the-fact review to back out of, but by then the external
+  // call has already been paid for; Normalize has no undo at all — nothing may
+  // reach the network until the second, deliberate click.
+  // `/^normalize$/i` is anchored so it doesn't also match "Normalizing…".
   const EXPENSIVE_ACTIONS: [string, RegExp, RegExp][] = [
     ["Re-scrape", /re-scrape/i, /re-fetches and re-parses the source page/i],
     ["Regen Image", /regen image/i, /replaces the current image/i],
+    ["Normalize", /^normalize$/i, /re-parses every ingredient line/i],
   ];
 
   it.each(EXPENSIVE_ACTIONS)(
@@ -467,6 +458,19 @@ describe("RecipeDetail — controls section", () => {
       expect(mockFetch).not.toHaveBeenCalled();
     },
   );
+
+  it("queues normalization once the confirm is accepted", async () => {
+    const mockFetch = vi
+      .fn()
+      .mockResolvedValue(new Response(JSON.stringify({}), { status: 200 }));
+    vi.stubGlobal("fetch", mockFetch);
+
+    render(<RecipeDetail recipe={makeRecipe()} isLoggedIn={true} />);
+    await clickAndConfirm(/^normalize$/i);
+
+    await waitFor(() => expect(mockFetch).toHaveBeenCalledTimes(1));
+    expect(String(mockFetch.mock.calls[0][0])).toContain("/normalize");
+  });
 
   it("shows loading state while re-scraping", async () => {
     let resolve: (value: Response) => void;

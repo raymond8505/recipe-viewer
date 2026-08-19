@@ -1,7 +1,6 @@
 "use client";
 
-import { Fragment, useState } from "react";
-import { useRouter } from "next/navigation";
+import { Fragment } from "react";
 import {
   Table,
   TableBody,
@@ -12,7 +11,6 @@ import {
 } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { WarningIcon } from "@/components/icons";
-import { normalizeRecipe } from "@/lib/api/recipes";
 import { pluralize } from "@/lib/format";
 import { useNutritionDetail } from "@/hooks/useNutritionDetail";
 import type { QuantitativeValue, RecipeIngredient } from "@/types/recipe";
@@ -21,6 +19,7 @@ import type {
   IngredientAutocompleteSearch,
   UsdaFoodSearch,
 } from "@/hooks/useIngredientAutocomplete";
+import NormalizeAction from "./NormalizeAction";
 import NutritionDetailRow from "./NutritionDetailRow";
 import NutritionGroupRow from "./NutritionGroupRow";
 import NutritionSummaryRow from "./NutritionSummaryRow";
@@ -71,10 +70,6 @@ export default function NutritionDetail({
   search,
   usdaSearch,
 }: NutritionDetailProps) {
-  const router = useRouter();
-  const [normalizeState, setNormalizeState] = useState<"idle" | "queueing" | "queued">(
-    "idle",
-  );
   const {
     groups,
     totals,
@@ -102,45 +97,20 @@ export default function NutritionDetail({
     initialIngredients,
   );
 
-  async function handleRenormalize() {
-    setNormalizeState("queueing");
-    try {
-      await normalizeRecipe(recipeId);
-      setNormalizeState("queued");
-    } catch {
-      setNormalizeState("idle");
-    }
-  }
-
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        {hasStaleLines ? (
+      {/* NormalizeAction carries `ml-auto`, which is what right-aligns it
+          whether or not the stale-lines warning is there — `justify-between`
+          would need a placeholder element when the warning is absent. */}
+      <div className="flex flex-wrap items-center gap-3">
+        {hasStaleLines && (
           <p className="flex items-center gap-2 text-sm text-muted-foreground">
             <WarningIcon />
             Some lines have never been normalized and are excluded from totals —
             normalize to build their rows.
           </p>
-        ) : (
-          <span />
         )}
-        {normalizeState === "queued" ? (
-          // A 200 from the normalize route means "queued", not "done" — the
-          // run happens post-response, so refreshing is the way to see it.
-          <Button size="sm" variant="secondary" onClick={() => router.refresh()}>
-            Queued — check again
-          </Button>
-        ) : (
-          <Button
-            size="sm"
-            variant="secondary"
-            disabled={normalizeState === "queueing"}
-            onClick={handleRenormalize}
-            title="Re-parses and re-matches every line; manual matches are preserved"
-          >
-            Normalize
-          </Button>
-        )}
+        <NormalizeAction recipeId={recipeId} />
       </div>
 
       {error && (

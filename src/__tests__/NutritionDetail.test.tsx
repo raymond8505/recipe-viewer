@@ -11,6 +11,7 @@ import {
 } from "@/lib/api/recipes";
 import { importUsdaIngredient } from "@/lib/api/ingredients";
 import { makeIngredient, makeRecipeIngredient } from "@/fixtures";
+import { clickAndConfirm } from "./helpers/confirmBar";
 import type {
   IngredientKeywordMatch,
   RecipeIngredientRow,
@@ -236,12 +237,62 @@ describe("NutritionDetail", () => {
     renderDetail();
 
     // Present even with nothing stale — it exists to fill in unmatched lines.
-    await user.click(screen.getByRole("button", { name: "Normalize" }));
+    await clickAndConfirm("Normalize");
     expect(normalizeRecipe).toHaveBeenCalledWith("r-1");
     // A 200 means queued, not done — the button flips to a refresh affordance.
     expect(
       await screen.findByRole("button", { name: "Queued — check again" }),
     ).toBeInTheDocument();
+  });
+
+  // Normalization queues a LangGraph run — model parsing plus USDA lookups for
+  // every line — and the route returns before it happens, so there is nothing
+  // to undo. The up-front confirm is the only guard, which makes "a misclick
+  // spends nothing" the contract worth pinning down.
+  it("does not queue a normalization run until the confirm is accepted", async () => {
+    const user = userEvent.setup();
+    renderDetail();
+
+    await user.click(screen.getByRole("button", { name: "Normalize" }));
+
+    expect(
+      screen.getByText(/re-parses every ingredient line/i),
+    ).toBeInTheDocument();
+    expect(normalizeRecipe).not.toHaveBeenCalled();
+  });
+
+  it("restores the Normalize button on cancel without queueing anything", async () => {
+    const user = userEvent.setup();
+    renderDetail();
+
+    await user.click(screen.getByRole("button", { name: "Normalize" }));
+    await user.click(screen.getByRole("button", { name: "Cancel" }));
+
+    expect(
+      screen.queryByText(/re-parses every ingredient line/i),
+    ).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Normalize" })).toBeInTheDocument();
+    expect(normalizeRecipe).not.toHaveBeenCalled();
+  });
+
+  // The queued-state affordance is a local router.refresh(), not a re-run — it
+  // costs nothing and so must NOT inherit the confirm.
+  it("leaves the queued refresh affordance ungated", async () => {
+    const user = userEvent.setup();
+    vi.mocked(normalizeRecipe).mockResolvedValue(undefined);
+    renderDetail();
+
+    await clickAndConfirm("Normalize");
+
+    await user.click(
+      await screen.findByRole("button", { name: "Queued — check again" }),
+    );
+
+    // No confirm was raised, and nothing was queued a second time.
+    expect(
+      screen.queryByText(/re-parses every ingredient line/i),
+    ).not.toBeInTheDocument();
+    expect(normalizeRecipe).toHaveBeenCalledTimes(1);
   });
 
   // The line text is display copy; the line id is the identity. Someone
