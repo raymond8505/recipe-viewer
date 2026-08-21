@@ -10,6 +10,7 @@ import {
   schemaToEditableIngredients,
   schemaToEditableInstructions,
 } from "@/lib/format";
+import { applyServings, parseServings } from "@/lib/units";
 
 export type EditState = "idle" | "editing" | "saving" | "error";
 
@@ -23,6 +24,8 @@ export interface EditDraft {
   instructions: EditableInstructions;
   notes: string;
   status: string;
+  /** Base servings as raw input text; parsed (integer >= 1) on save. */
+  servings: string;
 }
 
 const EMPTY_DRAFT: EditDraft = {
@@ -33,6 +36,7 @@ const EMPTY_DRAFT: EditDraft = {
   instructions: [],
   notes: "",
   status: "",
+  servings: "",
 };
 
 export interface UseRecipeEditor {
@@ -106,6 +110,7 @@ export function useRecipeEditor(): UseRecipeEditor {
         ),
         notes: schema.notes ?? "",
         status,
+        servings: parseServings(schema.recipeYield)?.toString() ?? "",
       });
       setEditState("editing");
     },
@@ -115,14 +120,26 @@ export function useRecipeEditor(): UseRecipeEditor {
   const cancel = useCallback(() => setEditState("idle"), []);
 
   const buildSchema = useCallback(
-    (base: SchemaRecipe): SchemaRecipe => ({
-      ...base,
-      name: draft.name.trim() || base.name,
-      description: draft.description || undefined,
-      recipeIngredient: editableIngredientsToSchema(draft.ingredients),
-      recipeInstructions: editableInstructionsToSchema(draft.instructions),
-      notes: draft.notes || undefined,
-    }),
+    (base: SchemaRecipe): SchemaRecipe => {
+      // Only rewrite the yield when the parsed input is a valid count that
+      // differs from the base. The changed-check is load-bearing: a range
+      // like "6-8 servings" seeds the input with its midpoint ("7"), so an
+      // untouched save would otherwise silently collapse the range.
+      const n = Number(draft.servings.trim());
+      const servingsChanged =
+        Number.isInteger(n) && n >= 1 && n !== parseServings(base.recipeYield);
+      return {
+        ...base,
+        name: draft.name.trim() || base.name,
+        description: draft.description || undefined,
+        recipeIngredient: editableIngredientsToSchema(draft.ingredients),
+        recipeInstructions: editableInstructionsToSchema(draft.instructions),
+        notes: draft.notes || undefined,
+        recipeYield: servingsChanged
+          ? applyServings(base.recipeYield, n)
+          : base.recipeYield,
+      };
+    },
     [draft],
   );
 
