@@ -1,4 +1,6 @@
 import ServingsControl from "@/components/ServingsControl";
+import ServingsInputCell from "@/components/ServingsInputCell";
+import Stat from "@/components/Stat";
 import type { SchemaRecipe } from "@/types/recipe";
 import { getYieldLabel, getYieldUnit } from "@/lib/format";
 import { cn } from "@/lib/utils";
@@ -15,23 +17,18 @@ interface TimeYieldStatsProps {
    */
   currentServings?: number | null;
   onServingsChange?: (n: number) => void;
+  /**
+   * When set, the servings cell becomes a base-servings editor (persisted
+   * `recipeYield`, not display scaling) and takes precedence over the stepper.
+   * The band renders even with no stats at all, so a recipe without a yield
+   * can gain one while editing.
+   */
+  servingsEdit?: {
+    value: string;
+    onChange: (value: string) => void;
+    disabled?: boolean;
+  };
   className?: string;
-}
-
-function Stat({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="text-center">
-      <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">
-        {label}
-      </p>
-      {/* min-h matches ServingsControl's size-11 stepper row so values share a
-          vertical center across cells (and the band height doesn't shift when
-          servings switch between static and stepper). */}
-      <p className="flex min-h-11 items-center justify-center font-semibold text-gray-900">
-        {value}
-      </p>
-    </div>
-  );
 }
 
 /**
@@ -40,7 +37,7 @@ function Stat({ label, value }: { label: string; value: string }) {
  * top/bottom borders, with the stats centered in a content container inside —
  * place it at a level where the parent spans the full region width (callers
  * pass negative margins via `className` if a padded ancestor must be escaped).
- * Renders nothing when there are no stats to show.
+ * Renders nothing when there are no stats to show and no servings editor.
  */
 export default function TimeYieldStats({
   prepTime,
@@ -49,9 +46,11 @@ export default function TimeYieldStats({
   recipeYield,
   currentServings,
   onServingsChange,
+  servingsEdit,
   className,
 }: TimeYieldStatsProps) {
-  if (!prepTime && !cookTime && !totalTime && !recipeYield) return null;
+  if (!prepTime && !cookTime && !totalTime && !recipeYield && !servingsEdit)
+    return null;
 
   return (
     <section
@@ -62,7 +61,15 @@ export default function TimeYieldStats({
         {prepTime && <Stat label="Prep time" value={prepTime} />}
         {cookTime && <Stat label="Cook time" value={cookTime} />}
         {totalTime && <Stat label="Total time" value={totalTime} />}
-        {recipeYield &&
+        {servingsEdit ? (
+          <ServingsInputCell
+            label={getYieldUnit(recipeYield) ?? "Servings"}
+            value={servingsEdit.value}
+            onChange={servingsEdit.onChange}
+            disabled={servingsEdit.disabled}
+          />
+        ) : (
+          recipeYield &&
           (currentServings != null && onServingsChange ? (
             <ServingsControl
               servings={currentServings}
@@ -71,7 +78,8 @@ export default function TimeYieldStats({
             />
           ) : (
             <Stat label="Servings" value={getYieldLabel(recipeYield) ?? ""} />
-          ))}
+          ))
+        )}
       </div>
     </section>
   );

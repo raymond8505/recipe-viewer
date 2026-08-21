@@ -52,3 +52,28 @@ export const TimesOnly: Story = {
     recipeYield: undefined,
   },
 };
+
+/**
+ * Edit mode: the servings cell is a numeric input that edits the recipe's
+ * BASE servings (the persisted recipeYield) — unlike the stepper, which only
+ * scales the display.
+ */
+export const Editing: Story = {
+  args: {
+    servingsEdit: { value: "4", onChange: fn() },
+  },
+};
+
+/**
+ * A recipe with no yield (and no times) still shows the band while editing,
+ * so servings can be added where none existed.
+ */
+export const EditingNoYield: Story = {
+  args: {
+    prepTime: undefined,
+    cookTime: undefined,
+    totalTime: undefined,
+    recipeYield: undefined,
+    servingsEdit: { value: "", onChange: fn() },
+  },
+};
