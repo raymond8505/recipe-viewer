@@ -1,4 +1,6 @@
 import ServingsControl from "@/components/ServingsControl";
+import ServingsInputCell from "@/components/ServingsInputCell";
+import Stat from "@/components/Stat";
 import type { SchemaRecipe } from "@/types/recipe";
 import { getYieldLabel, getYieldUnit } from "@/lib/format";
 import { cn } from "@/lib/utils";
@@ -27,55 +29,6 @@ interface TimeYieldStatsProps {
     disabled?: boolean;
   };
   className?: string;
-}
-
-function ServingsInputCell({
-  label,
-  value,
-  onChange,
-  disabled,
-}: {
-  label: string;
-  value: string;
-  onChange: (value: string) => void;
-  disabled?: boolean;
-}) {
-  return (
-    <div className="text-center">
-      <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">
-        {label}
-      </p>
-      {/* min-h matches Stat / ServingsControl so the band height doesn't
-          shift when the cell switches into edit mode. */}
-      <div className="flex min-h-11 items-center justify-center">
-        <input
-          type="text"
-          inputMode="numeric"
-          aria-label="Servings"
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          disabled={disabled}
-          className="w-16 text-center font-semibold text-gray-900 tabular-nums border-b border-input bg-transparent focus:outline-hidden focus:border-orange-400 disabled:opacity-50"
-        />
-      </div>
-    </div>
-  );
-}
-
-function Stat({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="text-center">
-      <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">
-        {label}
-      </p>
-      {/* min-h matches ServingsControl's size-11 stepper row so values share a
-          vertical center across cells (and the band height doesn't shift when
-          servings switch between static and stepper). */}
-      <p className="flex min-h-11 items-center justify-center font-semibold text-gray-900">
-        {value}
-      </p>
-    </div>
-  );
 }
 
 /**
