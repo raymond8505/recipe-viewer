@@ -23,6 +23,12 @@ import {
 export interface NormalizedNutrition {
   total: IngredientNutrition;
   fullyCovered: boolean;
+  /**
+   * How many schema lines were excluded from `total` (unmatched, no usable
+   * amount, stale, …). Optional: `RecipeNutritionResult` supplies it; hand-built
+   * transports may omit it and the coverage hint simply stays generic.
+   */
+  excludedCount?: number;
 }
 
 /** Which of the two nutrition views `nutrition()` is serving. */
@@ -385,6 +391,16 @@ export class ScalableRecipe {
 
   get hasNutrition(): boolean {
     return this.nutrition() != null;
+  }
+
+  /**
+   * Lines excluded from the normalized total; 0 when fully covered or when the
+   * recipe was never normalized. Lets the panel say *why* nutrition is missing
+   * instead of failing silently when partial coverage trips the trust gate.
+   */
+  get excludedNutritionLineCount(): number {
+    if (!this.normalized || this.normalized.fullyCovered) return 0;
+    return this.normalized.excludedCount ?? 0;
   }
 }
 

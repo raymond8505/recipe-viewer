@@ -44,6 +44,9 @@ export default function NutritionPanel({
   ) : null;
 
   if (!recipe.hasNutrition) {
+    // Partial normalization coverage: nutrition() rejects the incomplete total
+    // (all-or-nothing) — say why instead of the generic empty message.
+    const excluded = recipe.excludedNutritionLineCount;
     return (
       <div className="mt-8 p-4 border border-gray-200 rounded-2xl">
         <div className="flex items-center justify-between">
@@ -51,7 +54,9 @@ export default function NutritionPanel({
           {breakdownLink}
         </div>
         <p className="mt-2 text-sm text-muted-foreground">
-          No nutrition data on this recipe yet.
+          {excluded > 0
+            ? `${excluded} ingredient ${excluded === 1 ? "line doesn't" : "lines don't"} have a usable amount, so a total can't be computed — set grams in the ingredient breakdown.`
+            : "No nutrition data on this recipe yet."}
         </p>
       </div>
     );

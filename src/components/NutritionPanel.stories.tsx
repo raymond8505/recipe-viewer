@@ -178,3 +178,23 @@ export const NoNutritionShell: Story = {
     ingredientsHref: "/recipes/story-recipe/ingredients",
   },
 };
+
+/**
+ * Normalized but only partially covered, with no schema fallback: the trust
+ * gate rejects the incomplete total, and the shell explains how many lines
+ * block it instead of the generic empty message.
+ */
+export const PartialCoverageHint: Story = {
+  args: {
+    initial: new ScalableRecipe(
+      makeSchemaRecipe({
+        recipeIngredient: undefined,
+        recipeYield: "4 servings",
+        nutrition: undefined,
+      }),
+      undefined,
+      { total: { calories_kcal: 1800 }, fullyCovered: false, excludedCount: 2 },
+    ),
+    ingredientsHref: "/recipes/story-recipe/ingredients",
+  },
+};

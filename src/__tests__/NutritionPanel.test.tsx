@@ -243,3 +243,68 @@ describe("NutritionPanel — ingredient breakdown link", () => {
     expect(container.firstChild).toBeNull();
   });
 });
+
+describe("NutritionPanel — partial coverage hint", () => {
+  /** Normalized but not trusted: excluded lines + no schema fallback. */
+  function partialRecipe(excludedCount?: number) {
+    return new ScalableRecipe(
+      makeScalableRecipe({
+        recipeIngredient: undefined,
+        recipeYield: "4 servings",
+        nutrition: undefined,
+      }).schema,
+      undefined,
+      { total: { calories_kcal: 2000 }, fullyCovered: false, excludedCount },
+    );
+  }
+
+  it("explains how many lines block the total instead of the generic message", () => {
+    render(
+      <NutritionPanel
+        recipe={partialRecipe(2)}
+        onSplitPortions={() => {}}
+        ingredientsHref="/recipes/r-1/ingredients"
+      />,
+    );
+    expect(
+      screen.getByText(
+        "2 ingredient lines don't have a usable amount, so a total can't be computed — set grams in the ingredient breakdown.",
+      ),
+    ).toBeTruthy();
+    expect(screen.queryByText("No nutrition data on this recipe yet.")).toBeNull();
+    expect(screen.getByRole("link", { name: "Ingredient breakdown" })).toBeTruthy();
+  });
+
+  it("uses singular wording for one blocking line", () => {
+    render(
+      <NutritionPanel
+        recipe={partialRecipe(1)}
+        onSplitPortions={() => {}}
+        ingredientsHref="/recipes/r-1/ingredients"
+      />,
+    );
+    expect(
+      screen.getByText(
+        "1 ingredient line doesn't have a usable amount, so a total can't be computed — set grams in the ingredient breakdown.",
+      ),
+    ).toBeTruthy();
+  });
+
+  it("falls back to the generic message when the count didn't ride along", () => {
+    render(
+      <NutritionPanel
+        recipe={partialRecipe(undefined)}
+        onSplitPortions={() => {}}
+        ingredientsHref="/recipes/r-1/ingredients"
+      />,
+    );
+    expect(screen.getByText("No nutrition data on this recipe yet.")).toBeTruthy();
+  });
+
+  it("still renders nothing without an href (anonymous view)", () => {
+    const { container } = render(
+      <NutritionPanel recipe={partialRecipe(2)} onSplitPortions={() => {}} />,
+    );
+    expect(container.firstChild).toBeNull();
+  });
+});

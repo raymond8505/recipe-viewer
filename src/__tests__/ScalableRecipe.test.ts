@@ -479,4 +479,25 @@ describe("ScalableRecipe — nutrition views", () => {
       }).nutrition(),
     ).toBeNull();
   });
+
+  it("excludedNutritionLineCount reports the gap only under partial coverage", () => {
+    const partial = { total: { calories_kcal: 2000 }, fullyCovered: false };
+    expect(new ScalableRecipe(baseSchema).excludedNutritionLineCount).toBe(0);
+    expect(
+      new ScalableRecipe(baseSchema, undefined, covered).excludedNutritionLineCount,
+    ).toBe(0);
+    // fullyCovered wins even if a count rides along (a covered recipe has no gap).
+    expect(
+      new ScalableRecipe(baseSchema, undefined, { ...covered, excludedCount: 0 })
+        .excludedNutritionLineCount,
+    ).toBe(0);
+    expect(
+      new ScalableRecipe(baseSchema, undefined, { ...partial, excludedCount: 2 })
+        .excludedNutritionLineCount,
+    ).toBe(2);
+    // Hand-built transport without the optional field degrades to 0, not NaN.
+    expect(
+      new ScalableRecipe(baseSchema, undefined, partial).excludedNutritionLineCount,
+    ).toBe(0);
+  });
 });
