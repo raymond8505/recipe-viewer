@@ -184,6 +184,9 @@ const SINGLE_TOKEN =
   `|\\d+(?:\\.\\d+)?)`;                   // decimal or integer
 const RANGE_SEP = `(?:\\s*[-–—]\\s*|\\s+to\\s+)`;
 const AMOUNT_RANGE_RE = new RegExp(`^(${SINGLE_TOKEN}(?:${RANGE_SEP}${SINGLE_TOKEN})?)\\s*`);
+// Shared by parseServings/applyServings so both agree on what "the amount
+// token" in a yield string is: the first single-or-range amount anywhere in it.
+const YIELD_AMOUNT_RE = new RegExp(`(${SINGLE_TOKEN}(?:${RANGE_SEP}${SINGLE_TOKEN})?)`);
 
 function parseSingleToken(raw: string): number | null {
   const s = raw.trim();
@@ -284,13 +287,41 @@ export function parseServings(
   }
   const raw = Array.isArray(yld) ? yld[0] : yld;
   if (!raw) return null;
-  const m = raw.match(
-    new RegExp(`(${SINGLE_TOKEN}(?:${RANGE_SEP}${SINGLE_TOKEN})?)`)
-  );
+  const m = raw.match(YIELD_AMOUNT_RE);
   if (!m) return null;
   const parsed = parseAmountToken(m[1]);
   if (!parsed) return null;
   return parsed.kind === "single"
     ? Math.round(parsed.value)
     : Math.round((parsed.min + parsed.max) / 2);
+}
+
+/**
+ * Write a new base-servings count back onto a yield, preserving its shape —
+ * the inverse of `parseServings`: `parseServings(applyServings(yld, n)) === n`
+ * for any integer n >= 1.
+ * - QuantitativeValue → same object with `value` replaced (`unitText` /
+ *   `valueReference` kept; valueReference is whole-recipe weight, so
+ *   per-serving weight recomputes from the new count).
+ * - String/array → the first amount token of the (first) string is replaced,
+ *   so surrounding text survives ("Makes 6" → "Makes 8"). Ranges collapse to
+ *   the single new amount, and arrays collapse to the one rewritten string —
+ *   alternates would otherwise contradict it in exported JSON-LD.
+ * - No yield / no amount token → a minimal QuantitativeValue.
+ */
+export function applyServings(
+  yld: string | string[] | QuantitativeValue | undefined | null,
+  n: number,
+): string | QuantitativeValue {
+  if (yld && typeof yld === "object" && !Array.isArray(yld)) {
+    return { ...yld, value: n };
+  }
+  const raw = Array.isArray(yld) ? yld[0] : yld;
+  const m = raw?.match(YIELD_AMOUNT_RE);
+  if (raw && m && m.index != null) {
+    return (
+      raw.slice(0, m.index) + String(n) + raw.slice(m.index + m[1].length)
+    );
+  }
+  return { "@type": "QuantitativeValue", value: n };
 }

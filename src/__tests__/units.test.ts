@@ -7,6 +7,7 @@ import {
   getUnitGroup,
   formatAmount,
   parseServings,
+  applyServings,
   roundDecimal,
   getDefaultVolumeUnit,
   closestCommonFraction,
@@ -299,6 +300,89 @@ describe("parseServings", () => {
 
   it("returns null for a QuantitativeValue with no numeric value", () => {
     expect(parseServings({ unitText: "kebabs" })).toBeNull();
+  });
+});
+
+describe("applyServings", () => {
+  it("replaces value on a QuantitativeValue, preserving unitText and valueReference", () => {
+    expect(
+      applyServings(
+        {
+          "@type": "QuantitativeValue",
+          value: 4,
+          unitText: "kebabs",
+          valueReference: { value: 454, unitText: "g" },
+        },
+        8,
+      ),
+    ).toEqual({
+      "@type": "QuantitativeValue",
+      value: 8,
+      unitText: "kebabs",
+      valueReference: { value: 454, unitText: "g" },
+    });
+  });
+
+  it("adds a value to a QuantitativeValue that has none", () => {
+    expect(applyServings({ unitText: "kebabs" }, 8)).toEqual({
+      unitText: "kebabs",
+      value: 8,
+    });
+  });
+
+  it("replaces the number in 'N servings'", () => {
+    expect(applyServings("4 servings", 8)).toBe("8 servings");
+  });
+
+  it("replaces a mid-string number ('Makes N')", () => {
+    expect(applyServings("Makes 6", 8)).toBe("Makes 8");
+  });
+
+  it("replaces a bare number string", () => {
+    expect(applyServings("4", 8)).toBe("8");
+  });
+
+  it.each(["4 to 6 servings", "6-8 servings", "4–6 servings"])(
+    "collapses the range in %j to the single new amount",
+    (yld) => {
+      expect(applyServings(yld, 8)).toBe("8 servings");
+    },
+  );
+
+  it("replaces a mixed unicode-fraction token whole", () => {
+    expect(applyServings("2½ servings", 8)).toBe("8 servings");
+  });
+
+  it("collapses an array to the rewritten first element", () => {
+    expect(applyServings(["6 servings", "6"], 8)).toBe("8 servings");
+  });
+
+  it.each([undefined, "", "a few servings"])(
+    "creates a QuantitativeValue when there is no amount to replace (%j)",
+    (yld) => {
+      expect(applyServings(yld, 8)).toEqual({
+        "@type": "QuantitativeValue",
+        value: 8,
+      });
+    },
+  );
+
+  it("round-trips through parseServings for every yield shape", () => {
+    const shapes = [
+      "4 servings",
+      "Makes 6",
+      "6-8 servings",
+      "2 to 4 servings",
+      "2½ servings",
+      ["8 servings", "8"],
+      { "@type": "QuantitativeValue" as const, value: 4, unitText: "kebabs" },
+      { unitText: "kebabs" },
+      "a few servings",
+      undefined,
+    ];
+    for (const shape of shapes) {
+      expect(parseServings(applyServings(shape, 8))).toBe(8);
+    }
   });
 });
 
