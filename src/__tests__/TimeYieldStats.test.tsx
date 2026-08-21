@@ -55,4 +55,60 @@ describe("TimeYieldStats", () => {
     expect(screen.getByText("4")).toBeInTheDocument();
     expect(screen.queryByText("Servings")).not.toBeInTheDocument();
   });
+
+  describe("servingsEdit", () => {
+    it("renders an input wired to onChange", async () => {
+      const onChange = vi.fn();
+      render(
+        <TimeYieldStats
+          recipeYield="4 servings"
+          servingsEdit={{ value: "4", onChange }}
+        />,
+      );
+      const input = screen.getByLabelText("Servings") as HTMLInputElement;
+      expect(input.value).toBe("4");
+      await userEvent.type(input, "2");
+      expect(onChange).toHaveBeenCalledWith("42");
+    });
+
+    it("takes precedence over the scaling stepper", () => {
+      render(
+        <TimeYieldStats
+          recipeYield="4 servings"
+          currentServings={4}
+          onServingsChange={vi.fn()}
+          servingsEdit={{ value: "4", onChange: vi.fn() }}
+        />,
+      );
+      expect(screen.getByLabelText("Servings")).toBeInTheDocument();
+      expect(
+        screen.queryByLabelText("Increase servings"),
+      ).not.toBeInTheDocument();
+    });
+
+    it("renders the band even when there are no stats at all", () => {
+      render(<TimeYieldStats servingsEdit={{ value: "", onChange: vi.fn() }} />);
+      expect(screen.getByLabelText("Servings")).toBeInTheDocument();
+    });
+
+    it("labels the cell with the yield unitText for an object yield", () => {
+      render(
+        <TimeYieldStats
+          recipeYield={{ "@type": "QuantitativeValue", value: 4, unitText: "kebabs" }}
+          servingsEdit={{ value: "4", onChange: vi.fn() }}
+        />,
+      );
+      expect(screen.getByText("kebabs")).toBeInTheDocument();
+    });
+
+    it("disables the input when disabled", () => {
+      render(
+        <TimeYieldStats
+          recipeYield="4 servings"
+          servingsEdit={{ value: "4", onChange: vi.fn(), disabled: true }}
+        />,
+      );
+      expect(screen.getByLabelText("Servings")).toBeDisabled();
+    });
+  });
 });
