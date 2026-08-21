@@ -285,6 +285,15 @@ export default function RecipeDetail({
         recipeYield={schema.recipeYield}
         currentServings={scalable.currentServings}
         onServingsChange={scalePortionsTo}
+        servingsEdit={
+          isEditing
+            ? {
+                value: draft.servings,
+                onChange: (servings) => patch({ servings }),
+                disabled: editState === "saving",
+              }
+            : undefined
+        }
       />
 
       <div className="max-w-3xl lg:max-w-5xl mx-auto">

@@ -834,4 +834,54 @@ describe("RecipeDetail — controls section", () => {
     const body = JSON.parse(mockFetch.mock.calls[0][1].body);
     expect(body.schema.name).toBe("New Title");
   });
+
+  it("shows a servings input pre-filled with the base servings in edit mode", async () => {
+    render(
+      <RecipeDetail
+        recipe={makeRecipe({ recipeYield: "4 servings" })}
+        isLoggedIn={true}
+      />,
+    );
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /^edit$/i }));
+    });
+    const input = screen.getByRole("textbox", {
+      name: /^servings$/i,
+    }) as HTMLInputElement;
+    expect(input.value).toBe("4");
+  });
+
+  it("includes the edited base servings in the save request body", async () => {
+    const mockFetch = vi
+      .fn()
+      .mockResolvedValue(
+        new Response(
+          JSON.stringify({ schema: rescrapeFixture, status: "draft" }),
+          { status: 200 },
+        ),
+      );
+    vi.stubGlobal("fetch", mockFetch);
+
+    render(
+      <RecipeDetail
+        recipe={makeRecipe({ recipeYield: "4 servings" })}
+        isLoggedIn={true}
+      />,
+    );
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /^edit$/i }));
+    });
+    await act(async () => {
+      fireEvent.change(screen.getByRole("textbox", { name: /^servings$/i }), {
+        target: { value: "8" },
+      });
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /^save$/i }));
+    });
+
+    await waitFor(() => expect(mockFetch).toHaveBeenCalled());
+    const body = JSON.parse(mockFetch.mock.calls[0][1].body);
+    expect(body.schema.recipeYield).toBe("8 servings");
+  });
 });
