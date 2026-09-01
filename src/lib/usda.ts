@@ -201,6 +201,12 @@ const NUTRIENT_FIELD_BY_NDB_NUMBER: Record<string, keyof IngredientNutrition> = 
 // persist sugar-less.
 const SUGARS_FALLBACK_NDB_NUMBER = "269.3";
 
+// Standard general Atwater factors (kcal per gram) — USDA's own convention
+// for calculated energy. Used only when a food's abridged payload omits 208
+// (energy) outright but does report all three macros; real USDA energy
+// always wins when present.
+const ATWATER_KCAL_PER_G = { protein: 4, fat: 9, carbs: 4 };
+
 /** Map an abridged payload's NDB-number-keyed nutrients onto the core label set. */
 export function extractNutrition(detail: UsdaFoodDetail): IngredientNutrition {
   const amountByNumber = new Map<string, number>();
@@ -221,6 +227,22 @@ export function extractNutrition(detail: UsdaFoodDetail): IngredientNutrition {
   if (nutrition.sugars_g === undefined) {
     const amount = amountByNumber.get(SUGARS_FALLBACK_NDB_NUMBER);
     if (amount !== undefined) nutrition.sugars_g = amount;
+  }
+
+  // Atwater calorie fallback: some foods omit 208 (energy) outright even
+  // though all three macros are reported. Deriving from a partial macro set
+  // would silently understate calories, so all three are required.
+  if (
+    nutrition.calories_kcal === undefined &&
+    nutrition.protein_g !== undefined &&
+    nutrition.fat_g !== undefined &&
+    nutrition.carbs_g !== undefined
+  ) {
+    nutrition.calories_kcal = Math.round(
+      nutrition.protein_g * ATWATER_KCAL_PER_G.protein +
+        nutrition.carbs_g * ATWATER_KCAL_PER_G.carbs +
+        nutrition.fat_g * ATWATER_KCAL_PER_G.fat,
+    );
   }
 
   return nutrition;

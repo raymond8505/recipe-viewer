@@ -296,6 +296,46 @@ describe("extractNutrition", () => {
     });
     expect(nutrition).toEqual({ protein_g: 12.4 });
   });
+
+  it("derives calories via Atwater factors when 208 is absent but all three macros are present", () => {
+    const nutrition = extractNutrition({
+      fdcId: 1,
+      description: "x",
+      dataType: "Foundation",
+      foodNutrients: [
+        { number: "203", name: "Protein", amount: 10, unitName: "G" },
+        { number: "204", name: "Total lipid (fat)", amount: 5, unitName: "G" },
+        {
+          number: "205",
+          name: "Carbohydrate, by difference",
+          amount: 20,
+          unitName: "G",
+        },
+      ],
+    });
+    // 10*4 + 20*4 + 5*9 = 40 + 80 + 45 = 165
+    expect(nutrition.calories_kcal).toBe(165);
+  });
+
+  it("does not derive calories when any of the three macros is missing", () => {
+    const nutrition = extractNutrition({
+      fdcId: 1,
+      description: "x",
+      dataType: "Foundation",
+      foodNutrients: [
+        { number: "203", name: "Protein", amount: 10, unitName: "G" },
+        { number: "204", name: "Total lipid (fat)", amount: 5, unitName: "G" },
+        // no 205 (carbs)
+      ],
+    });
+    expect(nutrition.calories_kcal).toBeUndefined();
+  });
+
+  it("never overrides a real USDA-provided 208 value with the Atwater estimate", () => {
+    // Atwater on cumin's macros (17.8p, 22.3f, 44.2c) would give a different
+    // number than USDA's own 375 — the real value must win.
+    expect(extractNutrition(cuminDetailResponse).calories_kcal).toBe(375);
+  });
 });
 
 describe("deriveDensity", () => {
