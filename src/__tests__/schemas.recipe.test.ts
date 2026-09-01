@@ -1,6 +1,7 @@
 // @vitest-environment node
 import { describe, it, expect } from "vitest";
 import {
+  recipeCreateInputSchema,
   recipeImageUploadInputSchema,
   schemaRecipeSchema,
 } from "@/lib/schemas/recipe";
@@ -24,6 +25,52 @@ describe("recipeImageUploadInputSchema", () => {
       id: "r1",
       imageUrl: "not-a-url",
     });
+    expect(result.success).toBe(false);
+  });
+});
+
+// `url` and `source` are coupled: omitting url means "authored on this
+// instance", and createRecipe fills in both defaults (own canonical URL +
+// CUSTOM_RECIPE_SOURCE). Providing a url without a source is the one shape the
+// default must NOT cover — it would label someone else's page as the user's own
+// recipe, which is precisely what the Re-scrape control reads.
+describe("recipeCreateInputSchema — url/source coupling", () => {
+  const schema = { name: "Test Recipe" };
+
+  it("accepts a create with neither url nor source", () => {
+    const result = recipeCreateInputSchema.safeParse({ schema });
+    expect(result.success).toBe(true);
+  });
+
+  it("rejects a url with no source, naming the source field", () => {
+    const result = recipeCreateInputSchema.safeParse({
+      url: "https://seriouseats.com/adana-kebab",
+      schema,
+    });
+    expect(result.success).toBe(false);
+    expect(result.error?.issues[0]?.path).toEqual(["source"]);
+    expect(result.error?.issues[0]?.message).toMatch(/custom/);
+  });
+
+  it("accepts a url with a source", () => {
+    const result = recipeCreateInputSchema.safeParse({
+      url: "https://seriouseats.com/adana-kebab",
+      source: "seriouseats.com",
+      schema,
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it("accepts an explicit source with no url", () => {
+    const result = recipeCreateInputSchema.safeParse({
+      source: "instagram.com",
+      schema,
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it("still rejects an empty-string source", () => {
+    const result = recipeCreateInputSchema.safeParse({ source: "", schema });
     expect(result.success).toBe(false);
   });
 });

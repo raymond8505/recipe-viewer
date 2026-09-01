@@ -12,6 +12,8 @@ import {
   groupIngredients,
   groupIngredientsWithIndex,
   getIngredientText,
+  isOwnRecipe,
+  CUSTOM_RECIPE_SOURCE,
   markdownToInstructions,
   normalizeRecipeInstructions,
   toSchemaOrgJsonLd,
@@ -251,6 +253,39 @@ describe("getIngredientText", () => {
 
   it("returns the text field from a RecipeIngredient object", () => {
     expect(getIngredientText({ name: "1 cup sugar", group: "Cake" })).toBe("1 cup sugar");
+  });
+});
+
+// The one marker of "this recipe is mine" — deliberately an exact match on a
+// literal rather than anything derived from the site's hostname, which is what
+// this replaced (see db/migrations/0015).
+describe("isOwnRecipe", () => {
+  it("is true for the custom source", () => {
+    expect(isOwnRecipe({ source: CUSTOM_RECIPE_SOURCE })).toBe(true);
+    expect(CUSTOM_RECIPE_SOURCE).toBe("custom");
+  });
+
+  it("is false for a scraped domain", () => {
+    expect(isOwnRecipe({ source: "seriouseats.com" })).toBe(false);
+  });
+
+  // The hostnames that used to mean "mine". They are data now, not logic — a
+  // row still carrying one is a row migration 0015 missed, not an own recipe.
+  it("is false for the site's own hostnames", () => {
+    expect(isOwnRecipe({ source: "raymonds.recipes" })).toBe(false);
+    expect(isOwnRecipe({ source: "new.raymonds.recipes" })).toBe(false);
+  });
+
+  it("is false for a missing source", () => {
+    expect(isOwnRecipe({})).toBe(false);
+    expect(isOwnRecipe({ source: undefined })).toBe(false);
+    expect(isOwnRecipe({ source: null })).toBe(false);
+    expect(isOwnRecipe({ source: "" })).toBe(false);
+  });
+
+  it("is case-sensitive — only the exact literal counts", () => {
+    expect(isOwnRecipe({ source: "Custom" })).toBe(false);
+    expect(isOwnRecipe({ source: "CUSTOM" })).toBe(false);
   });
 });
 

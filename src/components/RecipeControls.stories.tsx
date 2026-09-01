@@ -41,6 +41,15 @@ type Story = StoryObj<typeof RecipeControls>;
 export const ViewMode: Story = {};
 
 /**
+ * The user's own recipe (`source: "custom"`) — authored here, so there is no
+ * upstream page and the Re-scrape button drops out of the row entirely. Every
+ * other control stays; this is the only difference from ViewMode.
+ */
+export const OwnRecipe: Story = {
+  args: { canRescrape: false },
+};
+
+/**
  * Re-scrape awaiting confirmation. Both webhook-backed actions spend on an
  * external service, so the whole button row swaps for a confirm bar — one
  * decision on screen, nothing spent on a misclick. The bar is driven by the

@@ -14,6 +14,7 @@ import {
   getFirstImage,
   toArray,
   getIngredientText,
+  isOwnRecipe,
   toSchemaOrgJsonLd,
 } from "@/lib/format";
 import { ScalableRecipe, type NormalizedNutrition } from "@/lib/ScalableRecipe";
@@ -149,9 +150,6 @@ export default function RecipeDetail({
     },
     [],
   );
-  const [isMounted, setIsMounted] = useState(false);
-  useEffect(() => setIsMounted(true), []);
-
   // Read-only aliases consumed by the JSX below.
   const isEditing = editor.isEditing;
   const isRescrapeReview = rescrape.isReview;
@@ -360,7 +358,7 @@ export default function RecipeDetail({
             rescrapeState={rescrapeState}
             regenImageState={regenImageState}
             normalizeState={normalizeState}
-            canRescrape={isMounted && recipe.url !== window.location.href}
+            canRescrape={!isOwnRecipe(recipe)}
             uploadError={imageUpload.error}
             fileInputRef={fileInputRef}
             onEditStart={handleEditStart}

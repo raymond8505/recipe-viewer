@@ -16,12 +16,16 @@ import type {
 import { rescrapeFixture } from "@/fixtures/rescrape";
 import { clickAndConfirm } from "./helpers/confirmBar";
 
-function makeRecipe(schema: Partial<SchemaRecipe> = {}): RecipeRow {
+function makeRecipe(
+  schema: Partial<SchemaRecipe> = {},
+  row: Partial<Omit<RecipeRow, "metadata">> = {},
+): RecipeRow {
   return {
     id: "1",
     url: "https://example.com",
     source: "example.com",
     status: "draft",
+    ...row,
     metadata: {
       schema: {
         name: "Test Recipe",
@@ -367,6 +371,34 @@ describe("RecipeDetail — controls section", () => {
 
   it("shows the Re-scrape button when isLoggedIn is true", () => {
     render(<RecipeDetail recipe={makeRecipe()} isLoggedIn={true} />);
+    expect(screen.getByRole("button", { name: /re-scrape/i })).toBeTruthy();
+  });
+
+  // A recipe authored here has no upstream page, so Re-scrape is meaningless
+  // for it. This reads `source` alone: the previous rule compared the stored
+  // url to window.location.href, which silently failed for every row minted on
+  // a staging host. See isOwnRecipe / db/migrations/0015.
+  it("hides the Re-scrape button for the user's own recipe, even when logged in", () => {
+    render(
+      <RecipeDetail
+        recipe={makeRecipe({}, { source: "custom" })}
+        isLoggedIn={true}
+      />,
+    );
+    expect(screen.queryByRole("button", { name: /re-scrape/i })).toBeNull();
+    // The rest of the Manage toolbar is unaffected — only Re-scrape goes.
+    expect(screen.getByRole("button", { name: /^edit$/i })).toBeTruthy();
+  });
+
+  // The url is no longer consulted at all: a recipe served from the page it
+  // claims as its source still offers Re-scrape as long as it isn't `custom`.
+  it("keeps Re-scrape when the recipe url matches the current page", () => {
+    render(
+      <RecipeDetail
+        recipe={makeRecipe({}, { url: window.location.href })}
+        isLoggedIn={true}
+      />,
+    );
     expect(screen.getByRole("button", { name: /re-scrape/i })).toBeTruthy();
   });
 

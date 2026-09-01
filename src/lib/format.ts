@@ -125,6 +125,23 @@ import type {
 } from "@/types/editor";
 
 /**
+ * The `source` value marking a recipe authored in this app rather than scraped
+ * from someone else's page. Self-authored rows used to carry the site's own
+ * hostname instead, which made "is this mine?" a question about deploy config —
+ * it broke on staging hosts and on any future rename. This literal is the
+ * host-independent replacement; see migration 0015.
+ */
+export const CUSTOM_RECIPE_SOURCE = "custom";
+
+/**
+ * Whether a recipe is the user's own — i.e. it has no upstream page behind it.
+ * Structurally typed so both a `RecipeRow` and a bare `{ source }` work.
+ */
+export function isOwnRecipe(recipe: { source?: string | null }): boolean {
+  return recipe.source === CUSTOM_RECIPE_SOURCE;
+}
+
+/**
  * Get the ingredient text from a string or RecipeIngredient object.
  */
 export function getIngredientText(

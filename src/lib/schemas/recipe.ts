@@ -7,6 +7,7 @@
 // here.
 
 import { z } from "zod";
+import { CUSTOM_RECIPE_SOURCE } from "@/lib/format";
 import { METRIC_YIELD_UNITS } from "@/lib/units";
 
 export const ingredientSchema = z.union([
@@ -134,14 +135,30 @@ export const recipeIdInputSchema = z.object({
   id: z.string().min(1),
 });
 
-export const recipeCreateInputSchema = z.object({
-  // Optional — when omitted, the create tool defaults it to the recipe's own
-  // canonical URL on this instance (env.MCP_PUBLIC_URL + /recipes/<new-uuid>).
-  url: z.string().url().optional(),
-  source: z.string().min(1),
-  status: recipeStatusSchema.optional(),
-  schema: schemaRecipeSchema,
-});
+// `url` and `source` travel together: omitting `url` means the recipe is
+// authored on this instance, so the create tool supplies both defaults (its own
+// canonical URL, and CUSTOM_RECIPE_SOURCE). A recipe that DOES carry an external
+// url must still declare its provenance — defaulting that to "custom" would
+// label someone else's page as one of the user's own recipes, which is exactly
+// the distinction the Re-scrape control reads.
+const sourceRequiredWithUrl = (d: { url?: unknown; source?: unknown }) =>
+  d.url === undefined || d.source !== undefined;
+const SOURCE_REQUIRED_WITH_URL_ISSUE = {
+  message: `Pass source (the origin domain, e.g. "seriouseats.com") alongside url. Omit both to create a recipe that lives on this instance — source then defaults to "${CUSTOM_RECIPE_SOURCE}".`,
+  path: ["source"],
+};
+
+export const recipeCreateInputSchema = z
+  .object({
+    // Optional — when omitted, the create tool defaults it to the recipe's own
+    // canonical URL on this instance (env.MCP_PUBLIC_URL + /recipes/<new-uuid>).
+    url: z.string().url().optional(),
+    // Optional only in that same case — see sourceRequiredWithUrl above.
+    source: z.string().min(1).optional(),
+    status: recipeStatusSchema.optional(),
+    schema: schemaRecipeSchema,
+  })
+  .refine(sourceRequiredWithUrl, SOURCE_REQUIRED_WITH_URL_ISSUE);
 
 export const recipeUpdateInputSchema = z.object({
   id: z.string().min(1),

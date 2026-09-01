@@ -51,7 +51,8 @@ export interface RecipeControlsProps {
   regenImageState: OpState;
   /** Fire-and-forget ingredient normalization (queues a background re-run). */
   normalizeState: OpState;
-  /** Whether the Re-scrape button applies (mounted + not viewing the source URL). */
+  /** Whether the Re-scrape button applies — false for the user's own recipes,
+   *  which have no upstream page to re-fetch. */
   canRescrape: boolean;
   /** Image-upload validation error flag. */
   uploadError: boolean;
