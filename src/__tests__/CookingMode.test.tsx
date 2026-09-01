@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, fireEvent } from "@testing-library/react";
+import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import CookingMode from "@/components/CookingMode";
 import type { RecipeRow, SchemaRecipe } from "@/types/recipe";
 
@@ -177,7 +177,9 @@ describe("CookingMode — shopping list", () => {
     fireEvent.click(screen.getByRole("checkbox", { name: "2 cups flour" }));
     fireEvent.click(screen.getByRole("checkbox", { name: "1 tsp salt" }));
     fireEvent.click(screen.getByRole("button", { name: /copy shopping list/i }));
-    await vi.waitFor(() => {
+    // RTL's waitFor (not vi.waitFor): it suspends the act environment while
+    // polling, so the post-clipboard "copied" state update doesn't warn.
+    await waitFor(() => {
       expect(navigator.clipboard.writeText).toHaveBeenCalledWith("2 cups flour\n1 tsp salt");
     });
   });
@@ -212,5 +214,41 @@ describe("CookingMode — cooking notes", () => {
     const textareas = screen.getAllByPlaceholderText(/note changes for next time/i);
     fireEvent.change(textareas[0], { target: { value: "add more garlic" } });
     expect((textareas[0] as HTMLTextAreaElement).value).toBe("add more garlic");
+  });
+});
+
+describe("CookingMode — nutrition source badge", () => {
+  const nutritious = () =>
+    makeRecipe({
+      nutrition: { calories: "200 kcal" },
+      cookingNotes: "less salt next time",
+    });
+  // The badge's title is the stable hook — its visible text ("recipe") is a
+  // common word that collides elsewhere in the modal.
+  const BADGE_TITLE = /from the recipe's own nutrition data/i;
+
+  it("hides the badge from an anonymous viewer", () => {
+    render(<CookingMode recipe={nutritious()} onClose={vi.fn()} />);
+    expect(screen.queryByTitle(BADGE_TITLE)).toBeNull();
+  });
+
+  it("shows the badge when logged in", () => {
+    render(<CookingMode recipe={nutritious()} onClose={vi.fn()} isLoggedIn />);
+    expect(screen.getAllByTitle(BADGE_TITLE).length).toBeGreaterThanOrEqual(1);
+  });
+
+  // The dev-door contract in cook mode: nutrition provenance opens for a
+  // logged-out viewer, cooking notes stay shut.
+  it("shows the badge but not cooking notes when canCurateNutrition without a login", () => {
+    render(
+      <CookingMode
+        recipe={nutritious()}
+        onClose={vi.fn()}
+        isLoggedIn={false}
+        canCurateNutrition
+      />,
+    );
+    expect(screen.getAllByTitle(BADGE_TITLE).length).toBeGreaterThanOrEqual(1);
+    expect(screen.queryByPlaceholderText(/note changes for next time/i)).toBeNull();
   });
 });

@@ -1,8 +1,10 @@
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import { getRecipeById } from "@/lib/recipes";
+import { getRecipeNormalizedNutrition } from "@/lib/ingredients";
 import { getFirstImage } from "@/lib/format";
 import { getIsLoggedIn } from "@/lib/auth";
+import { canCurateNutrition } from "@/lib/devAccess";
 import { env } from "@/env";
 import RecipeDetail from "@/components/RecipeDetail";
 
@@ -49,11 +51,22 @@ export default async function RecipePage({ params }: RecipePageProps) {
     notFound();
   }
 
+  // Normalized ingredient nutrition (null when the recipe was never normalized).
+  // Preferred over the schema's own nutrition fields when fully covered.
+  const normalizedNutrition = await getRecipeNormalizedNutrition(
+    id,
+    recipe.metadata.schema.recipeIngredient ?? [],
+  );
+
   return (
     <RecipeDetail
       recipe={recipe}
       isLoggedIn={isLoggedIn}
+      // Resolved server-side: a client component must never read NODE_ENV
+      // itself (Storybook runs in development). See src/lib/devAccess.ts.
+      canCurateNutrition={canCurateNutrition(isLoggedIn)}
       maxImageBytes={env.MAX_IMAGE_BYTES}
+      normalizedNutrition={normalizedNutrition}
     />
   );
 }

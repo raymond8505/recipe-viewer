@@ -1,6 +1,18 @@
 export interface RecipeIngredient {
   name: string;
   group?: string;
+  /**
+   * Stable identity of this line, independent of its text and its position.
+   * `recipe_ingredients.line_id` points at it, so the derived row — and any
+   * association a user curated on it — survives rewording, reordering, and
+   * insertions above it.
+   *
+   * Optional only because legacy rows predate it and plain-string lines can't
+   * carry one; the write path (`withLineIds`) mints one for every line it
+   * persists, so anything saved since is guaranteed to have it. Custom field:
+   * deliberately absent from `toSchemaOrgJsonLd` output.
+   */
+  id?: string;
 }
 
 export interface RecipeRow {

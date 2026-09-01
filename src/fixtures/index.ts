@@ -1,4 +1,10 @@
 export { recipeFixtures, makeRecipe } from "./recipes";
+export {
+  ingredientFixtures,
+  makeIngredient,
+  makeRecipeIngredient,
+  matchedLinesScenario,
+} from "./ingredients";
 export { rescrapeFixture } from "./rescrape";
 export { makeTimer } from "./timers";
 export {

@@ -6,10 +6,13 @@
 // can't read server env vars.
 export const DEFAULT_MAX_IMAGE_BYTES = 4_000_000;
 
+// `label` is the human/agent-facing format name — the MCP upload tool renders
+// its "Accepts ..." list from these, so a new content type shows up in the
+// tool description without anyone editing prose.
 export const IMAGE_CONTENT_TYPES = {
-  "image/png": { ext: "png" },
-  "image/jpeg": { ext: "jpg" },
-  "image/webp": { ext: "webp" },
+  "image/png": { ext: "png", label: "PNG" },
+  "image/jpeg": { ext: "jpg", label: "JPEG" },
+  "image/webp": { ext: "webp", label: "WebP" },
 } as const;
 
 export type AllowedImageContentType = keyof typeof IMAGE_CONTENT_TYPES;

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getIsLoggedIn } from "@/lib/auth";
 import { requireApiAuth } from "@/lib/apiAuth";
+import { isDevEnvironment } from "@/lib/devAccess";
 
 // Higher-order auth guards for App Router route handlers.
 //
@@ -39,6 +40,26 @@ export function requireSession<Args extends unknown[]>(
   };
 }
 
+/**
+ * Like {@link requireSession}, but also runs for ANY caller when
+ * `NODE_ENV === "development"` — the nutrition/ingredient curation surface is
+ * open in the local dev loop so it needs no login. Pairs with the
+ * `session-or-dev` policy in ./routePolicy.ts.
+ *
+ * The door is unreachable in every built image (the Dockerfile and both compose
+ * files pin `NODE_ENV=production`) and inert under vitest (`NODE_ENV=test`),
+ * which is what keeps the behavioral gate honest. See src/lib/devAccess.ts.
+ */
+export function requireSessionOrDev<Args extends unknown[]>(
+  handler: Handler<Args>,
+): (req: Request, ...args: Args) => Promise<Response> {
+  return async (req, ...args) => {
+    if (isDevEnvironment()) return handler(req, ...args);
+    if (!(await getIsLoggedIn())) return unauthorized();
+    return handler(req, ...args);
+  };
+}
+
 type RecipeParamsContext = { params: Promise<{ id: string }> };
 
 /**
@@ -53,6 +74,29 @@ export function requireSessionOrRecipeToken<Ctx extends RecipeParamsContext>(
   handler: (req: Request, ctx: Ctx) => Response | Promise<Response>,
 ): (req: Request, ctx: Ctx) => Promise<Response> {
   return async (req, ctx) => {
+    const { id } = await ctx.params;
+    const denied = await requireApiAuth(req, id);
+    if (denied) return denied;
+    return handler(req, ctx);
+  };
+}
+
+/**
+ * Like {@link requireSessionOrRecipeToken}, but also runs for ANY caller when
+ * `NODE_ENV === "development"`. Pairs with the `session-or-recipe-token-or-dev`
+ * policy in ./routePolicy.ts.
+ *
+ * Only `/api/recipes/[id]/normalize` uses this — the one nutrition route that
+ * also has an agent path. The bypass deliberately lives HERE rather than inside
+ * `requireApiAuth`: that helper also backs /update, /notes, /upload-image,
+ * /archive, /rescrape and /regenerate-image, i.e. the recipe-EDIT surface,
+ * which stays login-gated in dev.
+ */
+export function requireSessionOrRecipeTokenOrDev<Ctx extends RecipeParamsContext>(
+  handler: (req: Request, ctx: Ctx) => Response | Promise<Response>,
+): (req: Request, ctx: Ctx) => Promise<Response> {
+  return async (req, ctx) => {
+    if (isDevEnvironment()) return handler(req, ctx);
     const { id } = await ctx.params;
     const denied = await requireApiAuth(req, id);
     if (denied) return denied;

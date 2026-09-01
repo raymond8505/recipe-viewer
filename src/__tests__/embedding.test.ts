@@ -14,12 +14,10 @@ function jsonResponse(body: object, status = 200) {
 describe("generateEmbedding", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.spyOn(console, "error").mockImplementation(() => {});
   });
 
   afterEach(() => {
     vi.unstubAllGlobals();
-    vi.restoreAllMocks();
   });
 
   it("sends the documented request shape with the API key header", async () => {
@@ -50,27 +48,83 @@ describe("generateEmbedding", () => {
     expect(result).toEqual([3, 4]);
   });
 
-  it("returns null on a non-200 response", async () => {
-    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("nope", { status: 429 })));
+  it("returns null on a non-retryable non-200 (400)", async () => {
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("nope", { status: 400 })));
 
     expect(await generateEmbedding("text")).toBeNull();
+    expect(errorSpy).toHaveBeenCalledWith(
+      expect.stringContaining("Embedding request failed (400)"),
+    );
+    errorSpy.mockRestore();
   });
 
   it("returns null when the response body has no embedding values", async () => {
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse({ embedding: {} })));
 
     expect(await generateEmbedding("text")).toBeNull();
+    expect(errorSpy).toHaveBeenCalledWith("Embedding response missing embedding.values");
+    errorSpy.mockRestore();
   });
 
   it("returns null on an empty values array", async () => {
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse({ embedding: { values: [] } })));
 
     expect(await generateEmbedding("text")).toBeNull();
+    expect(errorSpy).toHaveBeenCalledWith("Embedding response missing embedding.values");
+    errorSpy.mockRestore();
   });
 
-  it("returns null (never throws) on a network error", async () => {
-    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("ECONNRESET")));
+  // Transient failures now go through fetchWithRetry. Fake timers drive the
+  // backoff so these don't actually wait.
+  describe("retry behavior", () => {
+    beforeEach(() => vi.useFakeTimers());
+    afterEach(() => vi.useRealTimers());
 
-    await expect(generateEmbedding("text")).resolves.toBeNull();
+    it("retries then returns null when the API keeps returning 429", async () => {
+      const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+      const fetchSpy = vi.fn().mockResolvedValue(new Response("nope", { status: 429 }));
+      vi.stubGlobal("fetch", fetchSpy);
+
+      const p = generateEmbedding("text");
+      await vi.advanceTimersByTimeAsync(60_000);
+
+      expect(await p).toBeNull();
+      expect(fetchSpy).toHaveBeenCalledTimes(3); // 1 attempt + 2 retries
+      expect(errorSpy).toHaveBeenCalledWith(
+        expect.stringContaining("Embedding request failed (429)"),
+      );
+      errorSpy.mockRestore();
+    });
+
+    it("retries then returns null (never throws) on a persistent network error", async () => {
+      const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+      const fetchSpy = vi.fn().mockRejectedValue(new Error("ECONNRESET"));
+      vi.stubGlobal("fetch", fetchSpy);
+
+      const p = generateEmbedding("text");
+      await vi.advanceTimersByTimeAsync(60_000);
+
+      expect(await p).toBeNull();
+      expect(fetchSpy).toHaveBeenCalledTimes(3);
+      expect(errorSpy).toHaveBeenCalledWith("Embedding request threw:", expect.any(Error));
+      errorSpy.mockRestore();
+    });
+
+    it("recovers when a transient 503 is followed by success", async () => {
+      const fetchSpy = vi
+        .fn()
+        .mockResolvedValueOnce(new Response("unavailable", { status: 503 }))
+        .mockResolvedValueOnce(jsonResponse({ embedding: { values: [3, 4] } }));
+      vi.stubGlobal("fetch", fetchSpy);
+
+      const p = generateEmbedding("text");
+      await vi.advanceTimersByTimeAsync(60_000);
+
+      expect(await p).toEqual([3, 4]);
+      expect(fetchSpy).toHaveBeenCalledTimes(2);
+    });
   });
 });

@@ -1,6 +1,7 @@
 import * as React from "react";
 import { IconButton, type IconButtonProps } from "./IconButton";
 import { CheckIcon, CopyIcon } from "@/components/icons";
+import { pluralize } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
 export interface CopyShoppingListButtonProps
@@ -29,7 +30,7 @@ export const CopyShoppingListButton = React.forwardRef<
     <IconButton
       ref={ref}
       disabled={empty}
-      aria-label={`Copy shopping list, ${count} item${count === 1 ? "" : "s"}`}
+      aria-label={`Copy shopping list, ${count} ${pluralize(count, "item")}`}
       className={cn(
         "size-9 text-muted-foreground hover:bg-muted hover:text-foreground",
         empty && "invisible",

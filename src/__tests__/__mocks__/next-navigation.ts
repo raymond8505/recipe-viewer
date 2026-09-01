@@ -5,6 +5,7 @@ export const useRouter = vi.fn(() => ({
   replace: vi.fn(),
   prefetch: vi.fn(),
   back: vi.fn(),
+  refresh: vi.fn(),
 }));
 
 export const useSearchParams = vi.fn(() => ({

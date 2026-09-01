@@ -17,7 +17,9 @@
     "storybook": "storybook dev -p 6006",
     "build-storybook": "storybook build --output-dir public/storybook",
     "build:prod": "yarn build-storybook && yarn build",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "backfill:normalization": "tsx --env-file-if-exists=.env --env-file-if-exists=.env.local scripts/backfill-normalization.ts",
+    "backfill:line-ids": "tsx --env-file-if-exists=.env --env-file-if-exists=.env.local scripts/backfill-line-ids.ts"
   },
   "lint-staged": {
     "*.{ts,tsx,js,jsx,mjs,cjs}": "eslint --max-warnings 0"
@@ -26,6 +28,8 @@
     "@dnd-kit/core": "^6.3.1",
     "@dnd-kit/sortable": "^10.0.0",
     "@dnd-kit/utilities": "^3.2.2",
+    "@langchain/core": "^1.2.1",
+    "@langchain/langgraph": "^1.4.7",
     "@supabase/supabase-js": "^2.49.4",
     "@t3-oss/env-nextjs": "^0.13.11",
     "class-variance-authority": "^0.7.1",
@@ -34,7 +38,7 @@
     "lucide-react": "^1.21.0",
     "nanoid": "^5.1.11",
     "next": "^16.1.7",
-    "radix-ui": "^1.6.0",
+    "radix-ui": "^1.6.7",
     "react": "^18",
     "react-dom": "^18",
     "tailwind-merge": "^3.6.0",
@@ -64,6 +68,7 @@
     "shadcn": "^4.11.0",
     "storybook": "^10.3.3",
     "tailwindcss": "^4.3.1",
+    "tsx": "^4.23.0",
     "typescript": "^5",
     "vite": "^7.0.0",
     "vite-plugin-storybook-nextjs": "^3.0.3",

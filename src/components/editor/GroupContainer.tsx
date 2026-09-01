@@ -7,6 +7,7 @@ import GroupHeadingInput from "./GroupHeadingInput";
 import DeleteConfirm from "./DeleteConfirm";
 import SortableRow from "./SortableRow";
 import { toGroupSortId } from "./dragIds";
+import { pluralize } from "@/lib/format";
 
 interface GroupContainerProps {
   /** The group's bare id (this component derives the `group:` sortable id). */
@@ -70,7 +71,7 @@ export default function GroupContainer({
           {!isUngrouped &&
             (confirming ? (
               <DeleteConfirm
-                message={`Delete “${heading || "this section"}” and its ${itemCount} ${itemNoun}${itemCount === 1 ? "" : "s"}?`}
+                message={`Delete “${heading || "this section"}” and its ${itemCount} ${pluralize(itemCount, itemNoun)}?`}
                 onCancel={() => setConfirming(false)}
                 onConfirm={() => {
                   onDelete?.();
