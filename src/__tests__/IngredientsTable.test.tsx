@@ -187,7 +187,9 @@ describe("IngredientsTable", () => {
 
     // Scope to the label panel: the drawer also renders bare numbers as
     // inputs, and the same figures appear at other scales in the main row.
-    const label = within(screen.getByText("Nutrition Facts").parentElement!);
+    // Anchored on the drawer's own "Label preview" heading — the label itself
+    // renders no title, since that heading sits directly above it.
+    const label = within(screen.getByText("Label preview").parentElement!);
     // Opens on the 100 g baseline — the big calories number is the stored value.
     expect(label.getByText("375")).toBeInTheDocument();
 

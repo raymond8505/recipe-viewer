@@ -97,9 +97,9 @@ export const CatalogSparse: Story = {
 
 /**
  * The recipe panel's label with room to breathe: the FDA tabular display —
- * identity and Calories on the left, then the nutrient groups as columns under
- * "Amount/serving", with the minerals as a footer run. Column names switch to
- * the FDA abbreviations ("Sat. Fat", "Total Carb.") that the narrow columns
+ * serving basis and Calories on the left, then the nutrient groups as columns
+ * under "Amount/serving", with the minerals as a footer run. Column names
+ * switch to the FDA abbreviations ("Sat. Fat", "Total Carb.") that the narrow columns
  * need. The minerals are em dashes because they have no Schema.org slot.
  */
 export const RecipeTabular: Story = {

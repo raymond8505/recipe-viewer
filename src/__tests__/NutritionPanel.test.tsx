@@ -224,14 +224,16 @@ describe("NutritionPanel — summary/label view toggle", () => {
   it("lands on the summary grid, not the label", () => {
     render(<Harness initial={makeFull()} />);
     expect(screen.getByText("Carbs")).toBeTruthy();
-    expect(screen.queryByText("Nutrition Facts")).toBeNull();
+    // "Amount per serving" is the label's eyebrow — label-only, so it's the
+    // marker for which view is showing. (The label has no title of its own.)
+    expect(screen.queryByText("Amount per serving")).toBeNull();
   });
 
   it("swaps the grid for the full label, showing the four nutrients the grid drops", () => {
     render(<Harness initial={makeFull()} />);
     fireEvent.click(screen.getByRole("button", { name: "Full label" }));
 
-    expect(screen.getByText("Nutrition Facts")).toBeTruthy();
+    expect(screen.getByText("Amount per serving")).toBeTruthy();
     // The grid's curated six omit these entirely; the label is the only way to
     // see them.
     expect(screen.getByText("Total Sugars")).toBeTruthy();
@@ -255,7 +257,9 @@ describe("NutritionPanel — summary/label view toggle", () => {
 
     fireEvent.click(summary);
     expect(screen.getByText("Carbs")).toBeTruthy();
-    expect(screen.queryByText("Nutrition Facts")).toBeNull();
+    // "Amount per serving" is the label's eyebrow — label-only, so it's the
+    // marker for which view is showing. (The label has no title of its own.)
+    expect(screen.queryByText("Amount per serving")).toBeNull();
   });
 
   it("keeps the label on the same basis as the grid when portions change", () => {
@@ -273,7 +277,7 @@ describe("NutritionPanel — summary/label view toggle", () => {
     expect(screen.getByText("260")).toBeTruthy();
     expect(screen.getAllByText("per portion")).toHaveLength(2);
     // Still in label view — a portion change must not reset the toggle.
-    expect(screen.getByText("Nutrition Facts")).toBeTruthy();
+    expect(screen.getByText("Amount per serving")).toBeTruthy();
   });
 
   it("stays available on a sparse recipe, where the em dashes are the signal", () => {

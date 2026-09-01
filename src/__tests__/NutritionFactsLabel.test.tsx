@@ -35,7 +35,6 @@ describe("NutritionFactsLabel", () => {
     // tabular columns re-arrange — so asserting it covers both layouts.
     const text = container.textContent!;
     const order = [
-      "Nutrition Facts",
       "Total Fat",
       "Saturated Fat",
       "Unsaturated Fat",
@@ -140,14 +139,13 @@ describe("NutritionFactsLabel", () => {
     expect(container.textContent).not.toContain("Total Carb.");
   });
 
-  it("renders 'Nutrition Facts' as a non-heading element", () => {
-    // Deliberate: the base layer styles h1–h6 serif-light, and the label title
-    // must stay sans-black like a real package label.
+  it("renders no title of its own", () => {
+    // Both callers render a heading directly above the label (the panel's
+    // "Nutrition", the catalog drawer's "Label preview"), so a "Nutrition
+    // Facts" title only ever read as a duplicate.
     render(<NutritionFactsLabel data={fullRecipe} servingLabel="per serving" />);
-    expect(screen.getByText("Nutrition Facts")).toBeTruthy();
-    expect(
-      screen.queryByRole("heading", { name: "Nutrition Facts" }),
-    ).toBeNull();
+    expect(screen.queryByText("Nutrition Facts")).toBeNull();
+    expect(screen.queryByRole("heading")).toBeNull();
   });
 
   it("renders real mineral values on the catalog side", () => {

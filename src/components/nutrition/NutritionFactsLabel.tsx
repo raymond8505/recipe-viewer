@@ -2,10 +2,22 @@ import { formatNutrientDisplay } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import type { LabelData, LabelRow } from "./labelRows";
 
-// An FDA-style Nutrition Facts panel, purely presentational: the rows arrive
-// already scaled to the serving that `servingLabel` names — no math in here.
-// The point of the classic look (heavy rules, big black Calories) is to let the
-// user hold a real package label next to it and compare line by line.
+// A Nutrition Facts panel, purely presentational: the rows arrive already
+// scaled to the serving that `servingLabel` names — no math in here.
+//
+// The STRUCTURE is the FDA's (serving basis, Calories, grouped nutrient rows,
+// minerals along the foot) because that's the arrangement people already know
+// how to read — minus the "Nutrition Facts" title, since both callers render a
+// heading directly above the label. The STYLING is the site's: warm
+// `border-border` rules instead of the regulation's heavy black bars,
+// serif-light display type instead of the condensed black sans, and one
+// `border-brand` accent on the rule above Calories to carry the focal point.
+// Three border tiers do the work the FDA's 1/4/8px bars used to:
+//   border-brand (2px)  — the Calories rule, the one accent in the label
+//   border-border (2px) — section rules (nutrient list, minerals)
+//   border-border (1px) — row hairlines and the tabular column dividers
+// Don't reintroduce `font-black` or `border-foreground`; hierarchy here comes
+// from size and spacing, per the site's typography rules.
 //
 // TWO LAYOUTS, ONE MARKUP. `layout="tabular"` is the FDA's tabular display —
 // title block, then the nutrient groups as side-by-side columns — but only when
@@ -23,14 +35,15 @@ import type { LabelData, LabelRow } from "./labelRows";
 // Absent nutrients render an em dash, not 0 — key sparsity is meaningful
 // (absent ≠ zero), and it keeps a half-typed draft value from flashing as a
 // fake zero while the user edits.
-//
-// The header is a <div>, not an h-tag: the global base layer styles headings
-// serif-light, and this must stay sans black like the real label.
+
+/** Eyebrow labels, in the site's uppercase-tracked sans (not the FDA's bold). */
+const EYEBROW =
+  "font-sans text-[10px] font-semibold uppercase tracking-widest text-muted-foreground";
 
 function NutrientRow({ row, tabular }: { row: LabelRow; tabular: boolean }) {
   return (
-    <div className="flex items-baseline justify-between gap-2 border-t border-foreground/40 py-0.5 text-sm">
-      <span className={cn(!row.sub && "font-bold", row.sub && "pl-4")}>
+    <div className="flex items-baseline justify-between gap-2 border-t border-border py-1 text-sm">
+      <span className={cn(!row.sub && "font-semibold", row.sub && "pl-4")}>
         {/* Tabular columns are narrow, so they take the FDA's own
             abbreviations; stacked, there's room for the full wording. Only one
             is ever visible, and only when the two differ. */}
@@ -51,10 +64,10 @@ function NutrientRow({ row, tabular }: { row: LabelRow; tabular: boolean }) {
 }
 
 /** The tabular columns' shared heading. Hidden while the label is stacked,
- *  where the rows sit directly under the panel's own heavy rule instead. */
+ *  where the rows sit directly under the panel's own section rule instead. */
 function ColumnHeading() {
   return (
-    <div className="hidden @lg:block border-b border-foreground/40 pb-0.5 text-[10px] font-bold uppercase tracking-wide">
+    <div className={cn("hidden @lg:block border-b border-border pb-1", EYEBROW)}>
       Amount/serving
     </div>
   );
@@ -92,35 +105,37 @@ export default function NutritionFactsLabel({
   return (
     <div
       className={cn(
-        "border border-foreground bg-card p-3 font-sans text-card-foreground",
+        "rounded-sm border border-border bg-card p-4 text-card-foreground",
         tabular && "@container",
         className,
       )}
     >
       <div
         className={cn(
-          tabular && "@lg:grid @lg:grid-cols-[auto_1fr_1fr] @lg:gap-x-3",
+          tabular && "@lg:grid @lg:grid-cols-[auto_1fr_1fr] @lg:gap-x-5",
         )}
       >
-        {/* Block 1 — identity and Calories. The leftmost block in tabular; the
-            head of the panel when stacked. */}
+        {/* Block 1 — serving basis and Calories. The leftmost block in tabular;
+            the head of the panel when stacked. There is deliberately no
+            "Nutrition Facts" title: both callers already render a heading
+            immediately above the label (the panel's "Nutrition", the catalog
+            drawer's "Label preview"), so it only ever read as a duplicate. */}
         <div>
-          <div className="text-2xl font-black leading-none tracking-tight">
-            Nutrition Facts
-          </div>
-          <div className="mt-1 flex items-baseline justify-between gap-2 border-t border-foreground/40 pt-1 text-sm font-bold">
-            {servingCaption && <span>{servingCaption}</span>}
+          <div className="flex items-baseline justify-between gap-2 text-sm font-semibold">
+            {servingCaption && (
+              <span className="text-muted-foreground">{servingCaption}</span>
+            )}
             <span className={cn(servingCaption && "text-right")}>
               {servingLabel}
             </span>
           </div>
-          <div className="mt-1 border-t-8 border-foreground pt-1">
-            <div className="text-[10px] font-bold uppercase tracking-wide">
-              Amount per serving
-            </div>
-            <div className="flex items-end justify-between gap-2">
-              <span className="text-xl font-black">Calories</span>
-              <span className="text-3xl font-black leading-none tabular-nums">
+          {/* The label's one accent: brand on the rule that introduces the
+              number people actually look for. */}
+          <div className="mt-2 border-t-2 border-brand pt-2">
+            <div className={EYEBROW}>Amount per serving</div>
+            <div className="mt-0.5 flex items-baseline justify-between gap-3">
+              <span className="text-lg font-semibold">Calories</span>
+              <span className="font-heading text-4xl font-light leading-none tabular-nums">
                 {calories != null
                   ? formatNutrientDisplay({ value: calories.value, unit: "" })
                   : "—"}
@@ -129,13 +144,13 @@ export default function NutritionFactsLabel({
           </div>
         </div>
 
-        {/* Block 2 — fats, cholesterol, sodium. The heavy rule that opens the
+        {/* Block 2 — fats, cholesterol, sodium. The section rule that opens the
             nutrient list becomes this column's left divider in tabular. */}
         <div
           className={cn(
-            "mt-1 border-t-4 border-foreground pt-1",
+            "mt-3 border-t-2 border-border pt-1",
             tabular &&
-              "@lg:mt-0 @lg:border-t-0 @lg:border-l @lg:border-foreground/40 @lg:pt-0 @lg:pl-3",
+              "@lg:mt-0 @lg:border-t-0 @lg:border-l @lg:border-border @lg:pt-0 @lg:pl-5",
           )}
         >
           {tabular && <ColumnHeading />}
@@ -152,14 +167,11 @@ export default function NutritionFactsLabel({
             the first one, since the heading rule already sits above it. */}
         <div
           className={cn(
-            tabular &&
-              "@lg:border-l @lg:border-foreground/40 @lg:pl-3",
+            tabular && "@lg:border-l @lg:border-border @lg:pl-5",
           )}
         >
           {tabular && <ColumnHeading />}
-          <div
-            className={cn(tabular && "@lg:[&>*:first-child]:border-t-0")}
-          >
+          <div className={cn(tabular && "@lg:[&>*:first-child]:border-t-0")}>
             {carbs.map((row) => (
               <NutrientRow key={row.key} row={row} tabular={tabular} />
             ))}
@@ -167,15 +179,15 @@ export default function NutritionFactsLabel({
         </div>
       </div>
 
-      {/* Minerals, below the closing heavy rule: full-width rows when stacked,
+      {/* Minerals, below the closing section rule: full-width rows when stacked,
           a single inline run across the foot in tabular — where the real label
           puts them. */}
-      <div className="mt-1 border-t-8 border-foreground">
+      <div className="mt-3 border-t-2 border-border">
         <div
           className={cn(
             "[&>*:first-child]:border-t-0",
             tabular &&
-              "@lg:flex @lg:flex-wrap @lg:gap-x-6 @lg:[&>*]:border-t-0 @lg:[&>*]:justify-start @lg:[&>*]:gap-1",
+              "@lg:flex @lg:flex-wrap @lg:gap-x-8 @lg:[&>*]:border-t-0 @lg:[&>*]:justify-start @lg:[&>*]:gap-2",
           )}
         >
           {micros.map((row) => (

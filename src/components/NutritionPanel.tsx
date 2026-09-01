@@ -151,6 +151,10 @@ export default function NutritionPanel({
           data={recipeNutritionRows(nutrition)}
           servingLabel={recipe.nutritionUnitLabel}
           layout="tabular"
+          // Frameless here: the panel already supplies the card frame and the
+          // "Nutrition" heading, so the label's own border/padding would just
+          // double it up. Standalone (Storybook, any future caller) it keeps them.
+          className="border-0 bg-transparent p-0"
         />
       ) : (
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm">
