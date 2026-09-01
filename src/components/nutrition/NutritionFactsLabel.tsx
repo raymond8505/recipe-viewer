@@ -1,5 +1,6 @@
 import { formatNutrientDisplay } from "@/lib/format";
 import { cn } from "@/lib/utils";
+import NutrientRowTr from "./NutrientRowTr";
 import type { LabelData, LabelRow } from "./labelRows";
 
 // Responsive arrangement (grid/flex) goes only on the plain-div wrappers AROUND
@@ -20,38 +21,6 @@ const GRID_COLUMNS: Record<number, string> = {
   2: "@lg:grid @lg:grid-cols-[auto_1fr] @lg:gap-x-5",
   3: "@lg:grid @lg:grid-cols-[auto_1fr_1fr] @lg:gap-x-5",
 };
-
-function NutrientRowTr({ row, tabular }: { row: LabelRow; tabular: boolean }) {
-  return (
-    <tr>
-      <th
-        scope="row"
-        className={cn(
-          // `<th>` defaults to font-weight: bold, so font-light is what
-          // restores the body's ambient weight — only font-semibold stands out.
-          "border-t border-border py-1 text-left align-baseline text-sm font-light pl-2",
-          !row.sub && "font-semibold",
-          row.sub && "pl-4",
-        )}
-      >
-        {/* Tabular columns are narrow, so they take the FDA's own
-            abbreviations; stacked, there's room for the full wording. Only one
-            is ever visible, and only when the two differ. */}
-        {tabular && row.short && row.short !== row.name ? (
-          <>
-            <span className="@lg:hidden">{row.name}</span>
-            <span className="hidden @lg:inline">{row.short}</span>
-          </>
-        ) : (
-          row.name
-        )}
-      </th>
-      <td className="border-t border-border py-1 text-right align-baseline text-sm tabular-nums">
-        {formatNutrientDisplay(row.value!)}
-      </td>
-    </tr>
-  );
-}
 
 /**
  * A Nutrition Facts label, in the FDA's arrangement and the site's styling.
