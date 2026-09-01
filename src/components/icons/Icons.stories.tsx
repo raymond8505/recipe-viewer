@@ -1,25 +1,6 @@
 import type { Meta, StoryObj } from "@storybook/nextjs-vite";
-import {
-  ChatBubbleIcon,
-  ChefHatIcon,
-  CheckIcon,
-  CloseIcon,
-  CloseSmallIcon,
-  CopyIcon,
-  DragHandleIcon,
-  EditIcon,
-  EnterFullscreenIcon,
-  ExitFullscreenIcon,
-  ExternalLinkIcon,
-  PauseIcon,
-  PlayIcon,
-  PlusIcon,
-  ResetIcon,
-  SearchIcon,
-  SmallPlusIcon,
-  SpinnerIcon,
-  TrashIcon,
-} from "@/components/icons";
+import * as Icons from "@/components/icons";
+import { iconRegistry } from "./registry";
 
 const meta: Meta = {
   title: "Components/Icons",
@@ -29,41 +10,60 @@ const meta: Meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
-function Cell({ label, children }: { label: string; children: React.ReactNode }) {
+const registered = new Set<string>(iconRegistry.map((entry) => entry.name));
+const unregistered = Object.keys(Icons).filter((name) => !registered.has(name));
+
+function Th({ children }: { children: React.ReactNode }) {
   return (
-    <div className="flex flex-col items-center gap-2 p-4 rounded-xl border border-gray-100 bg-card">
-      <div className="flex items-center justify-center w-10 h-10 text-gray-700">
-        {children}
-      </div>
-      <span className="text-xs text-gray-400 text-center leading-tight">{label}</span>
-    </div>
+    <th className="px-3 py-2 text-left font-sans text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+      {children}
+    </th>
   );
 }
 
-export const AllIcons: Story = {
+/**
+ * Every icon the app ships, sourced from the barrel rather than a hand-written
+ * list so a new icon can't quietly miss the table the way the old grid missed
+ * ImageIcon and WarningIcon. Rows come from the registry; anything exported but
+ * unregistered is called out above the table (and fails `icons.test.tsx`).
+ */
+export const IconTable: Story = {
   render: () => (
-    <div className="grid grid-cols-4 sm:grid-cols-6 gap-3">
-      <Cell label="ChatBubble"><ChatBubbleIcon /></Cell>
-      <Cell label="ChefHat"><ChefHatIcon /></Cell>
-      <Cell label="Check"><CheckIcon /></Cell>
-      <Cell label="Check (sm)"><CheckIcon size={12} /></Cell>
-      <Cell label="Close"><CloseIcon /></Cell>
-      <Cell label="CloseSmall"><CloseSmallIcon /></Cell>
-      <Cell label="Copy"><CopyIcon /></Cell>
-      <Cell label="DragHandle"><DragHandleIcon /></Cell>
-      <Cell label="Edit"><EditIcon /></Cell>
-      <Cell label="EnterFullscreen"><EnterFullscreenIcon /></Cell>
-      <Cell label="ExitFullscreen"><ExitFullscreenIcon /></Cell>
-      <Cell label="ExternalLink"><ExternalLinkIcon /></Cell>
-      <Cell label="Pause"><PauseIcon /></Cell>
-      <Cell label="Play"><PlayIcon /></Cell>
-      <Cell label="Play dimmed"><PlayIcon dimmed /></Cell>
-      <Cell label="Plus"><PlusIcon /></Cell>
-      <Cell label="Reset"><ResetIcon /></Cell>
-      <Cell label="Search"><SearchIcon /></Cell>
-      <Cell label="SmallPlus"><SmallPlusIcon /></Cell>
-      <Cell label="Spinner"><SpinnerIcon /></Cell>
-      <Cell label="Trash"><TrashIcon /></Cell>
+    <div className="space-y-4">
+      {unregistered.length > 0 && (
+        <p className="rounded-lg border border-amber-500 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+          Exported but missing from <code>registry.ts</code>: {unregistered.join(", ")}
+        </p>
+      )}
+
+      <div className="overflow-x-auto rounded-xl border border-border bg-card">
+        <table className="w-full border-collapse text-sm">
+          <thead>
+            <tr className="border-b border-border">
+              <Th>Icon</Th>
+              <Th>Name</Th>
+              <Th>Lucide</Th>
+              <Th>Size</Th>
+              <Th>Used in</Th>
+            </tr>
+          </thead>
+          <tbody>
+            {iconRegistry.map(({ name, component: Icon, lucide, size, usedIn }) => (
+              <tr key={name} className="border-b border-border last:border-b-0">
+                <td className="px-3 py-2">
+                  <span className="flex h-12 w-12 items-center justify-center text-gray-700">
+                    <Icon />
+                  </span>
+                </td>
+                <td className="px-3 py-2 font-medium text-card-foreground">{name}</td>
+                <td className="px-3 py-2 text-muted-foreground">{lucide}</td>
+                <td className="px-3 py-2 tabular-nums text-muted-foreground">{size}</td>
+                <td className="px-3 py-2 text-muted-foreground">{usedIn.join(", ")}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   ),
 };
