@@ -2,21 +2,8 @@ import type { NutrientValue, NutrientValues } from "@/lib/nutritionMath";
 import type { IngredientNutrition } from "@/types/ingredient";
 
 // The presentation model behind NutritionFactsLabel, plus one adapter per
-// surface that feeds it.
-//
-// This exists because the two labels are fed by different type systems: the
-// catalog editor holds `IngredientNutrition` (snake_case per-100g numbers, with
-// minerals but no unsaturated fat) and the recipe panel holds `NutrientValues`
-// (camelCase NutrientValue objects, with unsaturated fat but no minerals).
-// Converting either nutrition type into the other loses nutrients in one
-// direction or the other — so neither is the shared type. The shared type is
-// the ROW LIST both of them adapt into, which is lossless because a row already
-// carries its own name, unit and "absent" state.
-//
-// That also makes the FDA wording a single source of truth. Both labels use
-// panel wording ("Total Fat", "Dietary Fiber") rather than the app-canonical
-// nutritionColumns names ("Fat", "Fiber") — mimicking the physical package
-// label IS the feature — and now there is exactly one table of it to drift from.
+// surface that feeds it. Why the shared type is the row list rather than either
+// nutrition type: .claude/docs/nutrition-label.md.
 
 /** One nutrient line on the label. */
 export interface LabelRow {

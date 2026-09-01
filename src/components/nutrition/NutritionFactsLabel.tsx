@@ -3,13 +3,10 @@ import { cn } from "@/lib/utils";
 import NutrientRowTr from "./NutrientRowTr";
 import type { LabelData, LabelRow } from "./labelRows";
 
-// Responsive arrangement (grid/flex) goes only on the plain-div wrappers AROUND
-// the tables below, never on a table-internal element (`<table>`/`<tbody>`/
-// `<tr>`/`<td>`) — overriding `display` on those strips their implicit
-// table/row/cell roles in some browsers (notably Safari/VoiceOver).
-//
-// Row hairlines rely on Tailwind Preflight's global `border-collapse: collapse`;
-// if that default is ever overridden in globals.css they visibly double up.
+// Two constraints on the markup below, both explained in
+// .claude/docs/nutrition-label.md: responsive grid/flex classes go only on the
+// plain-div wrappers AROUND the tables, never on a table-internal element; and
+// the row hairlines depend on Tailwind Preflight's `border-collapse: collapse`.
 
 /** Eyebrow labels, in the site's uppercase-tracked sans. */
 const EYEBROW =
