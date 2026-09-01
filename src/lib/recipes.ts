@@ -188,7 +188,7 @@ export async function getRecipeById(id: string): Promise<RecipeRow | null> {
 // provided.
 // Throws RecipeRepoError("insert_failed") on Supabase failure. Derives the
 // `content` and `embedding` columns from the schema — see the "Derived content
-// + embedding columns" note in .claude/CLAUDE.md.
+// + embedding columns" note in .claude/docs/supabase-data-layer.md.
 export async function createRecipeRow(input: CreateRecipeInput): Promise<RecipeRow> {
   const supabase = getSupabaseClient();
   // Every persisted ingredient line carries a stable id from the moment it
