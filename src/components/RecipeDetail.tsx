@@ -154,6 +154,22 @@ export default function RecipeDetail({
     },
     [],
   );
+  // window.location is not available during SSR, and reading it straight in
+  // render would make the server and first client render disagree. Until mount
+  // the URL half of the check reads false, so Re-scrape starts enabled and only
+  // disables once we can actually compare — the safe direction for a button
+  // whose disabled state is an optimisation, not a guard.
+  const [isMounted, setIsMounted] = useState(false);
+  useEffect(() => setIsMounted(true), []);
+
+  // Re-scrape is only pointless when BOTH hold: the recipe is the user's own
+  // AND its source URL is this very page — i.e. re-scraping would fetch the
+  // page it is already showing. Either alone is not enough: a "custom" recipe
+  // can still point at a real external page worth re-fetching, and a scraped
+  // recipe whose URL happens to be this page is not the user's own.
+  const isSelfReferential = isMounted && recipe.url === window.location.href;
+  const canRescrape = !(isOwnRecipe({ source }) && isSelfReferential);
+
   // Read-only aliases consumed by the JSX below.
   const isEditing = editor.isEditing;
   const isRescrapeReview = rescrape.isReview;
@@ -373,7 +389,7 @@ export default function RecipeDetail({
             rescrapeState={rescrapeState}
             regenImageState={regenImageState}
             normalizeState={normalizeState}
-            canRescrape={!isOwnRecipe({ source })}
+            canRescrape={canRescrape}
             uploadError={imageUpload.error}
             fileInputRef={fileInputRef}
             onEditStart={handleEditStart}

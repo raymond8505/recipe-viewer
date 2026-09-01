@@ -374,32 +374,50 @@ describe("RecipeDetail — controls section", () => {
     expect(screen.getByRole("button", { name: /re-scrape/i })).toBeTruthy();
   });
 
-  // A recipe authored here has no upstream page, so Re-scrape is meaningless
-  // for it. This reads `source` alone: the previous rule compared the stored
-  // url to window.location.href, which silently failed for every row minted on
-  // a staging host. See isOwnRecipe / db/migrations/0015.
-  it("hides the Re-scrape button for the user's own recipe, even when logged in", () => {
+  // Re-scrape needs BOTH halves to be pointless before it switches off: the
+  // recipe is the user's own AND its source URL is this very page, so a
+  // re-scrape would fetch the page already on screen. It disables rather than
+  // disappearing, so the reason is visible instead of the button silently
+  // going missing.
+  it("disables Re-scrape for an own recipe whose source URL is this page", () => {
     render(
       <RecipeDetail
-        recipe={makeRecipe({}, { source: "custom" })}
+        recipe={makeRecipe({}, { source: "custom", url: window.location.href })}
         isLoggedIn={true}
       />,
     );
-    expect(screen.queryByRole("button", { name: /re-scrape/i })).toBeNull();
-    // The rest of the Manage toolbar is unaffected — only Re-scrape goes.
-    expect(screen.getByRole("button", { name: /^edit$/i })).toBeTruthy();
+
+    const button = screen.getByRole("button", { name: /re-scrape/i });
+    expect(button).toBeDisabled();
+    // The reason rides on the accessible name too: the tooltip is hover-only
+    // and a disabled button can't take focus.
+    expect(button).toHaveAccessibleName(/nothing external to re-fetch/i);
+    // The rest of the Manage toolbar is unaffected.
+    expect(screen.getByRole("button", { name: /^edit$/i })).toBeEnabled();
   });
 
-  // The url is no longer consulted at all: a recipe served from the page it
-  // claims as its source still offers Re-scrape as long as it isn't `custom`.
-  it("keeps Re-scrape when the recipe url matches the current page", () => {
+  // Each half alone leaves Re-scrape usable.
+  it("keeps Re-scrape enabled when the url matches but the recipe is not the user's own", () => {
     render(
       <RecipeDetail
         recipe={makeRecipe({}, { url: window.location.href })}
         isLoggedIn={true}
       />,
     );
-    expect(screen.getByRole("button", { name: /re-scrape/i })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /re-scrape/i })).toBeEnabled();
+  });
+
+  it("keeps Re-scrape enabled for an own recipe that still points at an external page", () => {
+    render(
+      <RecipeDetail
+        recipe={makeRecipe(
+          {},
+          { source: "custom", url: "https://seriouseats.com/kebab" },
+        )}
+        isLoggedIn={true}
+      />,
+    );
+    expect(screen.getByRole("button", { name: /re-scrape/i })).toBeEnabled();
   });
 
   it("links to the nutrition breakdown only when logged in", () => {
@@ -889,8 +907,10 @@ describe("RecipeDetail — controls section", () => {
   // The whole point of making source editable: switching a recipe to "custom"
   // must retire Re-scrape straight away. The `recipe` prop is a server-render
   // snapshot that never changes, so this only works because RecipeDetail tracks
-  // source in state and re-seeds it from the save response.
-  it("drops the Re-scrape button after saving source as custom", async () => {
+  // source in state and re-seeds it from the save response. The url is pinned
+  // to this page so the other half of the check is already satisfied and the
+  // source edit is the only thing moving.
+  it("disables the Re-scrape button after saving source as custom", async () => {
     const mockFetch = vi
       .fn()
       .mockResolvedValue(
@@ -905,8 +925,13 @@ describe("RecipeDetail — controls section", () => {
       );
     vi.stubGlobal("fetch", mockFetch);
 
-    render(<RecipeDetail recipe={makeRecipe()} isLoggedIn={true} />);
-    expect(screen.getByRole("button", { name: /re-scrape/i })).toBeTruthy();
+    render(
+      <RecipeDetail
+        recipe={makeRecipe({}, { url: window.location.href })}
+        isLoggedIn={true}
+      />,
+    );
+    expect(screen.getByRole("button", { name: /re-scrape/i })).toBeEnabled();
 
     await act(async () => {
       fireEvent.click(screen.getByRole("button", { name: /^edit$/i }));
@@ -921,7 +946,7 @@ describe("RecipeDetail — controls section", () => {
     });
 
     await waitFor(() =>
-      expect(screen.queryByRole("button", { name: /re-scrape/i })).toBeNull(),
+      expect(screen.getByRole("button", { name: /re-scrape/i })).toBeDisabled(),
     );
   });
 

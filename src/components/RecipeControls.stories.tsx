@@ -42,9 +42,10 @@ type Story = StoryObj<typeof RecipeControls>;
 export const ViewMode: Story = {};
 
 /**
- * The user's own recipe (`source: "custom"`) — authored here, so there is no
- * upstream page and the Re-scrape button drops out of the row entirely. Every
- * other control stays; this is the only difference from ViewMode.
+ * The user's own recipe (`source: "custom"`) whose source URL is this very page
+ * — re-scraping would fetch the page already on screen. Re-scrape stays in the
+ * row but goes flat, with a tooltip (and accessible name) saying why; a button
+ * that vanished would just read as a bug. Every other control is unchanged.
  */
 export const OwnRecipe: Story = {
   args: { canRescrape: false },

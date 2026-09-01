@@ -39,6 +39,15 @@ const CONFIRM_ACTIONS = {
 
 type ConfirmAction = keyof typeof CONFIRM_ACTIONS;
 
+/**
+ * Why Re-scrape can be unavailable. Shown as the disabled button's tooltip and
+ * folded into its accessible name — a disabled control that gives no reason is
+ * just a dead end, and this one's cause (a field the user can edit) is fixable
+ * from the form directly above it.
+ */
+const RESCRAPE_BLOCKED_REASON =
+  "this is your own recipe and its source URL is this page, so there is nothing external to re-fetch";
+
 export interface RecipeControlsProps {
   isEditing: boolean;
   editState: EditState;
@@ -58,8 +67,8 @@ export interface RecipeControlsProps {
   regenImageState: OpState;
   /** Fire-and-forget ingredient normalization (queues a background re-run). */
   normalizeState: OpState;
-  /** Whether the Re-scrape button applies — false for the user's own recipes,
-   *  which have no upstream page to re-fetch. */
+  /** Whether Re-scrape can run. False disables the button (with a tooltip
+   *  explaining why) rather than hiding it — see RESCRAPE_BLOCKED_REASON. */
   canRescrape: boolean;
   /** Image-upload validation error flag. */
   uploadError: boolean;
@@ -320,15 +329,29 @@ export default function RecipeControls({
             <Button variant="outline" onClick={onEditStart}>
               Edit
             </Button>
-            {canRescrape && (
+            {/* Always rendered. A button that vanishes reads as a bug ("where
+                did Re-scrape go?"); a disabled one carrying its reason answers
+                the question and points at the field that would change it.
+                The <span> is load-bearing, not a wrapper for layout: a disabled
+                button swallows its own pointer events, so `title` set on the
+                button would never surface. Same trick as NutritionDetailRow. */}
+            <span title={canRescrape ? undefined : RESCRAPE_BLOCKED_REASON}>
               <Button
                 variant="outline"
                 onClick={() => setPending("rescrape")}
-                disabled={rescrapeState === "loading"}
+                disabled={!canRescrape || rescrapeState === "loading"}
+                // The tooltip is hover-only and a disabled button is not
+                // focusable, so the reason also rides on the accessible name —
+                // otherwise it is invisible to a screen reader.
+                aria-label={
+                  canRescrape
+                    ? undefined
+                    : `Re-scrape — unavailable: ${RESCRAPE_BLOCKED_REASON}`
+                }
               >
                 {rescrapeState === "loading" ? "Re-scraping…" : "Re-scrape"}
               </Button>
-            )}
+            </span>
             {rescrapeState === "success" && (
               <span className="text-sm text-green-600">Recipe updated.</span>
             )}
