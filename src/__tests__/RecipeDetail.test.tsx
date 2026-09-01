@@ -837,6 +837,8 @@ describe("RecipeDetail — controls section", () => {
     expect(input.value).toBe("https://example.com");
   });
 
+  // Both provenance fields sit in a "Source" fieldset, so each label is only
+  // the part that differs: URL and Name.
   it("shows Source input pre-filled with recipe.source in edit mode", async () => {
     render(
       <RecipeDetail
@@ -847,7 +849,7 @@ describe("RecipeDetail — controls section", () => {
     await act(async () => {
       fireEvent.click(screen.getByRole("button", { name: /^edit$/i }));
     });
-    expect((screen.getByLabelText("Source") as HTMLInputElement).value).toBe(
+    expect((screen.getByLabelText("Name") as HTMLInputElement).value).toBe(
       "seriouseats.com",
     );
   });
@@ -872,7 +874,7 @@ describe("RecipeDetail — controls section", () => {
       fireEvent.click(screen.getByRole("button", { name: /^edit$/i }));
     });
     await act(async () => {
-      fireEvent.change(screen.getByLabelText("Source"), {
+      fireEvent.change(screen.getByLabelText("Name"), {
         target: { value: "custom" },
       });
     });
@@ -910,7 +912,7 @@ describe("RecipeDetail — controls section", () => {
       fireEvent.click(screen.getByRole("button", { name: /^edit$/i }));
     });
     await act(async () => {
-      fireEvent.change(screen.getByLabelText("Source"), {
+      fireEvent.change(screen.getByLabelText("Name"), {
         target: { value: "custom" },
       });
     });
@@ -921,6 +923,46 @@ describe("RecipeDetail — controls section", () => {
     await waitFor(() =>
       expect(screen.queryByRole("button", { name: /re-scrape/i })).toBeNull(),
     );
+  });
+
+  it("offers an open-in-new-tab link for the source URL", async () => {
+    render(
+      <RecipeDetail
+        recipe={makeRecipe({}, { url: "https://seriouseats.com/kebab" })}
+        isLoggedIn={true}
+      />,
+    );
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /^edit$/i }));
+    });
+
+    const link = screen.getByRole("link", {
+      name: /open source url in a new tab/i,
+    });
+    expect(link).toHaveAttribute("href", "https://seriouseats.com/kebab");
+    expect(link).toHaveAttribute("target", "_blank");
+    // Opening an arbitrary user-supplied URL without this hands the new tab a
+    // window.opener handle back to the app.
+    expect(link).toHaveAttribute("rel", "noopener noreferrer");
+  });
+
+  // A half-typed value must not be a live link. Dropping the href makes the
+  // anchor inert (not focusable, not a link) without unmounting it, so the
+  // input keeps its width as the user types.
+  it("keeps the open link inert while the source URL is incomplete", async () => {
+    render(<RecipeDetail recipe={makeRecipe()} isLoggedIn={true} />);
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /^edit$/i }));
+    });
+    await act(async () => {
+      fireEvent.change(screen.getByLabelText("URL"), {
+        target: { value: "htt" },
+      });
+    });
+
+    expect(
+      screen.queryByRole("link", { name: /open source url in a new tab/i }),
+    ).toBeNull();
   });
 
   it("includes url in the save request body", async () => {

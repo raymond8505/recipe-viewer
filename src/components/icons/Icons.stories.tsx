@@ -10,6 +10,7 @@ import {
   EditIcon,
   EnterFullscreenIcon,
   ExitFullscreenIcon,
+  ExternalLinkIcon,
   PauseIcon,
   PlayIcon,
   PlusIcon,
@@ -53,6 +54,7 @@ export const AllIcons: Story = {
       <Cell label="Edit"><EditIcon /></Cell>
       <Cell label="EnterFullscreen"><EnterFullscreenIcon /></Cell>
       <Cell label="ExitFullscreen"><ExitFullscreenIcon /></Cell>
+      <Cell label="ExternalLink"><ExternalLinkIcon /></Cell>
       <Cell label="Pause"><PauseIcon /></Cell>
       <Cell label="Play"><PlayIcon /></Cell>
       <Cell label="Play dimmed"><PlayIcon dimmed /></Cell>

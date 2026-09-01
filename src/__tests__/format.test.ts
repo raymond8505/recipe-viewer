@@ -13,6 +13,7 @@ import {
   groupIngredientsWithIndex,
   getIngredientText,
   isOwnRecipe,
+  isBrowsableUrl,
   CUSTOM_RECIPE_SOURCE,
   markdownToInstructions,
   normalizeRecipeInstructions,
@@ -286,6 +287,33 @@ describe("isOwnRecipe", () => {
   it("is case-sensitive — only the exact literal counts", () => {
     expect(isOwnRecipe({ source: "Custom" })).toBe(false);
     expect(isOwnRecipe({ source: "CUSTOM" })).toBe(false);
+  });
+});
+
+describe("isBrowsableUrl", () => {
+  it("accepts absolute http and https URLs", () => {
+    expect(isBrowsableUrl("https://seriouseats.com/adana-kebab")).toBe(true);
+    expect(isBrowsableUrl("http://example.com")).toBe(true);
+  });
+
+  it("rejects a half-typed URL", () => {
+    expect(isBrowsableUrl("htt")).toBe(false);
+    expect(isBrowsableUrl("example.com")).toBe(false);
+    expect(isBrowsableUrl("/recipes/1")).toBe(false);
+  });
+
+  it("rejects blank input", () => {
+    expect(isBrowsableUrl("")).toBe(false);
+    expect(isBrowsableUrl(null)).toBe(false);
+    expect(isBrowsableUrl(undefined)).toBe(false);
+  });
+
+  // The href this guards is user-editable, so a scheme that executes rather
+  // than navigates must never reach it.
+  it("rejects schemes that are not http(s)", () => {
+    expect(isBrowsableUrl("javascript:alert(1)")).toBe(false);
+    expect(isBrowsableUrl("data:text/html,<script>alert(1)</script>")).toBe(false);
+    expect(isBrowsableUrl("file:///etc/passwd")).toBe(false);
   });
 });
 

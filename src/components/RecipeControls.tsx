@@ -3,8 +3,9 @@
 import { useState, type ChangeEvent, type MutableRefObject } from "react";
 import type { OpState } from "@/hooks/useUndoableSchemaOp";
 import type { EditState } from "@/hooks/useRecipeEditor";
-import { CUSTOM_RECIPE_SOURCE } from "@/lib/format";
+import { CUSTOM_RECIPE_SOURCE, isBrowsableUrl } from "@/lib/format";
 import { ALLOWED_IMAGE_CONTENT_TYPES } from "@/lib/imageTypes";
+import { ExternalLinkIcon } from "@/components/icons";
 import { Button } from "@/components/ui/button";
 import ConfirmBar from "@/components/ConfirmBar";
 import { PrimaryActionButton } from "@/components/buttons";
@@ -117,6 +118,10 @@ export default function RecipeControls({
   // every hook); this mirrors the local `confirming` flag in editor rows.
   const [pending, setPending] = useState<ConfirmAction | null>(null);
 
+  // Gates the open-in-new-tab link: false while a URL is half-typed, and the
+  // guard that keeps a javascript: value out of a user-controlled href.
+  const canOpenUrl = isBrowsableUrl(draftUrl);
+
   const runPending = () => {
     const action = pending;
     setPending(null);
@@ -164,47 +169,86 @@ export default function RecipeControls({
                 cancel.
               </p>
             )}
-            <div className="w-full mb-1">
-              <label className="block text-xs font-medium text-gray-500 mb-1">
-                Source URL
-              </label>
-              <input
-                type="url"
-                value={draftUrl}
-                onChange={(e) => onUrlChange(e.target.value)}
-                disabled={editState === "saving"}
-                placeholder="https://example.com/recipe"
-                className="w-full rounded-none border-0 border-b border-gray-200 px-3 py-2 text-sm text-gray-700 focus:outline-hidden focus:border-brand disabled:opacity-60"
-              />
-            </div>
-            <div className="w-full mb-1">
-              <label
-                htmlFor="recipe-source"
-                className="block text-xs font-medium text-gray-500 mb-1"
-              >
+            {/* The two provenance fields are one idea, so they share a group
+                rather than stacking as unrelated rows. The legend carries the
+                "Source" noun, which lets each label shrink to the part that
+                differs. Both are full-width until sm — 50/50 on a phone leaves
+                neither field usable. */}
+            <fieldset className="w-full m-0 p-0 border-0 mb-1">
+              <legend className="block text-xs font-medium text-gray-500 mb-2 p-0">
                 Source
-              </label>
-              <input
-                id="recipe-source"
-                type="text"
-                value={draftSource}
-                onChange={(e) => onSourceChange(e.target.value)}
-                disabled={editState === "saving"}
-                placeholder="seriouseats.com"
-                list="recipe-source-options"
-                className="w-full rounded-none border-0 border-b border-gray-200 px-3 py-2 text-sm text-gray-700 focus:outline-hidden focus:border-brand disabled:opacity-60"
-              />
-              <datalist id="recipe-source-options">
-                <option value={CUSTOM_RECIPE_SOURCE} />
-              </datalist>
-              {/* This field is not just a label: isOwnRecipe reads it, so the
-                  one value with behaviour attached is spelled out rather than
-                  left for the user to guess. */}
+              </legend>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-2 items-start">
+                <div>
+                  <label
+                    htmlFor="recipe-source-url"
+                    className="block text-xs font-medium text-gray-500 mb-1"
+                  >
+                    URL
+                  </label>
+                  {/* The underline moves to the wrapper so it spans the input
+                      and the open-link button as one field. */}
+                  <div className="flex items-center border-b border-gray-200 focus-within:border-brand">
+                    <input
+                      id="recipe-source-url"
+                      type="url"
+                      value={draftUrl}
+                      onChange={(e) => onUrlChange(e.target.value)}
+                      disabled={editState === "saving"}
+                      placeholder="https://example.com/recipe"
+                      className="flex-1 min-w-0 rounded-none border-0 px-3 py-2 text-sm text-gray-700 focus:outline-hidden disabled:opacity-60"
+                    />
+                    {/* `invisible` rather than unmounted, so the input keeps its
+                        width while a URL is being typed. An <a> with no href is
+                        already inert — not focusable, not exposed as a link —
+                        so a half-typed value leaves no phantom tab stop. */}
+                    <a
+                      href={canOpenUrl ? draftUrl : undefined}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      aria-label="Open source URL in a new tab"
+                      aria-hidden={!canOpenUrl}
+                      className={`shrink-0 p-2 text-gray-400 transition-colors hover:text-brand ${
+                        canOpenUrl ? "" : "invisible"
+                      }`}
+                    >
+                      <ExternalLinkIcon />
+                    </a>
+                  </div>
+                </div>
+                <div>
+                  <label
+                    htmlFor="recipe-source"
+                    className="block text-xs font-medium text-gray-500 mb-1"
+                  >
+                    Name
+                  </label>
+                  <input
+                    id="recipe-source"
+                    type="text"
+                    value={draftSource}
+                    onChange={(e) => onSourceChange(e.target.value)}
+                    disabled={editState === "saving"}
+                    placeholder="seriouseats.com"
+                    list="recipe-source-options"
+                    className="w-full rounded-none border-0 border-b border-gray-200 px-3 py-2 text-sm text-gray-700 focus:outline-hidden focus:border-brand disabled:opacity-60"
+                  />
+                  <datalist id="recipe-source-options">
+                    <option value={CUSTOM_RECIPE_SOURCE} />
+                  </datalist>
+                </div>
+              </div>
+              {/* Spans the group rather than sitting under Name: hanging it off
+                  one column would make the two halves different heights and
+                  break the 50/50 read. Name is not just a label — isOwnRecipe
+                  reads it, so the one value with behaviour attached is spelled
+                  out rather than left for the user to infer. */}
               <p className="mt-1 text-xs text-gray-400">
                 Where the recipe came from. Use &ldquo;{CUSTOM_RECIPE_SOURCE}
-                &rdquo; for your own recipes — those hide the Re-scrape button.
+                &rdquo; as the name for your own recipes — those hide the
+                Re-scrape button.
               </p>
-            </div>
+            </fieldset>
             <select
               value={draftStatus}
               onChange={(e) => onStatusChange(e.target.value)}

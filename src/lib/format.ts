@@ -142,6 +142,22 @@ export function isOwnRecipe(recipe: { source?: string | null }): boolean {
 }
 
 /**
+ * Whether a string can be handed to an `<a href>` we open in a new tab: an
+ * absolute http(s) URL. Two jobs — it hides the "open source" affordance while
+ * a URL is still being typed, and it keeps a `javascript:` value out of an href
+ * the user controls.
+ */
+export function isBrowsableUrl(value: string | null | undefined): boolean {
+  if (!value) return false;
+  try {
+    const { protocol } = new URL(value);
+    return protocol === "http:" || protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Get the ingredient text from a string or RecipeIngredient object.
  */
 export function getIngredientText(
