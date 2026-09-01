@@ -14,6 +14,32 @@ Sample data a story renders — never inline it → [fixtures.md](fixtures.md).
 
 **`useSearchParams` in `@storybook/nextjs-vite`:** Pass `parameters.nextjs.navigation.searchParams: { q: "..." }` — the adapter wraps it in `ReadonlyURLSearchParams` internally, so `.get("q")` returns the expected value. No `play()` workaround needed.
 
+## Story Sizing
+
+**Never wrap a story in a `<div>` whose only job is a width** (PR #63 review). Pin the canvas
+instead — `globals: { viewport: { value: "panel" } }`, on the meta when every story shares a width,
+on the story to override it. The named canvases live in `.storybook/preview.tsx`: `control` (288),
+`card` (320), `column` (360, the cooking column), `phone` (390), `sheet` (420), `panel` (480),
+`editor` (640), `page` (760). Use a literal — `"576px-400px"` — only when the exact number is the
+point, i.e. it's demonstrating a breakpoint or container-query threshold rather than a surface.
+
+**A pinned width needs `layout: "fullscreen"`.** Under `layout: "centered"` the story root is an
+auto-margin flex item and shrink-wraps its content, so the canvas width never reaches the component
+and the viewport silently does nothing. `padded` costs you 32px. The `AppChrome` preview decorator
+deliberately adds no padding, so under `fullscreen` the rendered width *is* the number in the story.
+
+**Intrinsically sized components can't be canvas-sized at all** — a `Button` is `inline-flex`, so
+leave those on `centered` with no viewport (`PrimaryActionButton` is the worked example: only its
+`FullWidth` story, which passes `w-full`, takes over the canvas).
+
+**`parameters.viewport.defaultViewport` is the v7/v8 API and is a silent no-op in Storybook 10.**
+The current spelling is `globals.viewport`; `parameters.viewport.options` only registers the named
+set. Supplying `options` *replaces* the built-in viewports rather than merging, and an unrecognised
+key silently falls back to the first registered one rather than erroring.
+
+Pinning narrow canvases makes `sm:`/`md:` variants stop matching — previously they always did,
+because every story rendered full-width. That is the honest render; don't "fix" it by widening.
+
 ## Nav Structure
 
 - `Components/Cooking Mode/*` — all cooking session components
