@@ -16,10 +16,11 @@ const timerProps: Omit<ComponentProps<typeof TimerCard>, "timer"> = {
 const meta: Meta<typeof DraggableRibbon> = {
   component: DraggableRibbon,
   title: "Components/Cooking Mode/DraggableRibbon",
-  parameters: {
-    viewport: { defaultViewport: "mobile1" },
-    layout: "fullscreen",
-  },
+  parameters: { layout: "fullscreen" },
+  // `parameters.viewport.defaultViewport` was the v7/v8 spelling and is a
+  // silent no-op in Storybook 10 — this ribbon has been rendering at full
+  // browser width, not phone width, since the upgrade.
+  globals: { viewport: { value: "phone" } },
 };
 
 export default meta;

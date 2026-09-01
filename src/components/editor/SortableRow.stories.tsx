@@ -7,16 +7,15 @@ import SortableRow from "./SortableRow";
 const meta: Meta<typeof SortableRow> = {
   component: SortableRow,
   title: "Components/Recipes/Editor/SortableRow",
-  parameters: { layout: "padded" },
+  parameters: { layout: "fullscreen" },
+  globals: { viewport: { value: "sheet" } },
   decorators: [
     (Story, ctx) => (
-      <div style={{ maxWidth: 420 }}>
-        <DndContext>
-          <SortableContext items={[ctx.args.id]}>
-            <Story />
-          </SortableContext>
-        </DndContext>
-      </div>
+      <DndContext>
+        <SortableContext items={[ctx.args.id]}>
+          <Story />
+        </SortableContext>
+      </DndContext>
     ),
   ],
 };

@@ -8,17 +8,16 @@ import SortableItem from "./SortableItem";
 const meta: Meta<typeof SortableItem> = {
   component: SortableItem,
   title: "Components/Recipes/Editor/SortableItem",
-  parameters: { layout: "padded" },
+  parameters: { layout: "fullscreen" },
   args: { onDelete: fn() },
+  globals: { viewport: { value: "sheet" } },
   decorators: [
     (Story, ctx) => (
-      <div style={{ maxWidth: 420 }}>
-        <DndContext>
-          <SortableContext items={[ctx.args.id]}>
-            <Story />
-          </SortableContext>
-        </DndContext>
-      </div>
+      <DndContext>
+        <SortableContext items={[ctx.args.id]}>
+          <Story />
+        </SortableContext>
+      </DndContext>
     ),
   ],
 };
