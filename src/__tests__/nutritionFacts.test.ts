@@ -1,11 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
-  NUTRITION_LABEL_MICRONUTRIENTS,
-  NUTRITION_LABEL_ROWS,
   nutritionBasisOptions,
   parseDraftNutrition,
 } from "@/components/ingredients/nutritionFacts";
-import { NUTRITION_COLUMNS } from "@/components/ingredients/nutritionColumns";
 import { DEFAULT_PORTION_DRAFT } from "@/components/ingredients/portions";
 
 describe("parseDraftNutrition", () => {
@@ -60,15 +57,5 @@ describe("nutritionBasisOptions", () => {
   });
 });
 
-describe("nutrition label row coverage", () => {
-  it("covers every catalog nutrient exactly once across rows + micronutrients + calories", () => {
-    const labelKeys = [
-      "calories_kcal",
-      ...NUTRITION_LABEL_ROWS.map((row) => row.key),
-      ...NUTRITION_LABEL_MICRONUTRIENTS.map((row) => row.key),
-    ];
-    const columnKeys = NUTRITION_COLUMNS.map((col) => col.key);
-    expect(new Set(labelKeys).size).toBe(labelKeys.length);
-    expect([...labelKeys].sort()).toEqual([...columnKeys].sort());
-  });
-});
+// The label row-coverage check moved to nutritionLabelRows.test.ts along with
+// the rows themselves, which are now shared with the recipe panel's label.

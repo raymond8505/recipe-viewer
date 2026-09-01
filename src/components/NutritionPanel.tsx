@@ -5,7 +5,8 @@ import Link from "next/link";
 import { PortionStepperButton, SegmentButton } from "@/components/buttons";
 import { Button } from "@/components/ui/button";
 import NutritionSourceBadge from "@/components/ingredients/NutritionSourceBadge";
-import NutritionLinearLabel from "@/components/NutritionLinearLabel";
+import NutritionFactsLabel from "@/components/nutrition/NutritionFactsLabel";
+import { recipeNutritionRows } from "@/components/nutrition/labelRows";
 import { formatNutrientDisplay } from "@/lib/format";
 import type { NutrientValue } from "@/lib/nutritionMath";
 import type { ScalableRecipe } from "@/lib/ScalableRecipe";
@@ -144,9 +145,12 @@ export default function NutritionPanel({
           shows every Schema.org nutrient (absent ones as an em dash); the grid
           shows the curated six and omits what's missing. */}
       {view === "label" ? (
-        <NutritionLinearLabel
-          values={nutrition}
+        // No servingCaption: nutritionUnitLabel is already a phrase ("per 114 g
+        // serving"), which "Serving size" would turn into a stutter.
+        <NutritionFactsLabel
+          data={recipeNutritionRows(nutrition)}
           servingLabel={recipe.nutritionUnitLabel}
+          layout="tabular"
         />
       ) : (
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm">

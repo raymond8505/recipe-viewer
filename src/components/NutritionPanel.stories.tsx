@@ -98,14 +98,16 @@ export const PartialData: Story = {
 };
 
 /**
- * The "Full label" view: the same resolved values on the same basis, laid out
- * as an FDA linear-display label. Where the grid shows a curated six and omits
- * what's missing, the label shows every Schema.org nutrient — so sugars,
- * saturated/unsaturated fat and cholesterol appear here and nowhere else.
+ * The "Full label" view at the default 480px panel width. The label's layout
+ * switch is a container query, so at this size it renders the vertical FDA
+ * panel — the same fallback cooking mode gets. Where the grid shows a curated
+ * six and omits what's missing, the label shows every Schema.org nutrient, so
+ * sugars, saturated/unsaturated fat and cholesterol appear here and nowhere
+ * else.
  *
  * `view` is internal panel state, so the click genuinely changes what's shown.
  */
-export const LinearLabelView: Story = {
+export const FullLabelView: Story = {
   args: {
     initial: makeScalableRecipe({
       recipeIngredient: undefined,
@@ -119,11 +121,36 @@ export const LinearLabelView: Story = {
 };
 
 /**
+ * The same view in a panel wide enough for the FDA tabular display: identity
+ * and Calories on the left, the nutrient groups as columns, minerals along the
+ * foot. This is what the recipe page shows on a desktop.
+ */
+export const FullLabelWide: Story = {
+  args: {
+    initial: makeScalableRecipe({
+      recipeIngredient: undefined,
+      recipeYield: "4 servings",
+      nutrition: fullNutrition,
+    }),
+  },
+  decorators: [
+    (Story) => (
+      <div style={{ width: 760 }}>
+        <Story />
+      </div>
+    ),
+  ],
+  play: async ({ canvas }) => {
+    await userEvent.click(canvas.getByRole("button", { name: "Full label" }));
+  },
+};
+
+/**
  * The label on a recipe that tracks almost nothing. The em-dash run is the
  * point: absent ≠ zero, and seeing which slots are empty is information the
  * summary grid can't convey (it simply omits the missing stats).
  */
-export const LinearLabelSparse: Story = {
+export const FullLabelSparse: Story = {
   args: {
     initial: makeScalableRecipe({
       recipeIngredient: undefined,

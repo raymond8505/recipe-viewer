@@ -269,7 +269,8 @@ describe("NutritionPanel — summary/label view toggle", () => {
     fireEvent.click(smaller);
     fireEvent.click(smaller);
 
-    expect(screen.getByText("260 kcal")).toBeTruthy();
+    // Unit-less: on the label Calories is the big display number.
+    expect(screen.getByText("260")).toBeTruthy();
     expect(screen.getAllByText("per portion")).toHaveLength(2);
     // Still in label view — a portion change must not reset the toggle.
     expect(screen.getByText("Nutrition Facts")).toBeTruthy();
@@ -283,8 +284,11 @@ describe("NutritionPanel — summary/label view toggle", () => {
     });
     render(<Harness initial={r} />);
     fireEvent.click(screen.getByRole("button", { name: "Full label" }));
-    expect(screen.getByText("350 kcal")).toBeTruthy();
-    expect(screen.getAllByText("—")).toHaveLength(9);
+    // Calories is the label's big display number, so it drops its unit.
+    expect(screen.getByText("350")).toBeTruthy();
+    // 9 nutrient rows plus the three minerals, which the recipe path can never
+    // supply (no Schema.org slot) and so are always em dashes here.
+    expect(screen.getAllByText("—")).toHaveLength(12);
   });
 
   it("offers no toggle in the no-nutrition shell", () => {
