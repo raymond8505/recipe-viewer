@@ -192,15 +192,6 @@ export default function RecipeControls({
                   {/* The underline moves to the wrapper so it spans the input
                       and the open-link button as one field. */}
                   <div className="flex items-center border-b border-gray-200 focus-within:border-brand">
-                    <input
-                      id="recipe-source-url"
-                      type="url"
-                      value={draftUrl}
-                      onChange={(e) => onUrlChange(e.target.value)}
-                      disabled={editState === "saving"}
-                      placeholder="https://example.com/recipe"
-                      className="flex-1 min-w-0 rounded-none border-0 px-3 py-2 text-sm text-gray-700 focus:outline-hidden disabled:opacity-60"
-                    />
                     {/* `invisible` rather than unmounted, so the input keeps its
                         width while a URL is being typed. An <a> with no href is
                         already inert — not focusable, not exposed as a link —
@@ -217,6 +208,15 @@ export default function RecipeControls({
                     >
                       <ExternalLinkIcon />
                     </a>
+                    <input
+                      id="recipe-source-url"
+                      type="url"
+                      value={draftUrl}
+                      onChange={(e) => onUrlChange(e.target.value)}
+                      disabled={editState === "saving"}
+                      placeholder="https://example.com/recipe"
+                      className="flex-1 min-w-0 rounded-none border-0 px-3 py-2 text-sm text-gray-700 focus:outline-hidden disabled:opacity-60"
+                    />
                   </div>
                 </div>
                 <div>
@@ -229,6 +229,12 @@ export default function RecipeControls({
                   {/* Same input+trailing-control shape as the URL field, so
                       the two halves of the group stay visually symmetric. */}
                   <div className="flex items-center gap-2 border-b border-gray-200 focus-within:border-brand">
+                    <SetCustomSourceButton
+                      value={draftSource}
+                      disabled={editState === "saving"}
+                      onClick={() => onSourceChange(CUSTOM_RECIPE_SOURCE)}
+                      className="mb-1"
+                    />
                     <input
                       id="recipe-source"
                       type="text"
@@ -244,12 +250,6 @@ export default function RecipeControls({
                     <datalist id="recipe-source-options">
                       <option value={CUSTOM_RECIPE_SOURCE} />
                     </datalist>
-                    <SetCustomSourceButton
-                      value={draftSource}
-                      disabled={editState === "saving"}
-                      onClick={() => onSourceChange(CUSTOM_RECIPE_SOURCE)}
-                      className="mb-1"
-                    />
                   </div>
                 </div>
               </div>
