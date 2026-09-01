@@ -20,8 +20,14 @@ export const POST = requireSessionOrRecipeToken(
       schema: SchemaRecipe;
       status: RecipeStatus;
       url?: string;
+      source?: string;
     };
     const effectiveUrl = body.url ?? recipe.url;
+    // A blank source degrades to "no change" rather than clearing the column —
+    // isOwnRecipe and the browse filter both read it, and an empty string is
+    // never a meaningful provenance. Mirrors how the editor treats an invalid
+    // servings input: never blocks the save, just doesn't apply.
+    const effectiveSource = body.source?.trim() || recipe.source;
 
     // recomputes the markdown `content` column and the search embedding from
     // the saved schema.
@@ -29,6 +35,7 @@ export const POST = requireSessionOrRecipeToken(
     try {
       saved = await updateRecipeRow(id, {
         url: effectiveUrl,
+        source: effectiveSource,
         schema: body.schema,
         status: body.status,
       });
@@ -44,6 +51,7 @@ export const POST = requireSessionOrRecipeToken(
     return NextResponse.json({
       schema: saved.metadata.schema,
       status: saved.status,
+      source: saved.source,
     });
   },
 );

@@ -11,6 +11,7 @@ const meta: Meta<typeof RecipeControls> = {
     editState: "idle",
     canSave: true,
     draftUrl: "https://example.com/recipe",
+    draftSource: "example.com",
     draftStatus: "published",
     isRescrapeReview: false,
     isRegenImageReview: false,

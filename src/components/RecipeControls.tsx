@@ -3,6 +3,7 @@
 import { useState, type ChangeEvent, type MutableRefObject } from "react";
 import type { OpState } from "@/hooks/useUndoableSchemaOp";
 import type { EditState } from "@/hooks/useRecipeEditor";
+import { CUSTOM_RECIPE_SOURCE } from "@/lib/format";
 import { ALLOWED_IMAGE_CONTENT_TYPES } from "@/lib/imageTypes";
 import { Button } from "@/components/ui/button";
 import ConfirmBar from "@/components/ConfirmBar";
@@ -38,10 +39,12 @@ export interface RecipeControlsProps {
   isEditing: boolean;
   editState: EditState;
   canSave: boolean;
-  /** Edit-mode source URL + status fields. */
+  /** Edit-mode source URL + source + status fields. */
   draftUrl: string;
+  draftSource: string;
   draftStatus: string;
   onUrlChange: (value: string) => void;
+  onSourceChange: (value: string) => void;
   onStatusChange: (value: string) => void;
   /** Review banners shown when an op pre-populated the editor for confirmation. */
   isRescrapeReview: boolean;
@@ -86,8 +89,10 @@ export default function RecipeControls({
   editState,
   canSave,
   draftUrl,
+  draftSource,
   draftStatus,
   onUrlChange,
+  onSourceChange,
   onStatusChange,
   isRescrapeReview,
   isRegenImageReview,
@@ -171,6 +176,34 @@ export default function RecipeControls({
                 placeholder="https://example.com/recipe"
                 className="w-full rounded-none border-0 border-b border-gray-200 px-3 py-2 text-sm text-gray-700 focus:outline-hidden focus:border-brand disabled:opacity-60"
               />
+            </div>
+            <div className="w-full mb-1">
+              <label
+                htmlFor="recipe-source"
+                className="block text-xs font-medium text-gray-500 mb-1"
+              >
+                Source
+              </label>
+              <input
+                id="recipe-source"
+                type="text"
+                value={draftSource}
+                onChange={(e) => onSourceChange(e.target.value)}
+                disabled={editState === "saving"}
+                placeholder="seriouseats.com"
+                list="recipe-source-options"
+                className="w-full rounded-none border-0 border-b border-gray-200 px-3 py-2 text-sm text-gray-700 focus:outline-hidden focus:border-brand disabled:opacity-60"
+              />
+              <datalist id="recipe-source-options">
+                <option value={CUSTOM_RECIPE_SOURCE} />
+              </datalist>
+              {/* This field is not just a label: isOwnRecipe reads it, so the
+                  one value with behaviour attached is spelled out rather than
+                  left for the user to guess. */}
+              <p className="mt-1 text-xs text-gray-400">
+                Where the recipe came from. Use &ldquo;{CUSTOM_RECIPE_SOURCE}
+                &rdquo; for your own recipes — those hide the Re-scrape button.
+              </p>
             </div>
             <select
               value={draftStatus}

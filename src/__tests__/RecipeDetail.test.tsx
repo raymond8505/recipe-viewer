@@ -837,6 +837,92 @@ describe("RecipeDetail — controls section", () => {
     expect(input.value).toBe("https://example.com");
   });
 
+  it("shows Source input pre-filled with recipe.source in edit mode", async () => {
+    render(
+      <RecipeDetail
+        recipe={makeRecipe({}, { source: "seriouseats.com" })}
+        isLoggedIn={true}
+      />,
+    );
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /^edit$/i }));
+    });
+    expect((screen.getByLabelText("Source") as HTMLInputElement).value).toBe(
+      "seriouseats.com",
+    );
+  });
+
+  it("includes the edited source in the save request body", async () => {
+    const mockFetch = vi
+      .fn()
+      .mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            schema: rescrapeFixture,
+            status: "draft",
+            source: "custom",
+          }),
+          { status: 200 },
+        ),
+      );
+    vi.stubGlobal("fetch", mockFetch);
+
+    render(<RecipeDetail recipe={makeRecipe()} isLoggedIn={true} />);
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /^edit$/i }));
+    });
+    await act(async () => {
+      fireEvent.change(screen.getByLabelText("Source"), {
+        target: { value: "custom" },
+      });
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /^save$/i }));
+    });
+
+    await waitFor(() => expect(mockFetch).toHaveBeenCalled());
+    expect(JSON.parse(mockFetch.mock.calls[0][1].body).source).toBe("custom");
+  });
+
+  // The whole point of making source editable: switching a recipe to "custom"
+  // must retire Re-scrape straight away. The `recipe` prop is a server-render
+  // snapshot that never changes, so this only works because RecipeDetail tracks
+  // source in state and re-seeds it from the save response.
+  it("drops the Re-scrape button after saving source as custom", async () => {
+    const mockFetch = vi
+      .fn()
+      .mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            schema: rescrapeFixture,
+            status: "draft",
+            source: "custom",
+          }),
+          { status: 200 },
+        ),
+      );
+    vi.stubGlobal("fetch", mockFetch);
+
+    render(<RecipeDetail recipe={makeRecipe()} isLoggedIn={true} />);
+    expect(screen.getByRole("button", { name: /re-scrape/i })).toBeTruthy();
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /^edit$/i }));
+    });
+    await act(async () => {
+      fireEvent.change(screen.getByLabelText("Source"), {
+        target: { value: "custom" },
+      });
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /^save$/i }));
+    });
+
+    await waitFor(() =>
+      expect(screen.queryByRole("button", { name: /re-scrape/i })).toBeNull(),
+    );
+  });
+
   it("includes url in the save request body", async () => {
     const mockFetch = vi
       .fn()
