@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { renderHook, act } from "@testing-library/react";
-import { useTimers, loadTimers, saveTimers, stopAlarm, timerState } from "@/hooks/useTimers";
+import { useTimers, loadTimers, saveTimers, stopAlarm, timerState, editorSeconds } from "@/hooks/useTimers";
 import { hashUrl } from "@/lib/hash";
 
 // Stub AudioContext so playAlarm / beep don't throw in jsdom
@@ -39,6 +39,21 @@ describe("timerState", () => {
   });
   it("returns finished when remaining is 0 and finished", () => {
     expect(timerState(makeStoredTimer({ remaining: 0, finished: true }))).toBe("finished");
+  });
+});
+
+describe("editorSeconds", () => {
+  it("uses the time left for a running timer", () => {
+    expect(editorSeconds(makeStoredTimer({ remaining: 245 }))).toBe(245);
+  });
+  it("uses the full duration for a paused timer", () => {
+    expect(editorSeconds(makeStoredTimer({ remaining: 245, paused: true }))).toBe(600);
+  });
+  it("uses the full duration for a ringing timer", () => {
+    expect(editorSeconds(makeStoredTimer({ remaining: 0 }))).toBe(600);
+  });
+  it("uses the full duration for a finished timer", () => {
+    expect(editorSeconds(makeStoredTimer({ remaining: 0, finished: true }))).toBe(600);
   });
 });
 
@@ -127,16 +142,39 @@ describe("useTimers", () => {
     expect(t.paused).toBe(true);
   });
 
-  it("editTimer leaves the countdown alone when only the label changes", () => {
+  it("editTimer with a null duration leaves the countdown alone (label-only edit)", () => {
     const { result } = renderHook(() => useTimers(RECIPE_URL));
     act(() => { result.current.addTimer("Old Label", 600); });
     act(() => { vi.advanceTimersByTime(5000); }); // remaining = 595
     const id = result.current.timers[0].id;
-    act(() => { result.current.editTimer(id, "New Label", 600); });
+    act(() => { result.current.editTimer(id, "New Label", null); });
     const t = result.current.timers[0];
     expect(t.label).toBe("New Label");
+    expect(t.duration).toBe(600);
     expect(t.remaining).toBe(595); // cooking progress preserved
     expect(t.paused).toBe(false);
+  });
+
+  it("editTimer restarts even when the new duration equals the stored one", () => {
+    // A running timer is edited from its remaining time, so re-submitting the full duration
+    // is a real change the cook made — it must not be mistaken for an untouched field.
+    const { result } = renderHook(() => useTimers(RECIPE_URL));
+    act(() => { result.current.addTimer("Pasta", 600); });
+    act(() => { vi.advanceTimersByTime(5000); }); // remaining = 595
+    const id = result.current.timers[0].id;
+    act(() => { result.current.editTimer(id, "Pasta", 600); });
+    expect(result.current.timers[0].remaining).toBe(600);
+  });
+
+  it("editTimer with a null duration leaves a ringing alarm ringing", () => {
+    const { result } = renderHook(() => useTimers(RECIPE_URL));
+    act(() => { result.current.addTimer("Pasta", 1); });
+    act(() => { vi.advanceTimersByTime(2000); });
+    const id = result.current.timers[0].id;
+    act(() => { result.current.editTimer(id, "Renamed", null); });
+    const t = result.current.timers[0];
+    expect(t.label).toBe("Renamed");
+    expect(timerState(t)).toBe("alarm");
   });
 
   it("editTimer stops a ringing timer at the new duration", () => {
