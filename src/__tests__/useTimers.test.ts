@@ -101,7 +101,7 @@ describe("useTimers", () => {
     expect(t.remaining).toBe(300);
   });
 
-  it("editTimer updates label and duration without touching remaining", () => {
+  it("editTimer restarts a running timer at the new duration and keeps it running", () => {
     const { result } = renderHook(() => useTimers(RECIPE_URL));
     act(() => { result.current.addTimer("Old Label", 600); });
     act(() => { vi.advanceTimersByTime(5000); }); // remaining = 595
@@ -110,7 +110,71 @@ describe("useTimers", () => {
     const t = result.current.timers[0];
     expect(t.label).toBe("New Label");
     expect(t.duration).toBe(900);
-    expect(t.remaining).toBe(595); // unchanged
+    expect(t.remaining).toBe(900);
+    expect(t.paused).toBe(false);
+    act(() => { vi.advanceTimersByTime(2000); });
+    expect(result.current.timers[0].remaining).toBe(898); // still ticking
+  });
+
+  it("editTimer restarts a paused timer at the new duration and leaves it paused", () => {
+    const { result } = renderHook(() => useTimers(RECIPE_URL));
+    act(() => { result.current.addTimer("Pasta", 600); });
+    const id = result.current.timers[0].id;
+    act(() => { result.current.togglePause(id); });
+    act(() => { result.current.editTimer(id, "Pasta", 900); });
+    const t = result.current.timers[0];
+    expect(t.remaining).toBe(900);
+    expect(t.paused).toBe(true);
+  });
+
+  it("editTimer leaves the countdown alone when only the label changes", () => {
+    const { result } = renderHook(() => useTimers(RECIPE_URL));
+    act(() => { result.current.addTimer("Old Label", 600); });
+    act(() => { vi.advanceTimersByTime(5000); }); // remaining = 595
+    const id = result.current.timers[0].id;
+    act(() => { result.current.editTimer(id, "New Label", 600); });
+    const t = result.current.timers[0];
+    expect(t.label).toBe("New Label");
+    expect(t.remaining).toBe(595); // cooking progress preserved
+    expect(t.paused).toBe(false);
+  });
+
+  it("editTimer stops a ringing timer at the new duration", () => {
+    const { result } = renderHook(() => useTimers(RECIPE_URL));
+    act(() => { result.current.addTimer("Pasta", 1); });
+    act(() => { vi.advanceTimersByTime(2000); }); // alarm: remaining 0, not dismissed
+    const id = result.current.timers[0].id;
+    expect(timerState(result.current.timers[0])).toBe("alarm");
+    act(() => { result.current.editTimer(id, "Pasta", 60); });
+    const t = result.current.timers[0];
+    expect(t.remaining).toBe(60);
+    expect(t.paused).toBe(true);
+    expect(t.finished).toBe(false);
+    expect(timerState(t)).toBe("paused");
+  });
+
+  it("editTimer stops a finished (dismissed) timer at the new duration", () => {
+    const { result } = renderHook(() => useTimers(RECIPE_URL));
+    act(() => { result.current.addTimer("Pasta", 1); });
+    act(() => { vi.advanceTimersByTime(2000); });
+    const id = result.current.timers[0].id;
+    act(() => { result.current.dismissTimer(id); });
+    act(() => { result.current.editTimer(id, "Pasta", 60); });
+    const t = result.current.timers[0];
+    expect(t.remaining).toBe(60);
+    expect(t.paused).toBe(true);
+    expect(t.finished).toBe(false);
+  });
+
+  it("editTimer persists the restarted timer", () => {
+    const { result } = renderHook(() => useTimers(RECIPE_URL));
+    act(() => { result.current.addTimer("Pasta", 600); });
+    act(() => { vi.advanceTimersByTime(5000); });
+    const id = result.current.timers[0].id;
+    act(() => { result.current.editTimer(id, "Pasta", 900); });
+    const [stored] = loadTimers(RECIPE_HASH);
+    expect(stored.duration).toBe(900);
+    expect(stored.remaining).toBe(900);
   });
 
   it("togglePause pauses a running timer", () => {

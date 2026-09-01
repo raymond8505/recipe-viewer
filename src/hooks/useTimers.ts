@@ -143,11 +143,26 @@ export function useTimers(recipeUrl: string) {
     return id;
   }, []);
 
-  // Update label and duration only; does not reset remaining
+  // Changing the duration restarts the timer at it, preserving running/stopped state —
+  // otherwise the edit is invisible until the next reset. A timer that had already hit zero
+  // (ringing or dismissed) comes back stopped, so nothing silently starts counting down.
+  // A label-only edit leaves the countdown — and a ringing alarm — alone.
   const editTimer = useCallback((id: string, label: string, duration: number) => {
     setTimers((prev) => {
-      const updated = prev.map((t) => (t.id === id ? { ...t, label, duration } : t));
+      const updated = prev.map((t) => {
+        if (t.id !== id) return t;
+        if (t.duration === duration) return { ...t, label };
+        return {
+          ...t,
+          label,
+          duration,
+          remaining: duration,
+          paused: t.remaining === 0 ? true : t.paused,
+          finished: false,
+        };
+      });
       saveTimers(hashRef.current, updated);
+      if (!hasActiveAlarm(updated)) stopAlarm();
       return updated;
     });
   }, []);
