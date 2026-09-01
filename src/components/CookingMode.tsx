@@ -13,7 +13,7 @@ import {
 } from "@/lib/format";
 import { useTimers, timerState } from "@/hooks/useTimers";
 import type { Timer } from "@/hooks/useTimers";
-import { ScalableRecipe } from "@/lib/ScalableRecipe";
+import { ScalableRecipe, type NormalizedNutrition } from "@/lib/ScalableRecipe";
 import { useWakeLock } from "@/hooks/useWakeLock";
 import {
   registerCookingModeRecipe,
@@ -45,6 +45,13 @@ interface CookingModeProps {
   recipe: RecipeRow;
   onClose: () => void;
   isLoggedIn?: boolean;
+  // Whether the viewer may see the nutrition source badge: logged in, or running
+  // locally in dev. Separate from `isLoggedIn`, which still gates cooking notes.
+  // Resolved server-side — see src/lib/devAccess.ts.
+  canCurateNutrition?: boolean;
+  // Normalized ingredient nutrition for the PRIMARY recipe only. Meal (added)
+  // recipes keep their schema nutrition — scaling is primary-only here too.
+  normalizedNutrition?: NormalizedNutrition | null;
 }
 
 const TIMER_PRIORITY = {
@@ -63,6 +70,8 @@ export default function CookingMode({
   recipe,
   onClose,
   isLoggedIn = false,
+  canCurateNutrition = isLoggedIn,
+  normalizedNutrition,
 }: CookingModeProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const pendingScrollId = useRef<string | null>(null);
@@ -108,18 +117,26 @@ export default function CookingMode({
   // ingredient scale drives the UI; secondary recipes' scale is intentionally
   // pinned at 1 by suppressing the controls (see below).
   const [scalables, setScalables] = useState<Map<string, ScalableRecipe>>(
-    () => new Map([[recipe.id, new ScalableRecipe(recipe.metadata.schema)]]),
+    () =>
+      new Map([
+        [recipe.id, new ScalableRecipe(recipe.metadata.schema, undefined, normalizedNutrition)],
+      ]),
   );
 
   // When the primary schema is swapped (e.g. window API setRecipeViewerRecipe),
   // rebuild its ScalableRecipe at default state — the previous scale was anchored
-  // to a now-stale yield and would silently produce wrong numbers.
+  // to a now-stale yield and would silently produce wrong numbers. The normalized
+  // total was derived from the original schema, so it only applies while the
+  // schema is unchanged.
   useEffect(() => {
     setScalables((prev) => {
       const next = new Map(prev);
-      next.set(recipe.id, new ScalableRecipe(schema));
+      const normalized =
+        schema === recipe.metadata.schema ? normalizedNutrition : undefined;
+      next.set(recipe.id, new ScalableRecipe(schema, undefined, normalized));
       return next;
     });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [schema, recipe.id]);
 
   const primaryScalable = scalables.get(recipe.id)!;
@@ -731,6 +748,7 @@ export default function CookingMode({
               onSplitPortions={(n) =>
                 updateScalable(recipe.id, (r) => r.splitPortions(n))
               }
+              showSources={canCurateNutrition}
             />
           </div>
         </div>

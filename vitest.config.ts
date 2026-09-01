@@ -8,6 +8,10 @@ export default defineConfig({
     globals: true,
     environment: "jsdom",
     env: { SKIP_ENV_VALIDATION: "1" },
+    // Restore vi.stubEnv between tests. The dev-access bypass (src/lib/devAccess.ts)
+    // is gated on NODE_ENV, so a stub leaking out of one test could silently open
+    // the door in another and make an auth assertion pass for the wrong reason.
+    unstubEnvs: true,
     setupFiles: ["./src/__tests__/setup.ts"],
     include: ["src/**/*.test.{ts,tsx}"],
     alias: {

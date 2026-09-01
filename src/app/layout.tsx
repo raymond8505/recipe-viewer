@@ -4,6 +4,7 @@ import "./globals.css";
 import WindowApiProvider from "@/components/WindowApiProvider";
 import AuthButton from "@/components/AuthButton";
 import { getIsLoggedIn } from "@/lib/auth";
+import { canCurateNutrition } from "@/lib/devAccess";
 import {
   bodyFont,
   headingFont,
@@ -27,6 +28,9 @@ export default async function RootLayout({
   children: React.ReactNode;
 }) {
   const isLoggedIn = await getIsLoggedIn();
+  // The catalog manager is open in local dev; without matching the nav link to
+  // that, /ingredients would work but be undiscoverable.
+  const showIngredientsLink = canCurateNutrition(isLoggedIn);
 
   return (
     <html lang="en" className={`${bodyFont.variable} ${headingFont.variable}`}>
@@ -39,7 +43,17 @@ export default async function RootLayout({
             >
               RECIPES
             </Link>
-            <AuthButton isLoggedIn={isLoggedIn} />
+            <div className="flex items-center gap-4">
+              {showIngredientsLink && (
+                <Link
+                  href="/ingredients"
+                  className="text-sm text-muted-foreground hover:text-foreground transition"
+                >
+                  Ingredients
+                </Link>
+              )}
+              <AuthButton isLoggedIn={isLoggedIn} />
+            </div>
           </div>
         </header>
         <WindowApiProvider />

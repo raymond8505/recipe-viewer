@@ -3,6 +3,7 @@
 import { useState } from "react";
 import dynamic from "next/dynamic";
 import type { RecipeRow } from "@/types/recipe";
+import type { NormalizedNutrition } from "@/lib/ScalableRecipe";
 import { CookButton } from "@/components/buttons";
 
 // Cook mode is a heavy, secondary feature (CookingMode pulls in timers, meal
@@ -14,16 +15,32 @@ const CookingMode = dynamic(() => import("./CookingMode"), { ssr: false });
 interface CookingModeButtonProps {
   recipe: RecipeRow;
   isLoggedIn?: boolean;
+  // Transport only — see the prop of the same name on RecipeDetail/CookingMode.
+  canCurateNutrition?: boolean;
+  // Primary recipe's normalized ingredient nutrition, threaded through to the
+  // cook-mode nutrition panel (primary recipe only).
+  normalizedNutrition?: NormalizedNutrition | null;
 }
 
-export default function CookingModeButton({ recipe, isLoggedIn = false }: CookingModeButtonProps) {
+export default function CookingModeButton({
+  recipe,
+  isLoggedIn = false,
+  canCurateNutrition = isLoggedIn,
+  normalizedNutrition,
+}: CookingModeButtonProps) {
   const [isOpen, setIsOpen] = useState(false);
 
   return (
     <>
       <CookButton onClick={() => setIsOpen(true)} />
       {isOpen && (
-        <CookingMode recipe={recipe} isLoggedIn={isLoggedIn} onClose={() => setIsOpen(false)} />
+        <CookingMode
+          recipe={recipe}
+          isLoggedIn={isLoggedIn}
+          canCurateNutrition={canCurateNutrition}
+          normalizedNutrition={normalizedNutrition}
+          onClose={() => setIsOpen(false)}
+        />
       )}
     </>
   );

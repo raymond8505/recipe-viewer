@@ -5,8 +5,13 @@ const NextImage = ({
   alt,
   fill: _fill,
   priority: _priority,
+  unoptimized: _unoptimized,
   ...props
-}: React.ImgHTMLAttributes<HTMLImageElement> & { fill?: boolean; priority?: boolean }) => {
+}: React.ImgHTMLAttributes<HTMLImageElement> & {
+  fill?: boolean;
+  priority?: boolean;
+  unoptimized?: boolean;
+}) => {
   // eslint-disable-next-line @next/next/no-img-element
   return <img src={src as string} alt={alt} {...props} />;
 };

@@ -14,6 +14,7 @@ import type {
   SchemaRecipe,
 } from "@/types/recipe";
 import { rescrapeFixture } from "@/fixtures/rescrape";
+import { clickAndConfirm } from "./helpers/confirmBar";
 
 function makeRecipe(schema: Partial<SchemaRecipe> = {}): RecipeRow {
   return {
@@ -28,19 +29,6 @@ function makeRecipe(schema: Partial<SchemaRecipe> = {}): RecipeRow {
       },
     },
   };
-}
-
-/**
- * Click a Manage-toolbar action twice: once to raise the confirm bar, once to
- * confirm it.
- */
-async function clickAndConfirm(name: RegExp, confirmName: RegExp = name) {
-  await act(async () => {
-    fireEvent.click(screen.getByRole("button", { name }));
-  });
-  await act(async () => {
-    fireEvent.click(screen.getByRole("button", { name: confirmName }));
-  });
 }
 
 describe("RecipeDetail", () => {
@@ -183,9 +171,11 @@ describe("RecipeDetail", () => {
       />,
     );
     expect(screen.getByText("350 kcal")).toBeTruthy();
-    expect(screen.getByText("20g")).toBeTruthy();
-    expect(screen.getByText("40g")).toBeTruthy();
-    expect(screen.getByText("10g")).toBeTruthy();
+    // Attached units ("20g") normalize to spaced display — values are
+    // re-rendered from parsed NutrientValues, not echoed from the raw string.
+    expect(screen.getByText("20 g")).toBeTruthy();
+    expect(screen.getByText("40 g")).toBeTruthy();
+    expect(screen.getByText("10 g")).toBeTruthy();
   });
 
   it("hides nutrition section when only non-counted fields are present (e.g. servingSize)", () => {
@@ -319,13 +309,11 @@ describe("RecipeDetail — shopping list", () => {
     );
     fireEvent.click(screen.getByRole("checkbox", { name: "2 cups flour" }));
     fireEvent.click(screen.getByRole("checkbox", { name: "1 tsp salt" }));
-    fireEvent.click(
-      screen.getByRole("button", { name: /copy shopping list/i }),
-    );
-    await vi.waitFor(() => {
-      expect(navigator.clipboard.writeText).toHaveBeenCalledWith(
-        "2 cups flour\n1 tsp salt",
-      );
+    fireEvent.click(screen.getByRole("button", { name: /copy shopping list/i }));
+    // RTL's waitFor (not vi.waitFor): it suspends the act environment while
+    // polling, so the post-clipboard "copied" state update doesn't warn.
+    await waitFor(() => {
+      expect(navigator.clipboard.writeText).toHaveBeenCalledWith("2 cups flour\n1 tsp salt");
     });
   });
 
@@ -382,13 +370,56 @@ describe("RecipeDetail — controls section", () => {
     expect(screen.getByRole("button", { name: /re-scrape/i })).toBeTruthy();
   });
 
-  // Each of these fires a webhook the moment it is invoked, so a misclick is
-  // unrecoverable spend. Both do have an after-the-fact review to back out of,
-  // but by then the external call has already been paid for — nothing may reach
-  // the network until the second, deliberate click.
+  it("links to the nutrition breakdown only when logged in", () => {
+    const { unmount } = render(
+      <RecipeDetail recipe={makeRecipe()} isLoggedIn={true} />,
+    );
+    expect(
+      screen.getByRole("link", { name: "Ingredient breakdown" }),
+    ).toHaveAttribute("href", "/recipes/1/ingredients");
+    unmount();
+
+    render(<RecipeDetail recipe={makeRecipe()} isLoggedIn={false} />);
+    expect(screen.queryByRole("link", { name: "Ingredient breakdown" })).toBeNull();
+  });
+
+  // The whole contract of the dev-only nutrition door in one case: the nutrition
+  // layer opens for a logged-out viewer, and the edit surface does NOT come with
+  // it. The server page passes canCurateNutrition (resolved from NODE_ENV) — this
+  // component just honours it, so no env stubbing is needed here.
+  it("opens nutrition — but not editing — when canCurateNutrition without a login", () => {
+    render(
+      <RecipeDetail
+        recipe={makeRecipe()}
+        isLoggedIn={false}
+        canCurateNutrition={true}
+      />,
+    );
+
+    expect(
+      screen.getByRole("link", { name: "Ingredient breakdown" }),
+    ).toHaveAttribute("href", "/recipes/1/ingredients");
+    expect(screen.queryByRole("button", { name: /^edit$/i })).toBeNull();
+    expect(screen.queryByRole("button", { name: /re-scrape/i })).toBeNull();
+  });
+
+  it("defaults canCurateNutrition to isLoggedIn — curation is never wider than login by accident", () => {
+    render(<RecipeDetail recipe={makeRecipe()} isLoggedIn={true} />);
+    expect(
+      screen.getByRole("link", { name: "Ingredient breakdown" }),
+    ).toHaveAttribute("href", "/recipes/1/ingredients");
+  });
+
+  // Each of these fires a webhook or queues a model run the moment it is
+  // invoked, so a misclick is unrecoverable spend. Re-scrape and regen-image
+  // do have an after-the-fact review to back out of, but by then the external
+  // call has already been paid for; Normalize has no undo at all — nothing may
+  // reach the network until the second, deliberate click.
+  // `/^normalize$/i` is anchored so it doesn't also match "Normalizing…".
   const EXPENSIVE_ACTIONS: [string, RegExp, RegExp][] = [
     ["Re-scrape", /re-scrape/i, /re-fetches and re-parses the source page/i],
     ["Regen Image", /regen image/i, /replaces the current image/i],
+    ["Normalize", /^normalize$/i, /re-parses every ingredient line/i],
   ];
 
   it.each(EXPENSIVE_ACTIONS)(
@@ -428,6 +459,19 @@ describe("RecipeDetail — controls section", () => {
     },
   );
 
+  it("queues normalization once the confirm is accepted", async () => {
+    const mockFetch = vi
+      .fn()
+      .mockResolvedValue(new Response(JSON.stringify({}), { status: 200 }));
+    vi.stubGlobal("fetch", mockFetch);
+
+    render(<RecipeDetail recipe={makeRecipe()} isLoggedIn={true} />);
+    await clickAndConfirm(/^normalize$/i);
+
+    await waitFor(() => expect(mockFetch).toHaveBeenCalledTimes(1));
+    expect(String(mockFetch.mock.calls[0][0])).toContain("/normalize");
+  });
+
   it("shows loading state while re-scraping", async () => {
     let resolve: (value: Response) => void;
     const pending = new Promise<Response>((res) => {
@@ -441,11 +485,11 @@ describe("RecipeDetail — controls section", () => {
     expect(screen.getByRole("button", { name: /re-scraping/i })).toBeTruthy();
     expect(screen.getByRole("button", { name: /re-scraping/i })).toBeDisabled();
 
-    resolve!(
-      new Response(JSON.stringify({ schema: rescrapeFixture }), {
-        status: 200,
-      }),
-    );
+    // Flush the response continuation (json parse + state updates) inside act
+    // so the post-resolve setState doesn't fire after the test as a warning.
+    await act(async () => {
+      resolve!(new Response(JSON.stringify({ schema: rescrapeFixture }), { status: 200 }));
+    });
   });
 
   it("enters edit mode with rescraped data after a successful re-scrape", async () => {

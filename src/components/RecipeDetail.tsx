@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import Image from "next/image";
 import type {
   RecipeRow,
@@ -16,10 +16,13 @@ import {
   getIngredientText,
   toSchemaOrgJsonLd,
 } from "@/lib/format";
+import { ScalableRecipe, type NormalizedNutrition } from "@/lib/ScalableRecipe";
+import { nutrientValuesToSchema } from "@/lib/nutritionMath";
 import { useScalableRecipe } from "@/hooks/useScalableRecipe";
 import { useRecipeEditor } from "@/hooks/useRecipeEditor";
-import { useUndoableSchemaOp } from "@/hooks/useUndoableSchemaOp";
+import { useUndoableSchemaOp, type OpState } from "@/hooks/useUndoableSchemaOp";
 import { useImageUpload } from "@/hooks/useImageUpload";
+import { normalizeRecipe } from "@/lib/api/recipes";
 import { DEFAULT_MAX_IMAGE_BYTES } from "@/lib/imageTypes";
 import CookingModeButton from "./CookingModeButton";
 import RecipeControls from "./RecipeControls";
@@ -35,16 +38,29 @@ import { Textarea } from "@/components/ui/textarea";
 interface RecipeDetailProps {
   recipe: RecipeRow;
   isLoggedIn?: boolean;
+  // Whether the viewer may see and curate the nutrition layer: logged in, or
+  // running locally in dev where that layer is open. Distinct from `isLoggedIn`
+  // because that still gates the edit controls, which stay login-only. Resolved
+  // by the server page — client components must not read NODE_ENV themselves
+  // (Storybook runs in development). See src/lib/devAccess.ts.
+  canCurateNutrition?: boolean;
   // Upload size cap, passed down from the server page (env.MAX_IMAGE_BYTES).
   // Client components can't import @/env — t3-env throws on server-var
   // access in the browser — so the prop is the only wiring.
   maxImageBytes?: number;
+  // The recipe's normalized ingredient nutrition, computed server-side. When
+  // fully covered it's preferred over the schema's own nutrition fields.
+  normalizedNutrition?: NormalizedNutrition | null;
 }
 
 export default function RecipeDetail({
   recipe,
   isLoggedIn = false,
+  // Defaults to `isLoggedIn` so the safe direction is the default and the
+  // "curation ⊇ login" invariant holds even for callers unaware of the prop.
+  canCurateNutrition = isLoggedIn,
   maxImageBytes = DEFAULT_MAX_IMAGE_BYTES,
+  normalizedNutrition,
 }: RecipeDetailProps) {
   const [schema, setSchema] = useState(recipe.metadata.schema);
   const [status, setStatus] = useState(recipe.status ?? "draft");
@@ -53,12 +69,24 @@ export default function RecipeDetail({
   const cookTime = formatDuration(schema.cookTime);
   const totalTime = formatDuration(schema.totalTime);
   const categories = toArray(schema.recipeCategory);
+  // The normalized total was computed against the original, unedited schema; a
+  // client-side edit/re-scrape swaps `schema`, invalidating it — so only apply
+  // it while the schema is still the one it was derived from.
+  const normalizedForSchema =
+    schema === recipe.metadata.schema ? normalizedNutrition : undefined;
   const {
     recipe: scalable,
     scalePortionsTo,
     splitPortions,
     anchorIngredientAmount,
-  } = useScalableRecipe(schema);
+  } = useScalableRecipe(schema, normalizedForSchema);
+  // JSON-LD serializes the base per-serving nutrition. A default-state
+  // instance keeps it independent of the user's live scale/split (which
+  // `scalable` tracks).
+  const jsonLdNutrition = useMemo(
+    () => new ScalableRecipe(schema, undefined, normalizedForSchema ?? null).nutrition(),
+    [schema, normalizedForSchema],
+  );
 
   // Edit buffer + the two undoable schema operations (re-scrape / regen image)
   // + image-upload staging each own their slice of state in a dedicated hook;
@@ -92,6 +120,20 @@ export default function RecipeDetail({
       [recipe.id],
     ),
   );
+
+  // Manual ingredient normalization — fire-and-forget: the route queues a
+  // background re-run and returns immediately, so there's no schema to review
+  // (unlike rescrape/regenImage). A plain op-state drives the button feedback.
+  const [normalizeState, setNormalizeState] = useState<OpState>("idle");
+  const handleNormalize = useCallback(async () => {
+    setNormalizeState("loading");
+    try {
+      await normalizeRecipe(recipe.id);
+      setNormalizeState("success");
+    } catch {
+      setNormalizeState("error");
+    }
+  }, [recipe.id]);
 
   // Shopping list
   const [selectedIngredients, setSelectedIngredients] = useState<Set<string>>(
@@ -231,7 +273,12 @@ export default function RecipeDetail({
                 <h1 className="text-3xl sm:text-4xl text-gray-900 leading-tight">
                   {schema.name}
                 </h1>
-                <CookingModeButton recipe={recipe} isLoggedIn={isLoggedIn} />
+                <CookingModeButton
+                  recipe={recipe}
+                  isLoggedIn={isLoggedIn}
+                  canCurateNutrition={canCurateNutrition}
+                  normalizedNutrition={normalizedNutrition}
+                />
               </>
             )}
           </div>
@@ -312,6 +359,7 @@ export default function RecipeDetail({
             isUploadImageReview={isUploadImageReview}
             rescrapeState={rescrapeState}
             regenImageState={regenImageState}
+            normalizeState={normalizeState}
             canRescrape={isMounted && recipe.url !== window.location.href}
             uploadError={imageUpload.error}
             fileInputRef={fileInputRef}
@@ -320,6 +368,7 @@ export default function RecipeDetail({
             onEditCancel={handleEditCancel}
             onRescrape={handleRescrape}
             onRegenImage={handleRegenImage}
+            onNormalize={handleNormalize}
             onUploadOpen={imageUpload.open}
             onFileSelected={handleFileSelected}
           />
@@ -463,16 +512,32 @@ export default function RecipeDetail({
         )}
 
         {/* Nutrition */}
-        <NutritionPanel recipe={scalable} onSplitPortions={splitPortions} />
+        <NutritionPanel
+          recipe={scalable}
+          onSplitPortions={splitPortions}
+          ingredientsHref={
+            canCurateNutrition ? `/recipes/${recipe.id}/ingredients` : undefined
+          }
+          showSources={canCurateNutrition}
+        />
 
-        {/* JSON-LD — Schema.org-compliant only; escape </script> sequences to prevent tag injection */}
+        {/* JSON-LD — Schema.org-compliant only; escape </script> sequences to prevent tag injection.
+            Nutrition comes from the recipe's single resolved view (ScalableRecipe.nutrition). */}
         <script
           type="application/ld+json"
           dangerouslySetInnerHTML={{
-            __html: JSON.stringify(toSchemaOrgJsonLd(schema), null, 2).replace(
-              /</g,
-              "\\u003c",
-            ),
+            __html: JSON.stringify(
+              toSchemaOrgJsonLd(schema, {
+                nutritionOverride: jsonLdNutrition
+                  ? {
+                      "@type": "NutritionInformation",
+                      ...nutrientValuesToSchema(jsonLdNutrition.values),
+                    }
+                  : undefined,
+              }),
+              null,
+              2,
+            ).replace(/</g, "\\u003c"),
           }}
         />
       </div>

@@ -17,6 +17,7 @@ const meta: Meta<typeof RecipeControls> = {
     isUploadImageReview: false,
     rescrapeState: "idle",
     regenImageState: "idle",
+    normalizeState: "idle",
     canRescrape: true,
     uploadError: false,
     fileInputRef: { current: null },
@@ -27,6 +28,7 @@ const meta: Meta<typeof RecipeControls> = {
     onEditCancel: fn(),
     onRescrape: fn(),
     onRegenImage: fn(),
+    onNormalize: fn(),
     onUploadOpen: fn(),
     onFileSelected: fn(),
   },
@@ -35,7 +37,7 @@ const meta: Meta<typeof RecipeControls> = {
 export default meta;
 type Story = StoryObj<typeof RecipeControls>;
 
-/** Default (not editing): Edit / Re-scrape / Regen Image / Upload Image. */
+/** Default (not editing): Edit / Re-scrape / Regen Image / Upload Image / Normalize. */
 export const ViewMode: Story = {};
 
 /**
@@ -61,6 +63,30 @@ export const RegenImageConfirm: Story = {
       canvas.getByText(/replaces the current image/i),
     ).toBeInTheDocument();
   },
+};
+
+/**
+ * The same gate on Normalize. It needs it most of the three: re-scrape and
+ * regen-image land in a review state a misclick can be walked back from, while
+ * this queues a background run and returns with nothing to undo.
+ */
+export const NormalizeConfirm: Story = {
+  play: async ({ canvas }) => {
+    await userEvent.click(canvas.getByRole("button", { name: "Normalize" }));
+    await expect(
+      canvas.getByText(/re-parses every ingredient line/i),
+    ).toBeInTheDocument();
+  },
+};
+
+/** Normalization request in flight — the button reads "Normalizing…" and disables. */
+export const Normalizing: Story = {
+  args: { normalizeState: "loading" },
+};
+
+/** Normalization queued — transient success confirmation next to the button. */
+export const NormalizeQueued: Story = {
+  args: { normalizeState: "success" },
 };
 
 /** Editing: source URL + status + Save/Cancel. */

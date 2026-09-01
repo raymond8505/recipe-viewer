@@ -2,11 +2,15 @@ import { describe, it, expect } from "vitest";
 import {
   formatDuration,
   formatMS,
+  formatNutrientDisplay,
   parseMS,
+  parseNumeric,
+  pluralize,
   formatDate,
   getFirstImage,
   toArray,
   groupIngredients,
+  groupIngredientsWithIndex,
   getIngredientText,
   markdownToInstructions,
   normalizeRecipeInstructions,
@@ -87,6 +91,36 @@ describe("parseMS", () => {
   it("treats blank/garbage as zero", () => {
     expect(parseMS("")).toEqual({ minutes: 0, seconds: 0 });
     expect(parseMS("abc")).toEqual({ minutes: 0, seconds: 0 });
+  });
+});
+
+describe("parseNumeric", () => {
+  it("returns null for an empty (or whitespace-only) string", () => {
+    expect(parseNumeric("")).toBeNull();
+    expect(parseNumeric("   ")).toBeNull();
+  });
+  it("parses integers and decimals", () => {
+    expect(parseNumeric("3.5")).toBe(3.5);
+    expect(parseNumeric(" 42 ")).toBe(42);
+    expect(parseNumeric("0")).toBe(0);
+  });
+  it("returns undefined for unparseable input", () => {
+    expect(parseNumeric("abc")).toBeUndefined();
+    expect(parseNumeric("1.2.3")).toBeUndefined();
+  });
+});
+
+describe("pluralize", () => {
+  it("returns the singular for a count of 1", () => {
+    expect(pluralize(1, "ingredient")).toBe("ingredient");
+  });
+  it("returns the plural for 0 and other counts", () => {
+    expect(pluralize(0, "item")).toBe("items");
+    expect(pluralize(2, "item")).toBe("items");
+  });
+  it("uses an explicit plural when given", () => {
+    expect(pluralize(1, "berry", "berries")).toBe("berry");
+    expect(pluralize(3, "berry", "berries")).toBe("berries");
   });
 });
 
@@ -261,6 +295,46 @@ describe("groupIngredients", () => {
     expect(result).toHaveLength(2);
     expect(result[0].heading).toBeNull();
     expect(result[1].heading).toBe("Sauce");
+  });
+});
+
+describe("groupIngredientsWithIndex", () => {
+  it("carries original array indices through flat lists", () => {
+    const result = groupIngredientsWithIndex(["2 cups flour", "1 cup sugar"]);
+    expect(result).toHaveLength(1);
+    expect(result[0].items).toEqual([
+      { ingredient: "2 cups flour", index: 0 },
+      { ingredient: "1 cup sugar", index: 1 },
+    ]);
+  });
+
+  it("preserves original indices when interleaved groups are reordered", () => {
+    const ingredients = [
+      { name: "2 cups flour", group: "Cake" },
+      { name: "1 tsp vanilla", group: "Frosting" },
+      { name: "1 cup sugar", group: "Cake" },
+    ];
+    const result = groupIngredientsWithIndex(ingredients);
+    expect(result.map((g) => g.heading)).toEqual(["Cake", "Frosting"]);
+    // "1 cup sugar" moved into the Cake bucket but keeps index 2 — the join
+    // key back to recipe_ingredients.position.
+    expect(result[0].items.map((i) => i.index)).toEqual([0, 2]);
+    expect(result[1].items.map((i) => i.index)).toEqual([1]);
+  });
+
+  it("stays structurally equivalent to groupIngredients", () => {
+    const ingredients = [
+      "plain string",
+      { name: "grouped", group: "Sauce" },
+      { name: "also grouped", group: "Sauce" },
+    ];
+    const indexed = groupIngredientsWithIndex(ingredients);
+    expect(
+      indexed.map(({ heading, items }) => ({
+        heading,
+        items: items.map((i) => i.ingredient),
+      })),
+    ).toEqual(groupIngredients(ingredients));
   });
 });
 
@@ -443,11 +517,17 @@ describe("toSchemaOrgJsonLd", () => {
   });
 
   it("normalizes ingredient objects to strings", () => {
+    // `group` and `id` are both app-level fields with no Schema.org meaning —
+    // flattening to text is what keeps them out of the public JSON-LD.
     const result = toSchemaOrgJsonLd({
       name: "Pasta",
-      recipeIngredient: [{ name: "2 cups flour", group: "Dough" }, "1 tsp salt"],
+      recipeIngredient: [
+        { name: "2 cups flour", group: "Dough", id: "L1" },
+        "1 tsp salt",
+      ],
     }) as Record<string, unknown>;
     expect(result.recipeIngredient).toEqual(["2 cups flour", "1 tsp salt"]);
+    expect(JSON.stringify(result)).not.toContain("L1");
   });
 
   it("passes a QuantitativeValue recipeYield through unchanged", () => {
@@ -458,6 +538,34 @@ describe("toSchemaOrgJsonLd", () => {
       recipeYield: quantitativeValueYield,
     }) as Record<string, unknown>;
     expect(result.recipeYield).toEqual(quantitativeValueYield);
+  });
+
+  it("emits nutritionOverride in place of the schema's own nutrition", () => {
+    const result = toSchemaOrgJsonLd(
+      { name: "Pasta", nutrition: { calories: "300 kcal" } },
+      { nutritionOverride: { calories: "500 kcal", proteinContent: "10 g" } },
+    ) as Record<string, unknown>;
+    expect(result.nutrition).toEqual({
+      calories: "500 kcal",
+      proteinContent: "10 g",
+    });
+  });
+
+  it("still emits the schema's own nutrition without an override", () => {
+    const result = toSchemaOrgJsonLd({
+      name: "Pasta",
+      nutrition: { calories: "300 kcal" },
+    }) as Record<string, unknown>;
+    expect(result.nutrition).toEqual({ calories: "300 kcal" });
+  });
+
+  it("keeps custom fields out even with a nutrition override", () => {
+    const result = toSchemaOrgJsonLd(
+      { name: "Pasta", notes: "secret", nutrition: { calories: "300 kcal" } },
+      { nutritionOverride: { calories: "500 kcal" } },
+    ) as Record<string, unknown>;
+    expect(result.notes).toBeUndefined();
+    expect(result.nutrition).toEqual({ calories: "500 kcal" });
   });
 });
 
@@ -491,5 +599,29 @@ describe("normalizeRecipeInstructions", () => {
   it("wraps a single non-array object in an array", () => {
     const step = { "@type": "HowToStep", text: "Stir" };
     expect(normalizeRecipeInstructions(step)).toEqual([step]);
+  });
+});
+
+describe("formatNutrientDisplay", () => {
+  it("rounds values over 1 to the nearest integer", () => {
+    expect(formatNutrientDisplay({ value: 9.96, unit: "g" })).toBe("10 g");
+    expect(formatNutrientDisplay({ value: 12.4, unit: "g" })).toBe("12 g");
+    expect(formatNutrientDisplay({ value: 37.5, unit: "g" })).toBe("38 g");
+  });
+
+  it("leaves integer values untouched", () => {
+    expect(formatNutrientDisplay({ value: 148, unit: "kcal" })).toBe("148 kcal");
+  });
+
+  it("rounds values of 1 or less to 2dp instead of integer", () => {
+    // Rounding 0.2 g of fiber to "0 g" would erase the value entirely.
+    expect(formatNutrientDisplay({ value: 0.96, unit: "g" })).toBe("0.96 g");
+    expect(formatNutrientDisplay({ value: 0.2, unit: "g" })).toBe("0.2 g");
+    expect(formatNutrientDisplay({ value: 0.1234, unit: "g" })).toBe("0.12 g");
+    expect(formatNutrientDisplay({ value: 1, unit: "g" })).toBe("1 g");
+  });
+
+  it("prints bare when the unit is empty", () => {
+    expect(formatNutrientDisplay({ value: 250, unit: "" })).toBe("250");
   });
 });

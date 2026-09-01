@@ -10,9 +10,9 @@ import { PrimaryActionButton } from "@/components/buttons";
 
 /**
  * The actions that spend real money/time on an external service and so are
- * gated behind an up-front confirm: each one fires a webhook, and a misclick is
- * unrecoverable spend. The confirm label repeats the trigger button's label so
- * the bar names the action rather than saying "OK".
+ * gated behind an up-front confirm: each one fires a webhook or queues a model
+ * run, and a misclick is unrecoverable spend. The confirm label repeats the
+ * trigger button's label so the bar names the action rather than saying "OK".
  */
 const CONFIRM_ACTIONS = {
   rescrape: {
@@ -24,6 +24,11 @@ const CONFIRM_ACTIONS = {
     label: "Regen Image",
     message:
       "Generate a new image? This replaces the current image and can take a while.",
+  },
+  normalize: {
+    label: "Normalize",
+    message:
+      "Re-run ingredient normalization? This re-parses every ingredient line.",
   },
 } as const;
 
@@ -44,6 +49,8 @@ export interface RecipeControlsProps {
   isUploadImageReview: boolean;
   rescrapeState: OpState;
   regenImageState: OpState;
+  /** Fire-and-forget ingredient normalization (queues a background re-run). */
+  normalizeState: OpState;
   /** Whether the Re-scrape button applies (mounted + not viewing the source URL). */
   canRescrape: boolean;
   /** Image-upload validation error flag. */
@@ -54,6 +61,7 @@ export interface RecipeControlsProps {
   onEditCancel: () => void;
   onRescrape: () => void;
   onRegenImage: () => void;
+  onNormalize: () => void;
   onUploadOpen: () => void;
   onFileSelected: (e: ChangeEvent<HTMLInputElement>) => void;
 }
@@ -66,9 +74,11 @@ export interface RecipeControlsProps {
  *
  * The actions in `CONFIRM_ACTIONS` are gated behind an up-front confirm that
  * swaps the whole button row for a `ConfirmBar`, so their `on*` props only fire
- * on a second, deliberate click. Both also have an after-the-fact escape hatch
- * (the `*Review` editor states below); this gate sits in front of it so the
- * spend never happens on a misclick at all.
+ * on a second, deliberate click. Rescrape and regen-image also have an
+ * after-the-fact escape hatch (the `*Review` editor states below), and this
+ * gate sits in front of it so the spend never happens on a misclick at all.
+ * Normalize has no such hatch — it queues a background run and returns — which
+ * is exactly why the up-front confirm is the only guard it can have.
  */
 export default function RecipeControls({
   isEditing,
@@ -83,6 +93,7 @@ export default function RecipeControls({
   isUploadImageReview,
   rescrapeState,
   regenImageState,
+  normalizeState,
   canRescrape,
   uploadError,
   fileInputRef,
@@ -91,6 +102,7 @@ export default function RecipeControls({
   onEditCancel,
   onRescrape,
   onRegenImage,
+  onNormalize,
   onUploadOpen,
   onFileSelected,
 }: RecipeControlsProps) {
@@ -104,6 +116,7 @@ export default function RecipeControls({
     setPending(null);
     if (action === "rescrape") onRescrape();
     else if (action === "regenImage") onRegenImage();
+    else if (action === "normalize") onNormalize();
   };
 
   // Rendered in both view-mode branches rather than hoisted out of the ternary:
@@ -250,6 +263,23 @@ export default function RecipeControls({
             {uploadError && (
               <span className="text-sm text-red-600">
                 File must be PNG, JPEG, or WebP and under 4MB.
+              </span>
+            )}
+            <Button
+              variant="outline"
+              onClick={() => setPending("normalize")}
+              disabled={normalizeState === "loading"}
+            >
+              {normalizeState === "loading" ? "Normalizing…" : "Normalize"}
+            </Button>
+            {normalizeState === "success" && (
+              <span className="text-sm text-green-600">
+                Normalization queued.
+              </span>
+            )}
+            {normalizeState === "error" && (
+              <span className="text-sm text-red-600">
+                Normalization failed. Try again.
               </span>
             )}
           </>
