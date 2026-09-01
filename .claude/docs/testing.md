@@ -1,5 +1,7 @@
 # Test Performance
 
+Sample data a test needs — never inline it → [fixtures.md](fixtures.md).
+
 Vitest's per-test timeout is 5s. **Don't cold-load a real (unmocked) module graph inside a timed `it`/`it.each` body** — e.g. invoking `import.meta.glob` loaders, or `await import()` of a module that isn't `vi.mock`'d or statically imported at the top of the file. That triggers a cold transform + load of the whole dependency graph inside the timed case, which under full-suite parallel load can exceed 5s and surface as a flaky `Test timed out in 5000ms` (the failure is reported at the `it.each` call site, which makes it look like a different test).
 
 - **Hoist** such loads into `beforeAll` (with a generous hook timeout, e.g. `beforeAll(fn, 30000)`) and keep each test body to invoke + assert.

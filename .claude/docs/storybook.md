@@ -1,17 +1,6 @@
 # Storybook
 
-## Story Fixtures
-
-All shared `RecipeRow` fixtures — used by both stories and tests — live in `src/fixtures/` and import via `@/fixtures`. Never define inline `RecipeRow` objects in story files.
-
-- `recipeFixtures: RecipeRow[]` — 5 real production recipes with Supabase image URLs
-- `makeRecipe(id, name, overrides?)` — minimal factory for one-off fixture needs
-- `sources: string[]` — real source values from the fixture recipes
-- `rescrapeFixture: SchemaRecipe` — moved from `src/__tests__/fixtures/`; used by rescrape and update tests
-
-**Real fixture images** are at `https://xonkmdhnjpjkapnsmltu.supabase.co/storage/v1/object/recipes/...` (production Supabase). If a story shows broken images, check `next.config.js` `images.domains`.
-
-**Test-only fixtures are direct-import, not in the barrel:** `src/fixtures/supabase.ts` (`makeSupabaseClient` — shared Supabase client mock for API route tests) imports vitest, and stories import `@/fixtures` — vitest must never reach the Storybook bundle. Import `@/fixtures/supabase` / `@/fixtures/response` directly in test files. Also: `src/fixtures` IS type-checked by tsc (only `src/__tests__` is excluded) — e.g. `BodyInit` requires `Uint8Array<ArrayBuffer>`, not bare `Uint8Array`.
+Sample data a story renders — never inline it → [fixtures.md](fixtures.md).
 
 ## Story Discipline
 
