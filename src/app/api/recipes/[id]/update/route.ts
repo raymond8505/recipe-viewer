@@ -3,6 +3,7 @@ import { getRecipeById, updateRecipeRow, RecipeRepoError } from "@/lib/recipes";
 import type { SchemaRecipe } from "@/types/recipe";
 import type { RecipeStatus } from "@/lib/recipes";
 import { requireSessionOrRecipeToken } from "@/lib/api/guard";
+import { canonicalizeRecipeSource } from "@/lib/format";
 
 export const POST = requireSessionOrRecipeToken(
   async (
@@ -27,7 +28,14 @@ export const POST = requireSessionOrRecipeToken(
     // isOwnRecipe and the browse filter both read it, and an empty string is
     // never a meaningful provenance. Mirrors how the editor treats an invalid
     // servings input: never blocks the save, just doesn't apply.
-    const effectiveSource = body.source?.trim() || recipe.source;
+    //
+    // Canonicalized on the way in so the stored own-recipe value is always the
+    // lowercase literal: isOwnRecipe reads leniently, but the column also feeds
+    // the ?source= browse filter and MCP search_recipes, which match exactly —
+    // a stored "Custom" would silently split that bucket in two.
+    const effectiveSource = canonicalizeRecipeSource(
+      body.source?.trim() || recipe.source,
+    );
 
     // recomputes the markdown `content` column and the search embedding from
     // the saved schema.

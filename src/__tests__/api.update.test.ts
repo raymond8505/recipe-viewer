@@ -141,6 +141,41 @@ describe("POST /api/recipes/[id]/update", () => {
     expect(await res.json()).toMatchObject({ source: "custom" });
   });
 
+  // isOwnRecipe reads casing leniently, but the column also feeds the ?source=
+  // browse filter and MCP search_recipes, which match exactly — so the stored
+  // own-recipe value is folded to the lowercase literal on the way in.
+  it("stores the own-recipe source in canonical lowercase", async () => {
+    const { updateRecipeRow } = await import("@/lib/recipes");
+
+    await POST(
+      makeJsonRequest({ schema: { name: "Test" }, status: "draft", source: "Custom" }),
+      makeParams(),
+    );
+
+    expect(updateRecipeRow).toHaveBeenCalledWith(
+      "recipe-1",
+      expect.objectContaining({ source: "custom" }),
+    );
+  });
+
+  it("leaves a non-custom source's casing alone", async () => {
+    const { updateRecipeRow } = await import("@/lib/recipes");
+
+    await POST(
+      makeJsonRequest({
+        schema: { name: "Test" },
+        status: "draft",
+        source: "An Edible Mosaic",
+      }),
+      makeParams(),
+    );
+
+    expect(updateRecipeRow).toHaveBeenCalledWith(
+      "recipe-1",
+      expect.objectContaining({ source: "An Edible Mosaic" }),
+    );
+  });
+
   // Blank degrades to "no change" rather than clearing the column: an empty
   // string is never a meaningful provenance, and both isOwnRecipe and the
   // browse filter read it. Mirrors the editor's invalid-servings handling —

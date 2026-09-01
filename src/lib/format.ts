@@ -136,9 +136,23 @@ export const CUSTOM_RECIPE_SOURCE = "custom";
 /**
  * Whether a recipe is the user's own — i.e. it has no upstream page behind it.
  * Structurally typed so both a `RecipeRow` and a bare `{ source }` work.
+ *
+ * Reads case-insensitively, writes canonically: `source` is a free-text field
+ * an agent or a person can fill, so "Custom" must mean the same thing as
+ * "custom", while the value we *store* is always the lowercase literal (see
+ * canonicalizeRecipeSource).
  */
 export function isOwnRecipe(recipe: { source?: string | null }): boolean {
-  return recipe.source === CUSTOM_RECIPE_SOURCE;
+  return recipe.source?.toLowerCase() === CUSTOM_RECIPE_SOURCE;
+}
+
+/**
+ * The spelling of `source` to persist. Only the own-recipe value is folded —
+ * every other source is a real name ("An Edible Mosaic") whose casing is
+ * content, not a token, so it is stored exactly as given.
+ */
+export function canonicalizeRecipeSource(source: string): string {
+  return isOwnRecipe({ source }) ? CUSTOM_RECIPE_SOURCE : source;
 }
 
 /**

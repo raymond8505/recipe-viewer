@@ -14,6 +14,7 @@ import {
   getIngredientText,
   isOwnRecipe,
   isBrowsableUrl,
+  canonicalizeRecipeSource,
   CUSTOM_RECIPE_SOURCE,
   markdownToInstructions,
   normalizeRecipeInstructions,
@@ -270,13 +271,6 @@ describe("isOwnRecipe", () => {
     expect(isOwnRecipe({ source: "seriouseats.com" })).toBe(false);
   });
 
-  // The hostnames that used to mean "mine". They are data now, not logic — a
-  // row still carrying one is a row migration 0015 missed, not an own recipe.
-  it("is false for the site's own hostnames", () => {
-    expect(isOwnRecipe({ source: "raymonds.recipes" })).toBe(false);
-    expect(isOwnRecipe({ source: "new.raymonds.recipes" })).toBe(false);
-  });
-
   it("is false for a missing source", () => {
     expect(isOwnRecipe({})).toBe(false);
     expect(isOwnRecipe({ source: undefined })).toBe(false);
@@ -284,9 +278,31 @@ describe("isOwnRecipe", () => {
     expect(isOwnRecipe({ source: "" })).toBe(false);
   });
 
-  it("is case-sensitive — only the exact literal counts", () => {
-    expect(isOwnRecipe({ source: "Custom" })).toBe(false);
-    expect(isOwnRecipe({ source: "CUSTOM" })).toBe(false);
+  // `source` is a free-text field an agent or a person fills in, so the read
+  // side is lenient about casing even though the write side is not.
+  it("is case-insensitive", () => {
+    expect(isOwnRecipe({ source: "Custom" })).toBe(true);
+    expect(isOwnRecipe({ source: "CUSTOM" })).toBe(true);
+    expect(isOwnRecipe({ source: "cUsToM" })).toBe(true);
+  });
+});
+
+describe("canonicalizeRecipeSource", () => {
+  it("folds any casing of the own-recipe value to the lowercase literal", () => {
+    expect(canonicalizeRecipeSource("Custom")).toBe(CUSTOM_RECIPE_SOURCE);
+    expect(canonicalizeRecipeSource("CUSTOM")).toBe(CUSTOM_RECIPE_SOURCE);
+    expect(canonicalizeRecipeSource(CUSTOM_RECIPE_SOURCE)).toBe(
+      CUSTOM_RECIPE_SOURCE,
+    );
+  });
+
+  // Everything else is a name, not a token — its casing is content.
+  it("leaves any other source untouched", () => {
+    expect(canonicalizeRecipeSource("An Edible Mosaic")).toBe(
+      "An Edible Mosaic",
+    );
+    expect(canonicalizeRecipeSource("seriouseats.com")).toBe("seriouseats.com");
+    expect(canonicalizeRecipeSource("")).toBe("");
   });
 });
 

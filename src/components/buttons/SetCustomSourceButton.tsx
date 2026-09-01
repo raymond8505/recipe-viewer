@@ -1,6 +1,6 @@
 import * as React from "react";
 import { Button, type ButtonProps } from "@/components/ui/button";
-import { CUSTOM_RECIPE_SOURCE } from "@/lib/format";
+import { CUSTOM_RECIPE_SOURCE, isOwnRecipe } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
 export interface SetCustomSourceButtonProps
@@ -26,7 +26,11 @@ export const SetCustomSourceButton = React.forwardRef<
   HTMLButtonElement,
   SetCustomSourceButtonProps
 >(({ value, className, disabled, ...props }, ref) => {
-  const alreadyCustom = value === CUSTOM_RECIPE_SOURCE;
+  // Asks the same question every other reader asks, rather than restating the
+  // comparison — so a typed "Custom" reads as already-yours here too, the way
+  // it does for the Re-scrape gate. The save path folds it to the canonical
+  // spelling, so the button has nothing to fix up.
+  const alreadyCustom = isOwnRecipe({ source: value });
   return (
     <Button
       ref={ref}
