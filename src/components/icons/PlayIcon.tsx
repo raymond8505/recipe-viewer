@@ -1,7 +1,18 @@
-export function PlayIcon({ dimmed }: { dimmed?: boolean }) {
+import { Play, type LucideProps } from "lucide-react";
+import { cn } from "@/lib/utils";
+
+/**
+ * Filled rather than lucide's default outline: at 14px inside a timer's
+ * play/pause control the outline reads as a hollow smudge. `dimmed` is the
+ * finished-timer state, where the control is still present but inert.
+ */
+export function PlayIcon({ dimmed, className, ...props }: LucideProps & { dimmed?: boolean }) {
   return (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" className={`shrink-0 ${dimmed ? "text-gray-300" : "text-brand"}`} aria-hidden="true">
-      <polygon points="5,3 19,12 5,21" />
-    </svg>
+    <Play
+      size={14}
+      fill="currentColor"
+      className={cn("shrink-0", dimmed ? "text-gray-300" : "text-brand", className)}
+      {...props}
+    />
   );
 }

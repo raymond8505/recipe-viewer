@@ -1,19 +1,11 @@
-export function SearchIcon() {
-  return (
-    <svg
-      width="16"
-      height="16"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      className="text-gray-400 shrink-0"
-      aria-hidden="true"
-    >
-      <circle cx="11" cy="11" r="8" />
-      <path d="m21 21-4.35-4.35" />
-    </svg>
-  );
+import { Search, type LucideProps } from "lucide-react";
+import { cn } from "@/lib/utils";
+
+/**
+ * The muted grey is the default because every search input in the app wants it,
+ * but it merges rather than replaces — SearchBar overrides it to `text-brand`
+ * while a query is in flight.
+ */
+export function SearchIcon({ className, ...props }: LucideProps) {
+  return <Search size={16} className={cn("text-gray-400 shrink-0", className)} {...props} />;
 }

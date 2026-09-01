@@ -2,6 +2,8 @@
 
 import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useState, useTransition } from "react";
+import { SearchIcon } from "@/components/icons";
+import { cn } from "@/lib/utils";
 
 interface SearchBarProps {
   defaultValue?: string;
@@ -42,19 +44,9 @@ export default function SearchBar({ defaultValue }: SearchBarProps) {
         aria-label="Search"
         className="absolute inset-y-0 left-0 pl-4 flex items-center"
       >
-        <svg
-          className={`w-5 h-5 ${isPending ? "text-brand animate-pulse" : "text-gray-400"}`}
-          fill="none"
-          stroke="currentColor"
-          viewBox="0 0 24 24"
-        >
-          <path
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            strokeWidth={2}
-            d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
-          />
-        </svg>
+        <SearchIcon
+          className={cn("w-5 h-5", isPending && "text-brand animate-pulse")}
+        />
       </button>
       <input
         type="search"
