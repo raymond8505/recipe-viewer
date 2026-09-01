@@ -51,13 +51,20 @@ describe("SearchBar", () => {
     expect(input.value).toBe("tacos");
   });
 
-  it("sets q param when typing a value", () => {
+  it("does not search while typing", () => {
     render(<SearchBar />);
     fireEvent.change(screen.getByRole("searchbox"), { target: { value: "chicken" } });
+    expect(mockPush).not.toHaveBeenCalled();
+  });
+
+  it("sets q param on submit", () => {
+    render(<SearchBar />);
+    fireEvent.change(screen.getByRole("searchbox"), { target: { value: "chicken" } });
+    fireEvent.click(screen.getByRole("button", { name: "Search" }));
     expect(mockPush).toHaveBeenCalledWith("/?q=chicken");
   });
 
-  it("removes q param when input is cleared", () => {
+  it("removes q param when input is cleared and submitted", () => {
     vi.mocked(useSearchParams).mockReturnValue({
       get: vi.fn((key) => (key === "q" ? "pasta" : null)),
       toString: vi.fn(() => "q=pasta"),
@@ -65,6 +72,7 @@ describe("SearchBar", () => {
 
     render(<SearchBar defaultValue="pasta" />);
     fireEvent.change(screen.getByRole("searchbox"), { target: { value: "" } });
+    fireEvent.click(screen.getByRole("button", { name: "Search" }));
     expect(mockPush).toHaveBeenCalledWith("/?");
   });
 
@@ -76,6 +84,7 @@ describe("SearchBar", () => {
 
     render(<SearchBar />);
     fireEvent.change(screen.getByRole("searchbox"), { target: { value: "pasta" } });
+    fireEvent.click(screen.getByRole("button", { name: "Search" }));
     expect(mockPush).toHaveBeenCalledWith("/?sort=oldest&q=pasta");
   });
 
@@ -87,6 +96,14 @@ describe("SearchBar", () => {
 
     render(<SearchBar />);
     fireEvent.change(screen.getByRole("searchbox"), { target: { value: "pasta" } });
+    fireEvent.click(screen.getByRole("button", { name: "Search" }));
     expect(mockPush).toHaveBeenCalledWith("/?sort=oldest&q=pasta");
+  });
+
+  it("submits on Enter key in the input", () => {
+    render(<SearchBar />);
+    fireEvent.change(screen.getByRole("searchbox"), { target: { value: "pasta" } });
+    fireEvent.submit(screen.getByRole("searchbox").closest("form")!);
+    expect(mockPush).toHaveBeenCalledWith("/?q=pasta");
   });
 });
