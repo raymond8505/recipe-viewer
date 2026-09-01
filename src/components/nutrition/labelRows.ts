@@ -28,7 +28,7 @@ export interface LabelRow {
    * ("Sat. Fat", "Cholest.", "Total Carb."). Falls back to `name`.
    */
   short?: string;
-  /** null = this source doesn't carry the nutrient; renders an em dash. */
+  /** null = this source doesn't carry the nutrient; the row isn't rendered. */
   value: NutrientValue | null;
   /** Sub-nutrient, indented under the group's lead nutrient. */
   sub?: boolean;
@@ -78,11 +78,10 @@ function row(slot: SlotKey, value: NutrientValue | null): LabelRow {
 /**
  * The recipe panel's rows, from `ScalableRecipe.nutrition()!.values`.
  *
- * The minerals are always null here: the catalog tracks them, but they have no
+ * There are no mineral rows: the catalog tracks them, but they have no
  * Schema.org slot (see SCHEMA_NUTRITION_MAP), so the recipe path can never
- * supply them. They're rendered as em dashes rather than dropped so the label
- * keeps the shape of a real one — the same absent-≠-zero convention every other
- * row follows.
+ * supply them. Emitting them as permanently-empty rows would only ever render a
+ * row of em dashes for data this side cannot have.
  */
 export function recipeNutritionRows(values: NutrientValues): LabelData {
   const at = (field: keyof NutrientValues) => values[field] ?? null;
@@ -101,11 +100,7 @@ export function recipeNutritionRows(values: NutrientValues): LabelData {
       row("sugars", at("sugarContent")),
       row("protein", at("proteinContent")),
     ],
-    micros: [
-      row("potassium", null),
-      row("calcium", null),
-      row("iron", null),
-    ],
+    micros: [],
   };
 }
 

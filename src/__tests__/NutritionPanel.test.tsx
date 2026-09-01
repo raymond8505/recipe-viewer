@@ -290,9 +290,10 @@ describe("NutritionPanel — summary/label view toggle", () => {
     fireEvent.click(screen.getByRole("button", { name: "Full label" }));
     // Calories is the label's big display number, so it drops its unit.
     expect(screen.getByText("350")).toBeTruthy();
-    // 9 nutrient rows plus the three minerals, which the recipe path can never
-    // supply (no Schema.org slot) and so are always em dashes here.
-    expect(screen.getAllByText("—")).toHaveLength(12);
+    // Untracked nutrients are omitted, not dashed — the label shows only what
+    // this recipe actually carries.
+    expect(screen.queryByText("—")).toBeNull();
+    expect(screen.queryByText("Total Fat")).toBeNull();
   });
 
   it("offers no toggle in the no-nutrition shell", () => {

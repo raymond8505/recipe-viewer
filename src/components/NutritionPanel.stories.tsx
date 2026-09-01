@@ -146,9 +146,9 @@ export const FullLabelWide: Story = {
 };
 
 /**
- * The label on a recipe that tracks almost nothing. The em-dash run is the
- * point: absent ≠ zero, and seeing which slots are empty is information the
- * summary grid can't convey (it simply omits the missing stats).
+ * The label on a recipe that tracks almost nothing: it collapses to the few
+ * nutrients present rather than listing empty rows, so the "Full label" view
+ * degrades to something shorter than the summary grid rather than a skeleton.
  */
 export const FullLabelSparse: Story = {
   args: {

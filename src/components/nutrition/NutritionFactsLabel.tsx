@@ -19,11 +19,18 @@ import type { LabelData, LabelRow } from "./labelRows";
 // Don't reintroduce `font-black` or `border-foreground`; hierarchy here comes
 // from size and spacing, per the site's typography rules.
 //
+// ONLY TRACKED NUTRIENTS ARE SHOWN. A nutrient the source doesn't carry is
+// omitted, not rendered as an em dash: a real package label lists what was
+// measured, and a column of dashes reads as broken rather than as "unknown".
+// Sections and tabular columns that empty out collapse with their rules, so a
+// sparse recipe degrades to a short label instead of a skeleton — which is why
+// the grid template below is chosen from the number of surviving blocks.
+//
 // TWO LAYOUTS, ONE MARKUP. `layout="tabular"` is the FDA's tabular display —
 // title block, then the nutrient groups as side-by-side columns — but only when
 // there's room; it falls back to the vertical panel when there isn't, which is
 // what the FDA itself prescribes when horizontal space runs out. The fallback
-// needs no second DOM because document order IS the vertical label: title →
+// needs no second DOM because document order IS the vertical label: serving →
 // Calories → fats → carbs → minerals. The @lg: classes only re-arrange those
 // same children into columns, so no text is duplicated and tests see one copy.
 //
@@ -31,14 +38,17 @@ import type { LabelData, LabelRow } from "./labelRows";
 // in a wide recipe page and in a ~360px cooking-mode column at the same viewport
 // width, so `lg:` would pick the wrong layout for one of them. The wrapper
 // carries `@container`; the variants are `@lg` (32rem of container width).
-//
-// Absent nutrients render an em dash, not 0 — key sparsity is meaningful
-// (absent ≠ zero), and it keeps a half-typed draft value from flashing as a
-// fake zero while the user edits.
 
 /** Eyebrow labels, in the site's uppercase-tracked sans (not the FDA's bold). */
 const EYEBROW =
   "font-sans text-[10px] font-semibold uppercase tracking-widest text-muted-foreground";
+
+/** Grid template per number of rendered blocks; the serving/Calories block
+ *  always counts, so this only varies with how many nutrient groups survive. */
+const GRID_COLUMNS: Record<number, string> = {
+  2: "@lg:grid @lg:grid-cols-[auto_1fr] @lg:gap-x-5",
+  3: "@lg:grid @lg:grid-cols-[auto_1fr_1fr] @lg:gap-x-5",
+};
 
 function NutrientRow({ row, tabular }: { row: LabelRow; tabular: boolean }) {
   return (
@@ -56,9 +66,7 @@ function NutrientRow({ row, tabular }: { row: LabelRow; tabular: boolean }) {
           row.name
         )}
       </span>
-      <span className="tabular-nums">
-        {row.value ? formatNutrientDisplay(row.value) : "—"}
-      </span>
+      <span className="tabular-nums">{formatNutrientDisplay(row.value!)}</span>
     </div>
   );
 }
@@ -100,7 +108,15 @@ export default function NutritionFactsLabel({
   className?: string;
 }) {
   const tabular = layout === "tabular";
-  const { calories, fats, carbs, micros } = data;
+  const { calories } = data;
+
+  // Untracked nutrients are dropped, not dashed. A group that loses every row
+  // stops being rendered at all, so its rule and (in tabular) its column go too.
+  const tracked = (rows: LabelRow[]) => rows.filter((row) => row.value != null);
+  const groups = [tracked(data.fats), tracked(data.carbs)].filter(
+    (rows) => rows.length > 0,
+  );
+  const micros = tracked(data.micros);
 
   return (
     <div
@@ -110,11 +126,7 @@ export default function NutritionFactsLabel({
         className,
       )}
     >
-      <div
-        className={cn(
-          tabular && "@lg:grid @lg:grid-cols-[auto_1fr_1fr] @lg:gap-x-5",
-        )}
-      >
+      <div className={cn(tabular && GRID_COLUMNS[groups.length + 1])}>
         {/* Block 1 — serving basis and Calories. The leftmost block in tabular;
             the head of the panel when stacked. There is deliberately no
             "Nutrition Facts" title: both callers already render a heading
@@ -130,71 +142,70 @@ export default function NutritionFactsLabel({
             </span>
           </div>
           {/* The label's one accent: brand on the rule that introduces the
-              number people actually look for. */}
-          <div className="mt-2 border-t-2 border-brand pt-2">
-            <div className={EYEBROW}>Amount per serving</div>
-            <div className="mt-0.5 flex items-baseline justify-between gap-3">
-              <span className="text-lg font-semibold">Calories</span>
-              <span className="font-heading text-4xl font-light leading-none tabular-nums">
-                {calories != null
-                  ? formatNutrientDisplay({ value: calories.value, unit: "" })
-                  : "—"}
-              </span>
+              number people actually look for. Goes with it when it's absent. */}
+          {calories != null && (
+            <div className="mt-2 border-t-2 border-brand pt-2">
+              <div className={EYEBROW}>Amount per serving</div>
+              <div className="mt-0.5 flex items-baseline justify-between gap-3">
+                <span className="text-lg font-semibold">Calories</span>
+                <span className="font-heading text-4xl font-light leading-none tabular-nums">
+                  {formatNutrientDisplay({ value: calories.value, unit: "" })}
+                </span>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* The nutrient groups. Stacked they read as one continuous list, so
+            only the first carries the section rule and only the first suppresses
+            its leading hairline; as columns each gets a left divider, and the
+            second suppresses its hairline too since a heading rule sits above. */}
+        {groups.map((rows, i) => (
+          <div
+            key={rows[0].key}
+            className={cn(
+              i === 0 && "mt-3 border-t-2 border-border pt-1",
+              i === 0 &&
+                tabular &&
+                "@lg:mt-0 @lg:border-t-0 @lg:pt-0",
+              tabular && "@lg:border-l @lg:border-border @lg:pl-5",
+            )}
+          >
+            {tabular && <ColumnHeading />}
+            {/* Nested so :first-child means the first ROW, not the heading. */}
+            <div
+              className={cn(
+                i === 0
+                  ? "[&>*:first-child]:border-t-0"
+                  : tabular && "@lg:[&>*:first-child]:border-t-0",
+              )}
+            >
+              {rows.map((row) => (
+                <NutrientRow key={row.key} row={row} tabular={tabular} />
+              ))}
             </div>
           </div>
-        </div>
-
-        {/* Block 2 — fats, cholesterol, sodium. The section rule that opens the
-            nutrient list becomes this column's left divider in tabular. */}
-        <div
-          className={cn(
-            "mt-3 border-t-2 border-border pt-1",
-            tabular &&
-              "@lg:mt-0 @lg:border-t-0 @lg:border-l @lg:border-border @lg:pt-0 @lg:pl-5",
-          )}
-        >
-          {tabular && <ColumnHeading />}
-          {/* Nested so :first-child means the first ROW, not the heading. */}
-          <div className="[&>*:first-child]:border-t-0">
-            {fats.map((row) => (
-              <NutrientRow key={row.key} row={row} tabular={tabular} />
-            ))}
-          </div>
-        </div>
-
-        {/* Block 3 — carbohydrates and protein. Stacked, it continues block 2's
-            list unbroken, so every row keeps its hairline; as a column it drops
-            the first one, since the heading rule already sits above it. */}
-        <div
-          className={cn(
-            tabular && "@lg:border-l @lg:border-border @lg:pl-5",
-          )}
-        >
-          {tabular && <ColumnHeading />}
-          <div className={cn(tabular && "@lg:[&>*:first-child]:border-t-0")}>
-            {carbs.map((row) => (
-              <NutrientRow key={row.key} row={row} tabular={tabular} />
-            ))}
-          </div>
-        </div>
+        ))}
       </div>
 
       {/* Minerals, below the closing section rule: full-width rows when stacked,
           a single inline run across the foot in tabular — where the real label
-          puts them. */}
-      <div className="mt-3 border-t-2 border-border">
-        <div
-          className={cn(
-            "[&>*:first-child]:border-t-0",
-            tabular &&
-              "@lg:flex @lg:flex-wrap @lg:gap-x-8 @lg:[&>*]:border-t-0 @lg:[&>*]:justify-start @lg:[&>*]:gap-2",
-          )}
-        >
-          {micros.map((row) => (
-            <NutrientRow key={row.key} row={row} tabular={tabular} />
-          ))}
+          puts them. Only the catalog side ever has these. */}
+      {micros.length > 0 && (
+        <div className="mt-3 border-t-2 border-border">
+          <div
+            className={cn(
+              "[&>*:first-child]:border-t-0",
+              tabular &&
+                "@lg:flex @lg:flex-wrap @lg:gap-x-8 @lg:[&>*]:border-t-0 @lg:[&>*]:justify-start @lg:[&>*]:gap-2",
+            )}
+          >
+            {micros.map((row) => (
+              <NutrientRow key={row.key} row={row} tabular={tabular} />
+            ))}
+          </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }

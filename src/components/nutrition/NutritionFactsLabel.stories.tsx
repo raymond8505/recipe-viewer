@@ -77,8 +77,9 @@ export const CatalogSmallServing: Story = {
 };
 
 /**
- * A manual catalog row tracking only calories and sodium: every absent nutrient
- * renders an em dash, not a fake zero (absent ≠ 0).
+ * A manual catalog row tracking only calories and sodium. Untracked nutrients
+ * are left off entirely rather than dashed or zeroed, so the label states only
+ * what was actually measured — and the whole minerals section drops away.
  */
 export const CatalogSparse: Story = {
   args: {
@@ -100,7 +101,8 @@ export const CatalogSparse: Story = {
  * serving basis and Calories on the left, then the nutrient groups as columns
  * under "Amount/serving", with the minerals as a footer run. Column names
  * switch to the FDA abbreviations ("Sat. Fat", "Total Carb.") that the narrow columns
- * need. The minerals are em dashes because they have no Schema.org slot.
+ * need. There is no minerals footer here — the recipe path has no Schema.org
+ * slot for them, so they're never emitted.
  */
 export const RecipeTabular: Story = {
   args: {
@@ -140,9 +142,9 @@ export const RecipeNarrowFallback: Story = {
 };
 
 /**
- * A recipe that tracks almost nothing. The em-dash run is the point: seeing
- * which slots are empty is information the summary grid can't convey, since it
- * simply omits the missing stats.
+ * A recipe that tracks almost nothing, so the label collapses to just what it
+ * has: the fats group and the minerals footer disappear along with their rules,
+ * leaving a short label rather than a skeleton of empty rows.
  */
 export const RecipeSparse: Story = {
   args: {

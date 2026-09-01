@@ -44,10 +44,9 @@ describe("NutritionFactsLabel", () => {
       "Dietary Fiber",
       "Total Sugars",
       "Protein",
-      "Potassium",
-      "Calcium",
-      "Iron",
     ];
+    // No minerals: the recipe side has no Schema.org slot for them, so they're
+    // never emitted. Their order is covered by the catalog case below.
     let cursor = 0;
     for (const name of order) {
       const at = text.indexOf(name, cursor);
@@ -68,17 +67,53 @@ describe("NutritionFactsLabel", () => {
     expect(screen.getByText("32 g")).toBeTruthy();
   });
 
-  it("renders absent nutrients as an em dash, never 0", () => {
-    // Key sparsity is meaningful (absent ≠ zero); on the recipe side the three
-    // minerals are structurally always absent.
+  it("omits untracked nutrients rather than dashing them", () => {
+    // A real package label lists what was measured; a column of dashes reads as
+    // broken rather than as "unknown".
     const sparse = recipeNutritionRows(
-      schemaNutritionToValues({ calories: "350 kcal" }),
+      schemaNutritionToValues({ calories: "350 kcal", proteinContent: "22 g" }),
     );
     render(<NutritionFactsLabel data={sparse} servingLabel="per serving" />);
     expect(screen.getByText("350")).toBeTruthy();
-    // 9 nutrient rows + 3 minerals, all empty.
-    expect(screen.getAllByText("—")).toHaveLength(12);
+    expect(screen.getByText("22 g")).toBeTruthy();
+    expect(screen.queryByText("—")).toBeNull();
     expect(screen.queryByText("0 g")).toBeNull();
+    // Nothing the recipe doesn't carry survives — including the whole fats
+    // group, whose rows are all absent here.
+    expect(screen.queryByText("Total Fat")).toBeNull();
+    expect(screen.queryByText("Dietary Fiber")).toBeNull();
+  });
+
+  it("drops a section entirely when every row in it is untracked", () => {
+    // The minerals have no Schema.org slot, so the recipe side never has them —
+    // the closing section rule must go with them, not leave a stray bar.
+    const { container } = render(
+      <NutritionFactsLabel
+        data={recipeNutritionRows(
+          schemaNutritionToValues({ calories: "350 kcal" }),
+        )}
+        servingLabel="per serving"
+      />,
+    );
+    expect(screen.queryByText("Potassium")).toBeNull();
+    expect(screen.queryByText("Calcium")).toBeNull();
+    expect(container.querySelectorAll(".border-t-2")).toHaveLength(1); // the brand Calories rule only
+  });
+
+  it("hides the Calories block when calories is untracked", () => {
+    const { container } = render(
+      <NutritionFactsLabel
+        data={recipeNutritionRows(
+          schemaNutritionToValues({ proteinContent: "22 g" }),
+        )}
+        servingLabel="per serving"
+      />,
+    );
+    expect(screen.queryByText("Calories")).toBeNull();
+    expect(screen.queryByText("Amount per serving")).toBeNull();
+    expect(screen.getByText("22 g")).toBeTruthy();
+    // The brand accent rule belongs to that block and leaves with it.
+    expect(container.querySelector(".border-brand")).toBeNull();
   });
 
   it("shows the serving caption only when one is given", () => {

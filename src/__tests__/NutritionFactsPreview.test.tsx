@@ -83,12 +83,29 @@ describe("NutritionFactsPreview", () => {
     expect(screen.getByText("375")).toBeInTheDocument();
   });
 
-  it("renders em dashes for absent nutrients, never zeros", () => {
+  it("omits absent nutrients, never fabricating zeros", () => {
+    // A blank or unparseable draft field is untracked, so its row simply isn't
+    // on the label — the preview shows what's been entered, and rows appear as
+    // the curator types. The drawer's editable grid beside it is what lists
+    // every field, filled or not.
     renderPreview({ nutrition: { calories_kcal: "", fat_g: "oops" } });
 
-    // Calories, all 8 panel rows, and the 3 mineral rows are absent:
-    // 12 dashes, no fabricated 0 values.
-    expect(screen.getAllByText("—")).toHaveLength(12);
+    expect(screen.queryByText("—")).not.toBeInTheDocument();
     expect(screen.queryByText(/^0/)).not.toBeInTheDocument();
+    expect(screen.queryByText("Total Fat")).not.toBeInTheDocument();
+    expect(screen.queryByText("Calories")).not.toBeInTheDocument();
+    // The serving basis still anchors the preview.
+    expect(screen.getByText("Serving size")).toBeInTheDocument();
+  });
+
+  it("shows a row as soon as its value parses", () => {
+    // The live-preview contract: rows are driven by the draft, so entering a
+    // value makes its row appear rather than filling in a dash.
+    renderPreview({ nutrition: { protein_g: "17.8" } });
+
+    expect(screen.getByText("Protein")).toBeInTheDocument();
+    // Display rounding: values over 1 render as integers (17.8 → "18 g").
+    expect(screen.getByText("18 g")).toBeInTheDocument();
+    expect(screen.queryByText("Total Fat")).not.toBeInTheDocument();
   });
 });

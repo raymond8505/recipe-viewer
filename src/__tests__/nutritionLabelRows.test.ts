@@ -56,16 +56,11 @@ describe("recipeNutritionRows", () => {
     expect(new Set(keys).size).toBe(keys.length);
   });
 
-  it("renders the minerals as always-absent rows", () => {
-    // They have no Schema.org slot, so the recipe path can never fill them.
-    // Kept as em-dash rows so the label holds a real label's shape.
-    const data = recipeNutritionRows(fullValues);
-    expect(data.micros.map((r) => r.name)).toEqual([
-      "Potassium",
-      "Calcium",
-      "Iron",
-    ]);
-    expect(data.micros.every((r) => r.value === null)).toBe(true);
+  it("emits no mineral rows at all", () => {
+    // They have no Schema.org slot, so the recipe path can never fill them —
+    // and since untracked nutrients aren't rendered, permanently-empty rows
+    // would be pure dead weight.
+    expect(recipeNutritionRows(fullValues).micros).toEqual([]);
   });
 
   it("marks a nutrient the recipe doesn't carry as absent, not zero", () => {
@@ -107,12 +102,18 @@ describe("ingredientNutritionRows", () => {
 describe("shared FDA wording", () => {
   it("names a nutrient identically on both labels", () => {
     // The two labels are fed by different type systems but must not drift —
-    // this is what the shared SLOTS table buys, structurally.
+    // this is what the shared SLOTS table buys, structurally. Only the keys
+    // both sides carry can be compared: the minerals are catalog-only and
+    // unsaturated fat is recipe-only.
     const recipe = new Map(
       allRows(recipeNutritionRows(fullValues)).map((r) => [r.key, r.name]),
     );
-    for (const row of allRows(ingredientNutritionRows(cuminLike))) {
-      expect(recipe.get(row.key), `no recipe row for ${row.key}`).toBe(row.name);
+    const shared = allRows(ingredientNutritionRows(cuminLike)).filter((row) =>
+      recipe.has(row.key),
+    );
+    expect(shared.length).toBeGreaterThan(0);
+    for (const row of shared) {
+      expect(recipe.get(row.key), `name drift on ${row.key}`).toBe(row.name);
     }
   });
 
