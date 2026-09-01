@@ -69,6 +69,11 @@ export default function RecipeDetail({
   // it must flip the Re-scrape button immediately (isOwnRecipe reads it), and
   // the prop is a server-render snapshot that a client-side save can't update.
   const [source, setSource] = useState(recipe.source ?? "");
+  // Same reasoning as `source`, and for the same two consumers: the editor
+  // re-seeds its draft from this on every entry, and isSelfReferential compares
+  // it to the current location. Reading recipe.url instead made a saved URL edit
+  // invisible until a refresh — the editor reopened on the pre-edit value.
+  const [url, setUrl] = useState(recipe.url ?? "");
   const image = getFirstImage(schema.image);
   const prepTime = formatDuration(schema.prepTime);
   const cookTime = formatDuration(schema.cookTime);
@@ -167,7 +172,7 @@ export default function RecipeDetail({
   // page it is already showing. Either alone is not enough: a "custom" recipe
   // can still point at a real external page worth re-fetching, and a scraped
   // recipe whose URL happens to be this page is not the user's own.
-  const isSelfReferential = isMounted && recipe.url === window.location.href;
+  const isSelfReferential = isMounted && url === window.location.href;
   const canRescrape = !(isOwnRecipe({ source }) && isSelfReferential);
 
   // Read-only aliases consumed by the JSX below.
@@ -180,10 +185,10 @@ export default function RecipeDetail({
   const previewUrl = imageUpload.previewUrl;
   const fileInputRef = imageUpload.fileInputRef;
 
-  // The row-level fields every editor entry path seeds from. `status` is the
-  // live state (it can differ from recipe.status after a save); url and source
-  // come straight off the row.
-  const editRowFields = { status, url: recipe.url ?? "", source };
+  // The row-level fields every editor entry path seeds from. All three are live
+  // state, not props: each can differ from its `recipe` value after a save, and
+  // seeding the draft from the stale prop would silently revert the edit.
+  const editRowFields = { status, url, source };
 
   // Adopt an op's resulting schema and open the editor on it for review.
   const beginReview = (next: SchemaRecipe) => {
@@ -236,8 +241,12 @@ export default function RecipeDetail({
       if (!result.schema) throw new Error();
       setSchema(result.schema);
       setStatus(result.status);
-      // The route echoes the persisted value, which may differ from the draft
-      // (a blank field degrades to "no change" server-side).
+      // The route echoes the persisted values, which may differ from the draft
+      // (a blank source degrades to "no change" server-side, and "Custom" is
+      // stored canonically). The url guard is a type check, not a truthiness
+      // one: url is persisted verbatim, so a cleared field must survive as ""
+      // — only an absent key (a malformed response) leaves the state alone.
+      if (typeof result.url === "string") setUrl(result.url);
       if (result.source) setSource(result.source);
       rescrape.clear();
       regenImage.clear();

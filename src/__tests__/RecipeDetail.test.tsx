@@ -950,6 +950,94 @@ describe("RecipeDetail — controls section", () => {
     );
   });
 
+  // Regression: the editor used to seed its URL draft from the `recipe` prop
+  // while status and source came from state. The prop is a server-render
+  // snapshot, so a saved URL edit reverted the moment the editor was reopened —
+  // and only a page refresh made the new value stick.
+  it("keeps the edited source URL when the editor is reopened after saving", async () => {
+    const mockFetch = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          schema: rescrapeFixture,
+          status: "draft",
+          url: "https://corrected.com/recipe",
+          source: "example.com",
+        }),
+        { status: 200 },
+      ),
+    );
+    vi.stubGlobal("fetch", mockFetch);
+
+    render(<RecipeDetail recipe={makeRecipe()} isLoggedIn={true} />);
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /^edit$/i }));
+    });
+    await act(async () => {
+      fireEvent.change(
+        screen.getByPlaceholderText(/https:\/\/example\.com\/recipe/i),
+        { target: { value: "https://corrected.com/recipe" } },
+      );
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /^save$/i }));
+    });
+    await waitFor(() => expect(mockFetch).toHaveBeenCalled());
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /^edit$/i }));
+    });
+    expect(
+      (
+        screen.getByPlaceholderText(
+          /https:\/\/example\.com\/recipe/i,
+        ) as HTMLInputElement
+      ).value,
+    ).toBe("https://corrected.com/recipe");
+  });
+
+  // The other half of the same staleness: isSelfReferential compares the URL to
+  // the current location, so pointing an own-recipe at a real external page has
+  // to bring Re-scrape back without waiting for a refresh.
+  it("re-enables the Re-scrape button after saving a URL away from this page", async () => {
+    const mockFetch = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          schema: rescrapeFixture,
+          status: "draft",
+          url: "https://seriouseats.com/kebab",
+          source: "custom",
+        }),
+        { status: 200 },
+      ),
+    );
+    vi.stubGlobal("fetch", mockFetch);
+
+    render(
+      <RecipeDetail
+        recipe={makeRecipe({}, { source: "custom", url: window.location.href })}
+        isLoggedIn={true}
+      />,
+    );
+    expect(screen.getByRole("button", { name: /re-scrape/i })).toBeDisabled();
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /^edit$/i }));
+    });
+    await act(async () => {
+      fireEvent.change(
+        screen.getByPlaceholderText(/https:\/\/example\.com\/recipe/i),
+        { target: { value: "https://seriouseats.com/kebab" } },
+      );
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /^save$/i }));
+    });
+
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: /re-scrape/i })).toBeEnabled(),
+    );
+  });
+
   // The shortcut exists because "custom" is a magic word with behaviour behind
   // it (isOwnRecipe), so marking a recipe as your own shouldn't depend on
   // spelling it correctly.

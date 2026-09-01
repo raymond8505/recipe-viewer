@@ -132,6 +132,24 @@ describe("POST /api/recipes/[id]/update", () => {
     );
   });
 
+  // The editor re-seeds its draft from this echo on the next open. Without it
+  // the client falls back to its server-rendered `recipe` prop, which a
+  // client-side save never updates — a saved URL edit would appear to revert.
+  it("echoes the persisted url so the client can re-render without a refetch", async () => {
+    const res = await POST(
+      makeJsonRequest({
+        schema: { name: "Test" },
+        status: "draft",
+        url: "https://corrected.com/recipe",
+      }),
+      makeParams(),
+    );
+
+    expect(await res.json()).toMatchObject({
+      url: "https://corrected.com/recipe",
+    });
+  });
+
   it("echoes the persisted source so the client can re-render without a refetch", async () => {
     const res = await POST(
       makeJsonRequest({ schema: { name: "Test" }, status: "draft", source: "custom" }),
