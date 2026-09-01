@@ -8,3 +8,4 @@ export { CloseButton } from "./CloseButton";
 export { AddTimerButton } from "./AddTimerButton";
 export { ResetTimersButton } from "./ResetTimersButton";
 export { CopyShoppingListButton } from "./CopyShoppingListButton";
+export { SetCustomSourceButton } from "./SetCustomSourceButton";

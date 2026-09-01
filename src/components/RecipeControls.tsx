@@ -8,7 +8,10 @@ import { ALLOWED_IMAGE_CONTENT_TYPES } from "@/lib/imageTypes";
 import { ExternalLinkIcon } from "@/components/icons";
 import { Button } from "@/components/ui/button";
 import ConfirmBar from "@/components/ConfirmBar";
-import { PrimaryActionButton } from "@/components/buttons";
+import {
+  PrimaryActionButton,
+  SetCustomSourceButton,
+} from "@/components/buttons";
 
 /**
  * The actions that spend real money/time on an external service and so are
@@ -223,19 +226,31 @@ export default function RecipeControls({
                   >
                     Name
                   </label>
-                  <input
-                    id="recipe-source"
-                    type="text"
-                    value={draftSource}
-                    onChange={(e) => onSourceChange(e.target.value)}
-                    disabled={editState === "saving"}
-                    placeholder="seriouseats.com"
-                    list="recipe-source-options"
-                    className="w-full rounded-none border-0 border-b border-gray-200 px-3 py-2 text-sm text-gray-700 focus:outline-hidden focus:border-brand disabled:opacity-60"
-                  />
-                  <datalist id="recipe-source-options">
-                    <option value={CUSTOM_RECIPE_SOURCE} />
-                  </datalist>
+                  {/* Same input+trailing-control shape as the URL field, so
+                      the two halves of the group stay visually symmetric. */}
+                  <div className="flex items-center gap-2 border-b border-gray-200 focus-within:border-brand">
+                    <input
+                      id="recipe-source"
+                      type="text"
+                      value={draftSource}
+                      onChange={(e) => onSourceChange(e.target.value)}
+                      disabled={editState === "saving"}
+                      placeholder="seriouseats.com"
+                      list="recipe-source-options"
+                      className="flex-1 min-w-0 rounded-none border-0 px-3 py-2 text-sm text-gray-700 focus:outline-hidden disabled:opacity-60"
+                    />
+                    {/* The datalist still offers "custom" for keyboard users
+                        mid-type; the button is the one-click path. */}
+                    <datalist id="recipe-source-options">
+                      <option value={CUSTOM_RECIPE_SOURCE} />
+                    </datalist>
+                    <SetCustomSourceButton
+                      value={draftSource}
+                      disabled={editState === "saving"}
+                      onClick={() => onSourceChange(CUSTOM_RECIPE_SOURCE)}
+                      className="mb-1"
+                    />
+                  </div>
                 </div>
               </div>
               {/* Spans the group rather than sitting under Name: hanging it off

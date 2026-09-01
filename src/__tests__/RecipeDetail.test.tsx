@@ -925,6 +925,48 @@ describe("RecipeDetail — controls section", () => {
     );
   });
 
+  // The shortcut exists because "custom" is a magic word with behaviour behind
+  // it (isOwnRecipe), so marking a recipe as your own shouldn't depend on
+  // spelling it correctly.
+  it("fills the source field with custom from the shortcut button", async () => {
+    render(
+      <RecipeDetail
+        recipe={makeRecipe({}, { source: "seriouseats.com" })}
+        isLoggedIn={true}
+      />,
+    );
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /^edit$/i }));
+    });
+    await act(async () => {
+      fireEvent.click(
+        screen.getByRole("button", { name: /set source to "custom"/i }),
+      );
+    });
+
+    expect((screen.getByLabelText("Name") as HTMLInputElement).value).toBe(
+      "custom",
+    );
+  });
+
+  // Disabled-once-matched doubles as the "already your own recipe" indicator,
+  // so the field group needs no separate badge for that state.
+  it("disables the custom shortcut once the source already is custom", async () => {
+    render(
+      <RecipeDetail
+        recipe={makeRecipe({}, { source: "custom" })}
+        isLoggedIn={true}
+      />,
+    );
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /^edit$/i }));
+    });
+
+    expect(
+      screen.getByRole("button", { name: /source is already "custom"/i }),
+    ).toBeDisabled();
+  });
+
   it("offers an open-in-new-tab link for the source URL", async () => {
     render(
       <RecipeDetail
