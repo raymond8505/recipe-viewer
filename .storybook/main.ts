@@ -30,11 +30,17 @@ const config: StorybookConfig = {
     }
     if (configType === "DEVELOPMENT") {
       const certsDir = path.join(path.dirname(fileURLToPath(import.meta.url)), "certs");
-      config.server ??= {};
-      config.server.https = {
-        key: fs.readFileSync(path.join(certsDir, "localhost-key.pem")),
-        cert: fs.readFileSync(path.join(certsDir, "localhost.pem")),
-      };
+      const keyPath = path.join(certsDir, "localhost-key.pem");
+      const certPath = path.join(certsDir, "localhost.pem");
+      // certs are gitignored (*.pem) — a fresh checkout has none, and storybook
+      // must still start (plain http) rather than crash on the read
+      if (fs.existsSync(keyPath) && fs.existsSync(certPath)) {
+        config.server ??= {};
+        config.server.https = {
+          key: fs.readFileSync(keyPath),
+          cert: fs.readFileSync(certPath),
+        };
+      }
     }
     return config;
   },

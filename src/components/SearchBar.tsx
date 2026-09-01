@@ -17,12 +17,12 @@ export default function SearchBar({ defaultValue }: SearchBarProps) {
     setInputValue(searchParams.get("q") ?? "");
   }, [searchParams]);
 
-  const handleChange = useCallback(
-    (value: string) => {
-      setInputValue(value);
+  const handleSubmit = useCallback(
+    (e: React.FormEvent) => {
+      e.preventDefault();
       const params = new URLSearchParams(searchParams.toString());
-      if (value) {
-        params.set("q", value);
+      if (inputValue) {
+        params.set("q", inputValue);
       } else {
         params.delete("q");
       }
@@ -32,12 +32,16 @@ export default function SearchBar({ defaultValue }: SearchBarProps) {
         router.push(`/?${params.toString()}`);
       });
     },
-    [router, searchParams]
+    [router, searchParams, inputValue]
   );
 
   return (
-    <div className="relative">
-      <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+    <form onSubmit={handleSubmit} className="relative">
+      <button
+        type="submit"
+        aria-label="Search"
+        className="absolute inset-y-0 left-0 pl-4 flex items-center"
+      >
         <svg
           className={`w-5 h-5 ${isPending ? "text-brand animate-pulse" : "text-gray-400"}`}
           fill="none"
@@ -51,14 +55,14 @@ export default function SearchBar({ defaultValue }: SearchBarProps) {
             d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
           />
         </svg>
-      </div>
+      </button>
       <input
         type="search"
         value={inputValue}
-        onChange={(e) => handleChange(e.target.value)}
+        onChange={(e) => setInputValue(e.target.value)}
         placeholder="Search recipes…"
         className="w-full pl-12 pr-4 py-3 rounded-none border-0 border-b border-gray-200 bg-card text-gray-900 placeholder-gray-400 focus:outline-hidden focus:border-brand transition"
       />
-    </div>
+    </form>
   );
 }
