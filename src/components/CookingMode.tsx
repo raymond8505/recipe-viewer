@@ -11,7 +11,7 @@ import {
   parseDurationToSeconds,
   getIngredientText,
 } from "@/lib/format";
-import { useTimers, timerState } from "@/hooks/useTimers";
+import { useTimers, timerState, editorSeconds } from "@/hooks/useTimers";
 import type { Timer } from "@/hooks/useTimers";
 import { ScalableRecipe, type NormalizedNutrition } from "@/lib/ScalableRecipe";
 import { useWakeLock } from "@/hooks/useWakeLock";
@@ -791,9 +791,12 @@ export default function CookingMode({
       {editingTimer && (
         <AddTimerModal
           initialLabel={editingTimer.label}
-          initialSeconds={editingTimer.duration}
-          onAdd={(label, duration) => {
-            editTimer(editingTimer.id, label, duration);
+          initialSeconds={editorSeconds(editingTimer)}
+          onAdd={(label, seconds) => {
+            // An untouched duration field is a label-only edit — pass null so a running
+            // timer keeps counting down from where it is.
+            const touched = seconds !== editorSeconds(editingTimer);
+            editTimer(editingTimer.id, label, touched ? seconds : null);
             setEditingTimer(null);
           }}
           onClose={() => setEditingTimer(null)}

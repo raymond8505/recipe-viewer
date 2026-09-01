@@ -18,6 +18,12 @@ export function timerState(t: Timer): "running" | "paused" | "alarm" | "finished
   return t.paused ? "paused" : "running";
 }
 
+// What the edit modal pre-fills for a timer. A running timer is edited from the time left on
+// its clock — that is the number the cook is looking at — everything else from its duration.
+export function editorSeconds(t: Timer): number {
+  return timerState(t) === "running" ? t.remaining : t.duration;
+}
+
 type TimerStore = Record<string, Timer[]>;
 
 const STORAGE_KEY = "cookingTimers";
@@ -143,11 +149,29 @@ export function useTimers(recipeUrl: string) {
     return id;
   }, []);
 
-  // Update label and duration only; does not reset remaining
-  const editTimer = useCallback((id: string, label: string, duration: number) => {
+  // A new duration restarts the timer at it, preserving running/stopped state — otherwise the
+  // edit is invisible until the next reset. A timer that had already hit zero (ringing or
+  // dismissed) comes back stopped, so nothing silently starts counting down.
+  // `duration: null` is a label-only edit: it leaves the duration, the countdown and any
+  // ringing alarm alone. Only the caller knows whether the user touched the duration field
+  // (the modal pre-fills from `editorSeconds`, which is `remaining` for a running timer), so
+  // that decision is passed in rather than inferred from the value.
+  const editTimer = useCallback((id: string, label: string, duration: number | null) => {
     setTimers((prev) => {
-      const updated = prev.map((t) => (t.id === id ? { ...t, label, duration } : t));
+      const updated = prev.map((t) => {
+        if (t.id !== id) return t;
+        if (duration === null) return { ...t, label };
+        return {
+          ...t,
+          label,
+          duration,
+          remaining: duration,
+          paused: t.remaining === 0 ? true : t.paused,
+          finished: false,
+        };
+      });
       saveTimers(hashRef.current, updated);
+      if (!hasActiveAlarm(updated)) stopAlarm();
       return updated;
     });
   }, []);
