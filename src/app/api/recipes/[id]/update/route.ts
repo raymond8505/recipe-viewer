@@ -56,9 +56,14 @@ export const POST = requireSessionOrRecipeToken(
       throw err;
     }
 
+    // Every row-level field the editor seeds from is echoed back, so the client
+    // can re-seed its state from what was actually persisted rather than from
+    // its own draft — the two differ whenever a value degrades (blank source) or
+    // is canonicalized server-side.
     return NextResponse.json({
       schema: saved.metadata.schema,
       status: saved.status,
+      url: saved.url,
       source: saved.source,
     });
   },
