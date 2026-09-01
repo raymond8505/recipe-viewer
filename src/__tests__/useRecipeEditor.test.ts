@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { renderHook, act } from "@testing-library/react";
 import { useRecipeEditor } from "@/hooks/useRecipeEditor";
+import type { EditRowFields } from "@/hooks/useRecipeEditor";
 import type { SchemaRecipe } from "@/types/recipe";
 
 const schema: SchemaRecipe = {
@@ -10,6 +11,9 @@ const schema: SchemaRecipe = {
   recipeInstructions: [{ "@type": "HowToStep", text: "Mix" }],
   notes: "Use buttermilk.",
 };
+
+/** Row-level fields for cases that only care about the schema half of begin(). */
+const ROW: EditRowFields = { status: "draft", url: "", source: "" };
 
 describe("useRecipeEditor", () => {
   it("starts idle with an empty draft", () => {
@@ -21,7 +25,13 @@ describe("useRecipeEditor", () => {
 
   it("begin seeds every field from the schema and enters editing", () => {
     const { result } = renderHook(() => useRecipeEditor());
-    act(() => result.current.begin(schema, "published", "https://x.test"));
+    act(() =>
+      result.current.begin(schema, {
+        status: "published",
+        url: "https://x.test",
+        source: "seriouseats.com",
+      }),
+    );
     expect(result.current.isEditing).toBe(true);
     expect(result.current.draft).toMatchObject({
       name: "Pancakes",
@@ -29,6 +39,7 @@ describe("useRecipeEditor", () => {
       description: "Fluffy.",
       notes: "Use buttermilk.",
       status: "published",
+      source: "seriouseats.com",
     });
     // ingredients/instructions are the structured editor trees
     expect(result.current.draft.ingredients[0].items.map((i) => i.name)).toEqual(
@@ -39,7 +50,7 @@ describe("useRecipeEditor", () => {
 
   it("patch shallow-merges the draft", () => {
     const { result } = renderHook(() => useRecipeEditor());
-    act(() => result.current.begin(schema, "draft", ""));
+    act(() => result.current.begin(schema, ROW));
     act(() => result.current.patch({ name: "Crepes" }));
     expect(result.current.draft.name).toBe("Crepes");
     expect(result.current.draft.description).toBe("Fluffy.");
@@ -47,14 +58,14 @@ describe("useRecipeEditor", () => {
 
   it("cancel returns to idle", () => {
     const { result } = renderHook(() => useRecipeEditor());
-    act(() => result.current.begin(schema, "draft", ""));
+    act(() => result.current.begin(schema, ROW));
     act(() => result.current.cancel());
     expect(result.current.isEditing).toBe(false);
   });
 
   it("buildSchema merges the draft and falls back to base name when blank", () => {
     const { result } = renderHook(() => useRecipeEditor());
-    act(() => result.current.begin(schema, "draft", ""));
+    act(() => result.current.begin(schema, ROW));
     act(() => result.current.patch({ name: "   ", description: "" }));
     const built = result.current.buildSchema(schema);
     expect(built.name).toBe("Pancakes");
@@ -63,7 +74,7 @@ describe("useRecipeEditor", () => {
 
   it("buildSchema produces structured ingredient/instruction arrays", () => {
     const { result } = renderHook(() => useRecipeEditor());
-    act(() => result.current.begin(schema, "draft", ""));
+    act(() => result.current.begin(schema, ROW));
     const built = result.current.buildSchema(schema);
     expect(built.recipeIngredient).toEqual(["2 cups flour", "1 egg"]);
     expect(built.recipeInstructions).toEqual([
@@ -73,7 +84,7 @@ describe("useRecipeEditor", () => {
 
   it("allows a label with no time and keeps saving enabled", () => {
     const { result } = renderHook(() => useRecipeEditor());
-    act(() => result.current.begin(schema, "draft", ""));
+    act(() => result.current.begin(schema, ROW));
     const stepId = result.current.draft.instructions[0].items[0].id;
     act(() =>
       result.current.patch({
@@ -96,7 +107,7 @@ describe("useRecipeEditor", () => {
 
   it("flags a step with a time but no label and blocks saving", () => {
     const { result } = renderHook(() => useRecipeEditor());
-    act(() => result.current.begin(schema, "draft", ""));
+    act(() => result.current.begin(schema, ROW));
     const stepId = result.current.draft.instructions[0].items[0].id;
     act(() =>
       result.current.patch({
@@ -119,7 +130,7 @@ describe("useRecipeEditor", () => {
 
   it("canSave is true once name and time are both set", () => {
     const { result } = renderHook(() => useRecipeEditor());
-    act(() => result.current.begin(schema, "draft", ""));
+    act(() => result.current.begin(schema, ROW));
     act(() =>
       result.current.patch({
         instructions: [
@@ -143,7 +154,7 @@ describe("useRecipeEditor", () => {
   describe("servings", () => {
     it("begin seeds an empty string when the schema has no yield", () => {
       const { result } = renderHook(() => useRecipeEditor());
-      act(() => result.current.begin(schema, "draft", ""));
+      act(() => result.current.begin(schema, ROW));
       expect(result.current.draft.servings).toBe("");
     });
 
@@ -152,8 +163,7 @@ describe("useRecipeEditor", () => {
       act(() =>
         result.current.begin(
           { ...schema, recipeYield: "4 servings" },
-          "draft",
-          "",
+          ROW,
         ),
       );
       expect(result.current.draft.servings).toBe("4");
@@ -167,8 +177,7 @@ describe("useRecipeEditor", () => {
             ...schema,
             recipeYield: { "@type": "QuantitativeValue", value: 4 },
           },
-          "draft",
-          "",
+          ROW,
         ),
       );
       expect(result.current.draft.servings).toBe("4");
@@ -177,7 +186,7 @@ describe("useRecipeEditor", () => {
     it("buildSchema rewrites a string yield when servings change", () => {
       const base = { ...schema, recipeYield: "4 servings" };
       const { result } = renderHook(() => useRecipeEditor());
-      act(() => result.current.begin(base, "draft", ""));
+      act(() => result.current.begin(base, ROW));
       act(() => result.current.patch({ servings: "8" }));
       expect(result.current.buildSchema(base).recipeYield).toBe("8 servings");
     });
@@ -193,7 +202,7 @@ describe("useRecipeEditor", () => {
         },
       };
       const { result } = renderHook(() => useRecipeEditor());
-      act(() => result.current.begin(base, "draft", ""));
+      act(() => result.current.begin(base, ROW));
       act(() => result.current.patch({ servings: "8" }));
       expect(result.current.buildSchema(base).recipeYield).toEqual({
         "@type": "QuantitativeValue",
@@ -208,7 +217,7 @@ describe("useRecipeEditor", () => {
       (servings) => {
         const base = { ...schema, recipeYield: "4 servings" };
         const { result } = renderHook(() => useRecipeEditor());
-        act(() => result.current.begin(base, "draft", ""));
+        act(() => result.current.begin(base, ROW));
         act(() => result.current.patch({ servings }));
         expect(result.current.buildSchema(base).recipeYield).toBe("4 servings");
       },
@@ -219,14 +228,14 @@ describe("useRecipeEditor", () => {
       // editing must not collapse the range to "7 servings".
       const base = { ...schema, recipeYield: "6-8 servings" };
       const { result } = renderHook(() => useRecipeEditor());
-      act(() => result.current.begin(base, "draft", ""));
+      act(() => result.current.begin(base, ROW));
       expect(result.current.draft.servings).toBe("7");
       expect(result.current.buildSchema(base).recipeYield).toBe("6-8 servings");
     });
 
     it("buildSchema creates a yield on a recipe that had none", () => {
       const { result } = renderHook(() => useRecipeEditor());
-      act(() => result.current.begin(schema, "draft", ""));
+      act(() => result.current.begin(schema, ROW));
       act(() => result.current.patch({ servings: "6" }));
       expect(result.current.buildSchema(schema).recipeYield).toEqual({
         "@type": "QuantitativeValue",
@@ -237,7 +246,7 @@ describe("useRecipeEditor", () => {
 
   it("runSave transitions saving → idle on success", async () => {
     const { result } = renderHook(() => useRecipeEditor());
-    act(() => result.current.begin(schema, "draft", ""));
+    act(() => result.current.begin(schema, ROW));
     await act(async () => {
       await result.current.runSave(async () => {});
     });
@@ -246,7 +255,7 @@ describe("useRecipeEditor", () => {
 
   it("runSave transitions to error and keeps the draft on failure", async () => {
     const { result } = renderHook(() => useRecipeEditor());
-    act(() => result.current.begin(schema, "draft", ""));
+    act(() => result.current.begin(schema, ROW));
     act(() => result.current.patch({ name: "Edited" }));
     await act(async () => {
       await result.current.runSave(async () => {

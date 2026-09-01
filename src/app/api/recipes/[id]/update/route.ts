@@ -3,6 +3,7 @@ import { getRecipeById, updateRecipeRow, RecipeRepoError } from "@/lib/recipes";
 import type { SchemaRecipe } from "@/types/recipe";
 import type { RecipeStatus } from "@/lib/recipes";
 import { requireSessionOrRecipeToken } from "@/lib/api/guard";
+import { canonicalizeRecipeSource } from "@/lib/format";
 
 export const POST = requireSessionOrRecipeToken(
   async (
@@ -20,8 +21,21 @@ export const POST = requireSessionOrRecipeToken(
       schema: SchemaRecipe;
       status: RecipeStatus;
       url?: string;
+      source?: string;
     };
     const effectiveUrl = body.url ?? recipe.url;
+    // A blank source degrades to "no change" rather than clearing the column —
+    // isOwnRecipe and the browse filter both read it, and an empty string is
+    // never a meaningful provenance. Mirrors how the editor treats an invalid
+    // servings input: never blocks the save, just doesn't apply.
+    //
+    // Canonicalized on the way in so the stored own-recipe value is always the
+    // lowercase literal: isOwnRecipe reads leniently, but the column also feeds
+    // the ?source= browse filter and MCP search_recipes, which match exactly —
+    // a stored "Custom" would silently split that bucket in two.
+    const effectiveSource = canonicalizeRecipeSource(
+      body.source?.trim() || recipe.source,
+    );
 
     // recomputes the markdown `content` column and the search embedding from
     // the saved schema.
@@ -29,6 +43,7 @@ export const POST = requireSessionOrRecipeToken(
     try {
       saved = await updateRecipeRow(id, {
         url: effectiveUrl,
+        source: effectiveSource,
         schema: body.schema,
         status: body.status,
       });
@@ -44,6 +59,7 @@ export const POST = requireSessionOrRecipeToken(
     return NextResponse.json({
       schema: saved.metadata.schema,
       status: saved.status,
+      source: saved.source,
     });
   },
 );

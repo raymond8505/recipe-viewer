@@ -12,6 +12,7 @@ import {
   DEFAULT_INGREDIENT_SOURCE,
   INGREDIENT_SOURCES,
 } from "@/lib/schemas/ingredient";
+import { CUSTOM_RECIPE_SOURCE } from "@/lib/format";
 import { ARCHIVED_RECIPE_STATUS, RECIPE_STATUSES } from "@/lib/schemas/recipe";
 import { NUTRITION_FIELDS, type NutritionField } from "@/lib/nutritionFields";
 import { METRIC_YIELD_UNITS } from "@/lib/units";
@@ -265,7 +266,7 @@ export const TOOL_SCHEMAS = {
   },
   create_recipe: {
     type: "object",
-    required: ["source", "schema"],
+    required: ["schema"],
     properties: {
       url: {
         type: "string",
@@ -273,7 +274,10 @@ export const TOOL_SCHEMAS = {
         description:
           "Optional. Defaults to the recipe's own canonical page on this instance (<base-url>/recipes/<new-uuid>) when omitted.",
       },
-      source: { type: "string" },
+      source: {
+        type: "string",
+        description: `Where the recipe came from — the origin domain (e.g. "seriouseats.com"). Required whenever url is given. Omit both to create a recipe that lives on this instance: source then defaults to "${CUSTOM_RECIPE_SOURCE}", marking it as the user's own recipe (no upstream page to re-scrape).`,
+      },
       status: statusEnum,
       schema: schemaRecipeJsonSchema,
     },

@@ -24,8 +24,20 @@ export interface EditDraft {
   instructions: EditableInstructions;
   notes: string;
   status: string;
+  /** Provenance: an origin domain, or "custom" for a recipe authored here.
+   *  Read by isOwnRecipe to decide whether Re-scrape applies. */
+  source: string;
   /** Base servings as raw input text; parsed (integer >= 1) on save. */
   servings: string;
+}
+
+/** The row-level (non-schema) fields the editor seeds from. Passed as an object
+ *  rather than positionally: they are all plain strings, so a positional list
+ *  would let a caller swap two of them with no type error. */
+export interface EditRowFields {
+  status: string;
+  url: string;
+  source: string;
 }
 
 const EMPTY_DRAFT: EditDraft = {
@@ -36,6 +48,7 @@ const EMPTY_DRAFT: EditDraft = {
   instructions: [],
   notes: "",
   status: "",
+  source: "",
   servings: "",
 };
 
@@ -55,7 +68,7 @@ export interface UseRecipeEditor {
    *  source of truth for "what does opening the editor populate" — every
    *  entry path (Edit, re-scrape, regen image, upload) funnels through here,
    *  so a new field can never be forgotten on one path. */
-  begin: (schema: SchemaRecipe, status: string, url: string) => void;
+  begin: (schema: SchemaRecipe, row: EditRowFields) => void;
   /** Leave edit mode (does not touch the canonical schema). */
   cancel: () => void;
   /** Merge the current draft onto a base schema to produce the schema to
@@ -99,7 +112,7 @@ export function useRecipeEditor(): UseRecipeEditor {
   );
 
   const begin = useCallback(
-    (schema: SchemaRecipe, status: string, url: string) => {
+    (schema: SchemaRecipe, { status, url, source }: EditRowFields) => {
       setDraft({
         name: schema.name,
         url,
@@ -110,6 +123,7 @@ export function useRecipeEditor(): UseRecipeEditor {
         ),
         notes: schema.notes ?? "",
         status,
+        source,
         servings: parseServings(schema.recipeYield)?.toString() ?? "",
       });
       setEditState("editing");

@@ -14,6 +14,7 @@ import {
   getFirstImage,
   toArray,
   getIngredientText,
+  isOwnRecipe,
   toSchemaOrgJsonLd,
 } from "@/lib/format";
 import { ScalableRecipe, type NormalizedNutrition } from "@/lib/ScalableRecipe";
@@ -64,6 +65,10 @@ export default function RecipeDetail({
 }: RecipeDetailProps) {
   const [schema, setSchema] = useState(recipe.metadata.schema);
   const [status, setStatus] = useState(recipe.status ?? "draft");
+  // Tracked in state alongside `status` rather than read off the prop: editing
+  // it must flip the Re-scrape button immediately (isOwnRecipe reads it), and
+  // the prop is a server-render snapshot that a client-side save can't update.
+  const [source, setSource] = useState(recipe.source ?? "");
   const image = getFirstImage(schema.image);
   const prepTime = formatDuration(schema.prepTime);
   const cookTime = formatDuration(schema.cookTime);
@@ -149,8 +154,21 @@ export default function RecipeDetail({
     },
     [],
   );
+  // window.location is not available during SSR, and reading it straight in
+  // render would make the server and first client render disagree. Until mount
+  // the URL half of the check reads false, so Re-scrape starts enabled and only
+  // disables once we can actually compare — the safe direction for a button
+  // whose disabled state is an optimisation, not a guard.
   const [isMounted, setIsMounted] = useState(false);
   useEffect(() => setIsMounted(true), []);
+
+  // Re-scrape is only pointless when BOTH hold: the recipe is the user's own
+  // AND its source URL is this very page — i.e. re-scraping would fetch the
+  // page it is already showing. Either alone is not enough: a "custom" recipe
+  // can still point at a real external page worth re-fetching, and a scraped
+  // recipe whose URL happens to be this page is not the user's own.
+  const isSelfReferential = isMounted && recipe.url === window.location.href;
+  const canRescrape = !(isOwnRecipe({ source }) && isSelfReferential);
 
   // Read-only aliases consumed by the JSX below.
   const isEditing = editor.isEditing;
@@ -162,10 +180,15 @@ export default function RecipeDetail({
   const previewUrl = imageUpload.previewUrl;
   const fileInputRef = imageUpload.fileInputRef;
 
+  // The row-level fields every editor entry path seeds from. `status` is the
+  // live state (it can differ from recipe.status after a save); url and source
+  // come straight off the row.
+  const editRowFields = { status, url: recipe.url ?? "", source };
+
   // Adopt an op's resulting schema and open the editor on it for review.
   const beginReview = (next: SchemaRecipe) => {
     setSchema(next);
-    editor.begin(next, status, recipe.url ?? "");
+    editor.begin(next, editRowFields);
   };
 
   const handleRescrape = () => rescrape.run(schema, beginReview);
@@ -180,10 +203,10 @@ export default function RecipeDetail({
     imageUpload.onFileChange(e, () => {
       rescrape.clear();
       regenImage.clear();
-      editor.begin(schema, status, recipe.url ?? "");
+      editor.begin(schema, editRowFields);
     });
 
-  const handleEditStart = () => editor.begin(schema, status, recipe.url ?? "");
+  const handleEditStart = () => editor.begin(schema, editRowFields);
 
   const handleEditCancel = () => {
     if (rescrape.isReview) rescrape.undo(setSchema);
@@ -205,6 +228,7 @@ export default function RecipeDetail({
           schema: updatedSchema,
           status: draft.status,
           url: draft.url,
+          source: draft.source,
         }),
       });
       if (!res.ok) throw new Error();
@@ -212,6 +236,9 @@ export default function RecipeDetail({
       if (!result.schema) throw new Error();
       setSchema(result.schema);
       setStatus(result.status);
+      // The route echoes the persisted value, which may differ from the draft
+      // (a blank field degrades to "no change" server-side).
+      if (result.source) setSource(result.source);
       rescrape.clear();
       regenImage.clear();
       imageUpload.clear();
@@ -351,8 +378,10 @@ export default function RecipeDetail({
             editState={editState}
             canSave={editor.canSave}
             draftUrl={draft.url}
+            draftSource={draft.source}
             draftStatus={draft.status}
             onUrlChange={(url) => patch({ url })}
+            onSourceChange={(source) => patch({ source })}
             onStatusChange={(status) => patch({ status })}
             isRescrapeReview={isRescrapeReview}
             isRegenImageReview={isRegenImageReview}
@@ -360,7 +389,7 @@ export default function RecipeDetail({
             rescrapeState={rescrapeState}
             regenImageState={regenImageState}
             normalizeState={normalizeState}
-            canRescrape={isMounted && recipe.url !== window.location.href}
+            canRescrape={canRescrape}
             uploadError={imageUpload.error}
             fileInputRef={fileInputRef}
             onEditStart={handleEditStart}

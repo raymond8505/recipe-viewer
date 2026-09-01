@@ -11,6 +11,7 @@ const meta: Meta<typeof RecipeControls> = {
     editState: "idle",
     canSave: true,
     draftUrl: "https://example.com/recipe",
+    draftSource: "example.com",
     draftStatus: "published",
     isRescrapeReview: false,
     isRegenImageReview: false,
@@ -39,6 +40,16 @@ type Story = StoryObj<typeof RecipeControls>;
 
 /** Default (not editing): Edit / Re-scrape / Regen Image / Upload Image / Normalize. */
 export const ViewMode: Story = {};
+
+/**
+ * The user's own recipe (`source: "custom"`) whose source URL is this very page
+ * — re-scraping would fetch the page already on screen. Re-scrape stays in the
+ * row but goes flat, with a tooltip (and accessible name) saying why; a button
+ * that vanished would just read as a bug. Every other control is unchanged.
+ */
+export const OwnRecipe: Story = {
+  args: { canRescrape: false },
+};
 
 /**
  * Re-scrape awaiting confirmation. Both webhook-backed actions spend on an

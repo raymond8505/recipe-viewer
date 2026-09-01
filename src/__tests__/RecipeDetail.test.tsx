@@ -16,12 +16,16 @@ import type {
 import { rescrapeFixture } from "@/fixtures/rescrape";
 import { clickAndConfirm } from "./helpers/confirmBar";
 
-function makeRecipe(schema: Partial<SchemaRecipe> = {}): RecipeRow {
+function makeRecipe(
+  schema: Partial<SchemaRecipe> = {},
+  row: Partial<Omit<RecipeRow, "metadata">> = {},
+): RecipeRow {
   return {
     id: "1",
     url: "https://example.com",
     source: "example.com",
     status: "draft",
+    ...row,
     metadata: {
       schema: {
         name: "Test Recipe",
@@ -368,6 +372,52 @@ describe("RecipeDetail — controls section", () => {
   it("shows the Re-scrape button when isLoggedIn is true", () => {
     render(<RecipeDetail recipe={makeRecipe()} isLoggedIn={true} />);
     expect(screen.getByRole("button", { name: /re-scrape/i })).toBeTruthy();
+  });
+
+  // Re-scrape needs BOTH halves to be pointless before it switches off: the
+  // recipe is the user's own AND its source URL is this very page, so a
+  // re-scrape would fetch the page already on screen. It disables rather than
+  // disappearing, so the reason is visible instead of the button silently
+  // going missing.
+  it("disables Re-scrape for an own recipe whose source URL is this page", () => {
+    render(
+      <RecipeDetail
+        recipe={makeRecipe({}, { source: "custom", url: window.location.href })}
+        isLoggedIn={true}
+      />,
+    );
+
+    const button = screen.getByRole("button", { name: /re-scrape/i });
+    expect(button).toBeDisabled();
+    // The reason rides on the accessible name too: the tooltip is hover-only
+    // and a disabled button can't take focus.
+    expect(button).toHaveAccessibleName(/nothing external to re-fetch/i);
+    // The rest of the Manage toolbar is unaffected.
+    expect(screen.getByRole("button", { name: /^edit$/i })).toBeEnabled();
+  });
+
+  // Each half alone leaves Re-scrape usable.
+  it("keeps Re-scrape enabled when the url matches but the recipe is not the user's own", () => {
+    render(
+      <RecipeDetail
+        recipe={makeRecipe({}, { url: window.location.href })}
+        isLoggedIn={true}
+      />,
+    );
+    expect(screen.getByRole("button", { name: /re-scrape/i })).toBeEnabled();
+  });
+
+  it("keeps Re-scrape enabled for an own recipe that still points at an external page", () => {
+    render(
+      <RecipeDetail
+        recipe={makeRecipe(
+          {},
+          { source: "custom", url: "https://seriouseats.com/kebab" },
+        )}
+        isLoggedIn={true}
+      />,
+    );
+    expect(screen.getByRole("button", { name: /re-scrape/i })).toBeEnabled();
   });
 
   it("links to the nutrition breakdown only when logged in", () => {
@@ -803,6 +853,183 @@ describe("RecipeDetail — controls section", () => {
       /https:\/\/example\.com\/recipe/i,
     ) as HTMLInputElement;
     expect(input.value).toBe("https://example.com");
+  });
+
+  // Both provenance fields sit in a "Source" fieldset, so each label is only
+  // the part that differs: URL and Name.
+  it("shows Source input pre-filled with recipe.source in edit mode", async () => {
+    render(
+      <RecipeDetail
+        recipe={makeRecipe({}, { source: "seriouseats.com" })}
+        isLoggedIn={true}
+      />,
+    );
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /^edit$/i }));
+    });
+    expect((screen.getByLabelText("Name") as HTMLInputElement).value).toBe(
+      "seriouseats.com",
+    );
+  });
+
+  it("includes the edited source in the save request body", async () => {
+    const mockFetch = vi
+      .fn()
+      .mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            schema: rescrapeFixture,
+            status: "draft",
+            source: "custom",
+          }),
+          { status: 200 },
+        ),
+      );
+    vi.stubGlobal("fetch", mockFetch);
+
+    render(<RecipeDetail recipe={makeRecipe()} isLoggedIn={true} />);
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /^edit$/i }));
+    });
+    await act(async () => {
+      fireEvent.change(screen.getByLabelText("Name"), {
+        target: { value: "custom" },
+      });
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /^save$/i }));
+    });
+
+    await waitFor(() => expect(mockFetch).toHaveBeenCalled());
+    expect(JSON.parse(mockFetch.mock.calls[0][1].body).source).toBe("custom");
+  });
+
+  // The whole point of making source editable: switching a recipe to "custom"
+  // must retire Re-scrape straight away. The `recipe` prop is a server-render
+  // snapshot that never changes, so this only works because RecipeDetail tracks
+  // source in state and re-seeds it from the save response. The url is pinned
+  // to this page so the other half of the check is already satisfied and the
+  // source edit is the only thing moving.
+  it("disables the Re-scrape button after saving source as custom", async () => {
+    const mockFetch = vi
+      .fn()
+      .mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            schema: rescrapeFixture,
+            status: "draft",
+            source: "custom",
+          }),
+          { status: 200 },
+        ),
+      );
+    vi.stubGlobal("fetch", mockFetch);
+
+    render(
+      <RecipeDetail
+        recipe={makeRecipe({}, { url: window.location.href })}
+        isLoggedIn={true}
+      />,
+    );
+    expect(screen.getByRole("button", { name: /re-scrape/i })).toBeEnabled();
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /^edit$/i }));
+    });
+    await act(async () => {
+      fireEvent.change(screen.getByLabelText("Name"), {
+        target: { value: "custom" },
+      });
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /^save$/i }));
+    });
+
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: /re-scrape/i })).toBeDisabled(),
+    );
+  });
+
+  // The shortcut exists because "custom" is a magic word with behaviour behind
+  // it (isOwnRecipe), so marking a recipe as your own shouldn't depend on
+  // spelling it correctly.
+  it("fills the source field with custom from the shortcut button", async () => {
+    render(
+      <RecipeDetail
+        recipe={makeRecipe({}, { source: "seriouseats.com" })}
+        isLoggedIn={true}
+      />,
+    );
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /^edit$/i }));
+    });
+    await act(async () => {
+      fireEvent.click(
+        screen.getByRole("button", { name: /set source to "custom"/i }),
+      );
+    });
+
+    expect((screen.getByLabelText("Name") as HTMLInputElement).value).toBe(
+      "custom",
+    );
+  });
+
+  // Disabled-once-matched doubles as the "already your own recipe" indicator,
+  // so the field group needs no separate badge for that state.
+  it("disables the custom shortcut once the source already is custom", async () => {
+    render(
+      <RecipeDetail
+        recipe={makeRecipe({}, { source: "custom" })}
+        isLoggedIn={true}
+      />,
+    );
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /^edit$/i }));
+    });
+
+    expect(
+      screen.getByRole("button", { name: /source is already "custom"/i }),
+    ).toBeDisabled();
+  });
+
+  it("offers an open-in-new-tab link for the source URL", async () => {
+    render(
+      <RecipeDetail
+        recipe={makeRecipe({}, { url: "https://seriouseats.com/kebab" })}
+        isLoggedIn={true}
+      />,
+    );
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /^edit$/i }));
+    });
+
+    const link = screen.getByRole("link", {
+      name: /open source url in a new tab/i,
+    });
+    expect(link).toHaveAttribute("href", "https://seriouseats.com/kebab");
+    expect(link).toHaveAttribute("target", "_blank");
+    // Opening an arbitrary user-supplied URL without this hands the new tab a
+    // window.opener handle back to the app.
+    expect(link).toHaveAttribute("rel", "noopener noreferrer");
+  });
+
+  // A half-typed value must not be a live link. Dropping the href makes the
+  // anchor inert (not focusable, not a link) without unmounting it, so the
+  // input keeps its width as the user types.
+  it("keeps the open link inert while the source URL is incomplete", async () => {
+    render(<RecipeDetail recipe={makeRecipe()} isLoggedIn={true} />);
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /^edit$/i }));
+    });
+    await act(async () => {
+      fireEvent.change(screen.getByLabelText("URL"), {
+        target: { value: "htt" },
+      });
+    });
+
+    expect(
+      screen.queryByRole("link", { name: /open source url in a new tab/i }),
+    ).toBeNull();
   });
 
   it("includes url in the save request body", async () => {

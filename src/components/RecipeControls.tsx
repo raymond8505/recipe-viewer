@@ -3,10 +3,15 @@
 import { useState, type ChangeEvent, type MutableRefObject } from "react";
 import type { OpState } from "@/hooks/useUndoableSchemaOp";
 import type { EditState } from "@/hooks/useRecipeEditor";
+import { CUSTOM_RECIPE_SOURCE, isBrowsableUrl } from "@/lib/format";
 import { ALLOWED_IMAGE_CONTENT_TYPES } from "@/lib/imageTypes";
+import { ExternalLinkIcon } from "@/components/icons";
 import { Button } from "@/components/ui/button";
 import ConfirmBar from "@/components/ConfirmBar";
-import { PrimaryActionButton } from "@/components/buttons";
+import {
+  PrimaryActionButton,
+  SetCustomSourceButton,
+} from "@/components/buttons";
 
 /**
  * The actions that spend real money/time on an external service and so are
@@ -34,14 +39,25 @@ const CONFIRM_ACTIONS = {
 
 type ConfirmAction = keyof typeof CONFIRM_ACTIONS;
 
+/**
+ * Why Re-scrape can be unavailable. Shown as the disabled button's tooltip and
+ * folded into its accessible name — a disabled control that gives no reason is
+ * just a dead end, and this one's cause (a field the user can edit) is fixable
+ * from the form directly above it.
+ */
+const RESCRAPE_BLOCKED_REASON =
+  "this is your own recipe and its source URL is this page, so there is nothing external to re-fetch";
+
 export interface RecipeControlsProps {
   isEditing: boolean;
   editState: EditState;
   canSave: boolean;
-  /** Edit-mode source URL + status fields. */
+  /** Edit-mode source URL + source + status fields. */
   draftUrl: string;
+  draftSource: string;
   draftStatus: string;
   onUrlChange: (value: string) => void;
+  onSourceChange: (value: string) => void;
   onStatusChange: (value: string) => void;
   /** Review banners shown when an op pre-populated the editor for confirmation. */
   isRescrapeReview: boolean;
@@ -51,7 +67,8 @@ export interface RecipeControlsProps {
   regenImageState: OpState;
   /** Fire-and-forget ingredient normalization (queues a background re-run). */
   normalizeState: OpState;
-  /** Whether the Re-scrape button applies (mounted + not viewing the source URL). */
+  /** Whether Re-scrape can run. False disables the button (with a tooltip
+   *  explaining why) rather than hiding it — see RESCRAPE_BLOCKED_REASON. */
   canRescrape: boolean;
   /** Image-upload validation error flag. */
   uploadError: boolean;
@@ -85,8 +102,10 @@ export default function RecipeControls({
   editState,
   canSave,
   draftUrl,
+  draftSource,
   draftStatus,
   onUrlChange,
+  onSourceChange,
   onStatusChange,
   isRescrapeReview,
   isRegenImageReview,
@@ -110,6 +129,10 @@ export default function RecipeControls({
   // component stays presentational for *op* state (RecipeDetail still owns
   // every hook); this mirrors the local `confirming` flag in editor rows.
   const [pending, setPending] = useState<ConfirmAction | null>(null);
+
+  // Gates the open-in-new-tab link: false while a URL is half-typed, and the
+  // guard that keeps a javascript: value out of a user-controlled href.
+  const canOpenUrl = isBrowsableUrl(draftUrl);
 
   const runPending = () => {
     const action = pending;
@@ -158,19 +181,98 @@ export default function RecipeControls({
                 cancel.
               </p>
             )}
-            <div className="w-full mb-1">
-              <label className="block text-xs font-medium text-gray-500 mb-1">
-                Source URL
-              </label>
-              <input
-                type="url"
-                value={draftUrl}
-                onChange={(e) => onUrlChange(e.target.value)}
-                disabled={editState === "saving"}
-                placeholder="https://example.com/recipe"
-                className="w-full rounded-none border-0 border-b border-gray-200 px-3 py-2 text-sm text-gray-700 focus:outline-hidden focus:border-brand disabled:opacity-60"
-              />
-            </div>
+            {/* The two provenance fields are one idea, so they share a group
+                rather than stacking as unrelated rows. The legend carries the
+                "Source" noun, which lets each label shrink to the part that
+                differs. Both are full-width until sm — 50/50 on a phone leaves
+                neither field usable. */}
+            <fieldset className="w-full m-0 p-0 border-0 mb-1">
+              <legend className="block text-xs font-medium text-gray-500 mb-2 p-0">
+                Source
+              </legend>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-2 items-start">
+                <div>
+                  <label
+                    htmlFor="recipe-source-url"
+                    className="block text-xs font-medium text-gray-500 mb-1"
+                  >
+                    URL
+                  </label>
+                  {/* The underline moves to the wrapper so it spans the input
+                      and the open-link button as one field. */}
+                  <div className="flex items-center border-b border-gray-200 focus-within:border-brand">
+                    {/* `invisible` rather than unmounted, so the input keeps its
+                        width while a URL is being typed. An <a> with no href is
+                        already inert — not focusable, not exposed as a link —
+                        so a half-typed value leaves no phantom tab stop. */}
+                    <a
+                      href={canOpenUrl ? draftUrl : undefined}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      aria-label="Open source URL in a new tab"
+                      aria-hidden={!canOpenUrl}
+                      className={`shrink-0 p-2 text-gray-400 transition-colors hover:text-brand ${
+                        canOpenUrl ? "" : "invisible"
+                      }`}
+                    >
+                      <ExternalLinkIcon />
+                    </a>
+                    <input
+                      id="recipe-source-url"
+                      type="url"
+                      value={draftUrl}
+                      onChange={(e) => onUrlChange(e.target.value)}
+                      disabled={editState === "saving"}
+                      placeholder="https://example.com/recipe"
+                      className="flex-1 min-w-0 rounded-none border-0 px-3 py-2 text-sm text-gray-700 focus:outline-hidden disabled:opacity-60"
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label
+                    htmlFor="recipe-source"
+                    className="block text-xs font-medium text-gray-500 mb-1"
+                  >
+                    Name
+                  </label>
+                  {/* Same input+trailing-control shape as the URL field, so
+                      the two halves of the group stay visually symmetric. */}
+                  <div className="flex items-center gap-2 border-b border-gray-200 focus-within:border-brand">
+                    <SetCustomSourceButton
+                      value={draftSource}
+                      disabled={editState === "saving"}
+                      onClick={() => onSourceChange(CUSTOM_RECIPE_SOURCE)}
+                      className="mb-1"
+                    />
+                    <input
+                      id="recipe-source"
+                      type="text"
+                      value={draftSource}
+                      onChange={(e) => onSourceChange(e.target.value)}
+                      disabled={editState === "saving"}
+                      placeholder="seriouseats.com"
+                      list="recipe-source-options"
+                      className="flex-1 min-w-0 rounded-none border-0 px-3 py-2 text-sm text-gray-700 focus:outline-hidden disabled:opacity-60"
+                    />
+                    {/* The datalist still offers "custom" for keyboard users
+                        mid-type; the button is the one-click path. */}
+                    <datalist id="recipe-source-options">
+                      <option value={CUSTOM_RECIPE_SOURCE} />
+                    </datalist>
+                  </div>
+                </div>
+              </div>
+              {/* Spans the group rather than sitting under Name: hanging it off
+                  one column would make the two halves different heights and
+                  break the 50/50 read. Name is not just a label — isOwnRecipe
+                  reads it, so the one value with behaviour attached is spelled
+                  out rather than left for the user to infer. */}
+              <p className="mt-1 text-xs text-gray-400">
+                Where the recipe came from. Use &ldquo;{CUSTOM_RECIPE_SOURCE}
+                &rdquo; as the name for your own recipes — those hide the
+                Re-scrape button.
+              </p>
+            </fieldset>
             <select
               value={draftStatus}
               onChange={(e) => onStatusChange(e.target.value)}
@@ -227,15 +329,29 @@ export default function RecipeControls({
             <Button variant="outline" onClick={onEditStart}>
               Edit
             </Button>
-            {canRescrape && (
+            {/* Always rendered. A button that vanishes reads as a bug ("where
+                did Re-scrape go?"); a disabled one carrying its reason answers
+                the question and points at the field that would change it.
+                The <span> is load-bearing, not a wrapper for layout: a disabled
+                button swallows its own pointer events, so `title` set on the
+                button would never surface. Same trick as NutritionDetailRow. */}
+            <span title={canRescrape ? undefined : RESCRAPE_BLOCKED_REASON}>
               <Button
                 variant="outline"
                 onClick={() => setPending("rescrape")}
-                disabled={rescrapeState === "loading"}
+                disabled={!canRescrape || rescrapeState === "loading"}
+                // The tooltip is hover-only and a disabled button is not
+                // focusable, so the reason also rides on the accessible name —
+                // otherwise it is invisible to a screen reader.
+                aria-label={
+                  canRescrape
+                    ? undefined
+                    : `Re-scrape — unavailable: ${RESCRAPE_BLOCKED_REASON}`
+                }
               >
                 {rescrapeState === "loading" ? "Re-scraping…" : "Re-scrape"}
               </Button>
-            )}
+            </span>
             {rescrapeState === "success" && (
               <span className="text-sm text-green-600">Recipe updated.</span>
             )}

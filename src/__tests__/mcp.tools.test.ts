@@ -654,6 +654,42 @@ describe("createRecipe", () => {
     expect(arg.url).toBe(`http://localhost:3000/recipes/${arg.id}`);
   });
 
+  // The other half of that same default: no url means the recipe is authored
+  // on this instance, which is what "custom" marks. The pair has to move
+  // together — a row that got the canonical URL but kept a scraped-looking
+  // source would show a Re-scrape button pointed at its own page.
+  it("defaults source to custom when url is omitted", async () => {
+    const { createRecipeRow } = await import("@/lib/recipes");
+    vi.mocked(createRecipeRow).mockResolvedValueOnce({
+      id: "x",
+      url: "u",
+      source: "s",
+      status: "draft",
+      metadata: { schema: { name: "New" } },
+    } as never);
+
+    await createRecipe({ schema: { name: "New" } });
+
+    const arg = vi.mocked(createRecipeRow).mock.calls[0][0];
+    expect(arg.source).toBe("custom");
+    expect(arg.url).toBe(`http://localhost:3000/recipes/${arg.id}`);
+  });
+
+  it("keeps an explicit source rather than defaulting it", async () => {
+    const { createRecipeRow } = await import("@/lib/recipes");
+    vi.mocked(createRecipeRow).mockResolvedValueOnce({
+      id: "x",
+      url: "u",
+      source: "s",
+      status: "draft",
+      metadata: { schema: { name: "New" } },
+    } as never);
+
+    await createRecipe({ source: "instagram.com", schema: { name: "New" } });
+
+    expect(vi.mocked(createRecipeRow).mock.calls[0][0].source).toBe("instagram.com");
+  });
+
   it("ignores cookingNotes and returns a warning explaining why", async () => {
     const { createRecipeRow } = await import("@/lib/recipes");
     vi.mocked(createRecipeRow).mockResolvedValueOnce({

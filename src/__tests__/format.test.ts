@@ -12,6 +12,10 @@ import {
   groupIngredients,
   groupIngredientsWithIndex,
   getIngredientText,
+  isOwnRecipe,
+  isBrowsableUrl,
+  canonicalizeRecipeSource,
+  CUSTOM_RECIPE_SOURCE,
   markdownToInstructions,
   normalizeRecipeInstructions,
   toSchemaOrgJsonLd,
@@ -251,6 +255,81 @@ describe("getIngredientText", () => {
 
   it("returns the text field from a RecipeIngredient object", () => {
     expect(getIngredientText({ name: "1 cup sugar", group: "Cake" })).toBe("1 cup sugar");
+  });
+});
+
+// The one marker of "this recipe is mine" — deliberately an exact match on a
+// literal rather than anything derived from the site's hostname, which is what
+// this replaced (see db/migrations/0015).
+describe("isOwnRecipe", () => {
+  it("is true for the custom source", () => {
+    expect(isOwnRecipe({ source: CUSTOM_RECIPE_SOURCE })).toBe(true);
+    expect(CUSTOM_RECIPE_SOURCE).toBe("custom");
+  });
+
+  it("is false for a scraped domain", () => {
+    expect(isOwnRecipe({ source: "seriouseats.com" })).toBe(false);
+  });
+
+  it("is false for a missing source", () => {
+    expect(isOwnRecipe({})).toBe(false);
+    expect(isOwnRecipe({ source: undefined })).toBe(false);
+    expect(isOwnRecipe({ source: null })).toBe(false);
+    expect(isOwnRecipe({ source: "" })).toBe(false);
+  });
+
+  // `source` is a free-text field an agent or a person fills in, so the read
+  // side is lenient about casing even though the write side is not.
+  it("is case-insensitive", () => {
+    expect(isOwnRecipe({ source: "Custom" })).toBe(true);
+    expect(isOwnRecipe({ source: "CUSTOM" })).toBe(true);
+    expect(isOwnRecipe({ source: "cUsToM" })).toBe(true);
+  });
+});
+
+describe("canonicalizeRecipeSource", () => {
+  it("folds any casing of the own-recipe value to the lowercase literal", () => {
+    expect(canonicalizeRecipeSource("Custom")).toBe(CUSTOM_RECIPE_SOURCE);
+    expect(canonicalizeRecipeSource("CUSTOM")).toBe(CUSTOM_RECIPE_SOURCE);
+    expect(canonicalizeRecipeSource(CUSTOM_RECIPE_SOURCE)).toBe(
+      CUSTOM_RECIPE_SOURCE,
+    );
+  });
+
+  // Everything else is a name, not a token — its casing is content.
+  it("leaves any other source untouched", () => {
+    expect(canonicalizeRecipeSource("An Edible Mosaic")).toBe(
+      "An Edible Mosaic",
+    );
+    expect(canonicalizeRecipeSource("seriouseats.com")).toBe("seriouseats.com");
+    expect(canonicalizeRecipeSource("")).toBe("");
+  });
+});
+
+describe("isBrowsableUrl", () => {
+  it("accepts absolute http and https URLs", () => {
+    expect(isBrowsableUrl("https://seriouseats.com/adana-kebab")).toBe(true);
+    expect(isBrowsableUrl("http://example.com")).toBe(true);
+  });
+
+  it("rejects a half-typed URL", () => {
+    expect(isBrowsableUrl("htt")).toBe(false);
+    expect(isBrowsableUrl("example.com")).toBe(false);
+    expect(isBrowsableUrl("/recipes/1")).toBe(false);
+  });
+
+  it("rejects blank input", () => {
+    expect(isBrowsableUrl("")).toBe(false);
+    expect(isBrowsableUrl(null)).toBe(false);
+    expect(isBrowsableUrl(undefined)).toBe(false);
+  });
+
+  // The href this guards is user-editable, so a scheme that executes rather
+  // than navigates must never reach it.
+  it("rejects schemes that are not http(s)", () => {
+    expect(isBrowsableUrl("javascript:alert(1)")).toBe(false);
+    expect(isBrowsableUrl("data:text/html,<script>alert(1)</script>")).toBe(false);
+    expect(isBrowsableUrl("file:///etc/passwd")).toBe(false);
   });
 });
 

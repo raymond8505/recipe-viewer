@@ -10,6 +10,7 @@ export { DragHandleIcon } from "./DragHandleIcon";
 export { EditIcon } from "./EditIcon";
 export { EnterFullscreenIcon } from "./EnterFullscreenIcon";
 export { ExitFullscreenIcon } from "./ExitFullscreenIcon";
+export { ExternalLinkIcon } from "./ExternalLinkIcon";
 export { PauseIcon } from "./PauseIcon";
 export { PlayIcon } from "./PlayIcon";
 export { PlusIcon } from "./PlusIcon";

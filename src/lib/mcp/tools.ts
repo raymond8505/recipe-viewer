@@ -24,6 +24,7 @@ import {
 import { generateEmbedding } from "@/lib/embedding";
 import { exhaustiveKeys } from "@/lib/exhaustive";
 import { ingredientEmbeddingText, ingredientQueryText } from "@/lib/ingredientAliases";
+import { CUSTOM_RECIPE_SOURCE } from "@/lib/format";
 import { ARCHIVED_RECIPE_STATUS } from "@/lib/schemas/recipe";
 import { RECIPE_TOKEN_TTL_SECONDS, signRecipeToken } from "./recipeToken";
 import { env } from "@/env";
@@ -293,11 +294,17 @@ export async function createRecipe(
   // MCP_PUBLIC_URL is the app's base-URL source of truth (also the OAuth /
   // recipe-token issuer), and is overridden per-PR on staging.
   const url = args.url ?? `${env.MCP_PUBLIC_URL}/recipes/${id}`;
+  // Same condition, second half: a recipe with no url of its own is authored
+  // here, which is what CUSTOM_RECIPE_SOURCE means. (The input schema requires
+  // an explicit source whenever a url IS given, so this only fires for the
+  // authored-here case.) `source` is how the UI knows there is no upstream page
+  // to re-scrape — see isOwnRecipe.
+  const source = args.source ?? CUSTOM_RECIPE_SOURCE;
   try {
     const row = await createRecipeRow({
       id,
       url,
-      source: args.source,
+      source,
       status: args.status,
       schema,
     });

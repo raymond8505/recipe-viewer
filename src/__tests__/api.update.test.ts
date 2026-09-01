@@ -31,6 +31,7 @@ describe("POST /api/recipes/[id]/update", () => {
     vi.mocked(updateRecipeRow).mockImplementation(async (_id, patch) => ({
       ...storedRecipe,
       url: patch.url ?? storedRecipe.url,
+      source: patch.source ?? storedRecipe.source,
       status: patch.status ?? storedRecipe.status,
       metadata: { schema: (patch.schema ?? storedRecipe.metadata.schema) as SchemaRecipe },
     }));
@@ -93,6 +94,7 @@ describe("POST /api/recipes/[id]/update", () => {
 
     expect(updateRecipeRow).toHaveBeenCalledWith("recipe-1", {
       url: "https://example.com/recipe",
+      source: storedRecipe.source,
       schema: { name: "Test" },
       status: "draft",
     });
@@ -108,8 +110,91 @@ describe("POST /api/recipes/[id]/update", () => {
 
     expect(updateRecipeRow).toHaveBeenCalledWith("recipe-1", {
       url: "https://corrected.com/recipe",
+      source: storedRecipe.source,
       schema: { name: "Test" },
       status: "draft",
     });
   });
+
+  // `source` is editable from the recipe editor like url and status. It is not
+  // a free-form label: isOwnRecipe reads it to decide whether Re-scrape applies.
+  it("persists body.source when provided, overriding the stored source", async () => {
+    const { updateRecipeRow } = await import("@/lib/recipes");
+
+    await POST(
+      makeJsonRequest({ schema: { name: "Test" }, status: "draft", source: "custom" }),
+      makeParams(),
+    );
+
+    expect(updateRecipeRow).toHaveBeenCalledWith(
+      "recipe-1",
+      expect.objectContaining({ source: "custom" }),
+    );
+  });
+
+  it("echoes the persisted source so the client can re-render without a refetch", async () => {
+    const res = await POST(
+      makeJsonRequest({ schema: { name: "Test" }, status: "draft", source: "custom" }),
+      makeParams(),
+    );
+
+    expect(await res.json()).toMatchObject({ source: "custom" });
+  });
+
+  // isOwnRecipe reads casing leniently, but the column also feeds the ?source=
+  // browse filter and MCP search_recipes, which match exactly — so the stored
+  // own-recipe value is folded to the lowercase literal on the way in.
+  it("stores the own-recipe source in canonical lowercase", async () => {
+    const { updateRecipeRow } = await import("@/lib/recipes");
+
+    await POST(
+      makeJsonRequest({ schema: { name: "Test" }, status: "draft", source: "Custom" }),
+      makeParams(),
+    );
+
+    expect(updateRecipeRow).toHaveBeenCalledWith(
+      "recipe-1",
+      expect.objectContaining({ source: "custom" }),
+    );
+  });
+
+  it("leaves a non-custom source's casing alone", async () => {
+    const { updateRecipeRow } = await import("@/lib/recipes");
+
+    await POST(
+      makeJsonRequest({
+        schema: { name: "Test" },
+        status: "draft",
+        source: "An Edible Mosaic",
+      }),
+      makeParams(),
+    );
+
+    expect(updateRecipeRow).toHaveBeenCalledWith(
+      "recipe-1",
+      expect.objectContaining({ source: "An Edible Mosaic" }),
+    );
+  });
+
+  // Blank degrades to "no change" rather than clearing the column: an empty
+  // string is never a meaningful provenance, and both isOwnRecipe and the
+  // browse filter read it. Mirrors the editor's invalid-servings handling —
+  // it must never block the save.
+  it.each([["", "empty"], ["   ", "whitespace"]])(
+    "keeps the stored source when body.source is %s (%s)",
+    async (source) => {
+      const { updateRecipeRow } = await import("@/lib/recipes");
+
+      const res = await POST(
+        makeJsonRequest({ schema: { name: "Test" }, status: "draft", source }),
+        makeParams(),
+      );
+
+      expect(res.status).toBe(200);
+      expect(updateRecipeRow).toHaveBeenCalledWith(
+        "recipe-1",
+        expect.objectContaining({ source: storedRecipe.source }),
+      );
+    },
+  );
 });

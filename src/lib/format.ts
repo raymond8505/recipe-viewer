@@ -125,6 +125,53 @@ import type {
 } from "@/types/editor";
 
 /**
+ * The `source` value marking a recipe authored in this app rather than scraped
+ * from someone else's page. Self-authored rows used to carry the site's own
+ * hostname instead, which made "is this mine?" a question about deploy config —
+ * it broke on staging hosts and on any future rename. This literal is the
+ * host-independent replacement; see migration 0015.
+ */
+export const CUSTOM_RECIPE_SOURCE = "custom";
+
+/**
+ * Whether a recipe is the user's own — i.e. it has no upstream page behind it.
+ * Structurally typed so both a `RecipeRow` and a bare `{ source }` work.
+ *
+ * Reads case-insensitively, writes canonically: `source` is a free-text field
+ * an agent or a person can fill, so "Custom" must mean the same thing as
+ * "custom", while the value we *store* is always the lowercase literal (see
+ * canonicalizeRecipeSource).
+ */
+export function isOwnRecipe(recipe: { source?: string | null }): boolean {
+  return recipe.source?.toLowerCase() === CUSTOM_RECIPE_SOURCE;
+}
+
+/**
+ * The spelling of `source` to persist. Only the own-recipe value is folded —
+ * every other source is a real name ("An Edible Mosaic") whose casing is
+ * content, not a token, so it is stored exactly as given.
+ */
+export function canonicalizeRecipeSource(source: string): string {
+  return isOwnRecipe({ source }) ? CUSTOM_RECIPE_SOURCE : source;
+}
+
+/**
+ * Whether a string can be handed to an `<a href>` we open in a new tab: an
+ * absolute http(s) URL. Two jobs — it hides the "open source" affordance while
+ * a URL is still being typed, and it keeps a `javascript:` value out of an href
+ * the user controls.
+ */
+export function isBrowsableUrl(value: string | null | undefined): boolean {
+  if (!value) return false;
+  try {
+    const { protocol } = new URL(value);
+    return protocol === "http:" || protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Get the ingredient text from a string or RecipeIngredient object.
  */
 export function getIngredientText(
