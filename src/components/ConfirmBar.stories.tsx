@@ -5,15 +5,9 @@ import ConfirmBar from "./ConfirmBar";
 const meta: Meta<typeof ConfirmBar> = {
   component: ConfirmBar,
   title: "Components/ConfirmBar",
-  parameters: { layout: "padded" },
+  parameters: { layout: "fullscreen" },
+  globals: { viewport: { value: "sheet" } },
   args: { onCancel: fn(), onConfirm: fn() },
-  decorators: [
-    (Story) => (
-      <div style={{ maxWidth: 420 }}>
-        <Story />
-      </div>
-    ),
-  ],
 };
 
 export default meta;

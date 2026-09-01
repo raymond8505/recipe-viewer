@@ -7,7 +7,7 @@ const meta: Meta<typeof TimerColumn> = {
   component: TimerColumn,
   title: "Components/Cooking Mode/TimerColumn",
   parameters: {
-    layout: "centered",
+    layout: "fullscreen",
     docs: {
       description: {
         component:
@@ -15,9 +15,13 @@ const meta: Meta<typeof TimerColumn> = {
       },
     },
   },
+  globals: { viewport: { value: "column" } },
   decorators: [
+    // The column is `h-full`, which needs a parent with a *definite* height —
+    // the story root has none. `h-screen` resolves against the canvas instead,
+    // so the column fills it and its timer list scrolls rather than growing.
     (Story) => (
-      <div style={{ width: 340, height: 600, border: "1px solid #e5e7eb", borderRadius: 12, overflow: "hidden" }}>
+      <div className="h-screen overflow-hidden">
         <Story />
       </div>
     ),

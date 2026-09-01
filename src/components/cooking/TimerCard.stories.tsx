@@ -6,14 +6,8 @@ import { makeTimer } from "@/fixtures";
 const meta: Meta<typeof TimerCard> = {
   component: TimerCard,
   title: "Components/Cooking Mode/TimerCard",
-  parameters: { layout: "centered" },
-  decorators: [
-    (Story) => (
-      <div style={{ width: 320 }}>
-        <Story />
-      </div>
-    ),
-  ],
+  parameters: { layout: "fullscreen" },
+  globals: { viewport: { value: "card" } },
   args: {
     onTogglePause: fn(),
     onReset: fn(),

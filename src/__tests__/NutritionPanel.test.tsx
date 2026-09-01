@@ -3,7 +3,11 @@ import { useState } from "react";
 import { render, screen, fireEvent } from "@testing-library/react";
 import NutritionPanel from "@/components/NutritionPanel";
 import { ScalableRecipe } from "@/lib/ScalableRecipe";
-import { makeScalableRecipe, quantitativeValueYield } from "@/fixtures";
+import {
+  fullSchemaNutrition,
+  makeScalableRecipe,
+  quantitativeValueYield,
+} from "@/fixtures";
 
 /** Stateful wrapper so the stepper can actually update via onSplitPortions. */
 function Harness({
@@ -191,6 +195,113 @@ describe("NutritionPanel", () => {
     });
     render(<Harness initial={r} />);
     expect(screen.getByText("per 114 g serving")).toBeTruthy();
+  });
+});
+
+describe("NutritionPanel — summary/label view toggle", () => {
+  // NOTE for anyone adding cases here: in label view `nutritionUnitLabel`
+  // renders TWICE (the header span and the label's own serving line), so
+  // assertions on "per serving" / "per 114 g serving" in that view must use
+  // getAllByText. The tests above get away with getByText only because the
+  // default view is "summary" — don't flip the default.
+
+  const makeFull = () =>
+    makeScalableRecipe({
+      recipeIngredient: undefined,
+      recipeYield: "4 servings",
+      nutrition: fullSchemaNutrition,
+    });
+
+  it("lands on the summary grid, not the label", () => {
+    render(<Harness initial={makeFull()} />);
+    expect(screen.getByText("Carbs")).toBeTruthy();
+    // "Amount per serving" is the label's eyebrow — label-only, so it's the
+    // marker for which view is showing. (The label has no title of its own.)
+    expect(screen.queryByText("Amount per serving")).toBeNull();
+  });
+
+  it("swaps the grid for the full label, showing the four nutrients the grid drops", () => {
+    render(<Harness initial={makeFull()} />);
+    fireEvent.click(screen.getByRole("button", { name: "Full label" }));
+
+    expect(screen.getByText("Amount per serving")).toBeTruthy();
+    // The grid's curated six omit these entirely; the label is the only way to
+    // see them.
+    expect(screen.getByText("Total Sugars")).toBeTruthy();
+    expect(screen.getByText("Saturated Fat")).toBeTruthy();
+    expect(screen.getByText("Unsaturated Fat")).toBeTruthy();
+    expect(screen.getByText("Cholesterol")).toBeTruthy();
+    // ...and the grid itself is gone.
+    expect(screen.queryByText("Carbs")).toBeNull();
+  });
+
+  it("exposes the active view through aria-pressed and toggles back", () => {
+    render(<Harness initial={makeFull()} />);
+    const summary = screen.getByRole("button", { name: "Summary" });
+    const label = screen.getByRole("button", { name: "Full label" });
+    expect(summary).toHaveAttribute("aria-pressed", "true");
+    expect(label).toHaveAttribute("aria-pressed", "false");
+
+    fireEvent.click(label);
+    expect(summary).toHaveAttribute("aria-pressed", "false");
+    expect(label).toHaveAttribute("aria-pressed", "true");
+
+    fireEvent.click(summary);
+    expect(screen.getByText("Carbs")).toBeTruthy();
+    // "Amount per serving" is the label's eyebrow — label-only, so it's the
+    // marker for which view is showing. (The label has no title of its own.)
+    expect(screen.queryByText("Amount per serving")).toBeNull();
+  });
+
+  it("keeps the label on the same basis as the grid when portions change", () => {
+    // 4 servings at 520 kcal each; split into 8 portions → half a serving each
+    // → 260 kcal. The label is a layout swap, not another nutrition source.
+    render(<Harness initial={makeFull()} />);
+    fireEvent.click(screen.getByRole("button", { name: "Full label" }));
+    const smaller = screen.getByRole("button", { name: /smaller portion size/i });
+    fireEvent.click(smaller);
+    fireEvent.click(smaller);
+    fireEvent.click(smaller);
+    fireEvent.click(smaller);
+
+    // Unit-less: on the label Calories is the big display number.
+    expect(screen.getByText("260")).toBeTruthy();
+    expect(screen.getAllByText("per portion")).toHaveLength(2);
+    // Still in label view — a portion change must not reset the toggle.
+    expect(screen.getByText("Amount per serving")).toBeTruthy();
+  });
+
+  it("stays available on a sparse recipe, where the em dashes are the signal", () => {
+    const r = makeScalableRecipe({
+      recipeIngredient: undefined,
+      recipeYield: "4 servings",
+      nutrition: { calories: "350 kcal" },
+    });
+    render(<Harness initial={r} />);
+    fireEvent.click(screen.getByRole("button", { name: "Full label" }));
+    // Calories is the label's big display number, so it drops its unit.
+    expect(screen.getByText("350")).toBeTruthy();
+    // Untracked nutrients are omitted, not dashed — the label shows only what
+    // this recipe actually carries.
+    expect(screen.queryByText("—")).toBeNull();
+    expect(screen.queryByText("Total Fat")).toBeNull();
+  });
+
+  it("offers no toggle in the no-nutrition shell", () => {
+    const r = makeScalableRecipe({
+      recipeIngredient: undefined,
+      recipeYield: "4 servings",
+      nutrition: undefined,
+    });
+    render(
+      <NutritionPanel
+        recipe={r}
+        onSplitPortions={() => {}}
+        ingredientsHref="/recipes/r-1/ingredients"
+      />,
+    );
+    expect(screen.queryByRole("button", { name: "Full label" })).toBeNull();
+    expect(screen.queryByRole("group", { name: "Nutrition view" })).toBeNull();
   });
 });
 

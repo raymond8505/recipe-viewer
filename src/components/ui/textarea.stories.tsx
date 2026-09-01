@@ -6,18 +6,12 @@ const meta: Meta<typeof Textarea> = {
   component: Textarea,
   title: "Components/UI/Textarea",
   parameters: {
-    layout: "centered",
+    layout: "fullscreen",
   },
+  globals: { viewport: { value: "control" } },
   args: {
     placeholder: "Describe this step…",
   },
-  decorators: [
-    (Story) => (
-      <div className="w-80">
-        <Story />
-      </div>
-    ),
-  ],
 };
 
 export default meta;

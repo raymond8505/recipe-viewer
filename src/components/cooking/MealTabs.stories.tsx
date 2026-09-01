@@ -12,14 +12,8 @@ const recipes = [
 const meta: Meta<typeof MealTabs> = {
   component: MealTabs,
   title: "Components/Cooking Mode/MealTabs",
-  parameters: { layout: "centered" },
-  decorators: [
-    (Story) => (
-      <div style={{ width: 600 }}>
-        <Story />
-      </div>
-    ),
-  ],
+  parameters: { layout: "fullscreen" },
+  globals: { viewport: { value: "editor" } },
   args: {
     onSelect: fn(),
     onRemove: fn(),

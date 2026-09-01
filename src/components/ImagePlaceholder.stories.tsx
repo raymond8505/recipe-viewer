@@ -5,15 +5,9 @@ const meta: Meta<typeof ImagePlaceholder> = {
   component: ImagePlaceholder,
   title: "Components/Recipes/ImagePlaceholder",
   parameters: {
-    layout: "centered",
+    layout: "fullscreen",
   },
-  decorators: [
-    (Story) => (
-      <div style={{ width: 240 }}>
-        <Story />
-      </div>
-    ),
-  ],
+  globals: { viewport: { value: "card" } },
 };
 
 export default meta;

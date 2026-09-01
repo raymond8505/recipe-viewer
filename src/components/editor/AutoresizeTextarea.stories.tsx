@@ -6,21 +6,20 @@ import AutoresizeTextarea from "./AutoresizeTextarea";
 function Demo({ initial }: { initial: string }) {
   const [value, setValue] = useState(initial);
   return (
-    <div style={{ maxWidth: 480 }}>
-      <AutoresizeTextarea
-        value={value}
-        onChange={(e) => setValue(e.target.value)}
-        aria-label="Step instructions"
-        placeholder="Describe this step…"
-      />
-    </div>
+    <AutoresizeTextarea
+      value={value}
+      onChange={(e) => setValue(e.target.value)}
+      aria-label="Step instructions"
+      placeholder="Describe this step…"
+    />
   );
 }
 
 const meta: Meta<typeof AutoresizeTextarea> = {
   component: AutoresizeTextarea,
   title: "Components/Recipes/Editor/AutoresizeTextarea",
-  parameters: { layout: "padded" },
+  parameters: { layout: "fullscreen" },
+  globals: { viewport: { value: "panel" } },
 };
 
 export default meta;

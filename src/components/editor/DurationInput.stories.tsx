@@ -6,7 +6,7 @@ import DurationInput from "./DurationInput";
 function Demo({ m, s }: { m: number; s: number }) {
   const [{ minutes, seconds }, set] = useState({ minutes: m, seconds: s });
   return (
-    <div style={{ maxWidth: 220 }}>
+    <>
       <DurationInput
         minutes={minutes}
         seconds={seconds}
@@ -16,14 +16,15 @@ function Demo({ m, s }: { m: number; s: number }) {
       <p className="mt-2 text-xs text-gray-500">
         stored: {minutes}m {seconds}s
       </p>
-    </div>
+    </>
   );
 }
 
 const meta: Meta<typeof DurationInput> = {
   component: DurationInput,
   title: "Components/Recipes/Editor/DurationInput",
-  parameters: { layout: "padded" },
+  parameters: { layout: "fullscreen" },
+  globals: { viewport: { value: "control" } },
 };
 
 export default meta;

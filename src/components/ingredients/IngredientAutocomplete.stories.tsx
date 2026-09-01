@@ -36,14 +36,8 @@ async function fixtureUsdaSearch(q: string): Promise<UsdaSearchFood[]> {
 const meta: Meta<typeof IngredientAutocomplete> = {
   component: IngredientAutocomplete,
   title: "Components/Ingredients/IngredientAutocomplete",
-  parameters: { layout: "centered" },
-  decorators: [
-    (Story) => (
-      <div style={{ width: 260 }}>
-        <Story />
-      </div>
-    ),
-  ],
+  parameters: { layout: "fullscreen" },
+  globals: { viewport: { value: "control" } },
   args: {
     ariaLabel: "Change match for 1 tsp cumin",
     onSelect: fn(),

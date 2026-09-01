@@ -2,7 +2,8 @@
 
 import { useState } from "react";
 import { scaleNutritionToGrams } from "@/lib/nutritionMath";
-import NutritionFactsLabel from "./NutritionFactsLabel";
+import NutritionFactsLabel from "@/components/nutrition/NutritionFactsLabel";
+import { ingredientNutritionRows } from "@/components/nutrition/labelRows";
 import {
   nutritionBasisOptions,
   parseDraftNutrition,
@@ -63,7 +64,13 @@ export default function NutritionFactsPreview({
           ))}
         </select>
       </label>
-      <NutritionFactsLabel nutrition={scaled} servingLabel={selected.label} />
+      {/* Always the vertical panel: the drawer is a narrow column, and this is
+          the shape the user compares against a physical package label. */}
+      <NutritionFactsLabel
+        data={ingredientNutritionRows(scaled)}
+        servingLabel={selected.label}
+        servingCaption="Serving size"
+      />
     </div>
   );
 }

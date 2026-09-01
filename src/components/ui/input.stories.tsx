@@ -6,18 +6,12 @@ const meta: Meta<typeof Input> = {
   component: Input,
   title: "Components/UI/Input",
   parameters: {
-    layout: "centered",
+    layout: "fullscreen",
   },
+  globals: { viewport: { value: "control" } },
   args: {
     placeholder: "Type here…",
   },
-  decorators: [
-    (Story) => (
-      <div className="w-72">
-        <Story />
-      </div>
-    ),
-  ],
 };
 
 export default meta;

@@ -8,17 +8,16 @@ import { toGroupSortId } from "./dragIds";
 const meta: Meta<typeof GroupContainer> = {
   component: GroupContainer,
   title: "Components/Recipes/Editor/GroupContainer",
-  parameters: { layout: "padded" },
+  parameters: { layout: "fullscreen" },
   args: { onHeadingChange: fn(), onDelete: fn() },
+  globals: { viewport: { value: "panel" } },
   decorators: [
     (Story, ctx) => (
-      <div style={{ maxWidth: 480 }}>
-        <DndContext>
-          <SortableContext items={[toGroupSortId(ctx.args.groupId)]}>
-            <Story />
-          </SortableContext>
-        </DndContext>
-      </div>
+      <DndContext>
+        <SortableContext items={[toGroupSortId(ctx.args.groupId)]}>
+          <Story />
+        </SortableContext>
+      </DndContext>
     ),
   ],
 };

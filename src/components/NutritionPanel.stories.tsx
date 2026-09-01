@@ -4,22 +4,12 @@ import { userEvent, fn } from "storybook/test";
 import NutritionPanel from "./NutritionPanel";
 import { ScalableRecipe } from "@/lib/ScalableRecipe";
 import {
+  fullSchemaNutrition,
   makeScalableRecipe,
   makeSchemaRecipe,
   quantitativeValueYield,
+  sparseSchemaNutrition,
 } from "@/fixtures";
-import type { SchemaRecipe } from "@/types/recipe";
-
-type Nutrition = NonNullable<SchemaRecipe["nutrition"]>;
-
-const fullNutrition: Nutrition = {
-  calories: "520 kcal",
-  proteinContent: "32 g",
-  carbohydrateContent: "48 g",
-  fatContent: "18 g",
-  fiberContent: "6 g",
-  sodiumContent: "820 mg",
-};
 
 /** Stateful wrapper so the ± stepper visibly updates inside the story. */
 function StatefulNutritionPanel({
@@ -50,14 +40,8 @@ function StatefulNutritionPanel({
 const meta: Meta<typeof StatefulNutritionPanel> = {
   component: StatefulNutritionPanel,
   title: "Components/Recipes/NutritionPanel",
-  parameters: { layout: "centered" },
-  decorators: [
-    (Story) => (
-      <div style={{ width: 480 }}>
-        <Story />
-      </div>
-    ),
-  ],
+  parameters: { layout: "fullscreen" },
+  globals: { viewport: { value: "panel" } },
   args: { onSplitPortions: fn() },
 };
 
@@ -69,7 +53,7 @@ export const FullData: Story = {
     initial: makeScalableRecipe({
       recipeIngredient: undefined,
       recipeYield: "4 servings",
-      nutrition: fullNutrition,
+      nutrition: fullSchemaNutrition,
     }),
   },
   play: async ({ canvas }) => {
@@ -83,8 +67,67 @@ export const PartialData: Story = {
     initial: makeScalableRecipe({
       recipeIngredient: undefined,
       recipeYield: "2 servings",
-      nutrition: { calories: "350 kcal", proteinContent: "22 g" },
+      nutrition: sparseSchemaNutrition,
     }),
+  },
+};
+
+/**
+ * The "Full label" view at the default panel width. The label's layout switch
+ * is a container query, so at this size it renders the vertical FDA panel — the
+ * same fallback cooking mode gets. Where the grid shows a curated six and omits
+ * what's missing, the label shows every Schema.org nutrient, so sugars,
+ * saturated/unsaturated fat and cholesterol appear here and nowhere else.
+ *
+ * `view` is internal panel state, so the click genuinely changes what's shown.
+ */
+export const FullLabelView: Story = {
+  args: {
+    initial: makeScalableRecipe({
+      recipeIngredient: undefined,
+      recipeYield: "4 servings",
+      nutrition: fullSchemaNutrition,
+    }),
+  },
+  play: async ({ canvas }) => {
+    await userEvent.click(canvas.getByRole("button", { name: "Full label" }));
+  },
+};
+
+/**
+ * The same view in a panel wide enough for the FDA tabular display: identity
+ * and Calories on the left, the nutrient groups as columns, minerals along the
+ * foot. This is what the recipe page shows on a desktop.
+ */
+export const FullLabelWide: Story = {
+  args: {
+    initial: makeScalableRecipe({
+      recipeIngredient: undefined,
+      recipeYield: "4 servings",
+      nutrition: fullSchemaNutrition,
+    }),
+  },
+  globals: { viewport: { value: "page" } },
+  play: async ({ canvas }) => {
+    await userEvent.click(canvas.getByRole("button", { name: "Full label" }));
+  },
+};
+
+/**
+ * The label on a recipe that tracks almost nothing: it collapses to the few
+ * nutrients present rather than listing empty rows, so the "Full label" view
+ * degrades to something shorter than the summary grid rather than a skeleton.
+ */
+export const FullLabelSparse: Story = {
+  args: {
+    initial: makeScalableRecipe({
+      recipeIngredient: undefined,
+      recipeYield: "4 servings",
+      nutrition: sparseSchemaNutrition,
+    }),
+  },
+  play: async ({ canvas }) => {
+    await userEvent.click(canvas.getByRole("button", { name: "Full label" }));
   },
 };
 
@@ -129,7 +172,7 @@ export const FromRecipeFields: Story = {
     initial: makeScalableRecipe({
       recipeIngredient: undefined,
       recipeYield: "4 servings",
-      nutrition: fullNutrition,
+      nutrition: fullSchemaNutrition,
     }),
   },
 };
@@ -143,7 +186,7 @@ export const WithYieldWeight: Story = {
     initial: makeScalableRecipe({
       recipeIngredient: undefined,
       recipeYield: quantitativeValueYield,
-      nutrition: fullNutrition,
+      nutrition: fullSchemaNutrition,
     }),
   },
 };
@@ -157,7 +200,7 @@ export const WithBreakdownLink: Story = {
     initial: makeScalableRecipe({
       recipeIngredient: undefined,
       recipeYield: "4 servings",
-      nutrition: fullNutrition,
+      nutrition: fullSchemaNutrition,
     }),
     ingredientsHref: "/recipes/story-recipe/ingredients",
   },

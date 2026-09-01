@@ -5,15 +5,9 @@ import DeleteConfirm from "./DeleteConfirm";
 const meta: Meta<typeof DeleteConfirm> = {
   component: DeleteConfirm,
   title: "Components/Recipes/Editor/DeleteConfirm",
-  parameters: { layout: "padded" },
+  parameters: { layout: "fullscreen" },
+  globals: { viewport: { value: "column" } },
   args: { onCancel: fn(), onConfirm: fn() },
-  decorators: [
-    (Story) => (
-      <div style={{ maxWidth: 360 }}>
-        <Story />
-      </div>
-    ),
-  ],
 };
 
 export default meta;
