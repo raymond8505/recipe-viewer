@@ -178,7 +178,7 @@ export default function RecipeControls({
               <legend className="block text-xs font-medium text-gray-500 mb-2 p-0">
                 Source
               </legend>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-2 items-start">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-2 items-start">
                 <div>
                   <label
                     htmlFor="recipe-source-url"
