@@ -12,6 +12,7 @@ or shaped goes here. Files are named `src/fixtures/<topic>.ts` with a barrel at 
 | `recipes` | `recipeFixtures` (5 real production recipes with Supabase image URLs), `makeRecipe(id, name, overrides?)` |
 | `ingredients` | `ingredientFixtures` (real USDA per-100g figures), `makeIngredient`, `makeRecipeIngredient`, `matchedLinesScenario` |
 | `rescrape` | `rescrapeFixture: SchemaRecipe` — used by the rescrape and update tests |
+| `nutrition` | `fullSchemaNutrition` (all ten Schema.org nutrients), `sparseSchemaNutrition`, and their parsed forms `fullNutrientValues` / `sparseNutrientValues` |
 | `timers` | `makeTimer` |
 | `scalable` | `scalableBaseSchema`, `quantitativeValueYield`, `makeSchemaRecipe`, `makeScalableRecipe`, `makeScaledIngredient` |
 

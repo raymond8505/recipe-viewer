@@ -6,6 +6,12 @@ export {
   matchedLinesScenario,
 } from "./ingredients";
 export { rescrapeFixture } from "./rescrape";
+export {
+  fullSchemaNutrition,
+  sparseSchemaNutrition,
+  fullNutrientValues,
+  sparseNutrientValues,
+} from "./nutrition";
 export { makeTimer } from "./timers";
 export {
   scalableBaseSchema,

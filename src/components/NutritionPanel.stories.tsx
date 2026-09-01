@@ -4,31 +4,12 @@ import { userEvent, fn } from "storybook/test";
 import NutritionPanel from "./NutritionPanel";
 import { ScalableRecipe } from "@/lib/ScalableRecipe";
 import {
+  fullSchemaNutrition,
   makeScalableRecipe,
   makeSchemaRecipe,
   quantitativeValueYield,
+  sparseSchemaNutrition,
 } from "@/fixtures";
-import type { SchemaRecipe } from "@/types/recipe";
-
-type Nutrition = NonNullable<SchemaRecipe["nutrition"]>;
-
-/**
- * Every Schema.org nutrient the app models. The summary grid reads only six of
- * them, so the extra four are invisible until the "Full label" view — which is
- * the reason that view exists.
- */
-const fullNutrition: Nutrition = {
-  calories: "520 kcal",
-  proteinContent: "32 g",
-  carbohydrateContent: "48 g",
-  fatContent: "18 g",
-  fiberContent: "6 g",
-  sodiumContent: "820 mg",
-  sugarContent: "10 g",
-  saturatedFatContent: "5 g",
-  unsaturatedFatContent: "8 g",
-  cholesterolContent: "50 mg",
-};
 
 /** Stateful wrapper so the ± stepper visibly updates inside the story. */
 function StatefulNutritionPanel({
@@ -78,7 +59,7 @@ export const FullData: Story = {
     initial: makeScalableRecipe({
       recipeIngredient: undefined,
       recipeYield: "4 servings",
-      nutrition: fullNutrition,
+      nutrition: fullSchemaNutrition,
     }),
   },
   play: async ({ canvas }) => {
@@ -92,7 +73,7 @@ export const PartialData: Story = {
     initial: makeScalableRecipe({
       recipeIngredient: undefined,
       recipeYield: "2 servings",
-      nutrition: { calories: "350 kcal", proteinContent: "22 g" },
+      nutrition: sparseSchemaNutrition,
     }),
   },
 };
@@ -112,7 +93,7 @@ export const FullLabelView: Story = {
     initial: makeScalableRecipe({
       recipeIngredient: undefined,
       recipeYield: "4 servings",
-      nutrition: fullNutrition,
+      nutrition: fullSchemaNutrition,
     }),
   },
   play: async ({ canvas }) => {
@@ -130,7 +111,7 @@ export const FullLabelWide: Story = {
     initial: makeScalableRecipe({
       recipeIngredient: undefined,
       recipeYield: "4 servings",
-      nutrition: fullNutrition,
+      nutrition: fullSchemaNutrition,
     }),
   },
   decorators: [
@@ -155,7 +136,7 @@ export const FullLabelSparse: Story = {
     initial: makeScalableRecipe({
       recipeIngredient: undefined,
       recipeYield: "4 servings",
-      nutrition: { calories: "350 kcal", proteinContent: "22 g" },
+      nutrition: sparseSchemaNutrition,
     }),
   },
   play: async ({ canvas }) => {
@@ -204,7 +185,7 @@ export const FromRecipeFields: Story = {
     initial: makeScalableRecipe({
       recipeIngredient: undefined,
       recipeYield: "4 servings",
-      nutrition: fullNutrition,
+      nutrition: fullSchemaNutrition,
     }),
   },
 };
@@ -218,7 +199,7 @@ export const WithYieldWeight: Story = {
     initial: makeScalableRecipe({
       recipeIngredient: undefined,
       recipeYield: quantitativeValueYield,
-      nutrition: fullNutrition,
+      nutrition: fullSchemaNutrition,
     }),
   },
 };
@@ -232,7 +213,7 @@ export const WithBreakdownLink: Story = {
     initial: makeScalableRecipe({
       recipeIngredient: undefined,
       recipeYield: "4 servings",
-      nutrition: fullNutrition,
+      nutrition: fullSchemaNutrition,
     }),
     ingredientsHref: "/recipes/story-recipe/ingredients",
   },

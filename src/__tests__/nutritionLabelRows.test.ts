@@ -5,31 +5,17 @@ import {
   type LabelData,
 } from "@/components/nutrition/labelRows";
 import { NUTRITION_COLUMNS } from "@/components/ingredients/nutritionColumns";
-import { NUTRIENT_FIELDS } from "@/lib/nutritionMath";
-import { schemaNutritionToValues } from "@/lib/nutritionMath";
-import { ingredientFixtures } from "@/fixtures";
+import { NUTRIENT_FIELDS, schemaNutritionToValues } from "@/lib/nutritionMath";
+import { fullNutrientValues, ingredientFixtures } from "@/fixtures";
 
 /** Every row on a label, in the order it renders. */
 const allRows = (d: LabelData) => [...d.fats, ...d.carbs, ...d.micros];
-
-const fullValues = schemaNutritionToValues({
-  calories: "520 kcal",
-  proteinContent: "32 g",
-  carbohydrateContent: "48 g",
-  fatContent: "18 g",
-  fiberContent: "6 g",
-  sodiumContent: "820 mg",
-  sugarContent: "10 g",
-  saturatedFatContent: "5 g",
-  unsaturatedFatContent: "8 g",
-  cholesterolContent: "50 mg",
-});
 
 describe("recipeNutritionRows", () => {
   it("orders rows as the FDA panel does, fats column then carbs column", () => {
     // Stacked, these two groups read as one continuous list — so their order is
     // also the vertical label's order.
-    const data = recipeNutritionRows(fullValues);
+    const data = recipeNutritionRows(fullNutrientValues);
     expect(data.fats.map((r) => r.name)).toEqual([
       "Total Fat",
       "Saturated Fat",
@@ -48,7 +34,7 @@ describe("recipeNutritionRows", () => {
   it("covers every NutrientField exactly once across calories and rows", () => {
     // The recipe label is the only place all ten are visible, so a new
     // NutrientField that never reaches a row would be silently unreachable.
-    const data = recipeNutritionRows(fullValues);
+    const data = recipeNutritionRows(fullNutrientValues);
     const valued = allRows(data).filter((r) => r.value != null);
     expect(valued).toHaveLength(NUTRIENT_FIELDS.length - 1); // minus calories
     expect(data.calories).toEqual({ value: 520, unit: "kcal" });
@@ -60,7 +46,7 @@ describe("recipeNutritionRows", () => {
     // They have no Schema.org slot, so the recipe path can never fill them —
     // and since untracked nutrients aren't rendered, permanently-empty rows
     // would be pure dead weight.
-    expect(recipeNutritionRows(fullValues).micros).toEqual([]);
+    expect(recipeNutritionRows(fullNutrientValues).micros).toEqual([]);
   });
 
   it("marks a nutrient the recipe doesn't carry as absent, not zero", () => {
@@ -106,7 +92,7 @@ describe("shared FDA wording", () => {
     // both sides carry can be compared: the minerals are catalog-only and
     // unsaturated fat is recipe-only.
     const recipe = new Map(
-      allRows(recipeNutritionRows(fullValues)).map((r) => [r.key, r.name]),
+      allRows(recipeNutritionRows(fullNutrientValues)).map((r) => [r.key, r.name]),
     );
     const shared = allRows(ingredientNutritionRows(cuminLike)).filter((row) =>
       recipe.has(row.key),
@@ -119,7 +105,7 @@ describe("shared FDA wording", () => {
 
   it("gives the tabular columns FDA abbreviations", () => {
     const byKey = new Map(
-      allRows(recipeNutritionRows(fullValues)).map((r) => [r.key, r.short]),
+      allRows(recipeNutritionRows(fullNutrientValues)).map((r) => [r.key, r.short]),
     );
     expect(byKey.get("saturatedFat")).toBe("Sat. Fat");
     expect(byKey.get("cholesterol")).toBe("Cholest.");

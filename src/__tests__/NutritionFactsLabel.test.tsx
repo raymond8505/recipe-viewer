@@ -6,21 +6,13 @@ import {
   recipeNutritionRows,
 } from "@/components/nutrition/labelRows";
 import { schemaNutritionToValues } from "@/lib/nutritionMath";
+import {
+  fullNutrientValues,
+  ingredientFixtures,
+  sparseNutrientValues,
+} from "@/fixtures";
 
-const fullRecipe = recipeNutritionRows(
-  schemaNutritionToValues({
-    calories: "520 kcal",
-    proteinContent: "32 g",
-    carbohydrateContent: "48 g",
-    fatContent: "18 g",
-    fiberContent: "6 g",
-    sodiumContent: "820 mg",
-    sugarContent: "10 g",
-    saturatedFatContent: "5 g",
-    unsaturatedFatContent: "8 g",
-    cholesterolContent: "50 mg",
-  }),
-);
+const fullRecipe = recipeNutritionRows(fullNutrientValues);
 
 describe("NutritionFactsLabel", () => {
   it("renders every row in FDA panel order", () => {
@@ -70,9 +62,7 @@ describe("NutritionFactsLabel", () => {
   it("omits untracked nutrients rather than dashing them", () => {
     // A real package label lists what was measured; a column of dashes reads as
     // broken rather than as "unknown".
-    const sparse = recipeNutritionRows(
-      schemaNutritionToValues({ calories: "350 kcal", proteinContent: "22 g" }),
-    );
+    const sparse = recipeNutritionRows(sparseNutrientValues);
     render(<NutritionFactsLabel data={sparse} servingLabel="per serving" />);
     expect(screen.getByText("350")).toBeTruthy();
     expect(screen.getByText("22 g")).toBeTruthy();
@@ -199,19 +189,19 @@ describe("NutritionFactsLabel", () => {
 
   it("renders real mineral values on the catalog side", () => {
     // Same component, same rows — only the adapter differs, which is the whole
-    // point of sharing the row model.
+    // point of sharing the row model. Narrowed to the two minerals under test so
+    // the assertions can't be satisfied by some other row carrying "mg".
+    const { calories_kcal, potassium_mg, iron_mg } =
+      ingredientFixtures[0].nutrition!;
     render(
       <NutritionFactsLabel
-        data={ingredientNutritionRows({
-          calories_kcal: 375,
-          potassium_mg: 1788,
-          iron_mg: 66.4,
-        })}
+        data={ingredientNutritionRows({ calories_kcal, potassium_mg, iron_mg })}
         servingLabel="100 g"
         servingCaption="Serving size"
       />,
     );
     expect(screen.getByText("1788 mg")).toBeTruthy();
+    // 66.36 in the catalog — the label rounds a >1 value to whole units.
     expect(screen.getByText("66 mg")).toBeTruthy();
   });
 });

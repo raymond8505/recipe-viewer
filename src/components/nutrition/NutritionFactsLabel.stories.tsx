@@ -1,32 +1,19 @@
 import type { Meta, StoryObj } from "@storybook/nextjs-vite";
-import { ingredientFixtures } from "@/fixtures";
-import { scaleNutritionToGrams, schemaNutritionToValues } from "@/lib/nutritionMath";
+import {
+  fullNutrientValues,
+  ingredientFixtures,
+  sparseNutrientValues,
+} from "@/fixtures";
+import { scaleNutritionToGrams } from "@/lib/nutritionMath";
 import NutritionFactsLabel from "./NutritionFactsLabel";
 import { ingredientNutritionRows, recipeNutritionRows } from "./labelRows";
 
 // Purely prop-driven (no internal state), so every story is args-only — the
 // portion-picking interaction lives in NutritionFactsPreview's stories and the
 // summary/label toggle in NutritionPanel's.
-//
-// The two data sources reach the same component through the adapters in
-// labelRows.ts: `ingredientNutritionRows` for the catalog editor's per-100g
-// numbers, `recipeNutritionRows` for a recipe's resolved nutrition.
 
 const cumin = ingredientFixtures[0];
 const kosherSalt = ingredientFixtures[3];
-
-const recipeValues = schemaNutritionToValues({
-  calories: "520 kcal",
-  proteinContent: "32 g",
-  carbohydrateContent: "48 g",
-  fatContent: "18 g",
-  fiberContent: "6 g",
-  sodiumContent: "820 mg",
-  sugarContent: "10 g",
-  saturatedFatContent: "5 g",
-  unsaturatedFatContent: "8 g",
-  cholesterolContent: "50 mg",
-});
 
 const meta: Meta<typeof NutritionFactsLabel> = {
   component: NutritionFactsLabel,
@@ -106,7 +93,7 @@ export const CatalogSparse: Story = {
  */
 export const RecipeTabular: Story = {
   args: {
-    data: recipeNutritionRows(recipeValues),
+    data: recipeNutritionRows(fullNutrientValues),
     servingLabel: "per 114 g serving",
     layout: "tabular",
   },
@@ -128,7 +115,7 @@ export const RecipeTabular: Story = {
  */
 export const RecipeNarrowFallback: Story = {
   args: {
-    data: recipeNutritionRows(recipeValues),
+    data: recipeNutritionRows(fullNutrientValues),
     servingLabel: "per serving",
     layout: "tabular",
   },
@@ -148,9 +135,7 @@ export const RecipeNarrowFallback: Story = {
  */
 export const RecipeSparse: Story = {
   args: {
-    data: recipeNutritionRows(
-      schemaNutritionToValues({ calories: "350 kcal", proteinContent: "22 g" }),
-    ),
+    data: recipeNutritionRows(sparseNutrientValues),
     servingLabel: "per serving",
     layout: "tabular",
   },

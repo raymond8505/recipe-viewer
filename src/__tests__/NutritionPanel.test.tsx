@@ -3,7 +3,11 @@ import { useState } from "react";
 import { render, screen, fireEvent } from "@testing-library/react";
 import NutritionPanel from "@/components/NutritionPanel";
 import { ScalableRecipe } from "@/lib/ScalableRecipe";
-import { makeScalableRecipe, quantitativeValueYield } from "@/fixtures";
+import {
+  fullSchemaNutrition,
+  makeScalableRecipe,
+  quantitativeValueYield,
+} from "@/fixtures";
 
 /** Stateful wrapper so the stepper can actually update via onSplitPortions. */
 function Harness({
@@ -201,24 +205,11 @@ describe("NutritionPanel — summary/label view toggle", () => {
   // getAllByText. The tests above get away with getByText only because the
   // default view is "summary" — don't flip the default.
 
-  const fullNutrition = {
-    calories: "520 kcal",
-    fatContent: "18 g",
-    saturatedFatContent: "5 g",
-    unsaturatedFatContent: "8 g",
-    cholesterolContent: "50 mg",
-    sodiumContent: "820 mg",
-    carbohydrateContent: "48 g",
-    fiberContent: "6 g",
-    sugarContent: "10 g",
-    proteinContent: "32 g",
-  };
-
   const makeFull = () =>
     makeScalableRecipe({
       recipeIngredient: undefined,
       recipeYield: "4 servings",
-      nutrition: fullNutrition,
+      nutrition: fullSchemaNutrition,
     });
 
   it("lands on the summary grid, not the label", () => {
