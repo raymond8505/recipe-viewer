@@ -174,6 +174,20 @@ describe("NutritionFactsLabel", () => {
     expect(container.textContent).not.toContain("Total Carb.");
   });
 
+  it("marks up the repeating nutrient groups as real tables", () => {
+    // Fats and carbs are two independent lists, so each gets its own <table>
+    // rather than sharing one.
+    const { container } = render(
+      <NutritionFactsLabel
+        data={fullRecipe}
+        servingLabel="per serving"
+        layout="tabular"
+      />,
+    );
+    expect(container.querySelectorAll("table")).toHaveLength(2); // fats, carbs
+    expect(container.querySelectorAll('th[scope="row"]')).toHaveLength(9);
+  });
+
   it("renders no title of its own", () => {
     // Both callers render a heading directly above the label (the panel's
     // "Nutrition", the catalog drawer's "Label preview"), so a "Nutrition
