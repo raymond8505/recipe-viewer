@@ -194,6 +194,117 @@ describe("NutritionPanel", () => {
   });
 });
 
+describe("NutritionPanel — summary/label view toggle", () => {
+  // NOTE for anyone adding cases here: in label view `nutritionUnitLabel`
+  // renders TWICE (the header span and the label's own serving line), so
+  // assertions on "per serving" / "per 114 g serving" in that view must use
+  // getAllByText. The tests above get away with getByText only because the
+  // default view is "summary" — don't flip the default.
+
+  const fullNutrition = {
+    calories: "520 kcal",
+    fatContent: "18 g",
+    saturatedFatContent: "5 g",
+    unsaturatedFatContent: "8 g",
+    cholesterolContent: "50 mg",
+    sodiumContent: "820 mg",
+    carbohydrateContent: "48 g",
+    fiberContent: "6 g",
+    sugarContent: "10 g",
+    proteinContent: "32 g",
+  };
+
+  const makeFull = () =>
+    makeScalableRecipe({
+      recipeIngredient: undefined,
+      recipeYield: "4 servings",
+      nutrition: fullNutrition,
+    });
+
+  it("lands on the summary grid, not the label", () => {
+    render(<Harness initial={makeFull()} />);
+    expect(screen.getByText("Carbs")).toBeTruthy();
+    expect(screen.queryByText("Nutrition Facts")).toBeNull();
+  });
+
+  it("swaps the grid for the full label, showing the four nutrients the grid drops", () => {
+    render(<Harness initial={makeFull()} />);
+    fireEvent.click(screen.getByRole("button", { name: "Full label" }));
+
+    expect(screen.getByText("Nutrition Facts")).toBeTruthy();
+    // The grid's curated six omit these entirely; the label is the only way to
+    // see them.
+    expect(screen.getByText("Total Sugars")).toBeTruthy();
+    expect(screen.getByText("Saturated Fat")).toBeTruthy();
+    expect(screen.getByText("Unsaturated Fat")).toBeTruthy();
+    expect(screen.getByText("Cholesterol")).toBeTruthy();
+    // ...and the grid itself is gone.
+    expect(screen.queryByText("Carbs")).toBeNull();
+  });
+
+  it("exposes the active view through aria-pressed and toggles back", () => {
+    render(<Harness initial={makeFull()} />);
+    const summary = screen.getByRole("button", { name: "Summary" });
+    const label = screen.getByRole("button", { name: "Full label" });
+    expect(summary).toHaveAttribute("aria-pressed", "true");
+    expect(label).toHaveAttribute("aria-pressed", "false");
+
+    fireEvent.click(label);
+    expect(summary).toHaveAttribute("aria-pressed", "false");
+    expect(label).toHaveAttribute("aria-pressed", "true");
+
+    fireEvent.click(summary);
+    expect(screen.getByText("Carbs")).toBeTruthy();
+    expect(screen.queryByText("Nutrition Facts")).toBeNull();
+  });
+
+  it("keeps the label on the same basis as the grid when portions change", () => {
+    // 4 servings at 520 kcal each; split into 8 portions → half a serving each
+    // → 260 kcal. The label is a layout swap, not another nutrition source.
+    render(<Harness initial={makeFull()} />);
+    fireEvent.click(screen.getByRole("button", { name: "Full label" }));
+    const smaller = screen.getByRole("button", { name: /smaller portion size/i });
+    fireEvent.click(smaller);
+    fireEvent.click(smaller);
+    fireEvent.click(smaller);
+    fireEvent.click(smaller);
+
+    expect(screen.getByText("260 kcal")).toBeTruthy();
+    expect(screen.getAllByText("per portion")).toHaveLength(2);
+    // Still in label view — a portion change must not reset the toggle.
+    expect(screen.getByText("Nutrition Facts")).toBeTruthy();
+  });
+
+  it("stays available on a sparse recipe, where the em dashes are the signal", () => {
+    const r = makeScalableRecipe({
+      recipeIngredient: undefined,
+      recipeYield: "4 servings",
+      nutrition: { calories: "350 kcal" },
+    });
+    render(<Harness initial={r} />);
+    fireEvent.click(screen.getByRole("button", { name: "Full label" }));
+    expect(screen.getByText("350 kcal")).toBeTruthy();
+    expect(screen.getAllByText("—")).toHaveLength(9);
+  });
+
+  it("offers no toggle in the no-nutrition shell", () => {
+    const r = makeScalableRecipe({
+      recipeIngredient: undefined,
+      recipeYield: "4 servings",
+      nutrition: undefined,
+    });
+    render(
+      <NutritionPanel
+        recipe={r}
+        onSplitPortions={() => {}}
+        ingredientsHref="/recipes/r-1/ingredients"
+      />,
+    );
+    expect(screen.queryByRole("button", { name: "Full label" })).toBeNull();
+    expect(screen.queryByRole("group", { name: "Nutrition view" })).toBeNull();
+  });
+});
+
 describe("NutritionPanel — ingredient breakdown link", () => {
   it("renders the link with the given href alongside nutrition data", () => {
     const r = makeScalableRecipe({

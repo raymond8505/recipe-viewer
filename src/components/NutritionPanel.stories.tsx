@@ -12,6 +12,11 @@ import type { SchemaRecipe } from "@/types/recipe";
 
 type Nutrition = NonNullable<SchemaRecipe["nutrition"]>;
 
+/**
+ * Every Schema.org nutrient the app models. The summary grid reads only six of
+ * them, so the extra four are invisible until the "Full label" view — which is
+ * the reason that view exists.
+ */
 const fullNutrition: Nutrition = {
   calories: "520 kcal",
   proteinContent: "32 g",
@@ -19,6 +24,10 @@ const fullNutrition: Nutrition = {
   fatContent: "18 g",
   fiberContent: "6 g",
   sodiumContent: "820 mg",
+  sugarContent: "10 g",
+  saturatedFatContent: "5 g",
+  unsaturatedFatContent: "8 g",
+  cholesterolContent: "50 mg",
 };
 
 /** Stateful wrapper so the ± stepper visibly updates inside the story. */
@@ -85,6 +94,45 @@ export const PartialData: Story = {
       recipeYield: "2 servings",
       nutrition: { calories: "350 kcal", proteinContent: "22 g" },
     }),
+  },
+};
+
+/**
+ * The "Full label" view: the same resolved values on the same basis, laid out
+ * as an FDA linear-display label. Where the grid shows a curated six and omits
+ * what's missing, the label shows every Schema.org nutrient — so sugars,
+ * saturated/unsaturated fat and cholesterol appear here and nowhere else.
+ *
+ * `view` is internal panel state, so the click genuinely changes what's shown.
+ */
+export const LinearLabelView: Story = {
+  args: {
+    initial: makeScalableRecipe({
+      recipeIngredient: undefined,
+      recipeYield: "4 servings",
+      nutrition: fullNutrition,
+    }),
+  },
+  play: async ({ canvas }) => {
+    await userEvent.click(canvas.getByRole("button", { name: "Full label" }));
+  },
+};
+
+/**
+ * The label on a recipe that tracks almost nothing. The em-dash run is the
+ * point: absent ≠ zero, and seeing which slots are empty is information the
+ * summary grid can't convey (it simply omits the missing stats).
+ */
+export const LinearLabelSparse: Story = {
+  args: {
+    initial: makeScalableRecipe({
+      recipeIngredient: undefined,
+      recipeYield: "4 servings",
+      nutrition: { calories: "350 kcal", proteinContent: "22 g" },
+    }),
+  },
+  play: async ({ canvas }) => {
+    await userEvent.click(canvas.getByRole("button", { name: "Full label" }));
   },
 };
 
