@@ -19,13 +19,13 @@ export const Large: Story = { args: { size: "lg", children: "Start timer" } };
 
 export const Disabled: Story = { args: { disabled: true } };
 
+/**
+ * `w-full` makes the button stretch to whatever it is dropped into. The meta's
+ * centered layout would shrink-wrap it back to its label, so this story alone
+ * takes over the canvas to have a width to stretch into.
+ */
 export const FullWidth: Story = {
   args: { className: "w-full", children: "Let's go" },
-  decorators: [
-    (Story) => (
-      <div style={{ width: 280 }}>
-        <Story />
-      </div>
-    ),
-  ],
+  parameters: { layout: "fullscreen" },
+  globals: { viewport: { value: "control" } },
 };

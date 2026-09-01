@@ -22,14 +22,8 @@ function draftNutrition(row: typeof cumin): Record<string, string> {
 const meta: Meta<typeof NutritionFactsPreview> = {
   component: NutritionFactsPreview,
   title: "Components/Ingredients/NutritionFactsPreview",
-  parameters: { layout: "centered" },
-  decorators: [
-    (Story) => (
-      <div className="w-72">
-        <Story />
-      </div>
-    ),
-  ],
+  parameters: { layout: "fullscreen" },
+  globals: { viewport: { value: "control" } },
 };
 
 export default meta;

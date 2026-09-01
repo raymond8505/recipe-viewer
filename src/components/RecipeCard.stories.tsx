@@ -9,15 +9,9 @@ const meta: Meta<typeof RecipeCard> = {
   title: "Components/Recipes/RecipeCard",
   parameters: {
     nextjs: { appDirectory: true },
-    layout: "centered",
+    layout: "fullscreen",
   },
-  decorators: [
-    (Story) => (
-      <div style={{ width: 300 }}>
-        <Story />
-      </div>
-    ),
-  ],
+  globals: { viewport: { value: "card" } },
 };
 
 export default meta;

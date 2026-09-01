@@ -6,15 +6,9 @@ const meta: Meta<typeof SearchBar> = {
   title: "Components/Recipes/SearchBar",
   parameters: {
     nextjs: { appDirectory: true },
+    layout: "fullscreen",
   },
-  decorators: [
-    // SearchBar uses w-full; constrain to a realistic viewport width
-    (Story) => (
-      <div style={{ width: 400 }}>
-        <Story />
-      </div>
-    ),
-  ],
+  globals: { viewport: { value: "sheet" } },
 };
 
 export default meta;

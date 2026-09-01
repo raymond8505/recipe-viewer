@@ -5,15 +5,9 @@ import RecipeTitleInput from "./RecipeTitleInput";
 const meta: Meta<typeof RecipeTitleInput> = {
   component: RecipeTitleInput,
   title: "Components/Recipes/RecipeTitleInput",
-  parameters: { layout: "padded" },
+  parameters: { layout: "fullscreen" },
+  globals: { viewport: { value: "editor" } },
   args: { onChange: fn() },
-  decorators: [
-    (Story) => (
-      <div style={{ maxWidth: 640 }}>
-        <Story />
-      </div>
-    ),
-  ],
 };
 
 export default meta;

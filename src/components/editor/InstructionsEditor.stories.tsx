@@ -13,20 +13,19 @@ function Demo({
 }) {
   const [groups, setGroups] = useState(initial);
   return (
-    <div style={{ maxWidth: 560 }}>
-      <InstructionsEditor
-        value={groups}
-        onChange={setGroups}
-        erroredStepIds={erroredStepIds}
-      />
-    </div>
+    <InstructionsEditor
+      value={groups}
+      onChange={setGroups}
+      erroredStepIds={erroredStepIds}
+    />
   );
 }
 
 const meta: Meta<typeof InstructionsEditor> = {
   component: InstructionsEditor,
   title: "Components/Recipes/Editor/InstructionsEditor",
-  parameters: { layout: "padded" },
+  parameters: { layout: "fullscreen" },
+  globals: { viewport: { value: "editor" } },
 };
 
 export default meta;
@@ -40,15 +39,33 @@ export const WithSectionsAndTimer: Story = {
           id: "g0",
           heading: null,
           items: [
-            { id: "s0", text: "Preheat the oven to 200°C.", name: "", minutes: 0, seconds: 0 },
+            {
+              id: "s0",
+              text: "Preheat the oven to 200°C.",
+              name: "",
+              minutes: 0,
+              seconds: 0,
+            },
           ],
         },
         {
           id: "g1",
           heading: "Sauce",
           items: [
-            { id: "s1", text: "Simmer the tomatoes until reduced.", name: "Simmer", minutes: 5, seconds: 30 },
-            { id: "s2", text: "Stir in the basil.", name: "", minutes: 0, seconds: 0 },
+            {
+              id: "s1",
+              text: "Simmer the tomatoes until reduced.",
+              name: "Simmer",
+              minutes: 5,
+              seconds: 30,
+            },
+            {
+              id: "s2",
+              text: "Stir in the basil.",
+              name: "",
+              minutes: 0,
+              seconds: 0,
+            },
           ],
         },
       ]}
@@ -68,7 +85,13 @@ export const TimerValidationError: Story = {
           id: "g0",
           heading: null,
           items: [
-            { id: "s1", text: "Rest the dough.", name: "", minutes: 5, seconds: 0 },
+            {
+              id: "s1",
+              text: "Rest the dough.",
+              name: "",
+              minutes: 5,
+              seconds: 0,
+            },
           ],
         },
       ]}

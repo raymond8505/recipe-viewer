@@ -40,14 +40,8 @@ function StatefulNutritionPanel({
 const meta: Meta<typeof StatefulNutritionPanel> = {
   component: StatefulNutritionPanel,
   title: "Components/Recipes/NutritionPanel",
-  parameters: { layout: "centered" },
-  decorators: [
-    (Story) => (
-      <div style={{ width: 480 }}>
-        <Story />
-      </div>
-    ),
-  ],
+  parameters: { layout: "fullscreen" },
+  globals: { viewport: { value: "panel" } },
   args: { onSplitPortions: fn() },
 };
 
@@ -79,12 +73,11 @@ export const PartialData: Story = {
 };
 
 /**
- * The "Full label" view at the default 480px panel width. The label's layout
- * switch is a container query, so at this size it renders the vertical FDA
- * panel — the same fallback cooking mode gets. Where the grid shows a curated
- * six and omits what's missing, the label shows every Schema.org nutrient, so
- * sugars, saturated/unsaturated fat and cholesterol appear here and nowhere
- * else.
+ * The "Full label" view at the default panel width. The label's layout switch
+ * is a container query, so at this size it renders the vertical FDA panel — the
+ * same fallback cooking mode gets. Where the grid shows a curated six and omits
+ * what's missing, the label shows every Schema.org nutrient, so sugars,
+ * saturated/unsaturated fat and cholesterol appear here and nowhere else.
  *
  * `view` is internal panel state, so the click genuinely changes what's shown.
  */
@@ -114,13 +107,7 @@ export const FullLabelWide: Story = {
       nutrition: fullSchemaNutrition,
     }),
   },
-  decorators: [
-    (Story) => (
-      <div style={{ width: 760 }}>
-        <Story />
-      </div>
-    ),
-  ],
+  globals: { viewport: { value: "page" } },
   play: async ({ canvas }) => {
     await userEvent.click(canvas.getByRole("button", { name: "Full label" }));
   },

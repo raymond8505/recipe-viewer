@@ -5,15 +5,9 @@ import AddRowButton from "./AddRowButton";
 const meta: Meta<typeof AddRowButton> = {
   component: AddRowButton,
   title: "Components/Recipes/Editor/AddRowButton",
-  parameters: { layout: "padded" },
+  parameters: { layout: "fullscreen" },
+  globals: { viewport: { value: "column" } },
   args: { onClick: fn() },
-  decorators: [
-    (Story) => (
-      <div style={{ maxWidth: 360 }}>
-        <Story />
-      </div>
-    ),
-  ],
 };
 
 export default meta;

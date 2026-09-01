@@ -18,7 +18,8 @@ const kosherSalt = ingredientFixtures[3];
 const meta: Meta<typeof NutritionFactsLabel> = {
   component: NutritionFactsLabel,
   title: "Components/Nutrition/NutritionFactsLabel",
-  parameters: { layout: "centered" },
+  parameters: { layout: "fullscreen" },
+  globals: { viewport: { value: "control" } },
 };
 
 export default meta;
@@ -35,13 +36,6 @@ export const CatalogVertical: Story = {
     servingLabel: "100 g",
     servingCaption: "Serving size",
   },
-  decorators: [
-    (Story) => (
-      <div className="w-72">
-        <Story />
-      </div>
-    ),
-  ],
 };
 
 /**
@@ -54,13 +48,6 @@ export const CatalogSmallServing: Story = {
     servingLabel: "tbsp, whole (6 g)",
     servingCaption: "Serving size",
   },
-  decorators: [
-    (Story) => (
-      <div className="w-72">
-        <Story />
-      </div>
-    ),
-  ],
 };
 
 /**
@@ -74,22 +61,15 @@ export const CatalogSparse: Story = {
     servingLabel: "100 g",
     servingCaption: "Serving size",
   },
-  decorators: [
-    (Story) => (
-      <div className="w-72">
-        <Story />
-      </div>
-    ),
-  ],
 };
 
 /**
  * The recipe panel's label with room to breathe: the FDA tabular display —
  * serving basis and Calories on the left, then the nutrient groups as columns
- * under "Amount/serving", with the minerals as a footer run. Column names
- * switch to the FDA abbreviations ("Sat. Fat", "Total Carb.") that the narrow columns
- * need. There is no minerals footer here — the recipe path has no Schema.org
- * slot for them, so they're never emitted.
+ * under "Amount/serving". Column names switch to the FDA abbreviations
+ * ("Sat. Fat", "Total Carb.") that the narrow columns need. There is no
+ * minerals footer here — the recipe path has no Schema.org slot for them, so
+ * they're never emitted.
  */
 export const RecipeTabular: Story = {
   args: {
@@ -97,21 +77,19 @@ export const RecipeTabular: Story = {
     servingLabel: "per 114 g serving",
     layout: "tabular",
   },
-  decorators: [
-    (Story) => (
-      <div style={{ width: 700 }}>
-        <Story />
-      </div>
-    ),
-  ],
+  globals: { viewport: { value: "page" } },
 };
 
 /**
  * The same tabular label in a container too narrow for columns — roughly a
  * phone, or cooking mode's content column. It falls back to the vertical panel,
- * which is what the FDA itself prescribes when horizontal space runs out. The
- * switch is a CONTAINER query, so it tracks this box's width rather than the
- * browser window: resizing the Storybook viewport will not change it.
+ * which is what the FDA itself prescribes when horizontal space runs out.
+ *
+ * The switch is a CONTAINER query on the label's own box, not a media query.
+ * Here the label fills the canvas, so the pinned viewport is what drives it —
+ * but in the app one viewport can show a wide recipe page and a ~360px cooking
+ * column at the same time, which is why `lg:` would pick the wrong layout for
+ * one of them.
  */
 export const RecipeNarrowFallback: Story = {
   args: {
@@ -119,13 +97,7 @@ export const RecipeNarrowFallback: Story = {
     servingLabel: "per serving",
     layout: "tabular",
   },
-  decorators: [
-    (Story) => (
-      <div style={{ width: 340 }}>
-        <Story />
-      </div>
-    ),
-  ],
+  globals: { viewport: { value: "column" } },
 };
 
 /**
@@ -139,11 +111,5 @@ export const RecipeSparse: Story = {
     servingLabel: "per serving",
     layout: "tabular",
   },
-  decorators: [
-    (Story) => (
-      <div style={{ width: 700 }}>
-        <Story />
-      </div>
-    ),
-  ],
+  globals: { viewport: { value: "page" } },
 };

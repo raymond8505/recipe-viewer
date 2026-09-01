@@ -10,17 +10,14 @@ import type { EditableIngredients } from "@/types/editor";
  */
 function Demo({ initial }: { initial: EditableIngredients }) {
   const [groups, setGroups] = useState(initial);
-  return (
-    <div style={{ maxWidth: 480 }}>
-      <IngredientsEditor value={groups} onChange={setGroups} />
-    </div>
-  );
+  return <IngredientsEditor value={groups} onChange={setGroups} />;
 }
 
 const meta: Meta<typeof IngredientsEditor> = {
   component: IngredientsEditor,
   title: "Components/Recipes/Editor/IngredientsEditor",
-  parameters: { layout: "padded" },
+  parameters: { layout: "fullscreen" },
+  globals: { viewport: { value: "panel" } },
 };
 
 export default meta;

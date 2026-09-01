@@ -5,15 +5,9 @@ import GroupHeadingInput from "./GroupHeadingInput";
 const meta: Meta<typeof GroupHeadingInput> = {
   component: GroupHeadingInput,
   title: "Components/Recipes/Editor/GroupHeadingInput",
-  parameters: { layout: "padded" },
+  parameters: { layout: "fullscreen" },
+  globals: { viewport: { value: "panel" } },
   args: { onChange: fn() },
-  decorators: [
-    (Story) => (
-      <div style={{ maxWidth: 480 }}>
-        <Story />
-      </div>
-    ),
-  ],
 };
 
 export default meta;
