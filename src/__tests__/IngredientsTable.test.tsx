@@ -21,9 +21,16 @@ vi.mock("@/lib/api/ingredients", () => ({
 
 const cumin = ingredientFixtures[0]; // "cumin seed"
 
-function renderTable(rows = ingredientFixtures.slice(0, 2)) {
+function renderTable(
+  rows = ingredientFixtures.slice(0, 2),
+  initialQuery?: string,
+) {
   return render(
-    <IngredientsTable initialIngredients={rows} initialCount={rows.length} />,
+    <IngredientsTable
+      initialIngredients={rows}
+      initialCount={rows.length}
+      initialQuery={initialQuery}
+    />,
   );
 }
 
@@ -40,6 +47,24 @@ describe("IngredientsTable", () => {
       "all-purpose flour",
     );
     expect(fetchIngredients).not.toHaveBeenCalled();
+  });
+
+  // The page passes ?q= down after filtering the first page server-side, so a
+  // deep link (the nutrition breakdown links here per matched line) must show
+  // its term without re-fetching what the server already sent.
+  it("seeds the search box from initialQuery without re-fetching", () => {
+    renderTable(ingredientFixtures.slice(0, 1), "cumin seed");
+
+    expect(screen.getByLabelText("Search ingredients")).toHaveValue(
+      "cumin seed",
+    );
+    expect(fetchIngredients).not.toHaveBeenCalled();
+  });
+
+  it("leaves the search box empty when no initialQuery is given", () => {
+    renderTable();
+
+    expect(screen.getByLabelText("Search ingredients")).toHaveValue("");
   });
 
   it("shows the empty state with guidance", () => {

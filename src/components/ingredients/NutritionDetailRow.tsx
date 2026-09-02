@@ -1,9 +1,15 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { TableCell, TableRow } from "@/components/ui/table";
 import { Checkbox } from "@/components/ui/checkbox";
-import { EditIcon, SpinnerIcon, WarningIcon } from "@/components/icons";
+import {
+  EditIcon,
+  ExternalLinkIcon,
+  SpinnerIcon,
+  WarningIcon,
+} from "@/components/icons";
 import { cn } from "@/lib/utils";
 import { formatAmount } from "@/lib/units";
 import type { NutritionDetailLine } from "@/hooks/useNutritionDetail";
@@ -197,6 +203,23 @@ export default function NutritionDetailRow({
                   onOpenChange={setAutocompleteOpen}
                 />
               </span>
+              {/* Gated on the resolved catalog row, not on row.ingredient_id:
+                  when the id doesn't resolve the label above reads "(unknown
+                  ingredient)" and there is no name to search the manager with.
+                  New tab on purpose — this page's include-toggle lens and any
+                  in-flight edits are session state worth keeping. */}
+              {ingredient && (
+                <Link
+                  href={`/ingredients?q=${encodeURIComponent(ingredient.name)}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  aria-label={`Edit ${ingredient.name} in the ingredient manager`}
+                  title="Edit this ingredient in the ingredient manager"
+                  className="shrink-0 text-muted-foreground hover:text-brand [&_svg]:size-3.5"
+                >
+                  <ExternalLinkIcon />
+                </Link>
+              )}
               {saving && <SpinnerIcon />}
             </span>
             {showGrams && (

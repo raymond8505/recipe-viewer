@@ -90,6 +90,21 @@ export const CreatingIngredient: Story = {
 };
 
 /**
+ * Arriving from a deep link — the nutrition breakdown
+ * (`/recipes/[id]/ingredients`) links here per matched line as
+ * `/ingredients?q=<catalog name>`. The page filters the first page server-side
+ * and passes the term down as `initialQuery`, so the box shows what was
+ * searched and the list is already narrowed, with no client re-fetch.
+ */
+export const DeepLinkedSearch: Story = {
+  args: {
+    initialIngredients: ingredientFixtures.slice(0, 1),
+    initialCount: 1,
+    initialQuery: "cumin seed",
+  },
+};
+
+/**
  * Long catalogs paginate 50 at a time; the pager only renders past one page.
  */
 export const Paginated: Story = {

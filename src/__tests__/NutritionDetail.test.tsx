@@ -14,6 +14,7 @@ import { makeIngredient, makeRecipeIngredient } from "@/fixtures";
 import { clickAndConfirm } from "./helpers/confirmBar";
 import type {
   IngredientKeywordMatch,
+  IngredientRow,
   RecipeIngredientRow,
 } from "@/types/ingredient";
 import type { UsdaSearchFood } from "@/lib/usda";
@@ -104,6 +105,7 @@ function renderDetail(overrides?: {
   rows?: RecipeIngredientRow[];
   schemaIngredients?: Array<string | RecipeIngredient>;
   recipeYield?: string | undefined;
+  initialIngredients?: IngredientRow[];
 }) {
   return render(
     <NutritionDetail
@@ -115,7 +117,7 @@ function renderDetail(overrides?: {
           : "4 servings"
       }
       initialRows={overrides?.rows ?? makeRows()}
-      initialIngredients={[butter, eggs, cumin]}
+      initialIngredients={overrides?.initialIngredients ?? [butter, eggs, cumin]}
       search={search}
       usdaSearch={usdaSearch}
     />,
@@ -529,6 +531,38 @@ describe("NutritionDetail", () => {
     expect(
       screen.queryByRole("button", { name: "Queued — check again" }),
     ).not.toBeInTheDocument();
+  });
+
+  // The breakdown is where a bad catalog row shows itself, so every matched
+  // line links to that row in the ingredient manager with the search pre-filled
+  // — the manager owns the editing UI, this table just points at it.
+  it("links a matched line to the ingredient manager, search pre-filled", () => {
+    renderDetail();
+
+    const link = within(rowFor("1 tsp cumin")).getByRole("link", {
+      name: "Edit cumin seed in the ingredient manager",
+    });
+    expect(link).toHaveAttribute("href", "/ingredients?q=cumin%20seed");
+    // New tab: this page's include-toggle lens is session state worth keeping.
+    expect(link).toHaveAttribute("target", "_blank");
+  });
+
+  it("offers no manager link on an unmatched line", () => {
+    renderDetail();
+
+    expect(
+      within(rowFor("5 g magic dust")).queryByRole("link"),
+    ).not.toBeInTheDocument();
+  });
+
+  // An id we can't resolve to a catalog row leaves us with no name to search
+  // the manager with, so a link would land on an empty list.
+  it("offers no manager link when the matched id resolves to nothing", () => {
+    renderDetail({ initialIngredients: [eggs, cumin] });
+
+    const row = rowFor("100 g butter");
+    expect(within(row).getByText("(unknown ingredient)")).toBeInTheDocument();
+    expect(within(row).queryByRole("link")).not.toBeInTheDocument();
   });
 
   it("persists an association change and recomputes the row and totals", async () => {

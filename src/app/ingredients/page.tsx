@@ -12,7 +12,16 @@ export const metadata: Metadata = {
 // nutrition layer is open (see src/lib/devAccess.ts). The data-plane routes
 // under /api/ingredients enforce the same `session-or-dev` posture themselves
 // (routePolicy), so this gate is UX, not the security boundary.
-export default async function IngredientsPage() {
+//
+// `?q=` is a deep link into the catalog: the nutrition breakdown
+// (NutritionDetailRow) links here per matched line so a bad catalog row can be
+// fixed in this UI without re-typing the ingredient name. It filters the
+// first page server-side and seeds the table's search box.
+export default async function IngredientsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ q?: string }>;
+}) {
   if (!canCurateNutrition(await getIsLoggedIn())) {
     return (
       <section className="py-16 text-center">
@@ -24,7 +33,8 @@ export default async function IngredientsPage() {
     );
   }
 
-  const { data, count } = await getIngredients();
+  const query = (await searchParams).q ?? "";
+  const { data, count } = await getIngredients({ query: query || undefined });
 
   return (
     <section className="space-y-6">
@@ -35,7 +45,11 @@ export default async function IngredientsPage() {
           USDA-sourced rows and fill gaps by hand.
         </p>
       </div>
-      <IngredientsTable initialIngredients={data} initialCount={count} />
+      <IngredientsTable
+        initialIngredients={data}
+        initialCount={count}
+        initialQuery={query}
+      />
     </section>
   );
 }
