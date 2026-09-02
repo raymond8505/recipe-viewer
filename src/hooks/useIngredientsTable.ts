@@ -33,10 +33,14 @@ export interface UseIngredientsTable {
 export function useIngredientsTable(
   initialIngredients: IngredientRow[],
   initialCount: number,
+  initialQuery = "",
 ): UseIngredientsTable {
   const [rows, setRows] = useState(initialIngredients);
   const [count, setCount] = useState(initialCount);
-  const [query, setQuery] = useState("");
+  // Seeded from the URL's ?q= so a deep link (the ingredient-breakdown table
+  // links here) shows its term in the search box. The server already filtered
+  // `initialIngredients` by the same term, so there is nothing to re-fetch.
+  const [query, setQuery] = useState(initialQuery);
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);

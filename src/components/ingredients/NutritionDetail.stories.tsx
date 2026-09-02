@@ -60,7 +60,9 @@ type Story = StoryObj<typeof NutritionDetail>;
  * split around a "Sauce" line in the schema, and regroup for display exactly
  * like the recipe page). Every line converts to grams, so the totals and
  * per-portion rows are fully populated. The long salt line shows the
- * ingredient column wrapping to its full text instead of truncating. The
+ * ingredient column wrapping to its full text instead of truncating. Each
+ * matched line also carries an external-link icon that opens that catalog row
+ * in the ingredient manager (`/ingredients?q=…`, new tab) for editing. The
  * play() opens one line's autocomplete to show the match-editing affordance.
  */
 export const Default: Story = {

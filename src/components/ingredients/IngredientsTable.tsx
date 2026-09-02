@@ -42,9 +42,13 @@ import {
 export default function IngredientsTable({
   initialIngredients,
   initialCount,
+  initialQuery,
 }: {
   initialIngredients: IngredientRow[];
   initialCount: number;
+  /** Search term the server already filtered `initialIngredients` by (the
+   *  page's ?q=), so a deep link lands with the box filled and the list ready. */
+  initialQuery?: string;
 }) {
   const {
     rows,
@@ -60,7 +64,7 @@ export default function IngredientsTable({
     setError,
     totalPages,
     load,
-  } = useIngredientsTable(initialIngredients, initialCount);
+  } = useIngredientsTable(initialIngredients, initialCount, initialQuery);
 
   const [showCreate, setShowCreate] = useState(false);
 
