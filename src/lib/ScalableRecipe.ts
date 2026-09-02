@@ -3,6 +3,7 @@ import type { IngredientNutrition } from "@/types/ingredient";
 import {
   parseIngredient,
   parseServings,
+  formatParsedAmount,
   type ParsedAmount,
   type ParsedIngredient,
 } from "./units";
@@ -386,6 +387,39 @@ export class ScalableRecipe {
   get hasNutrition(): boolean {
     return this.nutrition() != null;
   }
+}
+
+function amountsEqual(a: ParsedAmount, b: ParsedAmount): boolean {
+  if (a.kind === "single" && b.kind === "single") return a.value === b.value;
+  if (a.kind === "range" && b.kind === "range")
+    return a.min === b.min && a.max === b.max;
+  return false;
+}
+
+/**
+ * Render a `ScaledIngredient` back to source-shaped text ("2 cups flour" at 2×
+ * → "4 cups flour"). Used by the shopping-list copy so the clipboard reflects
+ * the amounts on screen rather than the base schema.
+ *
+ * Two cases return `original` untouched: unparseable lines ("salt to taste"),
+ * and lines still sitting at their base amount. The latter guard matters —
+ * rebuilding is *not* an identity even at 1×, because `formatParsedAmount`
+ * renders ½ as "0.5". Comparing amounts rather than reading `ingredientScale`
+ * also covers an anchored range, which collapses `range` → `single` and so
+ * compares unequal even when the scale happens to land back on 1.
+ *
+ * The unit is the recipe's own wording; it deliberately does not reproduce
+ * IngredientItem's threshold promotion (8 tsp → "2.67 tbsp") or its per-item
+ * unit dropdown, both of which live in that component's local state.
+ */
+export function formatScaledIngredient(ing: ScaledIngredient): string {
+  const { parsed, scaledAmount, rest, original } = ing;
+  if (!parsed || !scaledAmount) return original;
+  if (amountsEqual(parsed.amount, scaledAmount)) return original;
+  const parts = [formatParsedAmount(scaledAmount)];
+  if (parsed.unitText) parts.push(parsed.unitText);
+  if (rest) parts.push(rest);
+  return parts.join(" ");
 }
 
 export type { ParsedAmount, ParsedIngredient };

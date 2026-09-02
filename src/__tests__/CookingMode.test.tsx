@@ -183,6 +183,61 @@ describe("CookingMode — shopping list", () => {
       expect(navigator.clipboard.writeText).toHaveBeenCalledWith("2 cups flour\n1 tsp salt");
     });
   });
+
+  it("copies scaled amounts after the recipe is scaled", async () => {
+    const recipe = makeRecipe({
+      recipeYield: "1 serving",
+      recipeIngredient: ["2 cups flour", "1 tsp salt"],
+    });
+    render(<CookingMode recipe={recipe} onClose={vi.fn()} />);
+    // Selection is keyed by the raw text, so it survives the scale change.
+    fireEvent.click(screen.getByRole("checkbox", { name: "2 cups flour" }));
+    fireEvent.click(screen.getByRole("checkbox", { name: "1 tsp salt" }));
+    fireEvent.click(screen.getByRole("button", { name: "Increase servings" }));
+    fireEvent.click(screen.getByRole("button", { name: /copy shopping list/i }));
+    await waitFor(() => {
+      expect(navigator.clipboard.writeText).toHaveBeenCalledWith("4 cups flour\n2 tsp salt");
+    });
+  });
+
+  it("scales only the primary recipe's lines in a meal", async () => {
+    // Scaling is primary-only, and the copy now reads through `scalables`
+    // rather than each recipe's schema — a secondary must still contribute its
+    // selected lines, unscaled.
+    const secondary = makeRecipe({
+      name: "Side Salad",
+      recipeIngredient: ["1 cup rice"],
+    });
+    secondary.id = "2";
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({ json: async () => ({ data: [secondary] }) }),
+    );
+    const recipe = makeRecipe({
+      recipeYield: "1 serving",
+      recipeIngredient: ["2 cups flour"],
+    });
+    render(<CookingMode recipe={recipe} onClose={vi.fn()} />);
+
+    fireEvent.change(screen.getByPlaceholderText("Add recipe to meal…"), {
+      target: { value: "salad" },
+    });
+    const option = await screen.findByRole("option", { name: /Side Salad/ });
+    fireEvent.click(option);
+
+    // Primary tab is still active: select its line and double the recipe.
+    fireEvent.click(screen.getByRole("checkbox", { name: "2 cups flour" }));
+    fireEvent.click(screen.getByRole("button", { name: "Increase servings" }));
+
+    fireEvent.click(screen.getByRole("tab", { name: /Side Salad/ }));
+    fireEvent.click(screen.getByRole("checkbox", { name: "1 cup rice" }));
+
+    fireEvent.click(screen.getByRole("button", { name: /copy shopping list/i }));
+    await waitFor(() => {
+      expect(navigator.clipboard.writeText).toHaveBeenCalledWith("4 cups flour\n1 cup rice");
+    });
+    vi.unstubAllGlobals();
+  });
 });
 
 describe("CookingMode — cooking notes", () => {

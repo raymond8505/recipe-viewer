@@ -9,11 +9,14 @@ import {
   getFirstImage,
   toArray,
   parseDurationToSeconds,
-  getIngredientText,
 } from "@/lib/format";
 import { useTimers, timerState, editorSeconds } from "@/hooks/useTimers";
 import type { Timer } from "@/hooks/useTimers";
-import { ScalableRecipe, type NormalizedNutrition } from "@/lib/ScalableRecipe";
+import {
+  ScalableRecipe,
+  formatScaledIngredient,
+  type NormalizedNutrition,
+} from "@/lib/ScalableRecipe";
 import { useWakeLock } from "@/hooks/useWakeLock";
 import {
   registerCookingModeRecipe,
@@ -241,14 +244,15 @@ export default function CookingMode({
 
   const copyShoppingList = async () => {
     const lines: string[] = [];
+    // Read through `scalables`, not the schemas: the copied line reflects the
+    // current scale (see formatScaledIngredient), and the primary's instance is
+    // rebuilt from the live `schema` above — so window-API overrides still win
+    // without branching on r.id here. Secondaries stay at 1× and copy verbatim.
     for (const r of mealRecipes) {
-      const ings =
-        r.id === recipe.id
-          ? schema.recipeIngredient
-          : r.metadata.schema.recipeIngredient;
-      for (const ing of ings ?? []) {
-        const text = getIngredientText(ing);
-        if (selectedIngredients.has(`${r.id}::${text}`)) lines.push(text);
+      for (const ing of scalables.get(r.id)?.ingredients ?? []) {
+        if (selectedIngredients.has(`${r.id}::${ing.original}`)) {
+          lines.push(formatScaledIngredient(ing));
+        }
       }
     }
     try {

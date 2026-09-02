@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { ScalableRecipe } from "@/lib/ScalableRecipe";
+import { ScalableRecipe, formatScaledIngredient } from "@/lib/ScalableRecipe";
 import { scalableBaseSchema as baseSchema, quantitativeValueYield } from "@/fixtures";
 
 describe("ScalableRecipe — construction", () => {
@@ -478,5 +478,75 @@ describe("ScalableRecipe — nutrition views", () => {
         nutrition: { calories: "unknown" },
       }).nutrition(),
     ).toBeNull();
+  });
+});
+
+describe("formatScaledIngredient", () => {
+  // baseSchema yields 4 servings; scalePortionsTo(8) is exactly 2x.
+  const doubled = new ScalableRecipe(baseSchema).scalePortionsTo(8);
+  const base = new ScalableRecipe(baseSchema);
+
+  it("scales a whole amount and keeps the source's plural", () => {
+    expect(formatScaledIngredient(doubled.ingredients[0])).toBe("4 cups flour");
+  });
+
+  it("scales a fraction to a whole number", () => {
+    // "1/2 tsp salt" doubled.
+    expect(formatScaledIngredient(doubled.ingredients[1])).toBe("1 tsp salt");
+  });
+
+  it("scales both ends of a range and keeps unit-less rest intact", () => {
+    expect(formatScaledIngredient(doubled.ingredients[2])).toBe(
+      "6-10 cloves garlic",
+    );
+  });
+
+  it("returns unparseable lines untouched", () => {
+    expect(formatScaledIngredient(doubled.ingredients[3])).toBe("salt to taste");
+  });
+
+  it("returns the original verbatim at base scale", () => {
+    // Load-bearing: rebuilding is not an identity even at 1x, because
+    // formatParsedAmount renders 1/2 as "0.5". Every base-scale line must come
+    // back exactly as the recipe wrote it.
+    expect(base.ingredients.map(formatScaledIngredient)).toEqual(
+      baseSchema.recipeIngredient!.map((i) =>
+        typeof i === "string" ? i : i.name,
+      ),
+    );
+  });
+
+  it("rebuilds an anchored range even when the scale lands back on 1", () => {
+    // Anchoring "3-5 cloves garlic" to its own midpoint leaves ingredientScale
+    // at 1 but collapses range -> single, so the amounts compare unequal and
+    // the line still rebuilds.
+    const anchored = new ScalableRecipe(baseSchema).anchorIngredientAmount(2, 4);
+    expect(anchored.state.ingredientScale).toBe(1);
+    expect(formatScaledIngredient(anchored.ingredients[2])).toBe(
+      "4 cloves garlic",
+    );
+    // Untouched siblings still come back verbatim.
+    expect(formatScaledIngredient(anchored.ingredients[0])).toBe(
+      "2 cups flour",
+    );
+  });
+
+  it("renders a scaled-down amount as a decimal", () => {
+    const halved = new ScalableRecipe(baseSchema).scalePortionsTo(2);
+    expect(formatScaledIngredient(halved.ingredients[0])).toBe("1 cups flour");
+  });
+
+  it("copies the recipe's own unit, not IngredientItem's promoted unit", () => {
+    // The list promotes 1 tsp (~4.9 ml) past the 7 ml threshold to tbsp and
+    // would show "0.34 tbsp"; the shopping list stays in the source's unit.
+    expect(formatScaledIngredient(doubled.ingredients[1])).toBe("1 tsp salt");
+  });
+
+  it("carries the source's singular through a scale-up (known wart)", () => {
+    // "1 cup butter" doubled reads "2 cup butter" — unitText is preserved
+    // verbatim, and UNIT_DEFS has no singular/plural pair to switch on.
+    expect(formatScaledIngredient(doubled.ingredients[4])).toBe(
+      "2 cup butter",
+    );
   });
 });
