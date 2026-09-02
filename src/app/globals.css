@@ -107,6 +107,16 @@
   animation: timer-done-pulse 2s ease-in-out infinite;
 }
 
+/* The rule above supplies the alert card's background entirely through the keyframes, so
+   dropping the animation would leave it transparent — the background-color here is load-bearing,
+   not decoration. It holds the pulse at its 50% peak: still unmistakably alerting, just still. */
+@media (prefers-reduced-motion: reduce) {
+  .animate-timer-done {
+    animation: none;
+    background-color: color-mix(in oklch, var(--brand) 40%, white);
+  }
+}
+
 .cook-mode-container {
   height: 100vh; /* fallback for browsers without svh support */
   height: 100svh;
