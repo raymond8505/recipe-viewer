@@ -71,6 +71,18 @@
   h6 {
     @apply font-heading font-light;
   }
+  /* Tailwind v3's preflight shipped `button, [role="button"] { cursor: pointer }`;
+     v4 dropped it and left the UA default (`cursor: default`) on every control.
+     This belongs here, not at call sites: the earlier fix put `cursor-pointer`
+     only on the shadcn button cva, which silently missed every raw <button> in
+     the app. Utilities outrank @layer base, so a deliberate override still wins
+     — see DragHandleButton's `cursor-grab`. Disabled controls fall through to
+     the plain arrow rather than advertising a click. */
+  button:not(:disabled),
+  select:not(:disabled),
+  [role="button"]:not([aria-disabled="true"]) {
+    cursor: pointer;
+  }
 }
 
 /* Hide scrollbar on ribbon containers while preserving scroll behaviour */

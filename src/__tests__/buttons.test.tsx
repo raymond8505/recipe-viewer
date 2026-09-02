@@ -119,4 +119,17 @@ describe("DragHandleButton", () => {
     await userEvent.pointer({ target: handle, keys: "[MouseLeft>]" });
     expect(onPointerDown).toHaveBeenCalled();
   });
+
+  // A drag handle must read as draggable, not clickable. Two things could take
+  // that away: twMerge failing to drop the Button cva's `cursor-pointer` (which
+  // would leave both classes on the element), or someone "simplifying" the grab
+  // classes away now that globals.css gives every button a pointer.
+  it("keeps the grab cursor instead of the shared button pointer", () => {
+    render(<DragHandleButton aria-label="Reorder row" />);
+    const cls = screen.getByRole("button", { name: "Reorder row" }).className;
+
+    expect(cls).toContain("cursor-grab");
+    expect(cls).toContain("active:cursor-grabbing");
+    expect(cls).not.toContain("cursor-pointer");
+  });
 });
