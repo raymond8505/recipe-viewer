@@ -5,6 +5,7 @@ import {
   formatParsedAmount,
   convert,
   getUnitGroup,
+  getUnitDisplay,
   formatAmount,
   parseServings,
   applyServings,
@@ -552,5 +553,39 @@ describe("parseIngredient", () => {
 
   it("returns null for non-numeric ingredient", () => {
     expect(parseIngredient("salt to taste")).toBeNull();
+  });
+});
+
+describe("parseIngredient — unitText", () => {
+  // unitText keeps the source's own wording so callers rebuilding a line don't
+  // emit the canonical singular ("2 cups flour" → "2 cup flour").
+  it("keeps the plural the source wrote, not the canonical display", () => {
+    const r = parseIngredient("2 cups flour");
+    expect(r!.unit).toBe("cup");
+    expect(r!.unitText).toBe("cups");
+    expect(getUnitDisplay(r!.unit!)).toBe("cup");
+  });
+
+  it("keeps a spelled-out unit verbatim", () => {
+    const r = parseIngredient("1 tablespoon olive oil");
+    expect(r!.unit).toBe("tbsp");
+    expect(r!.unitText).toBe("tablespoon");
+  });
+
+  it("preserves the source's casing", () => {
+    const r = parseIngredient("2 Cups flour");
+    expect(r!.unit).toBe("cup");
+    expect(r!.unitText).toBe("Cups");
+  });
+
+  it("keeps a multi-word unit whole", () => {
+    const r = parseIngredient("2 fl oz water");
+    expect(r!.unitText).toBe("fl oz");
+  });
+
+  it("is null when no unit matched", () => {
+    const r = parseIngredient("3-5 cloves garlic");
+    expect(r!.unit).toBeNull();
+    expect(r!.unitText).toBeNull();
   });
 });

@@ -321,6 +321,25 @@ describe("RecipeDetail — shopping list", () => {
     });
   });
 
+  it("copies scaled amounts after the recipe is scaled", async () => {
+    render(
+      <RecipeDetail
+        recipe={makeRecipe({
+          recipeYield: "1 serving",
+          recipeIngredient: ["2 cups flour", "1 tsp salt"],
+        })}
+      />,
+    );
+    // Selection is keyed by the raw text, so it survives the scale change.
+    fireEvent.click(screen.getByRole("checkbox", { name: "2 cups flour" }));
+    fireEvent.click(screen.getByRole("checkbox", { name: "1 tsp salt" }));
+    fireEvent.click(screen.getByRole("button", { name: "Increase servings" }));
+    fireEvent.click(screen.getByRole("button", { name: /copy shopping list/i }));
+    await waitFor(() => {
+      expect(navigator.clipboard.writeText).toHaveBeenCalledWith("4 cups flour\n2 tsp salt");
+    });
+  });
+
   it("clears the copy-feedback reset timer on unmount", async () => {
     const setSpy = vi.spyOn(globalThis, "setTimeout");
     const clearSpy = vi.spyOn(globalThis, "clearTimeout");

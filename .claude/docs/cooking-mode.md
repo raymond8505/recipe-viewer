@@ -34,6 +34,12 @@ Ingredients in both `CookingMode` and `RecipeDetail` are tappable checkboxes tha
 - `CookingMode`: `Set<string>` keyed as `"${recipeId}::${ingredientText}"` — shared across all meal recipes in a session
 - `RecipeDetail`: `Set<string>` keyed by bare ingredient text — separate, no cross-mode sharing
 
-**Copy output is raw ingredient text, not scaled.** `getIngredientText(ing)` is used — the original schema string, ignoring current scale. Intentional: shopping is about what to buy, not cook-time quantities.
+**Copy output reflects the current ingredient scale.** Both handlers iterate `ScalableRecipe.ingredients` and render each line through `formatScaledIngredient` (`src/lib/ScalableRecipe.ts`) — scaling a recipe is a deliberate act, and the shopper needs the amount to actually buy. (This reverses the earlier rule that copy was always raw text.)
 
-**Primary recipe copy reads from `schema` (live state), not `mealRecipes[0].metadata.schema`** — preserves window API overrides. Don't flatten this.
+`formatScaledIngredient` returns `original` verbatim in two cases: unparseable lines ("salt to taste"), and lines still at their base amount. The second guard is load-bearing — rebuilding is not an identity even at 1×, since `formatParsedAmount` renders ½ as "0.5".
+
+The unit in a copied line is the recipe's own wording, preserved as `ParsedIngredient.unitText` (the canonical `unit` key's `display` is singular, so rebuilding from it would yield "4 cup flour"). Copy deliberately does **not** reproduce `IngredientItem`'s volume-threshold promotion (8 tsp → "2.67 tbsp") or its per-item unit dropdown — both live in that component's local `selectedUnit` state.
+
+**Selection keys stay raw `ing.original` text**, unscaled — a scale-stable identity, so a selection survives the user changing the scale afterwards. Only the copy output scales.
+
+**Primary recipe copy must reflect live `schema`, not `mealRecipes[0].metadata.schema`** — preserves window API overrides. Now satisfied structurally rather than by branching on `r.id`: the effect that rebuilds `scalables` keys the primary off `schema`, so iterating `scalables` is already correct. Don't reintroduce a `metadata.schema` read here.

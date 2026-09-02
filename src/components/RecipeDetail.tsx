@@ -13,11 +13,14 @@ import {
   formatDate,
   getFirstImage,
   toArray,
-  getIngredientText,
   isOwnRecipe,
   toSchemaOrgJsonLd,
 } from "@/lib/format";
-import { ScalableRecipe, type NormalizedNutrition } from "@/lib/ScalableRecipe";
+import {
+  ScalableRecipe,
+  formatScaledIngredient,
+  type NormalizedNutrition,
+} from "@/lib/ScalableRecipe";
 import { nutrientValuesToSchema } from "@/lib/nutritionMath";
 import { useScalableRecipe } from "@/hooks/useScalableRecipe";
 import { useRecipeEditor } from "@/hooks/useRecipeEditor";
@@ -263,9 +266,11 @@ export default function RecipeDetail({
   };
 
   const copyShoppingList = async () => {
-    const lines = (schema.recipeIngredient ?? [])
-      .map(getIngredientText)
-      .filter((text) => selectedIngredients.has(text));
+    // Selection is keyed by raw schema text (scale-stable), but the copied
+    // line reflects the current scale — see formatScaledIngredient.
+    const lines = scalable.ingredients
+      .filter((ing) => selectedIngredients.has(ing.original))
+      .map(formatScaledIngredient);
     try {
       await navigator.clipboard.writeText(lines.join("\n"));
       setCopyFeedback(true);

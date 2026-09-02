@@ -248,6 +248,13 @@ export function roundParsedAmount(a: ParsedAmount): ParsedAmount {
 export interface ParsedIngredient {
   amount: ParsedAmount;
   unit: string | null;
+  /**
+   * The unit exactly as the source wrote it ("cups", "Tablespoon"), or null
+   * when no unit matched. `unit` is the canonical key, whose `display` is
+   * singular ("cup") — reconstructing a line from that turns "2 cups flour"
+   * into "2 cup flour", so anything rebuilding source-shaped text uses this.
+   */
+  unitText: string | null;
   rest: string;
   original: string;
 }
@@ -265,12 +272,19 @@ export function parseIngredient(str: string): ParsedIngredient | null {
       return {
         amount,
         unit: unitKey,
+        unitText: um[0],
         rest: afterAmount.slice(um[0].length).trim(),
         original: str,
       };
     }
   }
-  return { amount, unit: null, rest: afterAmount.trim(), original: str };
+  return {
+    amount,
+    unit: null,
+    unitText: null,
+    rest: afterAmount.trim(),
+    original: str,
+  };
 }
 
 /**
