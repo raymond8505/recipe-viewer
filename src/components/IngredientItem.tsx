@@ -127,7 +127,7 @@ export default function IngredientItem({ ingredient, onAnchor }: IngredientItemP
             e.stopPropagation();
             startEdit();
           }}
-          className="cursor-pointer underline underline-offset-2 decoration-brand/50 hover:decoration-brand"
+          className="underline underline-offset-2 decoration-brand/50 hover:decoration-brand"
           aria-label={rest ? `Edit amount for ${rest}` : `Edit amount: ${displayString}`}
         >
           {displayString}
@@ -141,7 +141,7 @@ export default function IngredientItem({ ingredient, onAnchor }: IngredientItemP
           <select
             value={displayUnit}
             onChange={(e) => setSelectedUnit(e.target.value)}
-            className="bg-transparent appearance-none border-0 p-0 cursor-pointer underline underline-offset-2 decoration-brand focus:outline-hidden focus-visible:ring-2 focus-visible:ring-brand rounded-sm"
+            className="bg-transparent appearance-none border-0 p-0 underline underline-offset-2 decoration-brand focus:outline-hidden focus-visible:ring-2 focus-visible:ring-brand rounded-sm"
             aria-label="unit"
           >
             {unitGroup.map((u) => (

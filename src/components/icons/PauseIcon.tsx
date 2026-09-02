@@ -1,8 +1,14 @@
-export function PauseIcon() {
+import { Pause, type LucideProps } from "lucide-react";
+import { cn } from "@/lib/utils";
+
+/** Filled to match {@link PlayIcon} — the two swap in place on the same control. */
+export function PauseIcon({ className, ...props }: LucideProps) {
   return (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" className="text-brand shrink-0" aria-hidden="true">
-      <rect x="6" y="4" width="4" height="16" rx="1" />
-      <rect x="14" y="4" width="4" height="16" rx="1" />
-    </svg>
+    <Pause
+      size={14}
+      fill="currentColor"
+      className={cn("text-brand shrink-0", className)}
+      {...props}
+    />
   );
 }

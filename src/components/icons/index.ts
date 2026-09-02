@@ -1,4 +1,3 @@
-export { ChatBubbleIcon } from "./ChatBubbleIcon";
 export { ChefHatIcon } from "./ChefHatIcon";
 export { CheckIcon } from "./CheckIcon";
 export { ClockIcon } from "./ClockIcon";
