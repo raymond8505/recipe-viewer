@@ -12,6 +12,9 @@ export function makeTimer(
     remaining: 300,
     paused: false,
     finished: false,
+    // Display never reads endsAt — it renders `remaining` — so leaving this null keeps cards and
+    // stories deterministic instead of pinning them to Date.now(). Pass one for deadline tests.
+    endsAt: null,
     ...overrides,
   };
 }

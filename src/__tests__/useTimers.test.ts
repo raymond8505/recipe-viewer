@@ -1,6 +1,16 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { renderHook, act } from "@testing-library/react";
-import { useTimers, loadTimers, saveTimers, stopAlarm, timerState, editorSeconds } from "@/hooks/useTimers";
+import {
+  useTimers,
+  loadTimers,
+  saveTimers,
+  stopAlarm,
+  timerState,
+  editorSeconds,
+  reconcileTimer,
+  ALARM_GRACE_MS,
+} from "@/hooks/useTimers";
+import type { Timer } from "@/hooks/useTimers";
 import { hashUrl } from "@/lib/hash";
 
 // Stub AudioContext so playAlarm / beep don't throw in jsdom
@@ -14,18 +24,32 @@ const mockCtx = {
   currentTime: 0, createOscillator: vi.fn(() => mockOscillator),
   createGain: vi.fn(() => mockGain), destination: {}, close: vi.fn(),
 };
-vi.stubGlobal("AudioContext", vi.fn(() => mockCtx));
+// Constructing an AudioContext is the first thing beep() does, so this doubles as the probe for
+// "did anything make a sound" — the load-bearing assertion for the never-ring-on-return rule.
+const audioContext = vi.fn(() => mockCtx);
+vi.stubGlobal("AudioContext", audioContext);
 
 const RECIPE_URL = "https://example.com/recipe/pasta";
 const RECIPE_HASH = hashUrl(RECIPE_URL);
 
-const makeStoredTimer = (overrides = {}) => ({
+const makeStoredTimer = (overrides: Partial<Timer> = {}): Timer => ({
   id: "t1", label: "Pasta", duration: 600, remaining: 600,
-  paused: false, finished: false, ...overrides,
+  paused: false, finished: false, endsAt: null, ...overrides,
 });
 
-beforeEach(() => { localStorage.clear(); vi.useFakeTimers(); });
-afterEach(() => { stopAlarm(); vi.useRealTimers(); });
+function stubVisibility(state: "visible" | "hidden") {
+  Object.defineProperty(document, "visibilityState", { value: state, configurable: true });
+}
+
+function setVisibility(state: "visible" | "hidden") {
+  stubVisibility(state);
+  document.dispatchEvent(new Event("visibilitychange"));
+}
+
+beforeEach(() => { localStorage.clear(); vi.useFakeTimers(); audioContext.mockClear(); });
+// Reset the stub without dispatching: RTL's cleanup runs after this hook, so a real event here
+// would reach a still-mounted hook and update state outside act().
+afterEach(() => { stopAlarm(); vi.useRealTimers(); stubVisibility("visible"); });
 
 describe("timerState", () => {
   it("returns running when remaining > 0 and not paused", () => {
@@ -57,6 +81,40 @@ describe("editorSeconds", () => {
   });
 });
 
+describe("reconcileTimer", () => {
+  const NOW = 1_000_000;
+
+  it("derives remaining from the deadline while it is still in the future", () => {
+    const t = reconcileTimer(makeStoredTimer({ endsAt: NOW + 245_400 }), NOW);
+    expect(t.remaining).toBe(246); // rounds up — 245.4s left still reads as 4:06
+    expect(t.endsAt).toBe(NOW + 245_400);
+  });
+
+  it("rings a timer found just past its deadline", () => {
+    const t = reconcileTimer(makeStoredTimer({ endsAt: NOW - 3_000 }), NOW);
+    expect(timerState(t)).toBe("alarm");
+    expect(t.remaining).toBe(0);
+    expect(t.endsAt).toBeNull();
+  });
+
+  it("returns a long-expired timer already dismissed", () => {
+    const t = reconcileTimer(makeStoredTimer({ endsAt: NOW - 30_000 }), NOW);
+    expect(timerState(t)).toBe("finished");
+  });
+
+  it("treats exactly the grace window as too late to ring", () => {
+    expect(timerState(reconcileTimer(makeStoredTimer({ endsAt: NOW - ALARM_GRACE_MS }), NOW)))
+      .toBe("finished");
+    expect(timerState(reconcileTimer(makeStoredTimer({ endsAt: NOW - (ALARM_GRACE_MS - 1) }), NOW)))
+      .toBe("alarm");
+  });
+
+  it("leaves a deadline-less timer untouched", () => {
+    const paused = makeStoredTimer({ remaining: 245, paused: true, endsAt: null });
+    expect(reconcileTimer(paused, NOW + 9_999_999)).toBe(paused);
+  });
+});
+
 describe("loadTimers / saveTimers", () => {
   it("returns empty array when nothing stored", () => {
     expect(loadTimers(RECIPE_HASH)).toEqual([]);
@@ -74,6 +132,24 @@ describe("loadTimers / saveTimers", () => {
     const [t] = loadTimers(RECIPE_HASH);
     expect(t.paused).toBe(false);
     expect(t.finished).toBe(false);
+  });
+
+  it("dates a deadline-less running timer from now, so it resumes rather than expires", () => {
+    // Rows written before endsAt existed froze at whatever the cook last saw. Back-dating them
+    // would expire every timer in storage the first time this build loads.
+    const raw = JSON.stringify({ [RECIPE_HASH]: [{ id: "x", label: "Old", duration: 60, remaining: 30 }] });
+    localStorage.setItem("cookingTimers", raw);
+    const [t] = loadTimers(RECIPE_HASH);
+    expect(t.endsAt).toBe(Date.now() + 30_000);
+    expect(reconcileTimer(t, Date.now()).remaining).toBe(30);
+  });
+
+  it("leaves a deadline-less paused timer without a deadline", () => {
+    const raw = JSON.stringify({
+      [RECIPE_HASH]: [{ id: "x", label: "Old", duration: 60, remaining: 30, paused: true }],
+    });
+    localStorage.setItem("cookingTimers", raw);
+    expect(loadTimers(RECIPE_HASH)[0].endsAt).toBeNull();
   });
 
   it("scopes timers by recipe hash", () => {
@@ -333,5 +409,109 @@ describe("useTimers", () => {
     act(() => { result.current.addTimer("Quick", 2); });
     act(() => { vi.advanceTimersByTime(5000); });
     expect(result.current.timers[0].remaining).toBe(0);
+  });
+
+  it("gives a running timer a deadline and a paused one none", () => {
+    const { result } = renderHook(() => useTimers(RECIPE_URL));
+    act(() => { result.current.addTimer("Pasta", 600); });
+    act(() => { result.current.addTimer("Simmer", 300, true); });
+    expect(result.current.timers[0].endsAt).toBe(Date.now() + 600_000);
+    expect(result.current.timers[1].endsAt).toBeNull();
+  });
+
+  it("keeps the deadline aligned with the clock the cook sees when pausing and resuming", () => {
+    const { result } = renderHook(() => useTimers(RECIPE_URL));
+    act(() => { result.current.addTimer("Pasta", 600); });
+    const id = result.current.timers[0].id;
+    act(() => { vi.advanceTimersByTime(5000); });
+    act(() => { result.current.togglePause(id); });
+    expect(result.current.timers[0].remaining).toBe(595);
+    expect(result.current.timers[0].endsAt).toBeNull();
+    act(() => { vi.advanceTimersByTime(60_000); }); // paused time must not count
+    act(() => { result.current.togglePause(id); });
+    expect(result.current.timers[0].remaining).toBe(595);
+    expect(result.current.timers[0].endsAt).toBe(Date.now() + 595_000);
+  });
+});
+
+// The point of the feature: a cook who fumbles cook mode closed comes back to timers where
+// physics left them, and never to a noise they didn't ask for.
+describe("useTimers — time away from the page", () => {
+  it("counts down time spent with cook mode closed", () => {
+    saveTimers(RECIPE_HASH, [makeStoredTimer({ endsAt: Date.now() + 600_000 })]);
+    act(() => { vi.advanceTimersByTime(120_000); }); // cook mode is not mounted for this stretch
+    const { result } = renderHook(() => useTimers(RECIPE_URL));
+    expect(result.current.timers[0].remaining).toBe(480);
+    expect(timerState(result.current.timers[0])).toBe("running");
+  });
+
+  it("comes back ringing, but silent, when a timer ended moments ago", () => {
+    saveTimers(RECIPE_HASH, [makeStoredTimer({ endsAt: Date.now() - 3_000 })]);
+    const { result } = renderHook(() => useTimers(RECIPE_URL));
+    expect(timerState(result.current.timers[0])).toBe("alarm");
+    expect(audioContext).not.toHaveBeenCalled();
+  });
+
+  it("comes back already dismissed when a timer ended long ago", () => {
+    saveTimers(RECIPE_HASH, [makeStoredTimer({ endsAt: Date.now() - 30_000 })]);
+    const { result } = renderHook(() => useTimers(RECIPE_URL));
+    expect(timerState(result.current.timers[0])).toBe("finished");
+    expect(audioContext).not.toHaveBeenCalled();
+  });
+
+  it("persists what it reconciled, so a second visit agrees with the first", () => {
+    saveTimers(RECIPE_HASH, [makeStoredTimer({ endsAt: Date.now() - 3_000 })]);
+    renderHook(() => useTimers(RECIPE_URL));
+    const [stored] = loadTimers(RECIPE_HASH);
+    expect(stored.remaining).toBe(0);
+    expect(stored.endsAt).toBeNull();
+    expect(stored.finished).toBe(false);
+  });
+
+  it("leaves a paused timer alone no matter how long the cook is away", () => {
+    saveTimers(RECIPE_HASH, [makeStoredTimer({ remaining: 245, paused: true })]);
+    act(() => { vi.advanceTimersByTime(3_600_000); });
+    const { result } = renderHook(() => useTimers(RECIPE_URL));
+    expect(result.current.timers[0].remaining).toBe(245);
+    expect(timerState(result.current.timers[0])).toBe("paused");
+  });
+
+  it("does not tick while the page is hidden, then catches up when it returns", () => {
+    const { result } = renderHook(() => useTimers(RECIPE_URL));
+    act(() => { result.current.addTimer("Pasta", 600); });
+    act(() => { setVisibility("hidden"); });
+    act(() => { vi.advanceTimersByTime(120_000); });
+    expect(result.current.timers[0].remaining).toBe(600); // no work done off-screen
+    act(() => { setVisibility("visible"); });
+    expect(result.current.timers[0].remaining).toBe(480); // but no time lost either
+  });
+
+  it("does not ring for a timer that expired while the page was hidden", () => {
+    const { result } = renderHook(() => useTimers(RECIPE_URL));
+    act(() => { result.current.addTimer("Pasta", 5); });
+    act(() => { setVisibility("hidden"); });
+    act(() => { vi.advanceTimersByTime(8_000); }); // ended 3s ago — inside the grace window
+    act(() => { setVisibility("visible"); });
+    expect(timerState(result.current.timers[0])).toBe("alarm");
+    expect(audioContext).not.toHaveBeenCalled();
+  });
+
+  it("still rings for a timer that expires while the cook is watching", () => {
+    const { result } = renderHook(() => useTimers(RECIPE_URL));
+    act(() => { result.current.addTimer("Quick", 2); });
+    act(() => { vi.advanceTimersByTime(2000); });
+    expect(timerState(result.current.timers[0])).toBe("alarm");
+    expect(audioContext).toHaveBeenCalled();
+  });
+
+  it("stops the alarm when cook mode closes mid-ring", () => {
+    const { result, unmount } = renderHook(() => useTimers(RECIPE_URL));
+    act(() => { result.current.addTimer("Quick", 2); });
+    act(() => { vi.advanceTimersByTime(2000); });
+    expect(audioContext).toHaveBeenCalled();
+    unmount();
+    audioContext.mockClear();
+    act(() => { vi.advanceTimersByTime(10_000); });
+    expect(audioContext).not.toHaveBeenCalled();
   });
 });
