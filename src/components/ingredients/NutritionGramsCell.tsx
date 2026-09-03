@@ -79,7 +79,14 @@ export default function NutritionGramsCell({
   }
 
   return (
-    <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+    // flex-wrap is load-bearing, not tidying: the cell sits in a hard-capped
+    // w-44 frozen column (tableStyles.ts), and the "not counted" pill is wide
+    // enough that field + unit + pill + "Estimate" no longer fit on one line.
+    // Without wrapping, "Estimate" overflows and widens the column past w-44,
+    // which breaks the NEXT frozen column's matching left-44 offset. Wrapping
+    // drops "Estimate" to a second line instead; the row grows, which the
+    // ingredient and match cells above already do for long text.
+    <span className="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
       <input
         type="number"
         inputMode="decimal"
