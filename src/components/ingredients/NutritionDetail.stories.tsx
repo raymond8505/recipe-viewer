@@ -248,6 +248,58 @@ export const EstimatedGrams: Story = {
   },
 };
 
+/**
+ * The un-weighable line, zeroed. "kosher salt to taste" carries no amount and
+ * no honest estimate exists for it, so it used to sit flagged and hold the whole
+ * recipe off its ingredient-derived total (coverage is all-or-nothing). A typed
+ * 0 settles it: the line reads "not counted" rather than "est." — it's a
+ * decision about the line, not a guess at its weight — its nutrition cells show
+ * an explicit 0 instead of dashes, and the "Totals exclude N flagged lines"
+ * footer is gone entirely, which is the whole point.
+ *
+ * Compare `WithExclusions`, where the same salt line is the quantity-less
+ * exclusion this story resolves.
+ */
+export const NotCounted: Story = {
+  args: {
+    schemaIngredients: [
+      "125 g all-purpose flour",
+      "1 tbsp olive oil",
+      "kosher salt to taste",
+    ],
+    recipeYield: "2 servings",
+    initialRows: [
+      makeRecipeIngredient("story-recipe", 0, {
+        raw_text: "125 g all-purpose flour",
+        quantity: 125,
+        unit: "g",
+        name_text: "all-purpose flour",
+        ingredient_id: flour.id,
+        match_status: "matched",
+      }),
+      makeRecipeIngredient("story-recipe", 1, {
+        raw_text: "1 tbsp olive oil",
+        quantity: 1,
+        unit: "tbsp",
+        name_text: "olive oil",
+        ingredient_id: oliveOil.id,
+        match_status: "matched",
+      }),
+      makeRecipeIngredient("story-recipe", 2, {
+        raw_text: "kosher salt to taste",
+        quantity: null,
+        unit: null,
+        name_text: "kosher salt",
+        ingredient_id: salt.id,
+        match_status: "matched",
+        estimated_grams: 0,
+        grams_source: "manual",
+      }),
+    ],
+    initialIngredients: [flour, oliveOil, salt],
+  },
+};
+
 /** A recipe with no ingredient groups renders flat, without heading rows. */
 export const Flat: Story = {
   args: {

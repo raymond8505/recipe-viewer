@@ -127,9 +127,31 @@ describe("PATCH /api/recipes/[id]/ingredients/[riId]/grams (manual set/clear)", 
     expect(setRecipeIngredientGrams).toHaveBeenCalledWith("r-1", "ri-1", null, null);
   });
 
-  it("rejects a non-positive value with 400", async () => {
+  // 0 is a value, not a rejection: it's how a curator says "don't count this
+  // line" for an ingredient nobody can weigh. It must reach the repo as 0 with
+  // source "manual" — NOT collapse to the null/clear path, which would restore
+  // the derived value and re-block the recipe's coverage.
+  it("stores an explicit 0 as 'manual' rather than treating it as a clear", async () => {
+    vi.mocked(setRecipeIngredientGrams).mockResolvedValue(
+      makeRecipeIngredient("r-1", 0, { estimated_grams: 0, grams_source: "manual" }),
+    );
+
     const res = await PATCH(
       makeJsonRequest({ grams: 0 }, { method: "PATCH" }),
+      makeParams(),
+    );
+
+    expect(res.status).toBe(200);
+    expect(setRecipeIngredientGrams).toHaveBeenCalledWith("r-1", "ri-1", 0, "manual");
+    expect(await res.json()).toMatchObject({
+      estimated_grams: 0,
+      grams_source: "manual",
+    });
+  });
+
+  it("rejects a negative value with 400", async () => {
+    const res = await PATCH(
+      makeJsonRequest({ grams: -1 }, { method: "PATCH" }),
       makeParams(),
     );
 

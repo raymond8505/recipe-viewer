@@ -122,9 +122,16 @@ export const recipeLineTextPatchSchema = z.object({
 });
 
 // PATCH /api/recipes/[id]/ingredients/[riId]/grams — user-typed per-line gram
-// override. null clears the estimate (line reverts to the derived value).
+// override. Three meanings, all deliberate:
+//   a weight — this is what the line masses;
+//   0        — "don't count this line", the answer to an ingredient that can't
+//              reasonably be weighed ("salt to taste"). Zero is BOTH the signal
+//              and the mechanism: the line computes as `ok` at 0 g, so it stops
+//              blocking `fullyCovered` while contributing nothing to the totals;
+//   null     — clear the override (line reverts to the derived value).
+// Negatives are rejected — a negative mass is neither.
 export const recipeIngredientGramsPatchSchema = z.object({
-  grams: z.number().positive().nullable(),
+  grams: z.number().nonnegative().nullable(),
 });
 
 // GET /api/usda/search — USDA candidates for the manual-import flow.

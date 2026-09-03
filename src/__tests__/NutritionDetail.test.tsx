@@ -194,11 +194,13 @@ describe("NutritionDetail", () => {
   it("flags excluded lines with the reason and em-dash cells", () => {
     renderDetail();
 
-    // "2 eggs" is matched but unitless — can't convert to grams.
+    // "2 eggs" is matched but unitless — can't convert to grams. Matched by
+    // prefix: the tooltip also carries the fixes ("…or enter 0 to count this
+    // line as nothing"), which the copy test below asserts on its own.
     const eggsRow = rowFor("2 eggs");
     expect(
       within(eggsRow).getByTitle(
-        "No unit (count line) — can't convert to grams",
+        /^No unit \(count line\) — can't convert to grams\./,
       ),
     ).toBeInTheDocument();
     expect(within(eggsRow).getAllByText("—").length).toBeGreaterThan(0);
@@ -683,7 +685,7 @@ describe("NutritionDetail", () => {
     // Starts excluded — no grams path.
     expect(
       within(eggsRow).getByTitle(
-        "No unit (count line) — can't convert to grams",
+        /^No unit \(count line\) — can't convert to grams\./,
       ),
     ).toBeInTheDocument();
 
@@ -836,5 +838,62 @@ describe("NutritionDetail", () => {
     await waitFor(() =>
       expect(rowFor("Recipe total")).toHaveTextContent("882.06"),
     );
+  });
+
+  // A typed 0 is the escape hatch for a line nobody can weigh: it persists as a
+  // value (not a clear), stops the line being flagged, and adds nothing.
+  it("accepts a typed 0 and stops flagging the line without changing totals", async () => {
+    const user = userEvent.setup();
+    vi.mocked(setIngredientGrams).mockResolvedValue(
+      makeRecipeIngredient("r-1", 1, {
+        id: "ri-1",
+        line_id: "L1",
+        raw_text: "2 eggs",
+        quantity: 2,
+        unit: null,
+        ingredient_id: "ing-eggs",
+        match_status: "matched",
+        estimated_grams: 0,
+        grams_source: "manual",
+      }),
+    );
+    renderDetail();
+
+    // Two lines start flagged: "2 eggs" (no unit) and "5 g magic dust"
+    // (unmatched, and NOT something 0 can fix).
+    expect(screen.getByText(/exclude 2 flagged lines/)).toBeInTheDocument();
+
+    const input = within(rowFor("2 eggs")).getByLabelText("Grams for 2 eggs");
+    await user.type(input, "0");
+    await user.tab(); // blur commits
+
+    expect(setIngredientGrams).toHaveBeenCalledWith("r-1", "ri-1", 0);
+    await waitFor(() =>
+      expect(screen.getByText(/exclude 1 flagged line/)).toBeInTheDocument(),
+    );
+
+    const eggsRow = rowFor("2 eggs");
+    // Marked as a decision, not a guess — and the warning flag is gone.
+    expect(within(eggsRow).getByText("not counted")).toBeInTheDocument();
+    expect(within(eggsRow).queryByText("est.")).not.toBeInTheDocument();
+    expect(
+      within(eggsRow).queryByTitle(/can't convert to grams/),
+    ).not.toBeInTheDocument();
+    // The line now contributes an explicit 0 rather than an em dash.
+    expect(within(eggsRow).getByText("0")).toBeInTheDocument();
+    // Butter (717) + cumin (7.76) — unchanged, because 0 g of egg is 0 kcal.
+    expect(rowFor("Recipe total")).toHaveTextContent("724.76");
+  });
+
+  it("rejects a negative gram entry back to the stored value", async () => {
+    const user = userEvent.setup();
+    renderDetail();
+
+    const input = within(rowFor("2 eggs")).getByLabelText("Grams for 2 eggs");
+    await user.type(input, "-5");
+    await user.tab();
+
+    expect(setIngredientGrams).not.toHaveBeenCalled();
+    expect(input).toHaveValue(null);
   });
 });
