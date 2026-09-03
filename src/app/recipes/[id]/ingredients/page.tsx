@@ -6,6 +6,7 @@ import { getIngredientsByIds, getRecipeIngredients } from "@/lib/ingredients";
 import { getIsLoggedIn } from "@/lib/auth";
 import { canCurateNutrition } from "@/lib/devAccess";
 import NutritionDetail from "@/components/ingredients/NutritionDetail";
+import { composeRecipeSchema } from "@/lib/recipeSchema";
 
 interface RecipeIngredientsPageProps {
   params: Promise<{ id: string }>;
@@ -52,7 +53,7 @@ export default async function RecipeIngredientsPage({
   ];
   const ingredients = await getIngredientsByIds(ingredientIds);
 
-  const { schema } = recipe.metadata;
+  const schema = composeRecipeSchema(recipe);
 
   return (
     <section className="space-y-6">

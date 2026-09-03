@@ -1,6 +1,87 @@
-import type { RecipeRow } from "@/types/recipe";
+import { getIngredientText } from "@/lib/format";
+import { parseLineDeterministic } from "@/lib/normalization/parseLine";
+import { toIngredientGroups } from "@/lib/recipeSchema";
+import type { RecipeIngredientRow } from "@/types/ingredient";
+import type { RecipeIngredient, RecipeRow, SchemaRecipe } from "@/types/recipe";
 
-export const recipeFixtures: RecipeRow[] = [
+export interface RecipeRowInput {
+  id: string;
+  url: string;
+  source: string;
+  status?: RecipeRow["status"];
+  schema: SchemaRecipe;
+}
+
+/**
+ * Build a RecipeRow the way the repo layer does: ingredient lines become
+ * `recipe_ingredients` rows plus a group array of their ids, instructions
+ * become their own column, and what is left stays in metadata.schema.
+ *
+ * Row ids are derived from the recipe id (`<id>-i0`, `-i1`, …) rather than
+ * random, so a fixture's line ids are stable and assertable. Lines are parsed
+ * with the real deterministic parser so quantity/unit match what production
+ * would store for the same text.
+ */
+export function makeRecipeRow({
+  id,
+  url,
+  source,
+  status = "published",
+  schema,
+}: RecipeRowInput): RecipeRow {
+  const { recipeIngredient, recipeInstructions, ...stored } = schema;
+  const lines = recipeIngredient ?? [];
+
+  // An id already on a line is its row's id, exactly as the reconcile treats
+  // it — a test that names its rows gets to keep those names.
+  const rowId = (line: string | RecipeIngredient, index: number) =>
+    (typeof line === "string" ? undefined : line.id) ?? `${id}-i${index}`;
+
+  const ingredientRows: RecipeIngredientRow[] = lines.map((line, index) => {
+    const text = getIngredientText(line);
+    const parsed = parseLineDeterministic(text, index);
+    return {
+      id: rowId(line, index),
+      recipe_id: id,
+      line_id: null,
+      ingredient_id: null,
+      raw_text: text,
+      quantity: parsed.quantity,
+      unit: parsed.unit,
+      name_text: parsed.name,
+      note: parsed.note,
+      match_status: "unmatched",
+      confidence: null,
+      position: index,
+      estimated_grams: null,
+      grams_source: null,
+    };
+  });
+
+  return {
+    id,
+    url,
+    source,
+    status,
+    ingredients: toIngredientGroups(
+      lines.map((line, index) => ({
+        ...(typeof line === "string" ? {} : { group: line.group }),
+        id: rowId(line, index),
+      })),
+    ),
+    instructions: recipeInstructions ?? [],
+    metadata: { schema: stored },
+    ingredientRows,
+  };
+}
+
+const rawFixtures: Array<{
+  id: string;
+  url: string;
+  source: string;
+  status: RecipeRow["status"];
+  metadata: { schema: SchemaRecipe };
+}> = [
   {
     id: "7cd24839-e518-4c6b-92c4-62171165c332",
     url: "https://new.raymonds.recipes/recipes/chorizo-tofu-marinade",
@@ -188,17 +269,29 @@ export const recipeFixtures: RecipeRow[] = [
   },
 ];
 
+export const recipeFixtures: RecipeRow[] = rawFixtures.map(
+  ({ metadata, ...row }) => makeRecipeRow({ ...row, schema: metadata.schema }),
+);
+
+/**
+ * A minimal recipe. `schema` overrides merge into the Schema.org half (so a
+ * test can hand it `recipeIngredient` and get the rows and groups for free);
+ * everything else overrides the row.
+ */
 export function makeRecipe(
   id: string,
   name: string,
-  overrides: Partial<RecipeRow> = {},
+  { schema, ...overrides }: Partial<Omit<RecipeRow, "metadata">> & {
+    schema?: Partial<SchemaRecipe>;
+  } = {},
 ): RecipeRow {
   return {
-    id,
-    url: `https://new.raymonds.recipes/recipes/${id}`,
-    source: "new.raymonds.recipes",
-    status: "published",
-    metadata: { schema: { name } },
+    ...makeRecipeRow({
+      id,
+      url: `https://new.raymonds.recipes/recipes/${id}`,
+      source: "new.raymonds.recipes",
+      schema: { name, ...schema },
+    }),
     ...overrides,
   };
 }

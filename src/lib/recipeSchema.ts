@@ -1,19 +1,10 @@
 import type {
   RecipeIngredient,
   RecipeIngredientGroup,
-  RecipeRowColumns,
+  RecipeRow,
   SchemaRecipe,
 } from "@/types/recipe";
 import type { RecipeIngredientRow } from "@/types/ingredient";
-
-/**
- * A recipe row plus the `recipe_ingredients` rows its groups point at — the two
- * halves a whole SchemaRecipe is assembled from. `RecipeRow` becomes exactly
- * this once the read path hydrates it.
- */
-export interface ComposableRecipe extends RecipeRowColumns {
-  ingredientRows: RecipeIngredientRow[];
-}
 
 /**
  * Rebuild the whole Schema.org Recipe from the two places it now lives.
@@ -35,10 +26,7 @@ export interface ComposableRecipe extends RecipeRowColumns {
  * re-composing inside the comparison, or that check is always false.
  */
 export function composeRecipeSchema(
-  row: Pick<
-    ComposableRecipe,
-    "ingredients" | "instructions" | "metadata" | "ingredientRows"
-  >,
+  row: Pick<RecipeRow, "ingredients" | "instructions" | "metadata" | "ingredientRows">,
 ): SchemaRecipe {
   return {
     ...row.metadata.schema,

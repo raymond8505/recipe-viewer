@@ -48,6 +48,7 @@ import type {
   IngredientUpdateToolInput,
 } from "@/lib/schemas/ingredient";
 import type { IngredientMatch, IngredientRow } from "@/types/ingredient";
+import { composeRecipeSchema } from "@/lib/recipeSchema";
 
 // Every tool here is a thin wrapper over a repo helper (`@/lib/recipes`,
 // `@/lib/ingredients`). They handle argument typing + translate repo errors
@@ -242,7 +243,7 @@ export async function getRecipe(args: RecipeIdInput): Promise<RecipeRow> {
   // ScalableRecipe.nutrition() decision as the UI panel and JSON-LD. Only an
   // ingredients-sourced result overrides; otherwise the row's own nutrition is
   // already what nutrition() would serve.
-  const schema = row.metadata.schema;
+  const schema = composeRecipeSchema(row);
   const normalized = await getRecipeNormalizedNutrition(
     args.id,
     schema.recipeIngredient ?? [],

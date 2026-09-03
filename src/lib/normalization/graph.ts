@@ -12,7 +12,6 @@ import {
   type RecipeIngredientInsert,
 } from "@/lib/ingredients";
 import { importUsdaIngredient } from "@/lib/ingredientImport";
-import { lineId } from "@/lib/ingredientLines";
 import {
   accreteAliasesFromLines,
   ingredientQueryText,
@@ -25,6 +24,7 @@ import type { GramsSource, IngredientMatch, MatchStatus } from "@/types/ingredie
 import { estimateLineGrams } from "./estimateGrams";
 import { ingredientFingerprint } from "./fingerprint";
 import { parseLineDeterministic, type ParsedLine } from "./parseLine";
+import { composeRecipeSchema } from "@/lib/recipeSchema";
 
 export type { ParsedLine };
 
@@ -414,18 +414,13 @@ async function fetchNovel(state: State): Promise<Partial<State>> {
 // hit the LLM. Best-effort: a failed estimate simply leaves the line excluded.
 async function estimate(state: State): Promise<Partial<State>> {
   const existing = await getRecipeIngredients(state.recipeId);
-  const priorByLineId = new Map(
-    existing.filter((row) => row.line_id != null).map((row) => [row.line_id!, row]),
-  );
-  const priorByPosition = new Map(
-    existing.filter((row) => row.line_id == null).map((row) => [row.position, row]),
-  );
+  const priorById = new Map(existing.map((row) => [row.id, row]));
 
   // Carry a stored weight forward when the AMOUNT it was measured against
   // hasn't moved. That condition used to be approximated by "raw_text is
   // byte-identical", which was both too strict (a typo fix dropped a perfectly
   // good weight) and beside the point. quantity+unit is the thing that
-  // actually invalidates a gram weight — the same rule syncLines applies.
+  // actually invalidates a gram weight — the same rule the reconcile applies.
   //
   // The SOURCE travels with the value: a user-typed weight and an LLM guess
   // are not interchangeable (the UI marks one "est."), so re-labelling a
@@ -434,9 +429,7 @@ async function estimate(state: State): Promise<Partial<State>> {
   // estimated_grams is.
   const carriedFor = (line: ParsedLine): LineEstimate | undefined => {
     const id = state.lineIds[line.position] ?? null;
-    const prior =
-      (id != null ? priorByLineId.get(id) : undefined) ??
-      priorByPosition.get(line.position);
+    const prior = id != null ? priorById.get(id) : undefined;
     if (!prior || prior.estimated_grams == null) return undefined;
     if (prior.quantity !== line.quantity || prior.unit !== line.unit) return undefined;
     return { grams: prior.estimated_grams, source: prior.grams_source ?? "llm" };
@@ -490,7 +483,7 @@ async function persist(state: State): Promise<Partial<State>> {
 
   // A newer save changed the ingredient text while this run was in flight; its
   // own trigger owns the result. Writing ours would clobber it with stale data.
-  if (ingredientFingerprint(recipe.metadata.schema) !== state.fingerprint) {
+  if (ingredientFingerprint(composeRecipeSchema(recipe)) !== state.fingerprint) {
     console.warn(`Normalization for ${state.recipeId} superseded mid-run — skipping persist`);
     return {};
   }
@@ -502,28 +495,17 @@ async function persist(state: State): Promise<Partial<State>> {
   // existing association always survives, and the matcher's opinion is used
   // only to fill gaps.
   //
-  // Inheritance is by line_id (db/migrations/0013). It used to be by raw_text,
-  // which meant fixing a typo silently orphaned the row and threw the curation
-  // away. Rows written before 0013 have no line_id, so they fall back to
-  // position — the old behaviour, for recipes not yet backfilled.
+  // Inheritance is by the row's own id (db/migrations/0016). It used to be by
+  // raw_text, which meant fixing a typo silently orphaned the row and threw
+  // the curation away; then by a synthetic line_id, which 0016 made redundant
+  // by pointing recipes.ingredients straight at these rows.
   const existingRows = await getRecipeIngredients(state.recipeId);
-  const priorByLineId = new Map(
-    existingRows
-      .filter((row) => row.line_id != null)
-      .map((row) => [row.line_id!, row]),
-  );
-  const priorByPosition = new Map(
-    existingRows
-      .filter((row) => row.line_id == null)
-      .map((row) => [row.position, row]),
-  );
+  const priorById = new Map(existingRows.map((row) => [row.id, row]));
 
   const matchByPosition = new Map(state.matches.map((m) => [m.position, m]));
   const rows: RecipeIngredientInsert[] = state.parsed.map((line) => {
     const id = state.lineIds[line.position] ?? null;
-    const prior =
-      (id != null ? priorByLineId.get(id) : undefined) ??
-      priorByPosition.get(line.position);
+    const prior = id != null ? priorById.get(id) : undefined;
 
     // The estimate node carries prior values forward and only adds new ones
     // for grams-less lines, so this covers both. Its `source` rides along:
@@ -531,13 +513,15 @@ async function persist(state: State): Promise<Partial<State>> {
     // weight as a machine guess.
     const estimate = state.estimates[line.position] ?? null;
     const parseFields = {
-      line_id: id,
+      // The recipes.ingredients group array already names this row, so the id
+      // is not ours to invent — reuse it, or let the column default mint one
+      // for a line the reconcile has not seen (which cannot normally happen).
+      ...(id != null ? { id } : {}),
       raw_text: line.rawText,
       quantity: line.quantity,
       unit: line.unit,
       name_text: line.name,
       note: line.note,
-      position: line.position,
       estimated_grams: estimate?.grams ?? null,
       grams_source: estimate?.source ?? null,
     };
@@ -621,10 +605,12 @@ export async function runNormalization(recipeId: string): Promise<void> {
     const recipe = await getRecipeById(recipeId);
     if (!recipe) return; // deleted between schedule and run
 
-    const schema = recipe.metadata.schema;
+    const schema = composeRecipeSchema(recipe);
     const schemaLines = schema.recipeIngredient ?? [];
     const rawLines = schemaLines.map(getIngredientText);
-    const lineIds = schemaLines.map(lineId);
+    const lineIds = schemaLines.map((line) =>
+      typeof line === "string" ? null : (line.id ?? null),
+    );
     const fingerprint = ingredientFingerprint(schema);
 
     if (rawLines.length === 0) {

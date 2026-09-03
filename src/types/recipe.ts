@@ -1,3 +1,5 @@
+import type { RecipeIngredientRow } from "./ingredient";
+
 export interface RecipeIngredient {
   name: string;
   group?: string;
@@ -51,12 +53,15 @@ export interface RecipeRowColumns {
   metadata: { schema: StoredRecipeSchema };
 }
 
-export interface RecipeRow {
-  id: string;
-  url: string;
-  source: string;
-  status: "published" | "archived" | "draft" | null;
-  metadata: { schema: SchemaRecipe };
+/**
+ * A recipe as the app passes it around: the row plus the `recipe_ingredients`
+ * rows its `ingredients` groups point at. The two together are what
+ * `composeRecipeSchema` turns back into a whole SchemaRecipe — the row alone
+ * cannot render an ingredient list, because since db/migrations/0016 the line
+ * text lives on those rows.
+ */
+export interface RecipeRow extends RecipeRowColumns {
+  ingredientRows: RecipeIngredientRow[];
 }
 
 export interface HowToStep {

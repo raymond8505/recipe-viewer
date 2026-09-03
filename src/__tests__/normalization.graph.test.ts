@@ -2,6 +2,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { runNormalization } from "@/lib/normalization/graph";
 import { ingredientFingerprint } from "@/lib/normalization/fingerprint";
+import { composeRecipeSchema } from "@/lib/recipeSchema";
 import { generateStructured } from "@/lib/gemini";
 import { generateEmbedding } from "@/lib/embedding";
 import {
@@ -59,10 +60,10 @@ vi.mock("@/lib/recipes", async (importOriginal) => {
 function makeTestRecipe(
   ingredients: SchemaRecipe["recipeIngredient"],
 ): RecipeRow {
+  // Goes through the shared factory so the lines get the recipe_ingredients
+  // rows and group array that the repo would have written for them.
   return makeRecipe("r-1", "Test Recipe", {
-    metadata: {
-      schema: { name: "Test Recipe", recipeIngredient: ingredients } as SchemaRecipe,
-    },
+    schema: { recipeIngredient: ingredients },
   });
 }
 
@@ -92,6 +93,10 @@ function statusWrites() {
 }
 
 const recipe = makeTestRecipe(["1 tsp cumin seed"]);
+// The row the shared factory created for that single line. Prior-row fixtures
+// have to name it: since db/migrations/0016 inheritance is by row id, and a row
+// with any other id simply belongs to a different line.
+const BASE_LINE_ROW_ID = recipe.ingredientRows[0].id;
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -117,9 +122,9 @@ describe("runNormalization — matching", () => {
 
     expect(persistedRows()).toEqual([
       {
-        // The base fixture's lines are plain strings with no id, so this row
-        // carries none either — the legacy shape, still supported.
-        line_id: null,
+        // The row the factory already created for this line; normalization
+        // fills in the association, it does not re-key the row.
+        id: "r-1-i0",
         ingredient_id: "ing-1",
         raw_text: "1 tsp cumin seed",
         quantity: 1,
@@ -128,7 +133,6 @@ describe("runNormalization — matching", () => {
         note: null,
         match_status: "matched",
         confidence: 0.9,
-        position: 0,
         // A weight-unit line (tsp × direct convert) needs no estimate.
         estimated_grams: null,
         grams_source: null,
@@ -140,15 +144,16 @@ describe("runNormalization — matching", () => {
         status: "completed",
         error: null,
         normalizedAt: expect.any(String),
-        fingerprint: ingredientFingerprint(recipe.metadata.schema),
+        fingerprint: ingredientFingerprint(composeRecipeSchema(recipe)),
       },
     ]);
   });
 
-  it("carries forward manual associations by raw_text over the automated match", async () => {
+  it("carries a manual association forward over the automated match", async () => {
     // The user curated this line; a re-run's own matcher would pick ing-auto.
     vi.mocked(getRecipeIngredients).mockResolvedValue([
       makeRecipeIngredient("r-1", 0, {
+        id: BASE_LINE_ROW_ID,
         raw_text: "1 tsp cumin seed",
         ingredient_id: "ing-manual",
         match_status: "manual",
@@ -177,6 +182,7 @@ describe("runNormalization — matching", () => {
   it("keeps an existing association when the line's text changed", async () => {
     vi.mocked(getRecipeIngredients).mockResolvedValue([
       makeRecipeIngredient("r-1", 0, {
+        id: BASE_LINE_ROW_ID,
         raw_text: "1 tsp ground cumin", // recipe now says "1 tsp cumin seed"
         ingredient_id: "ing-manual",
         match_status: "manual",
@@ -199,26 +205,24 @@ describe("runNormalization — matching", () => {
     ]);
   });
 
-  it("inherits by line_id, not position, when a line moves", async () => {
-    // Two lines, reordered in the schema. Position would hand each line the
-    // other's association; line_id follows the line.
+  it("inherits by row id, not array position, when a line moves", async () => {
+    // Two lines, reordered in the recipe. Position would hand each line the
+    // other's association; the row id follows the line.
     vi.mocked(getRecipeById).mockResolvedValue(
       makeTestRecipe([
-        { name: "2 cups rice", id: "L2" },
-        { name: "1 tsp cumin seed", id: "L1" },
+        { name: "2 cups rice", id: "ri-rice" },
+        { name: "1 tsp cumin seed", id: "ri-cumin" },
       ]),
     );
     vi.mocked(getRecipeIngredients).mockResolvedValue([
       makeRecipeIngredient("r-1", 0, {
         id: "ri-cumin",
-        line_id: "L1",
         raw_text: "1 tsp cumin seed",
         ingredient_id: "ing-cumin",
         match_status: "manual",
       }),
       makeRecipeIngredient("r-1", 1, {
         id: "ri-rice",
-        line_id: "L2",
         raw_text: "2 cups rice",
         ingredient_id: "ing-rice",
         match_status: "manual",
@@ -232,16 +236,8 @@ describe("runNormalization — matching", () => {
 
     const rows = persistedRows() ?? [];
     expect(rows).toHaveLength(2);
-    expect(rows[0]).toMatchObject({
-      line_id: "L2",
-      position: 0,
-      ingredient_id: "ing-rice",
-    });
-    expect(rows[1]).toMatchObject({
-      line_id: "L1",
-      position: 1,
-      ingredient_id: "ing-cumin",
-    });
+    expect(rows[0]).toMatchObject({ id: "ri-rice", ingredient_id: "ing-rice" });
+    expect(rows[1]).toMatchObject({ id: "ri-cumin", ingredient_id: "ing-cumin" });
   });
 
   it("falls back to the deterministic parser when the LLM parse is unavailable", async () => {
@@ -573,7 +569,7 @@ describe("runNormalization — grams estimation", () => {
     expect(generateStructured).toHaveBeenCalledTimes(1);
   });
 
-  it("carries a prior estimate forward by raw_text without re-calling the model", async () => {
+  it("carries a prior estimate forward without re-calling the model", async () => {
     vi.mocked(matchIngredients).mockResolvedValue([
       candidate("ing-1", "cumin seed", 0.9),
     ]);
@@ -582,6 +578,7 @@ describe("runNormalization — grams estimation", () => {
     ]);
     vi.mocked(getRecipeIngredients).mockResolvedValue([
       makeRecipeIngredient("r-1", 0, {
+        id: BASE_LINE_ROW_ID,
         raw_text: "1 tsp cumin seed",
         estimated_grams: 40,
         grams_source: "manual",

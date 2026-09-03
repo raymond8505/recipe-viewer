@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import CookingMode from "@/components/CookingMode";
 import type { RecipeRow, SchemaRecipe } from "@/types/recipe";
+import { makeRecipeRow } from "@/fixtures";
 
 // useTimers is irrelevant to instruction completion; stub it out
 vi.mock("@/hooks/useTimers", () => ({
@@ -18,13 +19,16 @@ vi.mock("@/hooks/useTimers", () => ({
   timerState: vi.fn(),
 }));
 
+// Thin local default over the shared factory (src/fixtures/recipes.ts), which
+// splits a schema into the columns + recipe_ingredients rows the component
+// reads. Never hand-build a RecipeRow here — see .claude/docs/fixtures.md.
 function makeRecipe(schema: Partial<SchemaRecipe> = {}): RecipeRow {
-  return {
+  return makeRecipeRow({
     id: "1",
     url: "https://example.com",
     source: "example.com",
-    metadata: { schema: { name: "Test Recipe", ...schema } },
-  };
+    schema: { name: "Test Recipe", ...schema },
+  });
 }
 
 beforeEach(() => {

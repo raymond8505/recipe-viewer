@@ -15,7 +15,17 @@ const mockGenerateEmbedding = vi.hoisted(() => vi.fn().mockResolvedValue(null));
 // module stays REAL — the should-normalize tests exercise the actual
 // ingredient-text comparison.
 const mockScheduleNormalization = vi.hoisted(() => vi.fn());
-const mockSyncRecipeIngredientText = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
+// The recipe_ingredients table is a second repo module; mock it at the module
+// boundary so these tests stay about the recipes row and the reconcile
+// decisions, not about PostgREST. `getRecipeIngredients` is what supplies the
+// rows a patch is diffed against.
+const mockIngredientsRepo = vi.hoisted(() => ({
+  getRecipeIngredients: vi.fn().mockResolvedValue([]),
+  getRecipeIngredientsByRecipeIds: vi.fn().mockResolvedValue(new Map()),
+  insertRecipeIngredientRows: vi.fn().mockResolvedValue(undefined),
+  updateRecipeIngredientRows: vi.fn().mockResolvedValue(undefined),
+  deleteRecipeIngredientRows: vi.fn().mockResolvedValue(undefined),
+}));
 
 vi.mock("@/lib/features", () => ({ getFeatures: () => mockFeatures }));
 // importOriginal keeps toVectorLiteral real — the embedding tests assert the
@@ -25,9 +35,7 @@ vi.mock("@/lib/supabase", async (importOriginal) => {
   return { ...actual, getSupabaseClient: mockGetSupabaseClient };
 });
 vi.mock("@/lib/embedding", () => ({ generateEmbedding: mockGenerateEmbedding }));
-vi.mock("@/lib/normalization/syncLines", () => ({
-  syncRecipeIngredientText: mockSyncRecipeIngredientText,
-}));
+vi.mock("@/lib/ingredients", () => mockIngredientsRepo);
 vi.mock("@/lib/normalization/trigger", () => ({
   scheduleNormalization: mockScheduleNormalization,
 }));
@@ -41,6 +49,22 @@ import {
   updateRecipeRow,
 } from "@/lib/recipes";
 import { schemaToMarkdown } from "@/lib/format";
+import { makeRecipeIngredient } from "@/fixtures";
+import type { RecipeIngredientRow } from "@/types/ingredient";
+
+/** An existing persisted line: the row, plus the schema line that names it. */
+function persistedLine(id: string, text: string, group?: string) {
+  const row = makeRecipeIngredient("r1", 0, { id, raw_text: text });
+  return {
+    row,
+    line: group == null ? { name: text, id } : { name: text, group, id },
+  };
+}
+
+/** Point the mocked repo at a recipe's current rows. */
+function withRows(rows: RecipeIngredientRow[]) {
+  mockIngredientsRepo.getRecipeIngredients.mockResolvedValue(rows);
+}
 
 /**
  * Builds a mock Supabase client whose query builder is fully chainable.
@@ -90,12 +114,21 @@ describe("getRecipes", () => {
     mockFeatures.filterByStatus = false;
   });
 
-  it("returns data and count from supabase", async () => {
-    const data = [{ id: "1", url: "u", source: "s", metadata: { schema: { name: "Pasta" } } }];
+  it("returns data and count from supabase, with ingredient rows attached", async () => {
+    const data = [
+      {
+        id: "1",
+        url: "u",
+        source: "s",
+        ingredients: [],
+        instructions: [],
+        metadata: { schema: { name: "Pasta" } },
+      },
+    ];
     makeSupabaseMock({ data, count: 1 });
 
     const result = await getRecipes();
-    expect(result.data).toEqual(data);
+    expect(result.data).toEqual(data.map((row) => ({ ...row, ingredientRows: [] })));
     expect(result.count).toBe(1);
   });
 
@@ -289,12 +322,21 @@ describe("getStatusCounts", () => {
 });
 
 describe("getRecipeById", () => {
-  it("returns the recipe when found", async () => {
-    const recipe = { id: "42", url: "u", source: "s", metadata: { schema: { name: "Pizza" } } };
+  it("returns the recipe with its ingredient rows attached", async () => {
+    const recipe = {
+      id: "42",
+      url: "u",
+      source: "s",
+      ingredients: [{ ingredients: ["ri-0"] }],
+      instructions: [],
+      metadata: { schema: { name: "Pizza" } },
+    };
+    const rows = [makeRecipeIngredient("42", 0, { id: "ri-0" })];
+    withRows(rows);
     makeSupabaseMock({ singleData: recipe });
 
     const result = await getRecipeById("42");
-    expect(result).toEqual(recipe);
+    expect(result).toEqual({ ...recipe, ingredientRows: rows });
   });
 
   it("returns null when record is not found", async () => {
@@ -311,18 +353,25 @@ describe("getRecipeById", () => {
     expect(result).toBeNull();
   });
 
-  it("normalizes string recipeInstructions to an array", async () => {
-    const recipe = {
-      id: "99",
-      url: "u",
-      source: "s",
-      metadata: { schema: { name: "Soup", recipeInstructions: "Boil water." } },
-    };
-    makeSupabaseMock({ singleData: recipe });
+  // The read used to coerce a string `recipeInstructions` into an array on
+  // every fetch. db/migrations/0016 moved instructions to a NOT NULL jsonb
+  // column that the backfill normalized once, so there is nothing left to
+  // coerce and the fix-up is gone.
+  it("reads instructions straight off the column", async () => {
+    const steps = [{ "@type": "HowToStep", text: "Boil water." }];
+    makeSupabaseMock({
+      singleData: {
+        id: "99",
+        url: "u",
+        source: "s",
+        ingredients: [],
+        instructions: steps,
+        metadata: { schema: { name: "Soup" } },
+      },
+    });
 
     const result = await getRecipeById("99");
-    expect(Array.isArray(result!.metadata.schema.recipeInstructions)).toBe(true);
-    expect((result!.metadata.schema.recipeInstructions as { text: string }[])[0].text).toBe("Boil water.");
+    expect(result!.instructions).toEqual(steps);
   });
 });
 
@@ -487,6 +536,8 @@ describe("updateRecipeRow", () => {
     url: "https://example.com",
     source: "example.com",
     status: "published",
+    ingredients: [],
+    instructions: [],
     metadata: { schema: { name: "Original", description: "Old blurb" } },
   };
 
@@ -558,103 +609,76 @@ describe("updateRecipeRow", () => {
     expect(mockGenerateEmbedding).not.toHaveBeenCalled();
   });
 
-  // A recipe written before line ids existed gets one minted per line on its
-  // first save. That is bookkeeping, not a structural edit — reading it as "N
-  // new lines" would re-run the matcher over a reword, which is exactly what
-  // ids were introduced to stop. Sync carries the text AND stamps the ids.
-  it("does not schedule normalization when a legacy id-less line is reworded", async () => {
+  // A caller may legitimately send bare strings — an MCP update_recipe, a
+  // re-scrape. Each one has no row to claim, so it becomes a new row, and a new
+  // row is exactly what normalization exists to guess an association for.
+  it("creates a row for a line that arrives without an id", async () => {
     mockScheduleNormalization.mockClear();
-    mockSyncRecipeIngredientText.mockClear();
+    mockIngredientsRepo.insertRecipeIngredientRows.mockClear();
+    withRows([]);
     makeWriteSupabaseMock({
-      selectSingle: {
-        data: {
-          ...existing,
-          metadata: { schema: { name: "Original", recipeIngredient: ["1 tsp cumin"] } },
-        },
-        error: null,
-      },
+      selectSingle: { data: existing, error: null },
       updateSingle: { data: existing, error: null },
     });
 
-    await updateRecipeRow("r1", {
-      schema: { recipeIngredient: ["2 tsp cumin"] },
-    });
+    await updateRecipeRow("r1", { schema: { recipeIngredient: ["2 tsp cumin"] } });
 
-    expect(mockScheduleNormalization).not.toHaveBeenCalled();
-    expect(mockSyncRecipeIngredientText).toHaveBeenCalledWith("r1", [
-      { name: "2 tsp cumin", id: expect.any(String) },
+    expect(mockIngredientsRepo.insertRecipeIngredientRows).toHaveBeenCalledWith("r1", [
+      expect.objectContaining({
+        raw_text: "2 tsp cumin",
+        quantity: 2,
+        unit: "tsp",
+        match_status: "unmatched",
+        ingredient_id: null,
+      }),
     ]);
-  });
-
-  // Minting also has to reach the rows, which only sync can do — so it runs
-  // even though the text itself never moved.
-  it("syncs a legacy line whose text is unchanged, to stamp its new id", async () => {
-    mockScheduleNormalization.mockClear();
-    mockSyncRecipeIngredientText.mockClear();
-    makeWriteSupabaseMock({
-      selectSingle: {
-        data: {
-          ...existing,
-          metadata: { schema: { name: "Original", recipeIngredient: ["1 tsp cumin"] } },
-        },
-        error: null,
-      },
-      updateSingle: { data: existing, error: null },
-    });
-
-    await updateRecipeRow("r1", {
-      schema: { recipeIngredient: ["1 tsp cumin"] },
-    });
-
-    expect(mockScheduleNormalization).not.toHaveBeenCalled();
-    expect(mockSyncRecipeIngredientText).toHaveBeenCalledWith("r1", [
-      { name: "1 tsp cumin", id: expect.any(String) },
-    ]);
-  });
-
-  it("schedules normalization when a legacy array gains a line", async () => {
-    mockScheduleNormalization.mockClear();
-    makeWriteSupabaseMock({
-      selectSingle: {
-        data: {
-          ...existing,
-          metadata: { schema: { name: "Original", recipeIngredient: ["1 tsp cumin"] } },
-        },
-        error: null,
-      },
-      updateSingle: { data: existing, error: null },
-    });
-
-    await updateRecipeRow("r1", {
-      schema: { recipeIngredient: ["1 tsp cumin", "2 cups rice"] },
-    });
-
     expect(mockScheduleNormalization).toHaveBeenCalledWith("r1");
   });
 
-  it("schedules normalization when a legacy array loses a line", async () => {
-    mockScheduleNormalization.mockClear();
-    makeWriteSupabaseMock({
-      selectSingle: {
-        data: {
-          ...existing,
-          metadata: {
-            schema: {
-              name: "Original",
-              recipeIngredient: ["1 tsp cumin", "2 cups rice"],
-            },
-          },
-        },
-        error: null,
-      },
+  it("writes the group array the reconcile produced", async () => {
+    const cumin = persistedLine("ri-0", "1 tsp cumin");
+    withRows([cumin.row]);
+    const { updates } = makeWriteSupabaseMock({
+      selectSingle: { data: existing, error: null },
       updateSingle: { data: existing, error: null },
     });
 
     await updateRecipeRow("r1", {
-      schema: { recipeIngredient: ["1 tsp cumin"] },
+      schema: {
+        recipeIngredient: [{ ...cumin.line, group: "Spices" }, "2 cups rice"],
+      },
     });
 
+    const groups = updates[0].ingredients as Array<{
+      name?: string;
+      ingredients: string[];
+    }>;
+    expect(groups).toHaveLength(2);
+    expect(groups[0]).toEqual({ name: "Spices", ingredients: ["ri-0"] });
+    // The new line's id was minted before the write, so the group array can
+    // reference it without waiting on the database.
+    expect(groups[1].name).toBeUndefined();
+    expect(groups[1].ingredients[0]).toEqual(expect.any(String));
+    expect(groups[1].ingredients[0]).not.toBe("ri-0");
+  });
+
+  it("schedules normalization when a line is removed", async () => {
+    mockScheduleNormalization.mockClear();
+    mockIngredientsRepo.deleteRecipeIngredientRows.mockClear();
+    const cumin = persistedLine("ri-0", "1 tsp cumin");
+    const rice = persistedLine("ri-1", "2 cups rice");
+    withRows([cumin.row, rice.row]);
+    makeWriteSupabaseMock({
+      selectSingle: { data: existing, error: null },
+      updateSingle: { data: existing, error: null },
+    });
+
+    await updateRecipeRow("r1", { schema: { recipeIngredient: [cumin.line] } });
+
     expect(mockScheduleNormalization).toHaveBeenCalledWith("r1");
+    expect(mockIngredientsRepo.deleteRecipeIngredientRows).toHaveBeenCalledWith("r1", [
+      "ri-1",
+    ]);
   });
 
   it("does not schedule normalization when the patch omits recipeIngredient", async () => {
@@ -669,121 +693,96 @@ describe("updateRecipeRow", () => {
     expect(mockScheduleNormalization).not.toHaveBeenCalled();
   });
 
-  it("does not schedule normalization when the ingredient text is unchanged", async () => {
+  // Regrouping moves a line between groups in the recipes array and touches
+  // nothing else - the same row, the same words, the same association.
+  it("does not schedule normalization or re-parse when a line is only regrouped", async () => {
     mockScheduleNormalization.mockClear();
+    mockIngredientsRepo.updateRecipeIngredientRows.mockClear();
+    const cumin = persistedLine("ri-0", "1 tsp cumin", "Spices");
+    withRows([cumin.row]);
     makeWriteSupabaseMock({
-      selectSingle: {
-        data: {
-          ...existing,
-          metadata: {
-            schema: {
-              name: "Original",
-              recipeIngredient: [{ name: "1 tsp cumin", group: "Spices", id: "L1" }],
-            },
-          },
-        },
-        error: null,
-      },
+      selectSingle: { data: existing, error: null },
       updateSingle: { data: existing, error: null },
     });
 
-    // Same ingredient TEXT (getIngredientText), different representation —
-    // regrouping alone must not re-run normalization. The bare string carries
-    // no id, so withLineIds inherits L1 by text: the line SET is unchanged and
-    // there is nothing new to guess.
     await updateRecipeRow("r1", {
-      schema: { recipeIngredient: ["1 tsp cumin"] },
+      schema: { recipeIngredient: [{ name: "1 tsp cumin", group: "Rubs", id: "ri-0" }] },
     });
 
     expect(mockScheduleNormalization).not.toHaveBeenCalled();
+    expect(mockIngredientsRepo.updateRecipeIngredientRows).toHaveBeenCalledWith("r1", []);
   });
 
   // Normalization guesses associations for lines that lack them, so the only
-  // thing that gives it work is a line appearing or disappearing. Rewording is
-  // handled by a deterministic re-parse (syncRecipeIngredientText) instead —
-  // re-running the matcher there would overwrite the user's own corrections.
-  it("does not schedule normalization when a line is only reworded", async () => {
+  // thing that gives it work is a line appearing or disappearing. Rewording
+  // gets a deterministic re-parse instead - re-running the matcher there would
+  // overwrite the curator's own corrections.
+  it("re-parses but does not re-normalize when a line is only reworded", async () => {
     mockScheduleNormalization.mockClear();
-    mockSyncRecipeIngredientText.mockClear();
+    mockIngredientsRepo.updateRecipeIngredientRows.mockClear();
+    const cumin = persistedLine("ri-0", "1 tsp cumin");
+    withRows([{ ...cumin.row, ingredient_id: "ing-cumin", match_status: "manual" }]);
     makeWriteSupabaseMock({
-      selectSingle: {
-        data: {
-          ...existing,
-          metadata: {
-            schema: { name: "Original", recipeIngredient: [{ name: "1 tsp cumin", id: "L1" }] },
-          },
-        },
-        error: null,
-      },
+      selectSingle: { data: existing, error: null },
       updateSingle: { data: existing, error: null },
     });
 
     await updateRecipeRow("r1", {
-      schema: { recipeIngredient: [{ name: "1 tsp ground cumin", id: "L1" }] },
+      schema: { recipeIngredient: [{ name: "2 tsp ground cumin", id: "ri-0" }] },
     });
 
     expect(mockScheduleNormalization).not.toHaveBeenCalled();
-    // The text still has to reach the row — just deterministically, without a
-    // matcher run that could overwrite the association.
-    expect(mockSyncRecipeIngredientText).toHaveBeenCalledWith("r1", [
-      { name: "1 tsp ground cumin", id: "L1" },
+    expect(mockIngredientsRepo.updateRecipeIngredientRows).toHaveBeenCalledWith("r1", [
+      expect.objectContaining({
+        id: "ri-0",
+        raw_text: "2 tsp ground cumin",
+        quantity: 2,
+        // The curated association rides through the reword untouched - that is
+        // the whole reason identity is the row and not the text.
+        ingredient_id: "ing-cumin",
+        match_status: "manual",
+      }),
     ]);
   });
 
   it("schedules normalization when a line is added", async () => {
     mockScheduleNormalization.mockClear();
+    const cumin = persistedLine("ri-0", "1 tsp cumin");
+    withRows([cumin.row]);
     makeWriteSupabaseMock({
-      selectSingle: {
-        data: {
-          ...existing,
-          metadata: {
-            schema: { name: "Original", recipeIngredient: [{ name: "1 tsp cumin", id: "L1" }] },
-          },
-        },
-        error: null,
-      },
+      selectSingle: { data: existing, error: null },
       updateSingle: { data: existing, error: null },
     });
 
     await updateRecipeRow("r1", {
-      schema: {
-        recipeIngredient: [{ name: "1 tsp cumin", id: "L1" }, "2 cups rice"],
-      },
+      schema: { recipeIngredient: [cumin.line, "2 cups rice"] },
     });
 
     expect(mockScheduleNormalization).toHaveBeenCalledWith("r1");
   });
 
-  it("preserves line ids a patch hands back, and mints only for new lines", async () => {
+  it("keeps the row a patch hands back, and mints only for new lines", async () => {
+    mockIngredientsRepo.insertRecipeIngredientRows.mockClear();
+    const cumin = persistedLine("ri-0", "1 tsp cumin");
+    withRows([cumin.row]);
     const { updates } = makeWriteSupabaseMock({
-      selectSingle: {
-        data: {
-          ...existing,
-          metadata: {
-            schema: { name: "Original", recipeIngredient: [{ name: "1 tsp cumin", id: "L1" }] },
-          },
-        },
-        error: null,
-      },
+      selectSingle: { data: existing, error: null },
       updateSingle: { data: existing, error: null },
     });
 
     await updateRecipeRow("r1", {
       schema: {
-        recipeIngredient: [{ name: "1 tsp ground cumin", id: "L1" }, "2 cups rice"],
+        recipeIngredient: [{ name: "1 tsp ground cumin", id: "ri-0" }, "2 cups rice"],
       },
     });
 
-    const lines = (
-      updates[0].metadata as {
-        schema: { recipeIngredient: Array<{ name: string; id?: string }> };
-      }
-    ).schema.recipeIngredient;
-    // The reworded line keeps its id — that id is what its derived row and the
-    // association on it are keyed to, so re-minting would orphan both.
-    expect(lines[0]).toMatchObject({ name: "1 tsp ground cumin", id: "L1" });
-    expect(lines[1].name).toBe("2 cups rice");
-    expect(lines[1].id).toEqual(expect.any(String));
-    expect(lines[1].id).not.toBe("L1");
+    // The reworded line keeps its row - that row carries the association, so
+    // replacing it would throw the curation away.
+    const [inserted] = mockIngredientsRepo.insertRecipeIngredientRows.mock.calls[0][1];
+    expect(inserted.raw_text).toBe("2 cups rice");
+    expect(inserted.id).not.toBe("ri-0");
+
+    const groups = updates[0].ingredients as Array<{ ingredients: string[] }>;
+    expect(groups[0].ingredients).toEqual(["ri-0", inserted.id]);
   });
 });

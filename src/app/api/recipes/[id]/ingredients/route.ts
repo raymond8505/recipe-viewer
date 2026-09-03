@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { requireSessionOrDev } from "@/lib/api/guard";
 import { getIngredientsByIds, getRecipeIngredients } from "@/lib/ingredients";
 import { RecipeRepoError, getRecipeById, updateRecipeRow } from "@/lib/recipes";
+import { composeRecipeSchema } from "@/lib/recipeSchema";
 import { recipeLineTextPatchSchema } from "@/lib/schemas/ingredient";
 
 // A recipe's normalized ingredient rows plus the catalog rows they point at,
@@ -29,7 +30,8 @@ export const GET = requireSessionOrDev(
 
 // Edit one schema ingredient line's text in place (the NutritionDetail inline
 // edit). This writes the RECIPE — updateRecipeRow merges the patched
-// recipeIngredient array into metadata.schema and recomputes content/embedding.
+// recipeIngredient array into the recipe_ingredients rows and recomputes
+// content/embedding.
 // Object lines keep their `group` (and their `id`); string lines stay strings.
 //
 // Rewording does NOT re-normalize: updateRecipeRow runs the deterministic
@@ -52,7 +54,7 @@ export const PATCH = requireSessionOrDev(
       return NextResponse.json({ error: "Invalid patch" }, { status: 400 });
     }
 
-    const lines = [...(recipe.metadata.schema.recipeIngredient ?? [])];
+    const lines = [...composeRecipeSchema(recipe).recipeIngredient!];
     const { index, text } = parsed.data;
     if (index >= lines.length) {
       return NextResponse.json({ error: "No such line" }, { status: 400 });
@@ -65,7 +67,7 @@ export const PATCH = requireSessionOrDev(
         schema: { recipeIngredient: lines },
       });
       return NextResponse.json({
-        recipeIngredient: saved.metadata.schema.recipeIngredient ?? lines,
+        recipeIngredient: composeRecipeSchema(saved).recipeIngredient ?? lines,
         rows: await getRecipeIngredients(id),
       });
     } catch (err) {

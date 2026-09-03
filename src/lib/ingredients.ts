@@ -1,5 +1,6 @@
 import { getSupabaseAdminClient, selectColumns, toVectorLiteral } from "./supabase";
 import { computeRecipeNutrition, type RecipeNutritionResult } from "./nutritionMath";
+import type { RecipeIngredientInsertRow } from "./recipeIngredientReconcile";
 import type { RecipeIngredient } from "@/types/recipe";
 import type {
   GramsSource,
@@ -550,7 +551,13 @@ export async function setRecipeIngredientGrams(
   return data as unknown as RecipeIngredientRow;
 }
 
-export type RecipeIngredientInsert = Omit<RecipeIngredientRow, "id" | "recipe_id">;
+// A row normalization writes. `id` is optional only for the line the reconcile
+// somehow never created; normally it names an existing row, and reusing it is
+// what keeps recipes.ingredients pointing at something real.
+export type RecipeIngredientInsert = Omit<
+  RecipeIngredientRow,
+  "id" | "recipe_id" | "line_id" | "position"
+> & { id?: string };
 
 // The parse-derived half of a row: everything that follows from the line's
 // TEXT. Deliberately excludes ingredient_id / match_status — re-reading a
@@ -603,19 +610,19 @@ export async function updateRecipeIngredientRows(
 }
 
 /**
- * Write a recipe's parsed-ingredient rows.
+ * Write a recipe's parsed-ingredient rows: upsert on the primary key, then
+ * prune whatever the run no longer names.
  *
- * When every incoming row carries a `line_id` this is an UPSERT on
- * (recipe_id, line_id) plus a prune of the lines that no longer exist. That
- * keeps a surviving line's row — and therefore its `id` — stable across runs,
- * which matters because the UI PATCHes associations by row id: under the old
- * delete-then-insert, a run completing between page load and a click left the
- * client holding an id that no longer existed.
+ * Keying on the row's own id (db/migrations/0016) is what keeps a surviving
+ * line's row — and therefore the association a user curated on it — stable
+ * across runs. It also matters to the UI, which PATCHes associations by row id:
+ * under the delete-then-insert this replaced, a run completing between page
+ * load and a click left the client holding an id that no longer existed.
  *
- * Rows without a line_id (recipes not yet backfilled) can't key on that index,
- * so they take the original delete-then-insert path. Neither path is
- * transactional — a known PostgREST limitation, acceptable while writes come
- * from one normalization run at a time; a SQL function is the upgrade path.
+ * Not transactional — a known PostgREST limitation, acceptable while writes
+ * come from one normalization run at a time; a SQL function is the upgrade
+ * path. The upsert lands before the prune so a failure between them leaves
+ * unreferenced rows rather than missing ones.
  */
 export async function replaceRecipeIngredients(
   recipeId: string,
@@ -623,60 +630,106 @@ export async function replaceRecipeIngredients(
 ): Promise<void> {
   const supabase = getSupabaseAdminClient();
 
-  const lineIds = rows.map((row) => row.line_id).filter((id): id is string => id != null);
-  if (rows.length > 0 && lineIds.length === rows.length) {
-    // Keep only rows whose line still exists; everything else goes, so the
-    // upsert below is writing into a clean set.
-    //
-    // The `line_id.is.null` half is not redundant: SQL `NOT IN` yields NULL —
-    // not true — for a NULL left operand, so a bare `not.in` silently spares
-    // every legacy row. Those rows ARE stale (their line now has an id and a
-    // properly keyed row is about to be inserted), and leaving them behind
-    // means two rows per line and a collision on unique (recipe_id, position).
-    // persist has already inherited their associations by position before we
-    // get here, so dropping them loses nothing.
-    const quoted = lineIds.map((id) => `"${id}"`).join(",");
-    const { error: pruneError } = await supabase
-      .from("recipe_ingredients")
-      .delete()
-      .eq("recipe_id", recipeId)
-      .or(`line_id.is.null,line_id.not.in.(${quoted})`);
-
-    if (pruneError) {
-      throw new IngredientRepoError("delete_failed", pruneError.message);
-    }
-
+  if (rows.length > 0) {
     const { error: upsertError } = await supabase
       .from("recipe_ingredients")
-      .upsert(
-        rows.map((row) => ({ ...row, recipe_id: recipeId })),
-        { onConflict: "recipe_id,line_id" },
-      );
+      .upsert(rows.map((row) => ({ ...row, recipe_id: recipeId })));
 
     if (upsertError) {
       throw new IngredientRepoError("insert_failed", upsertError.message);
     }
-    return;
   }
 
-  const { error: deleteError } = await supabase
-    .from("recipe_ingredients")
-    .delete()
-    .eq("recipe_id", recipeId);
-
-  if (deleteError) {
-    throw new IngredientRepoError("delete_failed", deleteError.message);
+  // Quoted: PostgREST splits an `in` list on commas, so an unquoted value
+  // containing one would silently become two filter terms.
+  const keptIds = rows
+    .map((row) => row.id)
+    .filter((id): id is string => id != null)
+    .map((id) => `"${id}"`);
+  let prune = supabase.from("recipe_ingredients").delete().eq("recipe_id", recipeId);
+  if (keptIds.length > 0) {
+    prune = prune.not("id", "in", `(${keptIds.join(",")})`);
   }
+  const { error: pruneError } = await prune;
 
+  if (pruneError) {
+    throw new IngredientRepoError("delete_failed", pruneError.message);
+  }
+}
+
+/**
+ * Create rows the reconcile minted ids for. Ids come from the caller, not the
+ * column default, because `recipes.ingredients` already references them.
+ * Throws ("insert_failed").
+ */
+export async function insertRecipeIngredientRows(
+  recipeId: string,
+  rows: RecipeIngredientInsertRow[],
+): Promise<void> {
   if (rows.length === 0) return;
+  const supabase = getSupabaseAdminClient();
 
-  const { error: insertError } = await supabase
+  const { error } = await supabase
     .from("recipe_ingredients")
     .insert(rows.map((row) => ({ ...row, recipe_id: recipeId })));
 
-  if (insertError) {
-    throw new IngredientRepoError("insert_failed", insertError.message);
+  if (error) {
+    throw new IngredientRepoError("insert_failed", error.message);
   }
+}
+
+/**
+ * Drop rows the recipe's group array no longer references. Scoped on recipe_id
+ * as well as id so a bad call can't reach another recipe's rows. Throws
+ * ("delete_failed").
+ */
+export async function deleteRecipeIngredientRows(
+  recipeId: string,
+  ids: string[],
+): Promise<void> {
+  if (ids.length === 0) return;
+  const supabase = getSupabaseAdminClient();
+
+  const { error } = await supabase
+    .from("recipe_ingredients")
+    .delete()
+    .eq("recipe_id", recipeId)
+    .in("id", ids);
+
+  if (error) {
+    throw new IngredientRepoError("delete_failed", error.message);
+  }
+}
+
+/**
+ * Fetch the rows for several recipes at once, for list views that would
+ * otherwise issue one query per recipe. Returns them grouped by recipe_id;
+ * ordering within a recipe comes from that recipe's `ingredients` groups, not
+ * from here.
+ */
+export async function getRecipeIngredientsByRecipeIds(
+  recipeIds: string[],
+): Promise<Map<string, RecipeIngredientRow[]>> {
+  const byRecipe = new Map<string, RecipeIngredientRow[]>();
+  if (recipeIds.length === 0) return byRecipe;
+
+  const supabase = getSupabaseAdminClient();
+  const { data, error } = await supabase
+    .from("recipe_ingredients")
+    .select(RECIPE_INGREDIENT_COLUMNS)
+    .in("recipe_id", recipeIds);
+
+  if (error) {
+    console.error("Supabase error fetching recipe ingredients:", error);
+    return byRecipe;
+  }
+
+  for (const row of (data as unknown as RecipeIngredientRow[]) ?? []) {
+    const bucket = byRecipe.get(row.recipe_id);
+    if (bucket) bucket.push(row);
+    else byRecipe.set(row.recipe_id, [row]);
+  }
+  return byRecipe;
 }
 
 export interface NormalizationPatch {

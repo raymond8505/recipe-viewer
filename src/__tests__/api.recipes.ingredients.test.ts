@@ -97,10 +97,13 @@ describe("PATCH /api/recipes/[id]/ingredients (line text)", () => {
   ];
 
   function recipeWithLines() {
-    return makeRecipe("r-1", "Test Recipe", {
-      metadata: { schema: { name: "Test Recipe", recipeIngredient: lines } },
-    });
+    return makeRecipe("r-1", "Test Recipe", { schema: { recipeIngredient: lines } });
   }
+
+  // The route composes its lines from the recipe's rows, so every line it sees
+  // carries the id of the row it is (db/migrations/0016). Row ids come from the
+  // shared factory.
+  const ROW_IDS = recipeWithLines().ingredientRows.map((row) => row.id);
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -109,12 +112,7 @@ describe("PATCH /api/recipes/[id]/ingredients (line text)", () => {
     vi.mocked(getRecipeIngredients).mockResolvedValue([]);
     vi.mocked(updateRecipeRow).mockImplementation(async (id, patch) =>
       makeRecipe(id, "Test Recipe", {
-        metadata: {
-          schema: {
-            name: "Test Recipe",
-            recipeIngredient: patch.schema?.recipeIngredient,
-          },
-        },
+        schema: { recipeIngredient: patch.schema?.recipeIngredient },
       }),
     );
   });
@@ -127,12 +125,17 @@ describe("PATCH /api/recipes/[id]/ingredients (line text)", () => {
 
     expect(res.status).toBe(200);
     expect((await res.json()).recipeIngredient).toEqual([
-      { name: "100 g butter", group: "Cake" },
-      "6 g magic dust",
+      { name: "100 g butter", group: "Cake", id: ROW_IDS[0] },
+      { name: "6 g magic dust", id: ROW_IDS[1] },
     ]);
+    // The edited line keeps its row id, so the write re-points that row rather
+    // than replacing it and dropping whatever was curated on it.
     expect(updateRecipeRow).toHaveBeenCalledWith("r-1", {
       schema: {
-        recipeIngredient: [{ name: "100 g butter", group: "Cake" }, "6 g magic dust"],
+        recipeIngredient: [
+          { name: "100 g butter", group: "Cake", id: ROW_IDS[0] },
+          { name: "6 g magic dust", id: ROW_IDS[1] },
+        ],
       },
     });
   });
@@ -143,7 +146,7 @@ describe("PATCH /api/recipes/[id]/ingredients (line text)", () => {
   it("returns the re-parsed rows alongside the lines", async () => {
     const rows = [
       makeRecipeIngredient("r-1", 1, {
-        line_id: "L2",
+        id: ROW_IDS[1],
         raw_text: "6 g magic dust",
         ingredient_id: "ing-dust",
       }),
@@ -173,6 +176,7 @@ describe("PATCH /api/recipes/[id]/ingredients (line text)", () => {
     expect((await res.json()).recipeIngredient[0]).toEqual({
       name: "150 g butter",
       group: "Cake",
+      id: ROW_IDS[0],
     });
   });
 

@@ -13,25 +13,26 @@ import type {
   HowToSection,
   SchemaRecipe,
 } from "@/types/recipe";
+import { makeRecipeRow } from "@/fixtures";
 import { rescrapeFixture } from "@/fixtures/rescrape";
 import { clickAndConfirm } from "./helpers/confirmBar";
 
+// Thin local default over the shared factory (src/fixtures/recipes.ts), which
+// is what splits a schema into the columns + recipe_ingredients rows the
+// component reads. Never hand-build a RecipeRow here — see .claude/docs/fixtures.md.
 function makeRecipe(
   schema: Partial<SchemaRecipe> = {},
   row: Partial<Omit<RecipeRow, "metadata">> = {},
 ): RecipeRow {
   return {
-    id: "1",
-    url: "https://example.com",
-    source: "example.com",
-    status: "draft",
+    ...makeRecipeRow({
+      id: "1",
+      url: "https://example.com",
+      source: "example.com",
+      status: "draft",
+      schema: { name: "Test Recipe", ...schema },
+    }),
     ...row,
-    metadata: {
-      schema: {
-        name: "Test Recipe",
-        ...schema,
-      },
-    },
   };
 }
 
