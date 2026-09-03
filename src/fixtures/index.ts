@@ -2,6 +2,7 @@ export { recipeFixtures, makeRecipe, makeRecipeRow } from "./recipes";
 export {
   ingredientFixtures,
   makeIngredient,
+  makeLineFor,
   makeRecipeIngredient,
   matchedLinesScenario,
 } from "./ingredients";

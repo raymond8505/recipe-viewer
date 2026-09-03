@@ -2,7 +2,7 @@
 
 Recipes' free-text ingredient lines get a derived structured layer: `recipe_ingredients` rows linking to a canonical `ingredients` catalog (per-100g nutrition + `density_g_per_ml` for volume↔weight conversion, USDA FoodData Central-sourced).
 
-**Parallel-layer invariant:** `SchemaRecipe.recipeIngredient` stays the display source of truth. Normalization NEVER rewrites recipe text — it only derives `recipe_ingredients` rows. Nothing may feed catalog data back into the schema.
+**Ownership invariant:** `recipe_ingredients.raw_text` **is** the recipe's ingredient text since `db/migrations/0016` — the table is no longer a parallel derived layer, it is where the lines live. Normalization still never rewrites that text: it only fills in `ingredient_id` / `match_status` / `confidence` / `estimated_grams`. Nothing may feed catalog data back into the line text.
 
 ## Catalog and matching
 
@@ -12,12 +12,15 @@ Recipes' free-text ingredient lines get a derived structured layer: `recipe_ingr
 
 ## Line identity, data layer, normalization
 
-**Line identity — `recipe_ingredients.line_id`, never text or position.** Each schema ingredient line carries a stable `id` (`RecipeIngredient.id`, minted by `withLineIds` in `src/lib/ingredientLines.ts` on every create/update); the derived row keys on it (`db/migrations/0013`, unique per `(recipe_id, line_id)`). Line text and array position are *display data* — people fix typos, reword and reorder, and none of that changes which food the line means. Keying on either is what used to silently discard curated associations, so:
+**Line identity — the `recipe_ingredients` row's own primary key, never text or position.** A line's `id` (`RecipeIngredient.id`) *is* that row (`db/migrations/0016`); `recipes.ingredients` points straight at it. Line text and array position are *display data* — people fix typos, reword and reorder, and none of that changes which food the line means. Keying on either is what used to silently discard curated associations, so:
+
+> Historical note: 0013 solved this with a synthetic `line_id` mirrored onto each schema line, and `position` was a denormalized copy of the array index whose unique constraint 0014 had to defer just so a reorder could land. 0016 made both redundant and 0017/0018 remove them; `src/lib/ingredientLines.ts` and `syncLines.ts` are gone.
 - **An existing association is never re-guessed.** Normalization fills gaps only — a row that already has an `ingredient_id` keeps it, whatever the matcher thinks this run. The user changes an association through the UI; nothing else may.
-- **Rewording does not schedule normalization.** `updateRecipeRow` triggers only when the *line-id set* changes (`lineIdSetKey`) — i.e. a line was added or removed. A reword instead runs `syncRecipeIngredientText` (`src/lib/normalization/syncLines.ts`): a deterministic re-parse of `raw_text`/`quantity`/`unit`/`name_text`/`position` with no model, no catalog read, and no association change. It drops `estimated_grams` only when `quantity`/`unit` actually moved (a stored weight overrides the density-derived value, so a stale one would silently win).
-- **`withLineIds` must preserve ids.** Ids on the incoming array always win; an id-less line inherits from the current array by exact text (a shim for callers that don't know about ids — MCP, scrapes) before minting. Dropping this re-keys every row on the next save.
-- Legacy rows (`line_id` null) and lines without ids fall back to position; `yarn backfill:line-ids [--limit=N] [--dry-run]` mints ids and stamps rows by position. `RecipeIngredient.id` is a custom field — `toSchemaOrgJsonLd` flattens lines to strings, so it can't leak.
-- `replaceRecipeIngredients` upserts on `(recipe_id, line_id)` and prunes removed lines when every row has one, so a surviving line's row `id` is stable across runs (the UI PATCHes associations by row id). Rows without line_ids still take the legacy delete-then-insert path.
+- **Rewording, reordering and regrouping do not schedule normalization.** `reconcileRecipeIngredients` (`src/lib/recipeIngredientReconcile.ts`) reports `lineSetChanged` only when its insert or delete set is non-empty — i.e. a line genuinely appeared or disappeared. A reword instead produces an `updates` entry: a deterministic re-parse of `raw_text`/`quantity`/`unit`/`name_text` with no model, no catalog read, and no association change. It drops `estimated_grams` only when `quantity`/`unit` actually moved (a stored weight overrides the density-derived value, so a stale one would silently win).
+- **A line with no id is a new line.** There is deliberately no text- or position-based fallback: an id that names no row means a genuinely new line, and guessing by position would hand it a neighbour's row after any reorder. Callers that round-trip a recipe hand ids back; MCP and scrapes may not, and each of those lines becomes a fresh row.
+- `RecipeIngredient.id` is internal — `toSchemaOrgJsonLd` flattens lines to strings, so it can't leak.
+- `replaceRecipeIngredients` upserts on the primary key and prunes whatever the run no longer names, so a surviving line's row `id` is stable across runs (the UI PATCHes associations by row id).
+- **Backfill:** `yarn backfill:ingredient-columns [--limit=N] [--dry-run]` is the one-shot that moved all 576 recipes onto the 0016 columns, materializing a row per line **deterministically** — `parseLineDeterministic`, `ingredient_id` null, `match_status: "unmatched"`, matcher never invoked. It is idempotent on `ingredients` being non-empty.
 
 **Data layer:**
 - DDL records: `db/migrations/0002`–`0005` (numbering continues the better-auth branch's `0001`) — applied out-of-band via Supabase MCP `apply_migration`; the files are review records, there is no runner.

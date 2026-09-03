@@ -2,14 +2,17 @@
 
 ## Ingredient Grouping System
 
-The app uses a custom schema that extends Schema.org/Recipe. Individual ingredients in `recipeIngredient` can be either plain strings (legacy/ungrouped) or objects with the following shape:
+The app uses a custom schema that extends Schema.org/Recipe. Individual ingredients in `recipeIngredient` can be either plain strings (accepted on the way *in*) or objects with the following shape:
 
 ```ts
-{ name: string; group?: string }
+{ name: string; group?: string; id?: string }
 ```
 
 - `name` — the ingredient text (e.g. `"1 tsp cumin"`)
 - `group` — optional; when set, its value matches the `name` of a `HowToSection` in `recipeInstructions`
+- `id` — the `recipe_ingredients` row this line **is** (`db/migrations/0016`). Every line composed *out* of storage carries one; it is optional only inbound, where a caller (MCP `update_recipe`, a re-scrape) may send bare strings and the write path mints a row for each.
+
+**This shape is in-memory only.** It is what `composeRecipeSchema` produces and what the write path accepts — it is not how the recipe is stored. Storage is `recipes.ingredients` (groups of row ids) plus `recipe_ingredients.raw_text`; see [supabase-data-layer.md](supabase-data-layer.md).
 
 **Rendering rule:** if any ingredient has a `group` value, all ingredients are partitioned into labeled sections using `group` as the heading. Ingredients without `group` fall into an unlabeled section. If no ingredient has `group`, the list renders flat with no section headings.
 
@@ -35,4 +38,4 @@ Custom fields (`notes`, ingredient `group` objects) must never appear in the JSO
 **Rules:**
 - Any new standard Schema.org/Recipe property added to `SchemaRecipe` must also be added to the `optionalFields` array in `toSchemaOrgJsonLd`, or it won't appear in JSON-LD output
 - Any new custom/app-level field on `SchemaRecipe` must be intentionally left out of `toSchemaOrgJsonLd`
-- `recipeIngredient` objects (`{ name, group }`) are internal-only — always flatten to strings before external serialization
+- `recipeIngredient` objects (`{ name, group, id }`) are internal-only — always flatten to strings before external serialization. `id` is a row primary key and `group` is a custom field; neither belongs in JSON-LD.
