@@ -358,6 +358,62 @@ describe("computeLineNutrition", () => {
     );
     expect(result).toMatchObject({ kind: "ok", grams: 90, gramsSource: "estimated" });
   });
+
+  // The un-estimable line's escape hatch: 0 is a curator decision, so it must
+  // survive the estimate branch's `!= null` test rather than being read as
+  // "no estimate" by a falsy check.
+  it("counts a 0-gram line as contributing nothing instead of excluding it", () => {
+    const result = computeLineNutrition(
+      {
+        quantity: null,
+        unit: null,
+        ingredient_id: "ing-1",
+        raw_text: "salt to taste",
+        estimated_grams: 0,
+      },
+      catalogButter,
+    );
+    expect(result).toEqual({
+      kind: "ok",
+      grams: 0,
+      gramsSource: "estimated",
+      // Every key the catalog carries, at zero — key sparsity still tracks the
+      // catalog, so this line is a no-op in the sum rather than absent from it.
+      nutrition: { calories_kcal: 0, fat_g: 0 },
+    });
+  });
+
+  it("still zeroes a convertible line when the curator sets 0", () => {
+    const result = computeLineNutrition(
+      {
+        quantity: 100,
+        unit: "g",
+        ingredient_id: "ing-1",
+        raw_text: "100 g butter",
+        estimated_grams: 0,
+      },
+      catalogButter,
+    );
+    expect(result).toMatchObject({ kind: "ok", grams: 0, gramsSource: "estimated" });
+  });
+
+  // 0 says "don't count this", which is a claim only a matched line can make.
+  // An unmatched line is UNKNOWN — a real threat to an accurate total — so the
+  // unmatched check keeps running first and the flag stays up.
+  it("still reports 'unmatched' for a 0-gram line with no association", () => {
+    expect(
+      computeLineNutrition(
+        {
+          quantity: null,
+          unit: null,
+          ingredient_id: null,
+          raw_text: "salt to taste",
+          estimated_grams: 0,
+        },
+        null,
+      ),
+    ).toEqual({ kind: "excluded", reason: "unmatched" });
+  });
 });
 
 describe("sumNutrition", () => {
@@ -524,6 +580,36 @@ describe("computeRecipeNutrition", () => {
     expect(result.total).toEqual({ calories_kcal: 100 });
     expect(result).toMatchObject({
       hasStaleLines: false,
+      excludedCount: 0,
+      fullyCovered: true,
+    });
+  });
+
+  // The whole point of the 0 signal: one un-weighable line used to hold the
+  // entire recipe off its ingredient-derived total, because fullyCovered
+  // demands zero exclusions. Zeroing it clears the gate without inventing a
+  // weight, and the total is unchanged from the line that does carry mass.
+  it("is fully covered when the only amount-less line is zeroed", () => {
+    const schema = ["100 g thing", "salt to taste"];
+    const rows = [
+      makeRow(0, { raw_text: "100 g thing", ingredient_id: "a" }),
+      makeRow(1, {
+        raw_text: "salt to taste",
+        quantity: null,
+        unit: null,
+        ingredient_id: "b",
+        estimated_grams: 0,
+        grams_source: "manual",
+      }),
+    ];
+    const byId = new Map([
+      ["a", catalog({ calories_kcal: 100 })],
+      ["b", catalog({ sodium_mg: 38758 })],
+    ]);
+    const result = computeRecipeNutrition(schema, rows, byId);
+    expect(result.total).toEqual({ calories_kcal: 100, sodium_mg: 0 });
+    expect(result).toMatchObject({
+      lineCount: 2,
       excludedCount: 0,
       fullyCovered: true,
     });

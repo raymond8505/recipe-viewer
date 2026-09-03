@@ -25,12 +25,21 @@ import NutritionGramsCell from "./NutritionGramsCell";
 import { NUTRITION_DETAIL_COLUMNS } from "./nutritionColumns";
 import { STICKY_ALIASES_CELL, STICKY_NAME_CELL } from "./tableStyles";
 
+// The three grams-less reasons all share one set of fixes, so they share one
+// tail — and it names entering 0 explicitly, because that is the only way out
+// for a line nobody can weigh ("salt to taste") and an empty numeric field is
+// not a discoverable place to learn it. `unmatched`, `no_nutrition` and `stale`
+// are fixed elsewhere (the autocomplete, the catalog, normalization), so they
+// must NOT offer it.
+const GRAMS_FIXES =
+  "Type a weight, use Estimate, or enter 0 to count this line as nothing.";
+
 const EXCLUSION_TITLES: Record<ExclusionReason, string> = {
   unmatched: "Not matched to the catalog — pick an ingredient to include it",
   no_nutrition: "Matched ingredient has no nutrition data",
-  no_quantity: "No parsed amount — can't convert to grams",
-  no_unit: "No unit (count line) — can't convert to grams",
-  no_density: "Volume unit but the ingredient has no density",
+  no_quantity: `No parsed amount — can't convert to grams. ${GRAMS_FIXES}`,
+  no_unit: `No unit (count line) — can't convert to grams. ${GRAMS_FIXES}`,
+  no_density: `Volume unit but the ingredient has no density. ${GRAMS_FIXES}`,
   stale: "No normalized row for this line — run normalization",
 };
 

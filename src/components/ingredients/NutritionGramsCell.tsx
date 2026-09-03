@@ -14,8 +14,14 @@ import type { RecipeIngredientRow } from "@/types/ingredient";
  *
  * The field is the local edit buffer; it re-syncs whenever the persisted
  * `estimated_grams` changes (save round-trip or re-estimate). Empty commits as
- * a clear (null); a non-positive/garbage entry is rejected back to the stored
- * value.
+ * a clear (null); a negative/garbage entry is rejected back to the stored value.
+ *
+ * A typed 0 is accepted and means "don't count this line" — the escape hatch
+ * for an ingredient that can't reasonably be weighed ("salt to taste"), which
+ * would otherwise sit un-estimable and hold the whole recipe off its
+ * ingredient-derived total. It marks as "not counted" rather than "est.":
+ * both are stored estimates, but 0 is a decision about the line, not a guess
+ * at its weight.
  *
  * @summary editable grams override + LLM estimate trigger for one line
  */
@@ -47,8 +53,14 @@ export default function NutritionGramsCell({
     computation.kind === "ok" && computation.gramsSource !== "estimated"
       ? computation.grams
       : null;
+  // Keyed on the stored value, not grams_source: an LLM-returned 0 says the
+  // same thing a user-typed one does, and "not counted" describes it better
+  // than "est." either way.
+  const notCounted = stored === 0;
   const isEstimated =
-    computation.kind === "ok" && computation.gramsSource === "estimated";
+    !notCounted &&
+    computation.kind === "ok" &&
+    computation.gramsSource === "estimated";
 
   function commit() {
     const trimmed = value.trim();
@@ -57,7 +69,9 @@ export default function NutritionGramsCell({
       return;
     }
     const parsed = Number(trimmed);
-    if (!Number.isFinite(parsed) || parsed <= 0) {
+    // 0 is a legitimate entry ("don't count this line"), so only negatives and
+    // garbage bounce back to the stored value.
+    if (!Number.isFinite(parsed) || parsed < 0) {
       setValue(stored != null ? String(stored) : "");
       return;
     }
@@ -65,7 +79,12 @@ export default function NutritionGramsCell({
   }
 
   return (
-    <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+    // flex-wrap is load-bearing, not tidying: the cell sits in a hard-capped
+    // w-44 frozen column (tableStyles.ts), and the "not counted" pill is wide
+    // enough that field + unit + "Estimate" + pill no longer fit on one line.
+    // Without wrapping, the overflow widens the column past w-44, which breaks
+    // the NEXT frozen column's matching left-44 offset.
+    <span className="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
       <input
         type="number"
         inputMode="decimal"
@@ -103,6 +122,22 @@ export default function NutritionGramsCell({
       >
         Estimate
       </button>
+      {/* The "not counted" pill is the one item too wide to share the line, so
+          it is the one that drops — field, unit and "Estimate" keep row one.
+          The full-width wrapper is what forces the break; `basis-full` on the
+          pill itself would stretch its rounded-full background across the whole
+          line instead of letting it hug its text. Only rendered in this state,
+          so no other row in the table gets taller. */}
+      {notCounted && (
+        <span className="flex basis-full items-center">
+          <span
+            className="rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium whitespace-nowrap text-muted-foreground"
+            title="Set to 0 — this line deliberately contributes nothing to the totals"
+          >
+            not counted
+          </span>
+        </span>
+      )}
     </span>
   );
 }
