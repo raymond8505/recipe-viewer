@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { cn } from "@/lib/utils";
 import { formatAmount } from "@/lib/units";
 import type { LineComputation } from "@/lib/nutritionMath";
 import type { RecipeIngredientRow } from "@/types/ingredient";
@@ -82,9 +81,9 @@ export default function NutritionGramsCell({
   return (
     // flex-wrap is load-bearing, not tidying: the cell sits in a hard-capped
     // w-44 frozen column (tableStyles.ts), and the "not counted" pill is wide
-    // enough that field + unit + pill + "Estimate" no longer fit on one line.
-    // Without wrapping, "Estimate" overflows and widens the column past w-44,
-    // which breaks the NEXT frozen column's matching left-44 offset.
+    // enough that field + unit + "Estimate" + pill no longer fit on one line.
+    // Without wrapping, the overflow widens the column past w-44, which breaks
+    // the NEXT frozen column's matching left-44 offset.
     <span className="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
       <input
         type="number"
@@ -106,41 +105,39 @@ export default function NutritionGramsCell({
         className="w-14 rounded-none border-0 border-b border-border bg-transparent text-right tabular-nums outline-hidden focus:border-orange-400 disabled:opacity-50"
       />
       <span aria-hidden="true">g</span>
-      {/* Marker + action travel together as one wrappable unit. `basis-full`
-          only when the wide "not counted" pill is showing: that's the case
-          where the four items can't share a line, and letting the pill break
-          on its own would strand "Estimate" alone on the next row, which reads
-          as a layout bug rather than a second line. Every other state (bare
-          field, or the narrow "est." pill) still fits on one line, so the
-          table's row height is unchanged there. */}
-      <span className={cn("flex items-center gap-1.5")}>
-        {isEstimated && (
-          <span
-            className="rounded-full bg-brand-subtle px-1.5 py-0.5 text-[10px] font-medium text-brand"
-            title="Estimated weight — not a measured density conversion"
-          >
-            est.
-          </span>
-        )}
-
-        <button
-          type="button"
-          onClick={() => onEstimate(row.id)}
-          disabled={saving}
-          className="text-brand hover:underline disabled:opacity-50"
-          aria-label={`Estimate grams for ${label}`}
+      {isEstimated && (
+        <span
+          className="rounded-full bg-brand-subtle px-1.5 py-0.5 text-[10px] font-medium text-brand"
+          title="Estimated weight — not a measured density conversion"
         >
-          Estimate
-        </button>
-        {notCounted && (
+          est.
+        </span>
+      )}
+      <button
+        type="button"
+        onClick={() => onEstimate(row.id)}
+        disabled={saving}
+        className="text-brand hover:underline disabled:opacity-50"
+        aria-label={`Estimate grams for ${label}`}
+      >
+        Estimate
+      </button>
+      {/* The "not counted" pill is the one item too wide to share the line, so
+          it is the one that drops — field, unit and "Estimate" keep row one.
+          The full-width wrapper is what forces the break; `basis-full` on the
+          pill itself would stretch its rounded-full background across the whole
+          line instead of letting it hug its text. Only rendered in this state,
+          so no other row in the table gets taller. */}
+      {notCounted && (
+        <span className="flex basis-full items-center">
           <span
             className="rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium whitespace-nowrap text-muted-foreground"
             title="Set to 0 — this line deliberately contributes nothing to the totals"
           >
             not counted
           </span>
-        )}
-      </span>
+        </span>
+      )}
     </span>
   );
 }
