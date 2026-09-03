@@ -113,9 +113,7 @@ export default function NutritionGramsCell({
           as a layout bug rather than a second line. Every other state (bare
           field, or the narrow "est." pill) still fits on one line, so the
           table's row height is unchanged there. */}
-      <span
-        className={cn("flex items-center gap-1.5", notCounted && "basis-full")}
-      >
+      <span className={cn("flex items-center gap-1.5")}>
         {isEstimated && (
           <span
             className="rounded-full bg-brand-subtle px-1.5 py-0.5 text-[10px] font-medium text-brand"
@@ -124,14 +122,7 @@ export default function NutritionGramsCell({
             est.
           </span>
         )}
-        {notCounted && (
-          <span
-            className="rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium whitespace-nowrap text-muted-foreground"
-            title="Set to 0 — this line deliberately contributes nothing to the totals"
-          >
-            not counted
-          </span>
-        )}
+
         <button
           type="button"
           onClick={() => onEstimate(row.id)}
@@ -141,6 +132,14 @@ export default function NutritionGramsCell({
         >
           Estimate
         </button>
+        {notCounted && (
+          <span
+            className="rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium whitespace-nowrap text-muted-foreground"
+            title="Set to 0 — this line deliberately contributes nothing to the totals"
+          >
+            not counted
+          </span>
+        )}
       </span>
     </span>
   );
