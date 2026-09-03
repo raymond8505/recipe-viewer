@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { cn } from "@/lib/utils";
 import { formatAmount } from "@/lib/units";
 import type { LineComputation } from "@/lib/nutritionMath";
 import type { RecipeIngredientRow } from "@/types/ingredient";
@@ -83,9 +84,7 @@ export default function NutritionGramsCell({
     // w-44 frozen column (tableStyles.ts), and the "not counted" pill is wide
     // enough that field + unit + pill + "Estimate" no longer fit on one line.
     // Without wrapping, "Estimate" overflows and widens the column past w-44,
-    // which breaks the NEXT frozen column's matching left-44 offset. Wrapping
-    // drops "Estimate" to a second line instead; the row grows, which the
-    // ingredient and match cells above already do for long text.
+    // which breaks the NEXT frozen column's matching left-44 offset.
     <span className="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
       <input
         type="number"
@@ -107,31 +106,42 @@ export default function NutritionGramsCell({
         className="w-14 rounded-none border-0 border-b border-border bg-transparent text-right tabular-nums outline-hidden focus:border-orange-400 disabled:opacity-50"
       />
       <span aria-hidden="true">g</span>
-      {isEstimated && (
-        <span
-          className="rounded-full bg-brand-subtle px-1.5 py-0.5 text-[10px] font-medium text-brand"
-          title="Estimated weight — not a measured density conversion"
-        >
-          est.
-        </span>
-      )}
-      {notCounted && (
-        <span
-          className="rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium whitespace-nowrap text-muted-foreground"
-          title="Set to 0 — this line deliberately contributes nothing to the totals"
-        >
-          not counted
-        </span>
-      )}
-      <button
-        type="button"
-        onClick={() => onEstimate(row.id)}
-        disabled={saving}
-        className="text-brand hover:underline disabled:opacity-50"
-        aria-label={`Estimate grams for ${label}`}
+      {/* Marker + action travel together as one wrappable unit. `basis-full`
+          only when the wide "not counted" pill is showing: that's the case
+          where the four items can't share a line, and letting the pill break
+          on its own would strand "Estimate" alone on the next row, which reads
+          as a layout bug rather than a second line. Every other state (bare
+          field, or the narrow "est." pill) still fits on one line, so the
+          table's row height is unchanged there. */}
+      <span
+        className={cn("flex items-center gap-1.5", notCounted && "basis-full")}
       >
-        Estimate
-      </button>
+        {isEstimated && (
+          <span
+            className="rounded-full bg-brand-subtle px-1.5 py-0.5 text-[10px] font-medium text-brand"
+            title="Estimated weight — not a measured density conversion"
+          >
+            est.
+          </span>
+        )}
+        {notCounted && (
+          <span
+            className="rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium whitespace-nowrap text-muted-foreground"
+            title="Set to 0 — this line deliberately contributes nothing to the totals"
+          >
+            not counted
+          </span>
+        )}
+        <button
+          type="button"
+          onClick={() => onEstimate(row.id)}
+          disabled={saving}
+          className="text-brand hover:underline disabled:opacity-50"
+          aria-label={`Estimate grams for ${label}`}
+        >
+          Estimate
+        </button>
+      </span>
     </span>
   );
 }
