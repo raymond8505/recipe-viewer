@@ -22,7 +22,7 @@ import { parseIngredient, unitKeyForAlias } from "@/lib/units";
 import { UsdaError, searchFoods } from "@/lib/usda";
 import type { GramsSource, IngredientMatch, MatchStatus } from "@/types/ingredient";
 import { estimateLineGrams } from "./estimateGrams";
-import { ingredientFingerprint } from "./fingerprint";
+import { recipeFingerprint } from "./fingerprint";
 import { parseLineDeterministic, type ParsedLine } from "./parseLine";
 import { composeRecipeSchema } from "@/lib/recipeSchema";
 
@@ -71,9 +71,11 @@ const NormalizationState = Annotation.Root({
   recipeId: Annotation<string>,
   fingerprint: Annotation<string>,
   rawLines: Annotation<string[]>,
-  // Stable schema-line id per position (null for legacy lines that predate
-  // them). This is what a persisted row keys on, so it — not raw_text, not
-  // position — decides which prior row a line inherits from.
+  // Each line's `recipe_ingredients` row id, by position. Every line composed
+  // out of storage carries one (db/migrations/0016); null only for a bare
+  // string, which composeRecipeSchema never emits. This is what a persisted
+  // row keys on, so it — not raw_text, not position — decides which prior row
+  // a line inherits from.
   lineIds: Annotation<Array<string | null>>,
   parsed: Annotation<ParsedLine[]>,
   matches: Annotation<LineMatch[]>,
@@ -483,7 +485,7 @@ async function persist(state: State): Promise<Partial<State>> {
 
   // A newer save changed the ingredient text while this run was in flight; its
   // own trigger owns the result. Writing ours would clobber it with stale data.
-  if (ingredientFingerprint(composeRecipeSchema(recipe)) !== state.fingerprint) {
+  if (recipeFingerprint(recipe) !== state.fingerprint) {
     console.warn(`Normalization for ${state.recipeId} superseded mid-run — skipping persist`);
     return {};
   }
@@ -611,7 +613,7 @@ export async function runNormalization(recipeId: string): Promise<void> {
     const lineIds = schemaLines.map((line) =>
       typeof line === "string" ? null : (line.id ?? null),
     );
-    const fingerprint = ingredientFingerprint(schema);
+    const fingerprint = recipeFingerprint(recipe);
 
     if (rawLines.length === 0) {
       await replaceRecipeIngredients(recipeId, []);
