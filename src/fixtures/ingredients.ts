@@ -188,7 +188,7 @@ export function makeRecipeIngredient(
   return {
     id: `ri-${recipeId}-${position}`,
     recipe_id: recipeId,
-    // Dead columns awaiting db/migrations/0018 — since 0016 a line's identity
+    // Dead columns kept as artifacts of the pre-0016 shape — a line's identity
     // is this row's own `id` and its position is its index in
     // `recipes.ingredients`. Nothing reads either.
     line_id: null,

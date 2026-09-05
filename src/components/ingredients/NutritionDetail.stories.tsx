@@ -328,16 +328,19 @@ export const Flat: Story = {
 };
 
 /**
- * The three states a line's join can be in, side by side.
+ * The two states a line's join can be in, side by side.
  *
- * - **Cumin** was reworded after its last normalization run — the row still
- *   says "1 tsp cumin seed". The line is keyed by a stable id, so the reword
- *   costs it neither its match nor its place in the totals. Text is display
- *   copy; only the curator changes an association.
- * - **Saffron** has no normalized row at all, so it is flagged and excluded.
- * - **Olive oil** is a legacy line with no id: its row can only be found by
- *   position, which makes the text the sole evidence the row belongs to it —
- *   and the recipe has moved past what the row says. Still flagged.
+ * - **Cumin** and **olive oil** each have their row, so both count. Cumin was
+ *   reworded after its last normalization run — the row still says "1 tsp
+ *   cumin seed" — and that costs it neither its match nor its place in the
+ *   totals. Since db/migrations/0016 a line's `id` IS its row, so text is pure
+ *   display copy; only the curator changes an association.
+ * - **Saffron** has no row at all, so it is flagged and excluded.
+ *
+ * There is deliberately no third state. Before 0016 a line could be joined by
+ * array position, which made its text the only evidence the row belonged to it
+ * — and so a row could be attached but stale. Keying on the row id removed
+ * that: a line either has its row or has none.
  *
  * The ever-present Normalize button (manual matches survive re-runs) builds
  * the missing rows.
@@ -345,14 +348,13 @@ export const Flat: Story = {
 export const StaleNormalization: Story = {
   args: {
     schemaIngredients: [
-      { name: "2 tsp cumin seed", id: "line-cumin" },
-      { name: "1 pinch saffron", id: "line-saffron" },
-      "1 tbsp olive oil, warmed",
+      { name: "2 tsp cumin seed", id: "ri-story-recipe-0" },
+      { name: "1 pinch saffron", id: "ri-story-recipe-1" },
+      { name: "1 tbsp olive oil, warmed", id: "ri-story-recipe-2" },
     ],
     recipeYield: "2 servings",
     initialRows: [
       makeRecipeIngredient("story-recipe", 0, {
-        line_id: "line-cumin",
         raw_text: "1 tsp cumin seed",
         quantity: 1,
         unit: "tsp",
@@ -360,6 +362,7 @@ export const StaleNormalization: Story = {
         ingredient_id: cumin.id,
         match_status: "matched",
       }),
+      // No row for saffron (index 1) — that is the flagged case.
       makeRecipeIngredient("story-recipe", 2, {
         raw_text: "1 tbsp olive oil",
         quantity: 1,

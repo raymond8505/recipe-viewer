@@ -184,8 +184,10 @@ export interface IndexedIngredient {
   ingredient: string | RecipeIngredient;
   /**
    * Position in the original recipeIngredient array. Grouping reorders
-   * interleaved groups, so this is the only stable join key back to derived
-   * per-line data (recipe_ingredients.position uses the same index).
+   * interleaved groups, so callers that need to address a line by where it
+   * came from (rather than where it renders) carry this through. It is a
+   * render-time index only — the join to a line's derived row goes through
+   * `RecipeIngredient.id`, which IS that row (db/migrations/0016).
    */
   index: number;
 }

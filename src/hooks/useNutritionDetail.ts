@@ -36,7 +36,7 @@ export type CatalogIngredientSummary = Pick<
 >;
 
 export interface NutritionDetailLine {
-  /** Original index into schemaIngredients — also recipe_ingredients.position. */
+  /** Original index into schemaIngredients. A render-time position, not a join key. */
   index: number;
   /** The recipe's display text for this line (the source of truth). */
   text: string;
@@ -86,8 +86,8 @@ export function useNutritionDetail(
   // never-normalized line has no row.
   const [savingLineIndex, setSavingLineIndex] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
-  // Keyed by schema position — the same index the row join falls back to, and
-  // the one `updateLineText` addresses a line by. Stable for the page's
+  // Keyed by schema position — the index `updateLineText` addresses a line by.
+  // (The row join itself is by id, not this.) Stable for the page's
   // lifetime even though `schemaLines` is now local state: an inline edit
   // rewrites one line's text in place and never reorders, adds, or removes, so
   // a switched-off line can't silently change identity under the user mid-edit.

@@ -9,8 +9,9 @@ import type { RecipeIngredient, RecipeIngredientGroup } from "@/types/recipe";
  *
  * `position` and `line_id` are omitted: since db/migrations/0016 a line's
  * position is its index in `recipes.ingredients` and its identity is this row's
- * own id, so both columns are dead. They survive only until 0018 drops them —
- * `position` takes its column default, `line_id` stays null.
+ * own id, so both columns are dead. They are kept as artifacts of the old
+ * shape rather than dropped — `position` takes its column default (0), and
+ * `line_id` stays null.
  */
 export type RecipeIngredientInsertRow = Omit<
   RecipeIngredientRow,
@@ -19,8 +20,8 @@ export type RecipeIngredientInsertRow = Omit<
 
 /**
  * An insert promoted to a full row, for the value a write returns without
- * re-reading. `line_id` and `position` are the dead columns awaiting
- * db/migrations/0018 — the database fills `position` from its default and
+ * re-reading. `line_id` and `position` are the dead columns kept as artifacts
+ * of the pre-0016 shape — the database fills `position` from its default and
  * nothing reads either.
  */
 export function insertedRow(

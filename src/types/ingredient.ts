@@ -45,20 +45,26 @@ export interface IngredientRow {
   updated_at: string;
 }
 
-// One parsed line of a recipe's ingredient list — the structured layer derived
-// from SchemaRecipe.recipeIngredient. The schema text stays the display source
-// of truth; these rows never feed back into it.
+// One line of a recipe's ingredient list. Since db/migrations/0016 this row IS
+// the line: `raw_text` is the recipe's ingredient text, and
+// `recipes.ingredients` orders these rows by id. Normalization fills in the
+// catalog association; it never rewrites the text.
 export interface RecipeIngredientRow {
+  /**
+   * The line's identity. `recipes.ingredients` holds these, so text and order
+   * move freely underneath it — which is what keeps a curated association
+   * attached across a reword or a reorder.
+   */
   id: string;
   recipe_id: string;
   /**
-   * The schema line this row derives from (SchemaRecipe.recipeIngredient[].id).
-   * THE join key — `position` and `raw_text` are display data that move freely
-   * as people reorder and reword, and keying on either is what used to throw
-   * away curated associations (db/migrations/0013).
+   * DEAD — always null on rows written since db/migrations/0016.
    *
-   * Null only on rows written before 0013 / for recipes whose lines predate
-   * ids; `yarn backfill:line-ids` fills them.
+   * 0013 introduced it as a synthetic id mirrored onto each schema line, back
+   * when the ingredient list lived in `metadata.schema` and a derived row had
+   * nothing better to key on. 0016 pointed `recipes.ingredients` straight at
+   * `id` instead, which made this redundant. Kept only as an artifact of the
+   * old shape; nothing reads or writes it.
    */
   line_id: string | null;
   ingredient_id: string | null;
@@ -70,6 +76,13 @@ export interface RecipeIngredientRow {
   note: string | null;
   match_status: MatchStatus;
   confidence: number | null;
+  /**
+   * DEAD — takes the column default (0) on rows written since
+   * db/migrations/0016, which made a line's position its index in
+   * `recipes.ingredients`. 0017 dropped the `unique (recipe_id, position)`
+   * constraint that 0014 had to defer just so a reorder could land. Kept only
+   * as an artifact of the old shape; nothing reads or writes it.
+   */
   position: number;
   // A resolved gram weight (db/migrations/0009) that rescues lines the density
   // path can't convert — volume-with-no-density, or count/can lines. Internal

@@ -647,7 +647,6 @@ describe("NutritionDetail", () => {
     vi.mocked(setIngredientGrams).mockResolvedValue(
       makeRecipeIngredient("r-1", 1, {
         id: "ri-1",
-        line_id: "L1",
         raw_text: "2 eggs",
         quantity: 2,
         unit: null,

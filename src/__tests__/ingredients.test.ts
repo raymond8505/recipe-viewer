@@ -396,7 +396,9 @@ describe("searchIngredientsKeyword", () => {
 });
 
 describe("getRecipeIngredients", () => {
-  it("filters by recipe and orders by position", async () => {
+  // Deliberately unordered: since db/migrations/0016 the sequence lives in
+  // `recipes.ingredients`, so sorting here would order by a dead column.
+  it("filters by recipe and asks the database for no ordering", async () => {
     const rows = [makeRecipeIngredient("r-1", 0), makeRecipeIngredient("r-1", 1)];
     useQueue([{ data: rows }]);
 
@@ -405,7 +407,7 @@ describe("getRecipeIngredients", () => {
     expect(result).toEqual(rows);
     const builder = builderAt(0);
     expect(builder.eq).toHaveBeenCalledWith("recipe_id", "r-1");
-    expect(builder.order).toHaveBeenCalledWith("position", { ascending: true });
+    expect(builder.order).not.toHaveBeenCalled();
   });
 
   it("returns an empty array on supabase error", async () => {

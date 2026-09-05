@@ -590,10 +590,10 @@ describe("computeRecipeNutrition", () => {
   // demands zero exclusions. Zeroing it clears the gate without inventing a
   // weight, and the total is unchanged from the line that does carry mass.
   it("is fully covered when the only amount-less line is zeroed", () => {
-    const schema = ["100 g thing", "salt to taste"];
     const rows = [
-      makeRow(0, { raw_text: "100 g thing", ingredient_id: "a" }),
+      makeRow(0, { id: "ri-0", raw_text: "100 g thing", ingredient_id: "a" }),
       makeRow(1, {
+        id: "ri-1",
         raw_text: "salt to taste",
         quantity: null,
         unit: null,
@@ -602,6 +602,7 @@ describe("computeRecipeNutrition", () => {
         grams_source: "manual",
       }),
     ];
+    const schema = rows.map((row) => ({ name: row.raw_text, id: row.id }));
     const byId = new Map([
       ["a", catalog({ calories_kcal: 100 })],
       ["b", catalog({ sodium_mg: 38758 })],

@@ -401,6 +401,11 @@ export async function removeIngredientAlias(
   return rows[0] ?? null;
 }
 
+/**
+ * A recipe's ingredient rows, in no particular order — ordering is the job of
+ * `recipes.ingredients`, which lists these ids grouped and in sequence. (This
+ * used to sort by `position`; db/migrations/0016 made that column dead.)
+ */
 export async function getRecipeIngredients(
   recipeId: string,
 ): Promise<RecipeIngredientRow[]> {
@@ -409,8 +414,7 @@ export async function getRecipeIngredients(
   const { data, error } = await supabase
     .from("recipe_ingredients")
     .select(RECIPE_INGREDIENT_COLUMNS)
-    .eq("recipe_id", recipeId)
-    .order("position", { ascending: true });
+    .eq("recipe_id", recipeId);
 
   if (error) {
     console.error("Supabase error fetching recipe ingredients:", error);
@@ -559,39 +563,18 @@ export type RecipeIngredientInsert = Omit<
   "id" | "recipe_id" | "line_id" | "position"
 > & { id?: string };
 
-// The parse-derived half of a row: everything that follows from the line's
-// TEXT. Deliberately excludes ingredient_id / match_status — re-reading a
-// reworded line must never disturb the association on it.
-//
-// `line_id` is the one non-parse field, and it is write-once: a legacy row
-// joined by position gets stamped with the id its line was just minted
-// (db/migrations/0013). Nothing re-points an already-stamped row.
-export type RecipeIngredientParsePatch = Partial<
-  Pick<
-    RecipeIngredientRow,
-    | "line_id"
-    | "raw_text"
-    | "quantity"
-    | "unit"
-    | "name_text"
-    | "position"
-    | "estimated_grams"
-    | "grams_source"
-  >
->;
-
 /**
  * Re-point rows' parse fields at edited line text, in ONE statement.
  *
- * The single statement is load-bearing, not an optimisation. Reordering two
- * lines swaps their `position` values, and unique (recipe_id, position) is
- * only INITIALLY DEFERRED (db/migrations/0014) — the check is skipped
- * mid-statement but still runs at commit, and PostgREST gives each request
- * exactly one transaction. Issued as separate updates, the first half of a
- * swap would collide with the row that hasn't moved yet.
+ * One statement per save rather than one per row — the reconcile hands over
+ * every reworded row at once, so there is no reason to spend a request each.
+ * (It used to be load-bearing for a different reason: reordering swapped
+ * `position` values and the `unique (recipe_id, position)` constraint was only
+ * INITIALLY DEFERRED, so a split write collided mid-swap. db/migrations/0016
+ * made position dead and 0017 dropped that constraint.)
  *
- * Upserts on the primary key, so callers pass whole rows (patch already
- * merged). Throws ("update_failed").
+ * Upserts on the primary key, so callers pass whole rows with the re-parse
+ * already merged in. Throws ("update_failed").
  */
 export async function updateRecipeIngredientRows(
   recipeId: string,
