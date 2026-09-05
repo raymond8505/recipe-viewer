@@ -20,6 +20,10 @@ import {
   normalizeRecipeInstructions,
   toSchemaOrgJsonLd,
   msToIsoDuration,
+  isoToMinutes,
+  minutesToIso,
+  formatMinutes,
+  parseMinutesInput,
   schemaToEditableIngredients,
   editableIngredientsToSchema,
   schemaToEditableInstructions,
@@ -702,5 +706,99 @@ describe("formatNutrientDisplay", () => {
 
   it("prints bare when the unit is empty", () => {
     expect(formatNutrientDisplay({ value: 250, unit: "" })).toBe("250");
+  });
+});
+
+describe("isoToMinutes", () => {
+  it("converts hours and minutes to whole minutes", () => {
+    expect(isoToMinutes("PT1H30M")).toBe(90);
+    expect(isoToMinutes("PT45M")).toBe(45);
+    expect(isoToMinutes("PT4H")).toBe(240);
+  });
+
+  it("rounds a part-minute duration to the nearest minute", () => {
+    expect(isoToMinutes("PT45S")).toBe(1);
+    expect(isoToMinutes("PT5M30S")).toBe(6);
+  });
+
+  it("returns null rather than 0 for a sub-half-minute duration", () => {
+    // NULL is how the column spells "no time recorded"; 0 would render as
+    // "0 min" and assert a zero-minute recipe instead.
+    expect(isoToMinutes("PT29S")).toBeNull();
+    expect(isoToMinutes("PT0S")).toBeNull();
+  });
+
+  it("returns null for absent or unparseable input", () => {
+    expect(isoToMinutes(null)).toBeNull();
+    expect(isoToMinutes(undefined)).toBeNull();
+    expect(isoToMinutes("half an hour")).toBeNull();
+  });
+});
+
+describe("minutesToIso", () => {
+  it("normalizes minutes into hours", () => {
+    expect(minutesToIso(90)).toBe("PT1H30M");
+    expect(minutesToIso(45)).toBe("PT45M");
+    expect(minutesToIso(240)).toBe("PT4H");
+  });
+
+  it("returns undefined for no time", () => {
+    expect(minutesToIso(null)).toBeUndefined();
+    expect(minutesToIso(undefined)).toBeUndefined();
+    expect(minutesToIso(0)).toBeUndefined();
+  });
+
+  it("round-trips with isoToMinutes for whole-minute durations", () => {
+    for (const minutes of [1, 5, 45, 60, 90, 240]) {
+      expect(isoToMinutes(minutesToIso(minutes))).toBe(minutes);
+    }
+  });
+});
+
+describe("formatMinutes", () => {
+  it("renders a column value the way formatDuration renders ISO", () => {
+    expect(formatMinutes(90)).toBe("1 hr 30 min");
+    expect(formatMinutes(45)).toBe("45 min");
+    expect(formatMinutes(240)).toBe("4 hr");
+  });
+
+  it("returns null when there is no time", () => {
+    expect(formatMinutes(null)).toBeNull();
+    expect(formatMinutes(undefined)).toBeNull();
+  });
+});
+
+describe("parseMinutesInput", () => {
+  it("reads a bare number as minutes", () => {
+    expect(parseMinutesInput("90")).toBe(90);
+    expect(parseMinutesInput(" 45 ")).toBe(45);
+  });
+
+  it("reads a colon as hours, not the m:ss parseMS uses", () => {
+    // "1:30" on a recipe is an hour and a half; on a step timer it is 90
+    // seconds. Different fields, deliberately different readings.
+    expect(parseMinutesInput("1:30")).toBe(90);
+    expect(parseMS("1:30")).toEqual({ minutes: 1, seconds: 30 });
+  });
+
+  it("reads unit-tagged forms", () => {
+    expect(parseMinutesInput("90 min")).toBe(90);
+    expect(parseMinutesInput("1h")).toBe(60);
+    expect(parseMinutesInput("1h30m")).toBe(90);
+    expect(parseMinutesInput("1 hr 30 min")).toBe(90);
+    expect(parseMinutesInput("2 hours")).toBe(120);
+  });
+
+  it("returns null for blank or zero — both mean 'no time'", () => {
+    expect(parseMinutesInput("")).toBeNull();
+    expect(parseMinutesInput("   ")).toBeNull();
+    expect(parseMinutesInput("0")).toBeNull();
+    expect(parseMinutesInput("0 min")).toBeNull();
+  });
+
+  it("returns undefined for unparseable input so a save degrades to no-change", () => {
+    expect(parseMinutesInput("a while")).toBeUndefined();
+    expect(parseMinutesInput("-5")).toBeUndefined();
+    expect(parseMinutesInput("1:75")).toBeUndefined();
   });
 });

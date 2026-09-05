@@ -20,6 +20,16 @@ export interface RecipeRow {
   url: string;
   source: string;
   status: "published" | "archived" | "draft" | null;
+  /**
+   * Whole minutes; null means no time recorded. These three are the source of
+   * truth for a recipe's times — `metadata.schema.{prepTime,cookTime,totalTime}`
+   * still holds a pre-0019 copy on older rows, but the repo layer overwrites it
+   * from these columns on every read and never writes it again. See the
+   * hydrate/extract seam in .claude/docs/supabase-data-layer.md.
+   */
+  prep_time: number | null;
+  cook_time: number | null;
+  total_time: number | null;
   metadata: { schema: SchemaRecipe };
 }
 
@@ -59,9 +69,12 @@ export interface SchemaRecipe {
   description?: string;
   image?: string | string[];
   author?: { "@type"?: "Person"; name: string };
-  cookTime?: string;
-  prepTime?: string;
-  totalTime?: string;
+  // ISO 8601 durations, backed by the recipes.{prep,cook,total}_time columns.
+  // Explicitly nullable so a patch can CLEAR a time: `undefined` disappears in
+  // JSON and would read as "field absent, leave it alone" after the round trip.
+  cookTime?: string | null;
+  prepTime?: string | null;
+  totalTime?: string | null;
   recipeYield?: string | string[] | QuantitativeValue;
   recipeCuisine?: string;
   recipeCategory?: string | string[];

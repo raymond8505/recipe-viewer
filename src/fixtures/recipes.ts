@@ -1,11 +1,19 @@
 import type { RecipeRow } from "@/types/recipe";
 
+// These are HYDRATED rows — what every consumer above src/lib/recipes.ts sees.
+// The time columns and their schema.{prepTime,cookTime,totalTime} counterparts
+// therefore agree here, because hydrateTimes has notionally already run. A raw
+// post-0019 database row would carry the columns and NO schema time keys; only
+// repo-layer tests should model that.
 export const recipeFixtures: RecipeRow[] = [
   {
     id: "7cd24839-e518-4c6b-92c4-62171165c332",
     url: "https://new.raymonds.recipes/recipes/chorizo-tofu-marinade",
     source: "new.raymonds.recipes",
     status: "published",
+    prep_time: 5,
+    cook_time: null,
+    total_time: 5,
     metadata: {
       schema: {
         name: "Chorizo Tofu Marinade",
@@ -33,6 +41,9 @@ export const recipeFixtures: RecipeRow[] = [
     url: "https://new.raymonds.recipes/recipes/black-bean-mushroom-enchiladas-charred-tomatillo",
     source: "new.raymonds.recipes",
     status: "published",
+    prep_time: 20,
+    cook_time: 35,
+    total_time: 55,
     metadata: {
       schema: {
         name: "Black Bean & Mushroom Enchiladas with Charred Tomatillo Sauce",
@@ -64,6 +75,9 @@ export const recipeFixtures: RecipeRow[] = [
     url: "https://new.raymonds.recipes/recipes/thai-curry-chicken-meatballs",
     source: "new.raymonds.recipes",
     status: "published",
+    prep_time: 20,
+    cook_time: 30,
+    total_time: 50,
     metadata: {
       schema: {
         name: "Thai Curry Chicken Meatballs",
@@ -131,6 +145,9 @@ export const recipeFixtures: RecipeRow[] = [
     url: "https://new.raymonds.recipes/recipes/strawberry-oat-bars",
     source: "new.raymonds.recipes",
     status: "published",
+    prep_time: 40,
+    cook_time: 35,
+    total_time: 240,
     metadata: {
       schema: {
         name: "Strawberry Oat Bars",
@@ -162,6 +179,9 @@ export const recipeFixtures: RecipeRow[] = [
     url: "https://new.raymonds.recipes/recipes/quick-yakisoba-sauce",
     source: "new.raymonds.recipes",
     status: "published",
+    prep_time: 5,
+    cook_time: null,
+    total_time: 5,
     metadata: {
       schema: {
         name: "Quick Yakisoba Sauce",
@@ -198,6 +218,9 @@ export function makeRecipe(
     url: `https://new.raymonds.recipes/recipes/${id}`,
     source: "new.raymonds.recipes",
     status: "published",
+    prep_time: null,
+    cook_time: null,
+    total_time: null,
     metadata: { schema: { name } },
     ...overrides,
   };

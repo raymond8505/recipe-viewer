@@ -37,6 +37,82 @@ export function parseDurationToSeconds(
   return total > 0 ? total : null;
 }
 
+// ---------------------------------------------------------------------------
+// Recipe times ↔ minutes.
+//
+// `recipes.prep_time` / `cook_time` / `total_time` are integer MINUTES, while
+// SchemaRecipe (and therefore JSON-LD, the MCP tools and every scraper) speaks
+// ISO 8601. These four are the only conversion between the two, and they are
+// built on formatDuration/parseDurationToSeconds/msToIsoDuration so there is
+// still exactly one parsing rule and one formatting rule in this file.
+// ---------------------------------------------------------------------------
+
+/**
+ * ISO 8601 duration → whole minutes, for the column. Null when there is no
+ * usable duration — which includes a sub-30-second one ("PT29S" → null), since
+ * the column's NULL means "no time recorded" and rounding those to 0 would
+ * claim a zero-minute recipe instead.
+ */
+export function isoToMinutes(iso: string | undefined | null): number | null {
+  const seconds = parseDurationToSeconds(iso);
+  if (seconds === null) return null;
+  const minutes = Math.round(seconds / 60);
+  return minutes > 0 ? minutes : null;
+}
+
+/** Minutes (a column value) → ISO 8601, for the schema. */
+export function minutesToIso(
+  minutes: number | null | undefined,
+): string | undefined {
+  if (minutes == null) return undefined;
+  return msToIsoDuration(minutes, 0);
+}
+
+/** Minutes (a column value) → "1 hr 30 min" display. */
+export function formatMinutes(
+  minutes: number | null | undefined,
+): string | null {
+  return formatDuration(minutesToIso(minutes));
+}
+
+/**
+ * Parse a recipe-time field from the editor. Three-way, like `parseNumeric`:
+ * a number sets the time, `null` clears it, `undefined` means "unparseable —
+ * leave the stored value alone" (a save is never blocked by a bad time).
+ *
+ * Accepts a bare minute count ("90"), `h:mm` ("1:30"), and unit-tagged forms
+ * ("90 min", "1h30m", "1 hr 30 min"). Note the colon means HOURS here, unlike
+ * `parseMS`, where "1:30" is a 90-second step timer — a recipe written "1:30"
+ * takes an hour and a half.
+ *
+ * Zero collapses to `null`: "0 minutes" and "no time" are not a distinction
+ * the label can render, and NULL is how the column spells the latter.
+ */
+export function parseMinutesInput(raw: string): number | null | undefined {
+  const text = raw.trim().toLowerCase();
+  if (!text) return null;
+
+  const zeroed = (minutes: number) => (minutes > 0 ? minutes : null);
+
+  if (/^\d+$/.test(text)) return zeroed(parseInt(text, 10));
+
+  const clock = text.match(/^(\d+):([0-5]\d)$/);
+  if (clock) {
+    return zeroed(parseInt(clock[1], 10) * 60 + parseInt(clock[2], 10));
+  }
+
+  const tagged = text.match(
+    /^(?:(\d+)\s*(?:h|hr|hrs|hour|hours))?\s*(?:(\d+)\s*(?:m|min|mins|minute|minutes))?$/,
+  );
+  if (tagged && (tagged[1] || tagged[2])) {
+    return zeroed(
+      (tagged[1] ? parseInt(tagged[1], 10) : 0) * 60 +
+        (tagged[2] ? parseInt(tagged[2], 10) : 0),
+    );
+  }
+  return undefined;
+}
+
 const pad = (n: number) => String(n).padStart(2, "0");
 
 /** minutes/seconds → "m:ss" display; a zero duration is blank (no timer).
