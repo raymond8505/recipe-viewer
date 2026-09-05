@@ -54,26 +54,53 @@ export const TimesOnly: Story = {
 };
 
 /**
- * Edit mode: the servings cell is a numeric input that edits the recipe's
- * BASE servings (the persisted recipeYield) — unlike the stepper, which only
- * scales the display.
+ * Edit mode, the shape RecipeDetail actually renders: all four cells become
+ * inputs at once. The times are minutes over the persisted values, and the
+ * servings cell edits BASE servings (the persisted recipeYield) — unlike the
+ * stepper, which only scales the display.
  */
 export const Editing: Story = {
   args: {
     servingsEdit: { value: "4", onChange: fn() },
+    timesEdit: {
+      prep: { value: "15", onChange: fn() },
+      cook: { value: "45", onChange: fn() },
+      total: { value: "60", onChange: fn() },
+    },
   },
 };
 
 /**
- * A recipe with no yield (and no times) still shows the band while editing,
- * so servings can be added where none existed.
+ * A recipe with nothing recorded still shows the full band while editing — the
+ * recipe that has never had a cook time is exactly the one that needs
+ * somewhere to type one.
  */
-export const EditingNoYield: Story = {
+export const EditingEmptyRecipe: Story = {
   args: {
     prepTime: undefined,
     cookTime: undefined,
     totalTime: undefined,
     recipeYield: undefined,
     servingsEdit: { value: "", onChange: fn() },
+    timesEdit: {
+      prep: { value: "", onChange: fn() },
+      cook: { value: "", onChange: fn() },
+      total: { value: "", onChange: fn() },
+    },
+  },
+};
+
+/**
+ * Saving: every cell is disabled together, so the band can't be edited while
+ * the write is in flight.
+ */
+export const EditingWhileSaving: Story = {
+  args: {
+    servingsEdit: { value: "4", onChange: fn(), disabled: true },
+    timesEdit: {
+      prep: { value: "15", onChange: fn(), disabled: true },
+      cook: { value: "45", onChange: fn(), disabled: true },
+      total: { value: "60", onChange: fn(), disabled: true },
+    },
   },
 };
