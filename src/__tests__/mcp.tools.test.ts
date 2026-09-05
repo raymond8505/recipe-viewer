@@ -1,6 +1,8 @@
 // @vitest-environment node
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { makeIngredient, recipeFixtures } from "@/fixtures";
+import { makeIngredient, makeRecipe, recipeFixtures } from "@/fixtures";
+import { composeRecipeSchema } from "@/lib/recipeSchema";
+import type { SchemaRecipe } from "@/types/recipe";
 
 vi.mock("@/env", () => ({
   env: {
@@ -524,6 +526,39 @@ describe("getRecipe", () => {
     await expect(getRecipe({ id: "missing" })).rejects.toBeInstanceOf(ToolError);
   });
 
+  // Agents read metadata.schema as the recipe. Since db/migrations/0016 the
+  // row's own blob holds no lines or steps — or a FROZEN pre-migration copy on
+  // a backfilled row — so the tool composes it, on every branch, not just when
+  // it has nutrition to override.
+  it("composes metadata.schema from the columns even without ingredient nutrition", async () => {
+    const { getRecipeById } = await import("@/lib/recipes");
+    const current = makeRecipe("r-1", "Backfilled", {
+      schema: {
+        recipeIngredient: ["2 cups flour", "1 tsp salt"],
+        recipeInstructions: [{ "@type": "HowToStep", text: "Mix." }],
+      },
+    });
+    const frozen = {
+      ...current.metadata.schema,
+      recipeIngredient: ["1 egg"],
+      recipeInstructions: [],
+    } as SchemaRecipe;
+    const backfilled = { ...current, metadata: { schema: frozen } };
+    vi.mocked(getRecipeById).mockResolvedValueOnce(backfilled);
+    vi.mocked(getRecipeNormalizedNutrition).mockResolvedValueOnce(null);
+
+    const out = await getRecipe({ id: "r-1" });
+
+    expect(out.metadata.schema).toEqual(composeRecipeSchema(backfilled));
+    // Every line names its row, so an agent can hand it back unchanged.
+    expect(out.metadata.schema.recipeIngredient?.map((l) => (l as { id: string }).id)).toEqual(
+      current.ingredientRows.map((row) => row.id),
+    );
+    // The raw storage still travels alongside.
+    expect(out.ingredients).toEqual(current.ingredients);
+    expect(out.ingredientRows).toEqual(current.ingredientRows);
+  });
+
   it("replaces nutrition with the normalized per-serving values when fully covered", async () => {
     const { getRecipeById } = await import("@/lib/recipes");
     const base = recipeFixtures[0];
@@ -613,23 +648,31 @@ describe("getToken", () => {
 describe("createRecipe", () => {
   beforeEach(() => vi.clearAllMocks());
 
-  it("delegates to createRecipeRow and passes through the row", async () => {
-    const { createRecipeRow } = await import("@/lib/recipes");
-    const inserted = {
-      id: "new-id",
+  // What the repo hands back: a real RecipeRow, lines already split into rows
+  // and groups. The tool composes them back for the agent.
+  const inserted = (id: string, schema: Partial<SchemaRecipe> = {}) =>
+    makeRecipe(id, "New", {
       url: "https://example.com/r",
       source: "example.com",
       status: "draft",
-      metadata: { schema: { name: "New" } },
-    } as never;
-    vi.mocked(createRecipeRow).mockResolvedValueOnce(inserted);
+      schema,
+    });
+
+  it("delegates to createRecipeRow and returns the row with its schema composed", async () => {
+    const { createRecipeRow } = await import("@/lib/recipes");
+    const row = inserted("new-id", { recipeIngredient: ["2 cups flour"] });
+    vi.mocked(createRecipeRow).mockResolvedValueOnce(row);
 
     const out = await createRecipe({
       url: "https://example.com/r",
       source: "example.com",
-      schema: { name: "New" },
+      schema: { name: "New", recipeIngredient: ["2 cups flour"] },
     });
     expect(out.id).toBe("new-id");
+    expect(out.metadata.schema).toEqual(composeRecipeSchema(row));
+    expect(out.metadata.schema.recipeIngredient).toEqual([
+      { name: "2 cups flour", id: row.ingredientRows[0].id },
+    ]);
     expect(createRecipeRow).toHaveBeenCalledWith(
       expect.objectContaining({ url: "https://example.com/r", source: "example.com" }),
     );
@@ -637,13 +680,7 @@ describe("createRecipe", () => {
 
   it("defaults url to the recipe's own canonical page when omitted", async () => {
     const { createRecipeRow } = await import("@/lib/recipes");
-    vi.mocked(createRecipeRow).mockResolvedValueOnce({
-      id: "x",
-      url: "u",
-      source: "s",
-      status: "draft",
-      metadata: { schema: { name: "New" } },
-    } as never);
+    vi.mocked(createRecipeRow).mockResolvedValueOnce(inserted("x"));
 
     await createRecipe({ source: "example.com", schema: { name: "New" } });
 
@@ -660,13 +697,7 @@ describe("createRecipe", () => {
   // source would show a Re-scrape button pointed at its own page.
   it("defaults source to custom when url is omitted", async () => {
     const { createRecipeRow } = await import("@/lib/recipes");
-    vi.mocked(createRecipeRow).mockResolvedValueOnce({
-      id: "x",
-      url: "u",
-      source: "s",
-      status: "draft",
-      metadata: { schema: { name: "New" } },
-    } as never);
+    vi.mocked(createRecipeRow).mockResolvedValueOnce(inserted("x"));
 
     await createRecipe({ schema: { name: "New" } });
 
@@ -677,13 +708,7 @@ describe("createRecipe", () => {
 
   it("keeps an explicit source rather than defaulting it", async () => {
     const { createRecipeRow } = await import("@/lib/recipes");
-    vi.mocked(createRecipeRow).mockResolvedValueOnce({
-      id: "x",
-      url: "u",
-      source: "s",
-      status: "draft",
-      metadata: { schema: { name: "New" } },
-    } as never);
+    vi.mocked(createRecipeRow).mockResolvedValueOnce(inserted("x"));
 
     await createRecipe({ source: "instagram.com", schema: { name: "New" } });
 
@@ -692,13 +717,7 @@ describe("createRecipe", () => {
 
   it("ignores cookingNotes and returns a warning explaining why", async () => {
     const { createRecipeRow } = await import("@/lib/recipes");
-    vi.mocked(createRecipeRow).mockResolvedValueOnce({
-      id: "x",
-      url: "u",
-      source: "s",
-      status: "draft",
-      metadata: { schema: { name: "New" } },
-    } as never);
+    vi.mocked(createRecipeRow).mockResolvedValueOnce(inserted("x"));
 
     const out = await createRecipe({
       source: "example.com",
@@ -724,7 +743,9 @@ describe("updateRecipe", () => {
 
   it("delegates to updateRecipeRow with the patch", async () => {
     const { updateRecipeRow } = await import("@/lib/recipes");
-    const existing = recipeFixtures[0];
+    // The fixture WITH ingredient lines, so the composed echo has something
+    // to show for it (fixture 0 is a marinade with none).
+    const existing = recipeFixtures[2];
     const updated = {
       ...existing,
       metadata: { schema: { ...existing.metadata.schema, description: "patched" } },
@@ -733,6 +754,10 @@ describe("updateRecipe", () => {
 
     const out = await updateRecipe({ id: existing.id, schema: { description: "patched" } });
     expect(out.metadata.schema.description).toBe("patched");
+    // The echo is the whole composed recipe, lines with their row ids included,
+    // so an agent can edit and send it straight back.
+    expect(out.metadata.schema).toEqual(composeRecipeSchema(updated));
+    expect(out.metadata.schema.recipeIngredient?.length).toBeGreaterThan(0);
     expect(updateRecipeRow).toHaveBeenCalledWith(
       existing.id,
       expect.objectContaining({ schema: { description: "patched" } }),

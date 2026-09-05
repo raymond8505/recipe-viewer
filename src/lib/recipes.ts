@@ -277,9 +277,12 @@ export async function createRecipeRow(input: CreateRecipeInput): Promise<RecipeR
   return hydrate(row, inserts.map((r) => insertedRow(r, row.id)));
 }
 
-// Patch fields on an existing recipe. The `schema` field is merged into the
-// existing metadata.schema (not replaced). Throws RecipeRepoError("not_found")
-// if the row doesn't exist, or ("update_failed") on Supabase failure.
+// Patch fields on an existing recipe. Within `schema`, the stored fields merge
+// into the existing metadata.schema (not replaced), while `recipeIngredient`
+// and `recipeInstructions` replace their columns wholesale — a line keeps its
+// row only if it carries that row's id (see reconcileRecipeIngredients).
+// Throws RecipeRepoError("not_found") if the row doesn't exist, or
+// ("update_failed") on Supabase failure.
 //
 // When `patch` has no defined fields, the existing row is returned unchanged
 // without writing to Supabase.

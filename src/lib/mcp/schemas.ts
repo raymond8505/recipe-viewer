@@ -82,7 +82,14 @@ const schemaRecipeJsonSchema = {
           {
             type: "object",
             required: ["name"],
-            properties: { name: { type: "string" }, group: { type: "string" } },
+            properties: {
+              name: { type: "string" },
+              group: { type: "string" },
+              id: {
+                type: "string",
+                description: `The recipe_ingredients row this line IS, as returned by ${TOOL.get_recipe}. Pass it back unchanged to keep the line's curated catalog association; omit it only for a genuinely new line.`,
+              },
+            },
           },
         ],
       },
@@ -293,7 +300,7 @@ export const TOOL_SCHEMAS = {
       schema: {
         ...schemaRecipeJsonSchema,
         required: [],
-        description: "Partial SchemaRecipe; merged into existing metadata.schema",
+        description: `Partial SchemaRecipe — only the fields you pass change. recipeIngredient and recipeInstructions replace the whole list when present; keep each line's id from ${TOOL.get_recipe}.`,
       },
     },
   },

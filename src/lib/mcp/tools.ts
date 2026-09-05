@@ -33,7 +33,7 @@ import {
   StorageUploadError,
   uploadRecipeImage as uploadImageToStorage,
 } from "@/lib/storage";
-import type { RecipeRow } from "@/types/recipe";
+import type { RecipeRow, SchemaRecipe } from "@/types/recipe";
 import type {
   RecipeCreateInput,
   RecipeIdInput,
@@ -235,7 +235,29 @@ export async function deleteIngredient(
   }
 }
 
-export async function getRecipe(args: RecipeIdInput): Promise<RecipeRow> {
+/**
+ * A recipe as the tools hand it to an agent: the row, with `metadata.schema`
+ * holding the WHOLE composed SchemaRecipe rather than the stored half.
+ *
+ * Since db/migrations/0016 the row's own `metadata.schema` carries no lines or
+ * steps — or, on a backfilled row, a frozen pre-migration copy of both. An
+ * agent reading `metadata.schema.recipeIngredient` off the raw row would get
+ * stale text on one recipe and nothing on the next, and neither fails loudly.
+ * Every tool that returns a recipe goes through `withComposedSchema` so the
+ * field means the same thing everywhere.
+ */
+export type ToolRecipe = Omit<RecipeRow, "metadata"> & {
+  metadata: { schema: SchemaRecipe };
+};
+
+function withComposedSchema(
+  row: RecipeRow,
+  schema: SchemaRecipe = composeRecipeSchema(row),
+): ToolRecipe {
+  return { ...row, metadata: { ...row.metadata, schema } };
+}
+
+export async function getRecipe(args: RecipeIdInput): Promise<ToolRecipe> {
   const row = await getRecipeById(args.id);
   if (!row) throw new ToolError("not_found", `Recipe ${args.id} not found`);
 
@@ -249,21 +271,15 @@ export async function getRecipe(args: RecipeIdInput): Promise<RecipeRow> {
     schema.recipeIngredient ?? [],
   );
   const resolved = new ScalableRecipe(schema, undefined, normalized).nutrition();
-  if (resolved?.source !== "ingredients") return row;
+  if (resolved?.source !== "ingredients") return withComposedSchema(row, schema);
 
-  return {
-    ...row,
-    metadata: {
-      ...row.metadata,
-      schema: {
-        ...schema,
-        nutrition: {
-          "@type": "NutritionInformation",
-          ...nutrientValuesToSchema(resolved.values),
-        },
-      },
+  return withComposedSchema(row, {
+    ...schema,
+    nutrition: {
+      "@type": "NutritionInformation",
+      ...nutrientValuesToSchema(resolved.values),
     },
-  };
+  });
 }
 
 export async function getToken(
@@ -284,7 +300,7 @@ export async function getToken(
 const COOKING_NOTES_IGNORED_WARNING =
   "cookingNotes is read-only for agents and was ignored — it is authored by users in cooking mode. Use the clear_cooking_notes tool when explicitly asked to clear it.";
 
-export type RecipeRowWithWarnings = RecipeRow & { warnings?: string[] };
+export type RecipeRowWithWarnings = ToolRecipe & { warnings?: string[] };
 
 export async function createRecipe(
   args: RecipeCreateInput,
@@ -302,13 +318,15 @@ export async function createRecipe(
   // to re-scrape — see isOwnRecipe.
   const source = args.source ?? CUSTOM_RECIPE_SOURCE;
   try {
-    const row = await createRecipeRow({
-      id,
-      url,
-      source,
-      status: args.status,
-      schema,
-    });
+    const row = withComposedSchema(
+      await createRecipeRow({
+        id,
+        url,
+        source,
+        status: args.status,
+        schema,
+      }),
+    );
     return cookingNotes !== undefined
       ? { ...row, warnings: [COOKING_NOTES_IGNORED_WARNING] }
       : row;
@@ -322,12 +340,14 @@ export async function updateRecipe(
 ): Promise<RecipeRowWithWarnings> {
   const { cookingNotes, ...schema } = args.schema ?? {};
   try {
-    const row = await updateRecipeRow(args.id, {
-      url: args.url,
-      source: args.source,
-      status: args.status,
-      schema: args.schema !== undefined ? schema : undefined,
-    });
+    const row = withComposedSchema(
+      await updateRecipeRow(args.id, {
+        url: args.url,
+        source: args.source,
+        status: args.status,
+        schema: args.schema !== undefined ? schema : undefined,
+      }),
+    );
     return cookingNotes !== undefined
       ? { ...row, warnings: [COOKING_NOTES_IGNORED_WARNING] }
       : row;
@@ -338,9 +358,11 @@ export async function updateRecipe(
 
 // The only agent-writable path for cookingNotes. Sets it to empty string;
 // used when the user explicitly asks to clear notes (e.g. after applying them).
-export async function clearCookingNotes(args: RecipeIdInput): Promise<RecipeRow> {
+export async function clearCookingNotes(args: RecipeIdInput): Promise<ToolRecipe> {
   try {
-    return await updateRecipeRow(args.id, { schema: { cookingNotes: "" } });
+    return withComposedSchema(
+      await updateRecipeRow(args.id, { schema: { cookingNotes: "" } }),
+    );
   } catch (err) {
     throw toToolError(err, "update_failed");
   }
@@ -359,7 +381,7 @@ export async function deleteRecipe(
 
 export async function uploadRecipeImage(
   args: RecipeImageUploadInput,
-): Promise<RecipeRow> {
+): Promise<ToolRecipe> {
   let bytes: Buffer;
   let contentType: string;
 
@@ -387,7 +409,9 @@ export async function uploadRecipeImage(
     throw new ToolError("upload_failed", err instanceof Error ? err.message : "Upload failed");
   }
   try {
-    return await updateRecipeRow(args.id, { schema: { image: imageUrl } });
+    return withComposedSchema(
+      await updateRecipeRow(args.id, { schema: { image: imageUrl } }),
+    );
   } catch (err) {
     throw toToolError(err, "update_failed");
   }
