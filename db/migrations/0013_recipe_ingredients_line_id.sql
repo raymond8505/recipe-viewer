@@ -19,6 +19,14 @@
 -- position, after which every row has one. The partial unique index enforces
 -- one row per line per recipe wherever the value is present, which is also
 -- what lets normalization upsert on it.
+--
+-- Postscript (2026-09, after 0016): `line_id` is dead. 0016 pointed
+-- recipes.ingredients straight at this table's own `id`, so the row IS the
+-- line and nothing needs a synthetic handle; new rows leave it null and
+-- nothing reads it. The column and its index are retained as artifacts of
+-- this shape rather than dropped, and scripts/backfill-line-ids.ts is gone.
+-- The column comment below ("The join key") describes the world between this
+-- migration and 0016 only.
 
 alter table public.recipe_ingredients
   add column if not exists line_id text;

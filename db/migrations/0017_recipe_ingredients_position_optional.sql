@@ -28,6 +28,12 @@
 -- on the constraint for correctness — 0014's comment records that the
 -- constraint was an obstacle to reordering rather than a guarantee anything
 -- wanted.
+--
+-- Postscript (2026-09): "0018 does the actual drop" was superseded — the
+-- column stays, dead, alongside line_id (see 0016's postscript). 0018 is
+-- reserved for the RPC rewrite instead. The applied column comment below
+-- still says "dropped in 0018"; it is only a comment, so it is left rather
+-- than spending a migration on it.
 
 alter table public.recipe_ingredients
   drop constraint if exists recipe_ingredients_recipe_id_position_key;

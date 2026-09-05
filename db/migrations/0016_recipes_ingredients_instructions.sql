@@ -62,6 +62,19 @@
 -- distinction anything acts on (every reader already spelled it `?? []`), and
 -- the default is what lets this run ahead of the backfill without a null-check
 -- appearing in every consumer.
+--
+-- Postscript (2026-09): the two forward references above did not happen as
+-- written. 0017 only gave `position` a default and dropped its unique
+-- constraint (the bridge that let both builds write at once); it did NOT drop
+-- line_id/position, strip the blob keys, or touch the RPCs. The decision since
+-- is that line_id, position and the metadata.schema copies of
+-- recipeIngredient/recipeInstructions all STAY, as dead artifacts of the old
+-- shape — nothing reads them, and dropping them buys nothing worth a second
+-- rollout window. That makes the blob copies frozen at backfill time, which is
+-- exactly why every reader must go through composeRecipeSchema
+-- (src/lib/recipeSchema.ts) rather than metadata.schema. The RPC rewrite that
+-- hands n8n a composed schema is a separate 0018, to land after this build
+-- deploys.
 
 alter table public.recipes
   add column if not exists ingredients  jsonb not null default '[]'::jsonb,

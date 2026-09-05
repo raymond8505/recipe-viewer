@@ -88,9 +88,9 @@ export default function NutritionDetailRow({
 }) {
   const { row, ingredient, computation, enabled } = line;
   const excluded = computation.kind === "excluded";
-  // Grams only matter for a matched line. "stale" now means the line has no row
-  // of its own — either none at all, or a legacy positional one about to be
-  // rebuilt — so there is nothing to edit a weight on either way. A reworded
+  // Grams only matter for a matched line. "stale" means the line has no row of
+  // its own (since db/migrations/0016 a line's id IS its row, so that is the
+  // only way to be stale), and there is nothing to edit a weight on. A reworded
   // line is NOT stale: its row followed the edit and keeps its grams.
   const isStale =
     computation.kind === "excluded" && computation.reason === "stale";

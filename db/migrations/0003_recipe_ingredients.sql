@@ -15,6 +15,13 @@
 -- cascades) if the referenced ingredient is deleted.
 --
 -- Service-role-only: RLS enabled with no policies (see 0002).
+--
+-- Postscript (2026-09, after 0016): "the recipe's schema stays the display
+-- source of truth — these rows never feed back into recipe text" was inverted
+-- by 0016. raw_text IS the recipe's ingredient text now; recipes.ingredients
+-- orders these rows by id, and a line's identity is this row's primary key.
+-- `position` and its unique constraint are dead (0017). Read 0016's header
+-- before reasoning from this one.
 
 create table public.recipe_ingredients (
   id uuid primary key default gen_random_uuid(),
