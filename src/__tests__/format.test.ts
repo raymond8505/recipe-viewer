@@ -20,6 +20,7 @@ import {
   normalizeRecipeInstructions,
   toSchemaOrgJsonLd,
   msToIsoDuration,
+  isIsoDuration,
   isoToMinutes,
   minutesToIso,
   formatMinutes,
@@ -800,5 +801,32 @@ describe("parseMinutesInput", () => {
     expect(parseMinutesInput("a while")).toBeUndefined();
     expect(parseMinutesInput("-5")).toBeUndefined();
     expect(parseMinutesInput("1:75")).toBeUndefined();
+  });
+});
+
+describe("isIsoDuration", () => {
+  it("accepts the time-only durations the readers parse", () => {
+    expect(isIsoDuration("PT1H30M")).toBe(true);
+    expect(isIsoDuration("PT45S")).toBe(true);
+  });
+
+  it("accepts a well-formed zero — a no-cook recipe saying so explicitly", () => {
+    // The distinction this predicate exists for: formatDuration and
+    // parseDurationToSeconds both return null here AND for "P4D", but only
+    // one of the two is a value we failed to read.
+    expect(isIsoDuration("PT0M")).toBe(true);
+    expect(isIsoDuration("PT0S")).toBe(true);
+  });
+
+  it("rejects date-bearing durations and human text", () => {
+    expect(isIsoDuration("P4D")).toBe(false);
+    expect(isIsoDuration("P1DT13H20M")).toBe(false);
+    expect(isIsoDuration("20–22 min")).toBe(false);
+  });
+
+  it("rejects blank and absent input", () => {
+    expect(isIsoDuration("")).toBe(false);
+    expect(isIsoDuration(null)).toBe(false);
+    expect(isIsoDuration(undefined)).toBe(false);
   });
 });

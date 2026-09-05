@@ -1,3 +1,20 @@
+// The grammar both duration readers accept: the time-only subset of ISO 8601,
+// which is all a recipe ever carries. Date-bearing forms ("P4D", "P1DT13H20M")
+// are deliberately outside it — see isIsoDuration.
+const ISO_DURATION = /^PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?$/;
+
+/**
+ * Whether a string is a duration this module can read at all — as distinct
+ * from one that reads as *no* time. "PT0M" is a well-formed zero (a no-cook
+ * recipe says so explicitly); "P4D" and "20–22 min" are not durations we can
+ * interpret. Both make formatDuration and parseDurationToSeconds return null,
+ * so anything that must not silently discard a value — the time backfill —
+ * needs this to tell the two apart.
+ */
+export function isIsoDuration(value: string | undefined | null): boolean {
+  return !!value && ISO_DURATION.test(value);
+}
+
 /**
  * Parse an ISO 8601 duration string into a human-readable format.
  * e.g. "PT1H30M" → "1 hr 30 min", "PT45M" → "45 min"
@@ -5,7 +22,7 @@
 export function formatDuration(iso: string | undefined | null): string | null {
   if (!iso) return null;
 
-  const match = iso.match(/^PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?$/);
+  const match = iso.match(ISO_DURATION);
   if (!match) return null;
 
   const hours = match[1] ? parseInt(match[1], 10) : 0;
@@ -28,7 +45,7 @@ export function parseDurationToSeconds(
   iso: string | undefined | null,
 ): number | null {
   if (!iso) return null;
-  const match = iso.match(/^PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?$/);
+  const match = iso.match(ISO_DURATION);
   if (!match) return null;
   const hours = match[1] ? parseInt(match[1], 10) : 0;
   const minutes = match[2] ? parseInt(match[2], 10) : 0;
