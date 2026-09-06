@@ -103,7 +103,7 @@ const TOOL_IMPLS: {
     call: (args) => deleteIngredient(ingredientIdInputSchema.parse(args)),
   },
   get_recipe: {
-    description: "Fetch the full recipe row (including metadata.schema) for a given recipe UUID.",
+    description: `Fetch the full recipe row for a given recipe UUID. metadata.schema is the WHOLE recipe (SchemaRecipe): each recipeIngredient line is an object whose id is its recipe_ingredients row — keep that id when you send lines back through ${TOOL.update_recipe}. The row also carries the raw storage: ingredients (ordered groups of row ids) and ingredientRows (the parsed lines with their catalog associations).`,
     call: (args) => getRecipe(recipeIdInputSchema.parse(args)),
   },
   get_token: {
@@ -115,7 +115,7 @@ const TOOL_IMPLS: {
     call: (args) => createRecipe(recipeCreateInputSchema.parse(args)),
   },
   update_recipe: {
-    description: `Patch fields on an existing recipe. The schema field is merged into existing metadata.schema (not replaced). Prefer a structured QuantitativeValue for recipeYield (value = serving count, unitText = its label, valueReference = raw weight/volume in metric units ${METRIC_UNIT_SLASHES} for per-serving nutrition); plain-string yields are accepted but deprecated. cookingNotes is read-only for agents: if present it is ignored (the call still succeeds) and the response carries a 'warnings' note. Use ${TOOL.clear_cooking_notes} to clear it.`,
+    description: `Patch fields on an existing recipe — only the fields you pass change. Within schema, most fields merge into what is stored, but recipeIngredient and recipeInstructions REPLACE the whole list when present. Send every ingredient line back with the id ${TOOL.get_recipe} returned for it: a line without an id (or with an unknown one) becomes a new row and loses the catalog association curated on the old one. Prefer a structured QuantitativeValue for recipeYield (value = serving count, unitText = its label, valueReference = raw weight/volume in metric units ${METRIC_UNIT_SLASHES} for per-serving nutrition); plain-string yields are accepted but deprecated. cookingNotes is read-only for agents: if present it is ignored (the call still succeeds) and the response carries a 'warnings' note. Use ${TOOL.clear_cooking_notes} to clear it.`,
     call: (args) => updateRecipe(recipeUpdateInputSchema.parse(args)),
   },
   clear_cooking_notes: {

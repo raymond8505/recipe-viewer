@@ -4,6 +4,7 @@ import type { SchemaRecipe } from "@/types/recipe";
 import type { RecipeStatus } from "@/lib/recipes";
 import { requireSessionOrRecipeToken } from "@/lib/api/guard";
 import { canonicalizeRecipeSource } from "@/lib/format";
+import { composeRecipeSchema } from "@/lib/recipeSchema";
 
 export const POST = requireSessionOrRecipeToken(
   async (
@@ -60,8 +61,16 @@ export const POST = requireSessionOrRecipeToken(
     // can re-seed its state from what was actually persisted rather than from
     // its own draft — the two differ whenever a value degrades (blank source) or
     // is canonicalized server-side.
+    //
+    // The schema is COMPOSED, not `saved.metadata.schema`: since
+    // db/migrations/0016 the blob holds neither the lines nor the steps (or, on
+    // a backfilled row, a frozen pre-migration copy of both), and the client
+    // adopts this value as its live schema. Echoing the blob would render the
+    // page without its ingredients until a reload — and the next save would
+    // hand back lines whose ids name no row, recreating every row and dropping
+    // the associations curated on them.
     return NextResponse.json({
-      schema: saved.metadata.schema,
+      schema: composeRecipeSchema(saved),
       status: saved.status,
       url: saved.url,
       source: saved.source,

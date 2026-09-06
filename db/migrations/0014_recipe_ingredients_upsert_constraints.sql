@@ -31,6 +31,13 @@
 --    (This is why the writers batch position changes into ONE statement:
 --    initially-deferred only helps within a transaction, and PostgREST gives
 --    each request exactly one.)
+--
+-- Postscript (2026-09, after 0016/0017): both halves are moot. 0016 made a
+-- line's identity the row's own primary key and its order the index in
+-- recipes.ingredients, so `line_id` is no longer anything's ON CONFLICT
+-- target, and 0017 dropped the deferred (recipe_id, position) constraint
+-- outright — the reorder problem it deferred can't arise when nothing writes
+-- position. The line_id index remains as an inert artifact.
 
 drop index if exists public.recipe_ingredients_recipe_line_key;
 

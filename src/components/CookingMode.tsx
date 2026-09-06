@@ -43,6 +43,7 @@ import {
 import IngredientItem from "@/components/IngredientItem";
 import TimeYieldStats from "@/components/TimeYieldStats";
 import NutritionPanel from "@/components/NutritionPanel";
+import { composeRecipeSchema } from "@/lib/recipeSchema";
 
 interface CookingModeProps {
   recipe: RecipeRow;
@@ -98,9 +99,13 @@ export default function CookingMode({
     resetAll,
   } = useTimers(recipe.url);
 
-  const [schema, setSchema] = useState(recipe.metadata.schema);
+  // One instance per row: composeRecipeSchema builds a fresh object every call,
+  // and the identity of this one is what tells the effects below whether the
+  // schema is still the one the server computed `normalizedNutrition` against.
+  const baseSchema = useMemo(() => composeRecipeSchema(recipe), [recipe]);
+  const [schema, setSchema] = useState(baseSchema);
   const [cookingNotes, setCookingNotes] = useState(
-    () => recipe.metadata.schema.cookingNotes ?? "",
+    () => baseSchema.cookingNotes ?? "",
   );
   const [notesSaveState, setNotesSaveState] = useState<
     "idle" | "saving" | "saved" | "error"
@@ -122,7 +127,7 @@ export default function CookingMode({
   const [scalables, setScalables] = useState<Map<string, ScalableRecipe>>(
     () =>
       new Map([
-        [recipe.id, new ScalableRecipe(recipe.metadata.schema, undefined, normalizedNutrition)],
+        [recipe.id, new ScalableRecipe(baseSchema, undefined, normalizedNutrition)],
       ]),
   );
 
@@ -135,7 +140,7 @@ export default function CookingMode({
     setScalables((prev) => {
       const next = new Map(prev);
       const normalized =
-        schema === recipe.metadata.schema ? normalizedNutrition : undefined;
+        schema === baseSchema ? normalizedNutrition : undefined;
       next.set(recipe.id, new ScalableRecipe(schema, undefined, normalized));
       return next;
     });
@@ -204,7 +209,7 @@ export default function CookingMode({
   }, [cookingNotes]);
 
   useEffect(() => {
-    registerCookingModeRecipe(recipe.metadata.schema, setSchema);
+    registerCookingModeRecipe(baseSchema, setSchema);
     return () => unregisterCookingModeRecipe();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -284,17 +289,18 @@ export default function CookingMode({
   };
 
   const handleAddToMeal = (newRecipe: RecipeRow) => {
+    const newSchema = composeRecipeSchema(newRecipe);
     setMealRecipes((prev) => [...prev, newRecipe]);
     setCompletedStepsMap((prev) => new Map(prev).set(newRecipe.id, new Set()));
     setScalables((prev) =>
       new Map(prev).set(
         newRecipe.id,
-        new ScalableRecipe(newRecipe.metadata.schema),
+        new ScalableRecipe(newSchema),
       ),
     );
     // Seed this recipe's timers unconditionally (bypass the "skip if timers > 0" guard on mount)
     const seededIds: string[] = [];
-    for (const item of newRecipe.metadata.schema.recipeInstructions ?? []) {
+    for (const item of newSchema.recipeInstructions ?? []) {
       const steps =
         item["@type"] === "HowToSection"
           ? (item as HowToSection).itemListElement

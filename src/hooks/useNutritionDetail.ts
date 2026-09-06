@@ -36,7 +36,7 @@ export type CatalogIngredientSummary = Pick<
 >;
 
 export interface NutritionDetailLine {
-  /** Original index into schemaIngredients — also recipe_ingredients.position. */
+  /** Original index into schemaIngredients. A render-time position, not a join key. */
   index: number;
   /** The recipe's display text for this line (the source of truth). */
   text: string;
@@ -57,7 +57,7 @@ export interface NutritionDetailGroup {
 }
 
 // State + derived math for the NutritionDetail screen. Rows join to schema
-// lines via `resolveLineRow` (stable line id, position only for legacy lines);
+// lines via `resolveLineRow` (the line's id IS the row's primary key);
 // a line with no row is "stale" and excluded from totals until normalization
 // gives it one. Association changes are non-optimistic: await the PATCH, then
 // update local state — totals recompute via useMemo.
@@ -86,8 +86,8 @@ export function useNutritionDetail(
   // never-normalized line has no row.
   const [savingLineIndex, setSavingLineIndex] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
-  // Keyed by schema position — the same index the row join falls back to, and
-  // the one `updateLineText` addresses a line by. Stable for the page's
+  // Keyed by schema position — the index `updateLineText` addresses a line by.
+  // (The row join itself is by id, not this.) Stable for the page's
   // lifetime even though `schemaLines` is now local state: an inline edit
   // rewrites one line's text in place and never reorders, adds, or removes, so
   // a switched-off line can't silently change identity under the user mid-edit.
@@ -101,7 +101,7 @@ export function useNutritionDetail(
       ({ heading, items }) => {
         const lines = items.map(({ ingredient: schemaIngredient, index }) => {
           const text = getIngredientText(schemaIngredient);
-          const resolved = resolveLineRow(schemaIngredient, index, rowIndex);
+          const resolved = resolveLineRow(schemaIngredient, rowIndex);
           const row = resolved.row;
           // Resolve the catalog row purely from ingredient_id, the same join
           // computeRecipeNutrition does. Staleness deliberately does NOT gate
@@ -123,7 +123,7 @@ export function useNutritionDetail(
             text,
             row,
             ingredient,
-            computation: lineComputationForSchema(text, resolved, ingredient),
+            computation: lineComputationForSchema(resolved, ingredient),
             enabled: !disabledIndexes.has(index),
           };
         });

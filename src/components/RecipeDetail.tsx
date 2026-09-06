@@ -38,6 +38,7 @@ import TimeYieldStats from "./TimeYieldStats";
 import NutritionPanel from "./NutritionPanel";
 import RecipeTitleInput from "./RecipeTitleInput";
 import { Textarea } from "@/components/ui/textarea";
+import { composeRecipeSchema } from "@/lib/recipeSchema";
 
 interface RecipeDetailProps {
   recipe: RecipeRow;
@@ -66,7 +67,11 @@ export default function RecipeDetail({
   maxImageBytes = DEFAULT_MAX_IMAGE_BYTES,
   normalizedNutrition,
 }: RecipeDetailProps) {
-  const [schema, setSchema] = useState(recipe.metadata.schema);
+  // One instance per row: composeRecipeSchema builds a fresh object every call,
+  // and the identity of this one is what `normalizedForSchema` below compares
+  // against to decide whether the server's total still describes this schema.
+  const baseSchema = useMemo(() => composeRecipeSchema(recipe), [recipe]);
+  const [schema, setSchema] = useState(baseSchema);
   const [status, setStatus] = useState(recipe.status ?? "draft");
   // Tracked in state alongside `status` rather than read off the prop: editing
   // it must flip the Re-scrape button immediately (isOwnRecipe reads it), and
@@ -86,7 +91,7 @@ export default function RecipeDetail({
   // client-side edit/re-scrape swaps `schema`, invalidating it — so only apply
   // it while the schema is still the one it was derived from.
   const normalizedForSchema =
-    schema === recipe.metadata.schema ? normalizedNutrition : undefined;
+    schema === baseSchema ? normalizedNutrition : undefined;
   const {
     recipe: scalable,
     scalePortionsTo,

@@ -7,6 +7,7 @@ import { getIsLoggedIn } from "@/lib/auth";
 import { canCurateNutrition } from "@/lib/devAccess";
 import { env } from "@/env";
 import RecipeDetail from "@/components/RecipeDetail";
+import { composeRecipeSchema } from "@/lib/recipeSchema";
 
 interface RecipePageProps {
   params: Promise<{ id: string }>;
@@ -19,7 +20,7 @@ export async function generateMetadata({
   const recipe = await getRecipeById(id);
   if (!recipe) return { title: "Recipe Not Found" };
 
-  const { schema } = recipe.metadata;
+  const schema = composeRecipeSchema(recipe);
   const image = getFirstImage(schema.image);
   const description = schema.description ?? undefined;
 
@@ -55,7 +56,7 @@ export default async function RecipePage({ params }: RecipePageProps) {
   // Preferred over the schema's own nutrition fields when fully covered.
   const normalizedNutrition = await getRecipeNormalizedNutrition(
     id,
-    recipe.metadata.schema.recipeIngredient ?? [],
+    composeRecipeSchema(recipe).recipeIngredient ?? [],
   );
 
   return (

@@ -3,28 +3,36 @@
 //   yarn backfill:normalization              # process everything pending
 //   yarn backfill:normalization --limit=10   # cap a pass (smoke-testing)
 //
-// Selects recipes whose stored normalized_fingerprint doesn't match their
-// current ingredient text (covers never-normalized, failed, and stale rows —
-// runNormalization only writes the fingerprint on a completed run, so
+// A recipe is pending when its stored normalized_fingerprint doesn't match the
+// fingerprint of its CURRENT lines (covers never-normalized, failed, and stale
+// rows — runNormalization only writes the fingerprint on a completed run, so
 // re-running this script naturally resumes where the last pass left off).
 //
-// Sequential with a fixed delay: the only USDA spend is novel-ingredient
-// lookups (~2 requests each, 1,000/hr budget), and early passes are
-// novel-heavy by definition. Runs outside a request scope on purpose — it
-// calls runNormalization directly, not the trigger.
+// "Current" means the composed recipe (recipeFingerprint → composeRecipeSchema),
+// never metadata.schema: since db/migrations/0016 the line text lives on the
+// recipe_ingredients rows, and the blob's own recipeIngredient is a frozen
+// pre-migration copy on every backfilled row. Hashing that copy silently
+// selects the wrong set. Each recipe is fetched through getRecipeById on its
+// turn rather than in one bulk query — a single .in() over every recipe id
+// would exceed the PostgREST URL limit, and the rows for all of them would
+// exceed its 1,000-row page.
+//
+// Normalization is human-in-the-loop: this exists for recovery passes, not for
+// bulk-guessing the whole catalog. Sequential with a fixed delay: the only USDA
+// spend is novel-ingredient lookups (~2 requests each, 1,000/hr budget), and
+// early passes are novel-heavy by definition. Runs outside a request scope on
+// purpose — it calls runNormalization directly, not the trigger.
 
-import { ingredientFingerprint } from "@/lib/normalization/fingerprint";
+import { recipeFingerprint } from "@/lib/normalization/fingerprint";
 import { runNormalization } from "@/lib/normalization/graph";
+import { getRecipeById } from "@/lib/recipes";
 import { getSupabaseAdminClient } from "@/lib/supabase";
-import type { SchemaRecipe } from "@/types/recipe";
 
 const DELAY_MS = 3_000;
 
 interface BackfillRow {
   id: string;
   normalized_fingerprint: string | null;
-  // schema is absent on legacy/malformed rows — guarded before use.
-  metadata: { schema?: SchemaRecipe } | null;
 }
 
 function parseLimit(): number {
@@ -44,7 +52,7 @@ async function main() {
 
   const { data, error } = await supabase
     .from("recipes")
-    .select("id, normalized_fingerprint, metadata")
+    .select("id, normalized_fingerprint")
     .order("created_at", { ascending: true });
 
   if (error) {
@@ -53,42 +61,33 @@ async function main() {
   }
 
   const rows = (data as unknown as BackfillRow[]) ?? [];
+  console.log(`${rows.length} recipes total; scanning for stale fingerprints…`);
 
-  // Legacy/malformed rows carry no metadata.schema — they can't be
-  // fingerprinted or normalized, so skip them loudly instead of crashing the
-  // whole pass on one bad row.
-  const skipped = rows.filter((row) => !row.metadata?.schema);
-  if (skipped.length > 0) {
-    console.warn(
-      `Skipping ${skipped.length} recipe(s) with no metadata.schema: ${skipped
-        .map((row) => row.id)
-        .join(", ")}`,
-    );
-  }
+  // Lazy: staleness is decided one recipe at a time so a --limit pass stops as
+  // soon as it has done its N, instead of fetching all 500+ recipes up front.
+  let scanned = 0;
+  let processed = 0;
+  for (const row of rows) {
+    if (processed >= limit) break;
+    scanned++;
 
-  const pending = rows.filter((row) => {
-    const schema = row.metadata?.schema;
-    if (!schema) return false;
-    return row.normalized_fingerprint !== ingredientFingerprint(schema);
-  });
-  const target = Math.min(pending.length, limit);
+    const recipe = await getRecipeById(row.id);
+    if (!recipe) continue; // deleted between the listing and now
+    if (row.normalized_fingerprint === recipeFingerprint(recipe)) continue;
 
-  console.log(
-    `${rows.length} recipes total; ${pending.length} pending normalization; processing ${target}.`,
-  );
-
-  for (let i = 0; i < target; i++) {
-    const row = pending[i];
-    console.log(`[${i + 1}/${target}] normalizing ${row.id}…`);
+    if (processed > 0) {
+      await new Promise((resolve) => setTimeout(resolve, DELAY_MS));
+    }
+    processed++;
+    console.log(`[${processed}] normalizing ${row.id}…`);
     // Never throws — failures land as normalization_status="failed" on the
     // row and are retried by the next pass.
     await runNormalization(row.id);
-    if (i < target - 1) {
-      await new Promise((resolve) => setTimeout(resolve, DELAY_MS));
-    }
   }
 
-  console.log(`Backfill pass complete: ${target} processed.`);
+  console.log(
+    `Backfill pass complete: ${processed} processed (${scanned} of ${rows.length} scanned).`,
+  );
 }
 
 void main();

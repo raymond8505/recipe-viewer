@@ -188,9 +188,9 @@ export function makeRecipeIngredient(
   return {
     id: `ri-${recipeId}-${position}`,
     recipe_id: recipeId,
-    // Null by default so fixtures exercise the legacy path (rows predating
-    // db/migrations/0013, joined by position). Tests covering the line-id
-    // join set it explicitly.
+    // Dead columns kept as artifacts of the pre-0016 shape — a line's identity
+    // is this row's own `id` and its position is its index in
+    // `recipes.ingredients`. Nothing reads either.
     line_id: null,
     ingredient_id: null,
     raw_text: "1 tsp cumin seed",
@@ -205,6 +205,20 @@ export function makeRecipeIngredient(
     grams_source: null,
     ...overrides,
   };
+}
+
+/**
+ * The schema line a row is the parse of. Since db/migrations/0016 the pairing
+ * IS the row's id, so a fixture that wants a line joined to a row must build it
+ * from that row rather than from bare text.
+ */
+export function makeLineFor(
+  row: RecipeIngredientRow,
+  group?: string,
+): RecipeIngredient {
+  return group == null
+    ? { name: row.raw_text, id: row.id }
+    : { name: row.raw_text, group, id: row.id };
 }
 
 /**
@@ -226,10 +240,8 @@ export const matchedLinesScenario: {
   recipeYield: string;
   initialRows: RecipeIngredientRow[];
   initialIngredients: IngredientRow[];
-} = {
-  schemaIngredients: ["2 tsp cumin seed", "1 tbsp olive oil"],
-  recipeYield: "2 servings",
-  initialRows: [
+} = (() => {
+  const initialRows = [
     makeRecipeIngredient("story-recipe", 0, {
       raw_text: "2 tsp cumin seed",
       quantity: 2,
@@ -246,6 +258,13 @@ export const matchedLinesScenario: {
       ingredient_id: ingredientFixtures[2].id,
       match_status: "matched",
     }),
-  ],
-  initialIngredients: [ingredientFixtures[0], ingredientFixtures[2]],
-};
+  ];
+  return {
+    // Derived from the rows, not restated: the line's id IS the row's id, so
+    // writing the text twice would let the pairing drift silently.
+    schemaIngredients: initialRows.map((row) => makeLineFor(row)),
+    recipeYield: "2 servings",
+    initialRows,
+    initialIngredients: [ingredientFixtures[0], ingredientFixtures[2]],
+  };
+})();

@@ -395,8 +395,9 @@ describe("groupIngredientsWithIndex", () => {
     ];
     const result = groupIngredientsWithIndex(ingredients);
     expect(result.map((g) => g.heading)).toEqual(["Cake", "Frosting"]);
-    // "1 cup sugar" moved into the Cake bucket but keeps index 2 — the join
-    // key back to recipe_ingredients.position.
+    // "1 cup sugar" moved into the Cake bucket but keeps index 2 — its place
+    // in the original array, which is how the editor addresses a line. (A
+    // render-time index only: the join to a line's row is RecipeIngredient.id.)
     expect(result[0].items.map((i) => i.index)).toEqual([0, 2]);
     expect(result[1].items.map((i) => i.index)).toEqual([1]);
   });

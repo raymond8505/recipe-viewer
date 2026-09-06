@@ -6,7 +6,6 @@
 
 import { convert, isVolumeUnit, roundDecimal, unitKeyForAlias } from "./units";
 import { getIngredientText } from "./format";
-import { lineId } from "./ingredientLines";
 import { NUTRITION_FIELDS as NUTRITION_KEYS } from "./nutritionFields";
 import type {
   IngredientNutrition,
@@ -25,8 +24,8 @@ export type CatalogNutritionSource = Pick<
 >;
 
 // Why a line is excluded from nutrition totals. "stale" is assigned by the
-// join (no normalized row for this line, or a legacy position-joined row whose
-// text has moved on) — the math here can only detect the other reasons.
+// join (the line carries no id, or its id resolves to no row) — the math here
+// can only detect the other reasons.
 export type ExclusionReason =
   | "unmatched"
   | "no_quantity"
@@ -233,78 +232,60 @@ export function perPortionNutrition(
 
 // ─── Recipe-wide aggregation + recipe-nutrition source resolution ──────────
 
-/** Rows keyed both ways, so a batch of lines resolves without rescanning. */
+/** Rows keyed by id, so a batch of lines resolves without rescanning. */
 export interface LineRowIndex {
-  byLineId: Map<string, RecipeIngredientRow>;
-  byPosition: Map<number, RecipeIngredientRow>;
+  byId: Map<string, RecipeIngredientRow>;
 }
 
-/** The row a schema line joins to, and which key found it. */
+/** The row a schema line joins to, or null when it has none. */
 export interface ResolvedLineRow {
   row: RecipeIngredientRow | null;
-  /** True when the row was found by the line's stable id. */
-  joinedById: boolean;
 }
 
 export function indexRowsForLines(
   rows: readonly RecipeIngredientRow[],
 ): LineRowIndex {
-  return {
-    byLineId: new Map(
-      rows
-        .filter((row) => row.line_id != null)
-        .map((row) => [row.line_id!, row]),
-    ),
-    byPosition: new Map(rows.map((row) => [row.position, row])),
-  };
+  return { byId: new Map(rows.map((row) => [row.id, row])) };
 }
 
 /**
  * Join a schema line to its normalized row.
  *
- * By the line's stable id when it has one, and DON'T fall back to position in
- * that case: once ids are in play, an id with no row means a genuinely new
- * line, whereas position would hand it a neighbour's row after any reorder.
- * Position is only for legacy lines that predate ids (db/migrations/0013).
+ * Since db/migrations/0016 a line's `id` IS the row's primary key, so this is a
+ * direct lookup. There is deliberately no position fallback: an id with no row
+ * means a genuinely new line, and position would hand it a neighbour's row
+ * after any reorder. A line with no id at all has never been persisted.
  */
 export function resolveLineRow(
   line: string | RecipeIngredient,
-  index: number,
   rowIndex: LineRowIndex,
 ): ResolvedLineRow {
-  const id = lineId(line);
-  if (id != null) {
-    return { row: rowIndex.byLineId.get(id) ?? null, joinedById: true };
-  }
-  return { row: rowIndex.byPosition.get(index) ?? null, joinedById: false };
+  const id = typeof line === "string" ? null : line.id;
+  if (id == null) return { row: null };
+  return { row: rowIndex.byId.get(id) ?? null };
 }
 
 /**
  * The line computation for a schema line joined to its normalized row.
  *
- * A line with no row at all is "stale" — it has never been normalized, so
- * there is nothing to compute and normalization is what fixes it.
+ * A line with no row is "stale" — it has never been normalized, so there is
+ * nothing to compute and normalization is what fixes it.
  *
- * A row found BY ID is the right row no matter what its text says. Line text
- * is display copy; the id is the identity. Rewording is exactly the edit that
- * must not disturb a line's association or its contribution to the totals, and
- * `syncRecipeIngredientText` has already carried the new words onto the row.
- * The text comparison survives only for a row joined by POSITION, where text
- * is the only evidence the row belongs to this line at all.
+ * A row reached at all is the right row no matter what its text says. Line
+ * text is display copy; since db/migrations/0016 the id is the row itself, and
+ * rewording is exactly the edit that must not disturb a line's association or
+ * its contribution to the totals — the reconcile carries the new words onto
+ * the row and leaves the association alone.
  *
  * Otherwise defers to `computeLineNutrition`. Shared by the NutritionDetail
  * hook and the recipe-wide total so the two paths can never disagree.
  */
 export function lineComputationForSchema(
-  schemaText: string,
   resolved: ResolvedLineRow,
   ingredient: CatalogNutritionSource | null,
 ): LineComputation {
-  const { row, joinedById } = resolved;
-  if (!row || (!joinedById && row.raw_text !== schemaText)) {
-    return { kind: "excluded", reason: "stale" };
-  }
-  return computeLineNutrition(row, ingredient);
+  if (!resolved.row) return { kind: "excluded", reason: "stale" };
+  return computeLineNutrition(resolved.row, ingredient);
 }
 
 export interface RecipeNutritionResult {
@@ -333,14 +314,13 @@ export function computeRecipeNutrition(
   ingredientsById: Map<string, CatalogNutritionSource>,
 ): RecipeNutritionResult {
   const rowIndex = indexRowsForLines(rows);
-  const computations = schemaIngredients.map((ingredient, index) => {
-    const text = getIngredientText(ingredient);
-    const resolved = resolveLineRow(ingredient, index, rowIndex);
+  const computations = schemaIngredients.map((ingredient) => {
+    const resolved = resolveLineRow(ingredient, rowIndex);
     const catalog =
       resolved.row?.ingredient_id != null
         ? (ingredientsById.get(resolved.row.ingredient_id) ?? null)
         : null;
-    return lineComputationForSchema(text, resolved, catalog);
+    return lineComputationForSchema(resolved, catalog);
   });
 
   const total = sumNutrition(

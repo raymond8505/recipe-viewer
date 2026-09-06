@@ -19,7 +19,7 @@
     "build:prod": "yarn build-storybook && yarn build",
     "typecheck": "tsc --noEmit",
     "backfill:normalization": "tsx --env-file-if-exists=.env --env-file-if-exists=.env.local scripts/backfill-normalization.ts",
-    "backfill:line-ids": "tsx --env-file-if-exists=.env --env-file-if-exists=.env.local scripts/backfill-line-ids.ts"
+    "backfill:ingredient-columns": "tsx --env-file-if-exists=.env --env-file-if-exists=.env.local scripts/backfill-ingredient-columns.ts"
   },
   "lint-staged": {
     "*.{ts,tsx,js,jsx,mjs,cjs}": "eslint --max-warnings 0"
