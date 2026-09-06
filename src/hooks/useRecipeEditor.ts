@@ -7,11 +7,12 @@ import type {
 import {
   editableIngredientsToSchema,
   editableInstructionsToSchema,
-  isoToMinutes,
-  minutesToIso,
-  parseMinutesInput,
+  formatTimeInput,
+  parseDurationToSeconds,
+  parseTimeInput,
   schemaToEditableIngredients,
   schemaToEditableInstructions,
+  secondsToIso,
 } from "@/lib/format";
 import { applyServings, parseServings } from "@/lib/units";
 
@@ -32,8 +33,8 @@ export interface EditDraft {
   source: string;
   /** Base servings as raw input text; parsed (integer >= 1) on save. */
   servings: string;
-  /** Persisted recipe times as raw input text (minutes); parsed by
-   *  `parseMinutesInput` on save. Blank clears the time outright. */
+  /** Persisted recipe times as raw input text in `H:MM`; parsed by
+   *  `parseTimeInput` on save. Blank clears the time outright. */
   prepTime: string;
   cookTime: string;
   totalTime: string;
@@ -92,7 +93,7 @@ export interface UseRecipeEditor {
 }
 
 /**
- * One recipe time's contribution to the saved schema. `parseMinutesInput`'s
+ * One recipe time's contribution to the saved schema. `parseTimeInput`'s
  * three-way result maps straight onto the patch semantics `updateRecipeRow`
  * expects: a number sets the time, `null` clears it, and an unparseable entry
  * falls back to the stored value — a bad time degrades to "no change" rather
@@ -102,10 +103,10 @@ function buildTime(
   raw: string,
   base: string | null | undefined,
 ): string | null | undefined {
-  const minutes = parseMinutesInput(raw);
-  if (minutes === undefined) return base;
-  if (minutes === null) return null;
-  return minutesToIso(minutes) ?? null;
+  const seconds = parseTimeInput(raw);
+  if (seconds === undefined) return base;
+  if (seconds === null) return null;
+  return secondsToIso(seconds) ?? null;
 }
 
 /** A timer needs a label; a label on its own is fine. So the only invalid
@@ -153,9 +154,9 @@ export function useRecipeEditor(): UseRecipeEditor {
         status,
         source,
         servings: parseServings(schema.recipeYield)?.toString() ?? "",
-        prepTime: isoToMinutes(schema.prepTime)?.toString() ?? "",
-        cookTime: isoToMinutes(schema.cookTime)?.toString() ?? "",
-        totalTime: isoToMinutes(schema.totalTime)?.toString() ?? "",
+        prepTime: formatTimeInput(parseDurationToSeconds(schema.prepTime)),
+        cookTime: formatTimeInput(parseDurationToSeconds(schema.cookTime)),
+        totalTime: formatTimeInput(parseDurationToSeconds(schema.totalTime)),
       });
       setEditState("editing");
     },

@@ -5,14 +5,14 @@
 //   yarn backfill:recipe-times --dry-run    # report only, write nothing
 //
 // Copies each recipe's prepTime/cookTime/totalTime out of `metadata.schema`
-// and into `recipes.prep_time`/`cook_time`/`total_time` as whole minutes. The
+// and into `recipes.prep_time`/`cook_time`/`total_time` as whole seconds. The
 // metadata copies are deliberately LEFT IN PLACE — 0019 declares them dead
 // rather than deleting them, and the repo layer overwrites them on read.
 //
-// Why a script and not SQL: it reuses isoToMinutes, so the backfill and the
-// runtime agree on what counts as a parseable duration and on where the
-// minute boundary rounds. An ISO-8601 regex rewritten in PL/pgSQL is exactly
-// where that agreement would drift.
+// Why a script and not SQL: it reuses parseDurationToSeconds, so the backfill
+// and the runtime agree on exactly what counts as a parseable duration. An
+// ISO-8601 regex rewritten in PL/pgSQL is precisely where that agreement would
+// drift.
 //
 // UNPARSEABLE VALUES ARE REPORTED, NEVER GUESSED. `parseDurationToSeconds`
 // only accepts `PT[h]H[m]M[s]S`, so day-bearing durations ("P4D",
@@ -25,7 +25,7 @@
 // its schema implies is skipped, so a re-run resumes where an interrupted
 // pass stopped and a second full pass writes nothing.
 
-import { isIsoDuration, isoToMinutes } from "@/lib/format";
+import { isIsoDuration, parseDurationToSeconds } from "@/lib/format";
 import { getSupabaseAdminClient } from "@/lib/supabase";
 import type { SchemaRecipe } from "@/types/recipe";
 
@@ -73,15 +73,15 @@ function plan(row: BackfillRow): Planned {
 
   for (const [key, column] of TIME_FIELDS) {
     const raw = schema?.[key];
-    const minutes = isoToMinutes(raw);
+    const seconds = parseDurationToSeconds(raw);
     // A value we cannot READ is one we would drop on the floor — surface it.
     // A well-formed zero ("PT0M" on a no-cook dressing) is not that: it is the
     // recipe saying it has no cook time, and NULL records exactly that.
     if (typeof raw === "string" && raw.trim() !== "" && !isIsoDuration(raw)) {
       unparseable.push({ field: key, value: raw });
     }
-    if (minutes !== null && minutes !== columns[column]) {
-      columns[column] = minutes;
+    if (seconds !== null && seconds !== columns[column]) {
+      columns[column] = seconds;
       changed = true;
     }
   }

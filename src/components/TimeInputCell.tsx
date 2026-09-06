@@ -1,3 +1,7 @@
+"use client";
+
+import { canonicalizeTimeInput } from "@/lib/format";
+
 interface TimeInputCellProps {
   /** Cell heading, and the input's accessible name — "Prep time", "Cook time", "Total time". */
   label: string;
@@ -7,10 +11,16 @@ interface TimeInputCellProps {
 }
 
 /**
- * A Time/Yield-band cell that edits one of the recipe's persisted times as raw
- * input text. Rendered by TimeYieldStats when its `timesEdit` prop is set; the
- * text is parsed by `parseMinutesInput` on save, which accepts a bare minute
- * count, `h:mm`, and unit-tagged forms.
+ * A Time/Yield-band cell that edits one of the recipe's persisted times in
+ * `HH:MM`. Rendered by TimeYieldStats when its `timesEdit` prop is set; the
+ * text is parsed by `parseTimeInput` on save.
+ *
+ * Re-spells itself in canonical `H:MM` on blur, which is what lets the field
+ * accept a bare minute count ("45" → "0:45") and unit-tagged forms ("1h30m" →
+ * "1:30") without ambiguity: whatever you type, you see what it meant before
+ * you save. Text that doesn't parse is left exactly as typed so the typo stays
+ * visible to fix. No local state — the draft field IS the text, so there is no
+ * second copy to diverge.
  *
  * Deliberately not the editor's `DurationInput`: that one is the `m:ss` step
  * timer, where "1:30" means ninety seconds. On a recipe it means an hour and a
@@ -34,9 +44,13 @@ export default function TimeInputCell({
           type="text"
           inputMode="numeric"
           aria-label={label}
-          placeholder="min"
+          placeholder="HH:MM"
           value={value}
           onChange={(e) => onChange(e.target.value)}
+          onBlur={() => {
+            const canonical = canonicalizeTimeInput(value);
+            if (canonical !== null && canonical !== value) onChange(canonical);
+          }}
           disabled={disabled}
           className="w-20 text-center font-semibold text-gray-900 tabular-nums border-b border-input bg-transparent focus:outline-hidden focus:border-orange-400 disabled:opacity-50"
         />

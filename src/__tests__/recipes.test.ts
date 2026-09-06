@@ -795,17 +795,18 @@ describe("updateRecipeRow", () => {
 // being true — a missed read exit, or a write that repopulates the artifact.
 // ---------------------------------------------------------------------------
 describe("recipe time columns", () => {
-  // The blob says 999 minutes and the columns say 20/35/55. A row shaped like
-  // this exists for real: the backfill copied the times forward and then the
-  // user edited them, leaving the blob frozen at its pre-0019 value.
+  // The blob says 999 minutes; the columns say 20/35/55 minutes, in seconds.
+  // A row shaped like this exists for real: the backfill copied the times
+  // forward and then the user edited them, leaving the blob frozen at its
+  // pre-0019 value.
   const staleBlobRow = {
     id: "r1",
     url: "https://example.com",
     source: "example.com",
     status: "published",
-    prep_time: 20,
-    cook_time: 35,
-    total_time: 55,
+    prep_time: 1200,
+    cook_time: 2100,
+    total_time: 3300,
     metadata: {
       schema: {
         name: "Enchiladas",
@@ -865,9 +866,9 @@ describe("recipe time columns", () => {
     });
 
     expect(inserts[0]).toMatchObject({
-      prep_time: 20,
+      prep_time: 1200,
       cook_time: null,
-      total_time: 90,
+      total_time: 5400,
     });
     const blob = (inserts[0].metadata as { schema: object }).schema;
     expect(blob).not.toHaveProperty("prepTime");
@@ -911,9 +912,9 @@ describe("recipe time columns", () => {
     await updateRecipeRow("r1", { schema: { description: "Fresh blurb" } });
 
     expect(updates[0]).toMatchObject({
-      prep_time: 20,
-      cook_time: 35,
-      total_time: 55,
+      prep_time: 1200,
+      cook_time: 2100,
+      total_time: 3300,
     });
   });
 
@@ -925,7 +926,7 @@ describe("recipe time columns", () => {
 
     await updateRecipeRow("r1", { schema: { prepTime: "PT45M" } });
 
-    expect(updates[0]).toMatchObject({ prep_time: 45 });
+    expect(updates[0]).toMatchObject({ prep_time: 2700 });
     const blob = (updates[0].metadata as { schema: object }).schema;
     expect(blob).not.toHaveProperty("prepTime");
   });

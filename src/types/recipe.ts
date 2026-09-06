@@ -21,11 +21,15 @@ export interface RecipeRow {
   source: string;
   status: "published" | "archived" | "draft" | null;
   /**
-   * Whole minutes; null means no time recorded. These three are the source of
+   * Whole seconds; null means no time recorded. These three are the source of
    * truth for a recipe's times — `metadata.schema.{prepTime,cookTime,totalTime}`
    * still holds a pre-0019 copy on older rows, but the repo layer overwrites it
    * from these columns on every read and never writes it again. See the
    * hydrate/extract seam in .claude/docs/supabase-data-layer.md.
+   *
+   * Seconds, not minutes, so the column can hold any ISO 8601 duration a
+   * scraper produces without rounding. The editor is coarser (HH:MM) — that
+   * asymmetry is deliberate and documented on `formatTimeInput`.
    */
   prep_time: number | null;
   cook_time: number | null;

@@ -119,13 +119,13 @@ describe("TimeYieldStats", () => {
       render(
         <TimeYieldStats
           prepTime="15 min"
-          timesEdit={{ prep: { value: "15", onChange }, cook: noop, total: noop }}
+          timesEdit={{ prep: { value: "0:15", onChange }, cook: noop, total: noop }}
         />,
       );
       const input = screen.getByLabelText("Prep time") as HTMLInputElement;
-      expect(input.value).toBe("15");
+      expect(input.value).toBe("0:15");
       await userEvent.type(input, "0");
-      expect(onChange).toHaveBeenCalledWith("150");
+      expect(onChange).toHaveBeenCalledWith("0:150");
       expect(screen.getByLabelText("Cook time")).toBeInTheDocument();
       expect(screen.getByLabelText("Total time")).toBeInTheDocument();
     });
@@ -149,7 +149,7 @@ describe("TimeYieldStats", () => {
       render(
         <TimeYieldStats
           prepTime="15 min"
-          timesEdit={{ prep: { value: "15", onChange: vi.fn() }, cook: noop, total: noop }}
+          timesEdit={{ prep: { value: "0:15", onChange: vi.fn() }, cook: noop, total: noop }}
         />,
       );
       expect((screen.getByLabelText("Cook time") as HTMLInputElement).value).toBe("");
@@ -164,7 +164,7 @@ describe("TimeYieldStats", () => {
       render(
         <TimeYieldStats
           timesEdit={{
-            prep: { value: "15", onChange: vi.fn(), disabled: true },
+            prep: { value: "0:15", onChange: vi.fn(), disabled: true },
             cook: noop,
             total: noop,
           }}

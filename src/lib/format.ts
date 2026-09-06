@@ -54,75 +54,90 @@ export function parseDurationToSeconds(
   return total > 0 ? total : null;
 }
 
+const pad = (n: number) => String(n).padStart(2, "0");
+
 // ---------------------------------------------------------------------------
-// Recipe times ↔ minutes.
+// Recipe times ↔ seconds.
 //
-// `recipes.prep_time` / `cook_time` / `total_time` are integer MINUTES, while
+// `recipes.prep_time` / `cook_time` / `total_time` are integer SECONDS, while
 // SchemaRecipe (and therefore JSON-LD, the MCP tools and every scraper) speaks
-// ISO 8601. These four are the only conversion between the two, and they are
-// built on formatDuration/parseDurationToSeconds/msToIsoDuration so there is
-// still exactly one parsing rule and one formatting rule in this file.
+// ISO 8601. `parseDurationToSeconds` above is already the ISO → column
+// direction, so there is no second reader to keep in step; these are the
+// return trip, all built on msToIsoDuration/formatDuration so the file still
+// has one parsing rule and one formatting rule.
+//
+// The editor works in HH:MM, which is coarser than the column. That is a
+// deliberate asymmetry — a recipe time is written in hours and minutes — but
+// it means a stored value carrying seconds cannot survive being edited: see
+// formatTimeInput.
 // ---------------------------------------------------------------------------
 
-/**
- * ISO 8601 duration → whole minutes, for the column. Null when there is no
- * usable duration — which includes a sub-30-second one ("PT29S" → null), since
- * the column's NULL means "no time recorded" and rounding those to 0 would
- * claim a zero-minute recipe instead.
- */
-export function isoToMinutes(iso: string | undefined | null): number | null {
-  const seconds = parseDurationToSeconds(iso);
-  if (seconds === null) return null;
-  const minutes = Math.round(seconds / 60);
-  return minutes > 0 ? minutes : null;
-}
-
-/** Minutes (a column value) → ISO 8601, for the schema. */
-export function minutesToIso(
-  minutes: number | null | undefined,
+/** Seconds (a column value) → ISO 8601, for the schema. */
+export function secondsToIso(
+  seconds: number | null | undefined,
 ): string | undefined {
-  if (minutes == null) return undefined;
-  return msToIsoDuration(minutes, 0);
+  if (seconds == null) return undefined;
+  return msToIsoDuration(0, seconds);
 }
 
-/** Minutes (a column value) → "1 hr 30 min" display. */
-export function formatMinutes(
-  minutes: number | null | undefined,
+/** Seconds (a column value) → "1 hr 30 min" display. */
+export function formatSeconds(
+  seconds: number | null | undefined,
 ): string | null {
-  return formatDuration(minutesToIso(minutes));
+  return formatDuration(secondsToIso(seconds));
 }
 
 /**
- * Parse a recipe-time field from the editor. Three-way, like `parseNumeric`:
- * a number sets the time, `null` clears it, `undefined` means "unparseable —
- * leave the stored value alone" (a save is never blocked by a bad time).
+ * Seconds (a column value) → the editor's `H:MM` text; blank for no time.
  *
- * Accepts a bare minute count ("90"), `h:mm` ("1:30"), and unit-tagged forms
- * ("90 min", "1h30m", "1 hr 30 min"). Note the colon means HOURS here, unlike
- * `parseMS`, where "1:30" is a 90-second step timer — a recipe written "1:30"
- * takes an hour and a half.
- *
- * Zero collapses to `null`: "0 minutes" and "no time" are not a distinction
- * the label can render, and NULL is how the column spells the latter.
+ * ROUNDS TO THE NEAREST MINUTE, because HH:MM cannot express anything finer.
+ * A stored 4h5m30s seeds the field as "4:06", so focusing and blurring the
+ * input rewrites the value and the 30 seconds are gone. Accepted: two values
+ * in the entire recipe set carry a seconds component, and neither is a time a
+ * cook acts on to that precision.
  */
-export function parseMinutesInput(raw: string): number | null | undefined {
+export function formatTimeInput(seconds: number | null | undefined): string {
+  if (seconds == null || seconds <= 0) return "";
+  const minutes = Math.round(seconds / 60);
+  return `${Math.floor(minutes / 60)}:${pad(minutes % 60)}`;
+}
+
+/**
+ * Parse a recipe-time field from the editor into SECONDS. Three-way, like
+ * `parseNumeric`: a number sets the time, `null` clears it, `undefined` means
+ * "unparseable — leave the stored value alone" (a save is never blocked by a
+ * bad time).
+ *
+ * `H:MM` is the canonical form and what the field is seeded and re-formatted
+ * with. A bare number is read as MINUTES ("45" → 0:45) and unit-tagged forms
+ * are accepted too ("1h30m", "1 hr 30 min"); both canonicalize on blur, which
+ * is how the field teaches its own format. Minutes past 59 carry into hours
+ * ("1:75" → 2:15), as `parseMS` already does for step timers.
+ *
+ * Note the colon means HOURS here, unlike `parseMS`, where "1:30" is a
+ * 90-second step timer — a recipe written "1:30" takes an hour and a half.
+ *
+ * Zero collapses to `null`: "0:00" and "no time" are not a distinction the
+ * label can render, and NULL is how the column spells the latter.
+ */
+export function parseTimeInput(raw: string): number | null | undefined {
   const text = raw.trim().toLowerCase();
   if (!text) return null;
 
-  const zeroed = (minutes: number) => (minutes > 0 ? minutes : null);
+  const toSeconds = (minutes: number) => (minutes > 0 ? minutes * 60 : null);
 
-  if (/^\d+$/.test(text)) return zeroed(parseInt(text, 10));
+  if (/^\d+$/.test(text)) return toSeconds(parseInt(text, 10));
 
-  const clock = text.match(/^(\d+):([0-5]\d)$/);
+  const clock = text.match(/^(\d+):(\d{1,2})$/);
   if (clock) {
-    return zeroed(parseInt(clock[1], 10) * 60 + parseInt(clock[2], 10));
+    return toSeconds(parseInt(clock[1], 10) * 60 + parseInt(clock[2], 10));
   }
 
   const tagged = text.match(
     /^(?:(\d+)\s*(?:h|hr|hrs|hour|hours))?\s*(?:(\d+)\s*(?:m|min|mins|minute|minutes))?$/,
   );
   if (tagged && (tagged[1] || tagged[2])) {
-    return zeroed(
+    return toSeconds(
       (tagged[1] ? parseInt(tagged[1], 10) : 0) * 60 +
         (tagged[2] ? parseInt(tagged[2], 10) : 0),
     );
@@ -130,7 +145,17 @@ export function parseMinutesInput(raw: string): number | null | undefined {
   return undefined;
 }
 
-const pad = (n: number) => String(n).padStart(2, "0");
+/**
+ * Re-spell an editor time entry in canonical `H:MM`, for the input's blur
+ * handler. Returns null when the text doesn't parse, meaning "leave what the
+ * user typed alone" — the same degrade `parseTimeInput` does, so a typo is
+ * still visible to fix rather than silently rewritten or dropped.
+ */
+export function canonicalizeTimeInput(raw: string): string | null {
+  const seconds = parseTimeInput(raw);
+  if (seconds === undefined) return null;
+  return formatTimeInput(seconds);
+}
 
 /** minutes/seconds → "m:ss" display; a zero duration is blank (no timer).
  *  Minutes are not capped, so a long step reads e.g. "90:00". */

@@ -272,19 +272,19 @@ describe("useRecipeEditor", () => {
       cookTime: "PT1H30M",
     };
 
-    it("begin seeds the time fields as minutes", () => {
+    it("begin seeds the time fields as H:MM", () => {
       const { result } = renderHook(() => useRecipeEditor());
       act(() => result.current.begin(timed, ROW));
-      expect(result.current.draft.prepTime).toBe("15");
-      expect(result.current.draft.cookTime).toBe("90");
-      // A time the recipe doesn't have seeds blank, not "0".
+      expect(result.current.draft.prepTime).toBe("0:15");
+      expect(result.current.draft.cookTime).toBe("1:30");
+      // A time the recipe doesn't have seeds blank, not "0:00".
       expect(result.current.draft.totalTime).toBe("");
     });
 
-    it("buildSchema writes the edited minutes back as ISO", () => {
+    it("buildSchema writes the edited H:MM back as ISO", () => {
       const { result } = renderHook(() => useRecipeEditor());
       act(() => result.current.begin(timed, ROW));
-      act(() => result.current.patch({ prepTime: "20", totalTime: "1:45" }));
+      act(() => result.current.patch({ prepTime: "0:20", totalTime: "1:45" }));
       const built = result.current.buildSchema(timed);
       expect(built.prepTime).toBe("PT20M");
       expect(built.totalTime).toBe("PT1H45M");

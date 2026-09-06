@@ -55,7 +55,7 @@ export const TimesOnly: Story = {
 
 /**
  * Edit mode, the shape RecipeDetail actually renders: all four cells become
- * inputs at once. The times are minutes over the persisted values, and the
+ * inputs at once. The times are HH:MM over the persisted values, and the
  * servings cell edits BASE servings (the persisted recipeYield) — unlike the
  * stepper, which only scales the display.
  */
@@ -63,9 +63,9 @@ export const Editing: Story = {
   args: {
     servingsEdit: { value: "4", onChange: fn() },
     timesEdit: {
-      prep: { value: "15", onChange: fn() },
-      cook: { value: "45", onChange: fn() },
-      total: { value: "60", onChange: fn() },
+      prep: { value: "0:15", onChange: fn() },
+      cook: { value: "0:45", onChange: fn() },
+      total: { value: "1:00", onChange: fn() },
     },
   },
 };
@@ -98,9 +98,9 @@ export const EditingWhileSaving: Story = {
   args: {
     servingsEdit: { value: "4", onChange: fn(), disabled: true },
     timesEdit: {
-      prep: { value: "15", onChange: fn(), disabled: true },
-      cook: { value: "45", onChange: fn(), disabled: true },
-      total: { value: "60", onChange: fn(), disabled: true },
+      prep: { value: "0:15", onChange: fn(), disabled: true },
+      cook: { value: "0:45", onChange: fn(), disabled: true },
+      total: { value: "1:00", onChange: fn(), disabled: true },
     },
   },
 };

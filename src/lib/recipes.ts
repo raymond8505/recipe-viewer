@@ -1,10 +1,10 @@
 import { getSupabaseClient, selectColumns, toVectorLiteral } from "./supabase";
 import { getFeatures } from "./features";
 import {
-  isoToMinutes,
-  minutesToIso,
   normalizeRecipeInstructions,
+  parseDurationToSeconds,
   schemaToMarkdown,
+  secondsToIso,
 } from "./format";
 import { generateEmbedding } from "./embedding";
 import { lineId, lineSetChanged, withLineIds } from "./ingredientLines";
@@ -84,7 +84,7 @@ function hydrateTimes(row: RecipeRow): RecipeRow {
   const schema = row.metadata?.schema;
   if (!schema) return row;
   for (const [key, column] of TIME_FIELDS) {
-    const iso = minutesToIso(row[column]);
+    const iso = secondsToIso(row[column]);
     if (iso === undefined) delete schema[key];
     else schema[key] = iso;
   }
@@ -268,9 +268,9 @@ export async function createRecipeRow(input: CreateRecipeInput): Promise<RecipeR
       url: input.url,
       source: input.source,
       status: input.status ?? DEFAULT_RECIPE_STATUS,
-      prep_time: isoToMinutes(schema.prepTime),
-      cook_time: isoToMinutes(schema.cookTime),
-      total_time: isoToMinutes(schema.totalTime),
+      prep_time: parseDurationToSeconds(schema.prepTime),
+      cook_time: parseDurationToSeconds(schema.cookTime),
+      total_time: parseDurationToSeconds(schema.totalTime),
       metadata: { schema: stripTimes(schema) },
     })
     .select(RECIPE_COLUMNS)
@@ -385,9 +385,9 @@ export async function updateRecipeRow(
     // The blob is written WITHOUT times; the columns carry them. `mergedSchema`
     // itself keeps them, because schemaToMarkdown below still has to see them.
     writePatch.metadata = { ...current.metadata, schema: stripTimes(mergedSchema) };
-    writePatch.prep_time = isoToMinutes(mergedSchema.prepTime);
-    writePatch.cook_time = isoToMinutes(mergedSchema.cookTime);
-    writePatch.total_time = isoToMinutes(mergedSchema.totalTime);
+    writePatch.prep_time = parseDurationToSeconds(mergedSchema.prepTime);
+    writePatch.cook_time = parseDurationToSeconds(mergedSchema.cookTime);
+    writePatch.total_time = parseDurationToSeconds(mergedSchema.totalTime);
     // Keep the top-level name in sync when the schema patch touches it —
     // otherwise list/search views keep showing the old value.
     if (patch.schema.name !== undefined) writePatch.name = patch.schema.name;

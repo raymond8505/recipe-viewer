@@ -16,7 +16,7 @@
 
 ## Promoted time columns — the hydrate/extract seam
 
-**`recipes.prep_time` / `cook_time` / `total_time` (integer minutes, nullable) are the source of truth for a recipe's times** (0019). The copies still sitting in `metadata.schema.{prepTime,cookTime,totalTime}` are **dead artifacts** — unlike 0016's rollout, no migration ever strips them, and nothing may read or write them again.
+**`recipes.prep_time` / `cook_time` / `total_time` (integer SECONDS, nullable) are the source of truth for a recipe's times** (0019, re-based to seconds in 0020). The copies still sitting in `metadata.schema.{prepTime,cookTime,totalTime}` are **dead artifacts** — unlike 0016's rollout, no migration ever strips them, and nothing may read or write them again.
 
 What makes that safe is one seam in `src/lib/recipes.ts`:
 - **`hydrateTimes`** runs at every read exit (list query, `getRecipeById`, and the row returned by both write helpers) and overwrites the schema's three time keys from the columns. A NULL column *deletes* the key rather than setting null, so a hydrated schema is indistinguishable from one that never had the time.
@@ -26,7 +26,9 @@ So `row.metadata.schema.prepTime` is a **hydrated view**, not the stored blob, a
 
 `updateRecipeRow` hydrates `current` *before* merging the schema patch, which is what makes three-way semantics fall out of the plain spread — an absent key inherits the column, an explicit `null` clears it, an ISO string sets it. `SchemaRecipe`'s three time fields are `string | null` for that middle case: `undefined` disappears in JSON, so a cleared field would otherwise read as "absent, leave it alone" after the round trip.
 
-Conversions live in `src/lib/format.ts` (`isoToMinutes`, `minutesToIso`, `formatMinutes`, `parseMinutesInput`, `isIsoDuration`) — never re-derive them, and note `isoToMinutes` maps a sub-half-minute duration to `null`, because NULL is how the column spells "no time" and `0` would render as "0 min".
+Conversions live in `src/lib/format.ts` — never re-derive them. The ISO → column direction is just `parseDurationToSeconds`, which already existed; the return trip is `secondsToIso` / `formatSeconds`. `isIsoDuration` answers the *syntax* question separately, because `"PT0M"` (a no-cook recipe saying so) and `"P4D"` (a duration we can't read) both parse to `null` and only the second is a value being dropped.
+
+**The editor is HH:MM, which is coarser than the column** — `formatTimeInput` / `parseTimeInput` / `canonicalizeTimeInput`. `formatTimeInput` rounds to the nearest minute, so a stored value carrying seconds is rewritten if that recipe is ever edited. Two values in the whole recipe set are affected; the asymmetry is deliberate (a recipe time is written in hours and minutes) and recorded on the function.
 
 ## Migrations
 
