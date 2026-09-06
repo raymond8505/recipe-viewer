@@ -265,4 +265,56 @@ describe("useRecipeEditor", () => {
     expect(result.current.editState).toBe("error");
     expect(result.current.draft.name).toBe("Edited");
   });
+  describe("recipe times", () => {
+    const timed: SchemaRecipe = {
+      name: "Pancakes",
+      prepTime: "PT15M",
+      cookTime: "PT1H30M",
+    };
+
+    it("begin seeds the time fields as H:MM", () => {
+      const { result } = renderHook(() => useRecipeEditor());
+      act(() => result.current.begin(timed, ROW));
+      expect(result.current.draft.prepTime).toBe("0:15");
+      expect(result.current.draft.cookTime).toBe("1:30");
+      // A time the recipe doesn't have seeds blank, not "0:00".
+      expect(result.current.draft.totalTime).toBe("");
+    });
+
+    it("buildSchema writes the edited H:MM back as ISO", () => {
+      const { result } = renderHook(() => useRecipeEditor());
+      act(() => result.current.begin(timed, ROW));
+      act(() => result.current.patch({ prepTime: "0:20", totalTime: "1:45" }));
+      const built = result.current.buildSchema(timed);
+      expect(built.prepTime).toBe("PT20M");
+      expect(built.totalTime).toBe("PT1H45M");
+    });
+
+    it("clears a time to null when the field is emptied", () => {
+      const { result } = renderHook(() => useRecipeEditor());
+      act(() => result.current.begin(timed, ROW));
+      act(() => result.current.patch({ cookTime: "" }));
+      // null, not undefined: undefined disappears in JSON, so after the POST
+      // the merge would read it as "absent, leave it alone" and the time the
+      // user just deleted would come straight back.
+      expect(result.current.buildSchema(timed).cookTime).toBeNull();
+    });
+
+    it("degrades an unparseable time to no-change rather than blocking the save", () => {
+      const { result } = renderHook(() => useRecipeEditor());
+      act(() => result.current.begin(timed, ROW));
+      act(() => result.current.patch({ prepTime: "a while" }));
+      expect(result.current.buildSchema(timed).prepTime).toBe("PT15M");
+      expect(result.current.canSave).toBe(true);
+    });
+
+    it("round-trips an untouched recipe's times unchanged", () => {
+      const { result } = renderHook(() => useRecipeEditor());
+      act(() => result.current.begin(timed, ROW));
+      const built = result.current.buildSchema(timed);
+      expect(built.prepTime).toBe("PT15M");
+      expect(built.cookTime).toBe("PT1H30M");
+      expect(built.totalTime).toBeNull();
+    });
+  });
 });

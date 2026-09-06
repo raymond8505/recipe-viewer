@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   formatDuration,
+  parseDurationToSeconds,
   formatMS,
   formatNutrientDisplay,
   parseMS,
@@ -20,6 +21,12 @@ import {
   normalizeRecipeInstructions,
   toSchemaOrgJsonLd,
   msToIsoDuration,
+  isIsoDuration,
+  secondsToIso,
+  formatSeconds,
+  formatTimeInput,
+  parseTimeInput,
+  canonicalizeTimeInput,
   schemaToEditableIngredients,
   editableIngredientsToSchema,
   schemaToEditableInstructions,
@@ -702,5 +709,169 @@ describe("formatNutrientDisplay", () => {
 
   it("prints bare when the unit is empty", () => {
     expect(formatNutrientDisplay({ value: 250, unit: "" })).toBe("250");
+  });
+});
+
+describe("isIsoDuration", () => {
+  it("accepts the time-only durations the readers parse", () => {
+    expect(isIsoDuration("PT1H30M")).toBe(true);
+    expect(isIsoDuration("PT45S")).toBe(true);
+  });
+
+  it("accepts a well-formed zero — a no-cook recipe saying so explicitly", () => {
+    // The distinction this predicate exists for: formatDuration and
+    // parseDurationToSeconds both return null here AND for "P4D", but only
+    // one of the two is a value we failed to read.
+    expect(isIsoDuration("PT0M")).toBe(true);
+    expect(isIsoDuration("PT0S")).toBe(true);
+  });
+
+  it("rejects date-bearing durations and human text", () => {
+    expect(isIsoDuration("P4D")).toBe(false);
+    expect(isIsoDuration("P1DT13H20M")).toBe(false);
+    expect(isIsoDuration("20–22 min")).toBe(false);
+  });
+
+  it("rejects blank and absent input", () => {
+    expect(isIsoDuration("")).toBe(false);
+    expect(isIsoDuration(null)).toBe(false);
+    expect(isIsoDuration(undefined)).toBe(false);
+  });
+});
+
+describe("secondsToIso", () => {
+  it("normalizes seconds into hours and minutes", () => {
+    expect(secondsToIso(5400)).toBe("PT1H30M");
+    expect(secondsToIso(2700)).toBe("PT45M");
+    expect(secondsToIso(14400)).toBe("PT4H");
+  });
+
+  it("keeps a seconds component the column can hold", () => {
+    // The reason the column is seconds: nothing is rounded on the way in.
+    expect(secondsToIso(30)).toBe("PT30S");
+    expect(secondsToIso(14730)).toBe("PT4H5M30S");
+  });
+
+  it("returns undefined for no time", () => {
+    expect(secondsToIso(null)).toBeUndefined();
+    expect(secondsToIso(undefined)).toBeUndefined();
+    expect(secondsToIso(0)).toBeUndefined();
+  });
+
+  it("round-trips with parseDurationToSeconds, the ISO -> column direction", () => {
+    for (const seconds of [30, 300, 2700, 5400, 14400, 14730]) {
+      expect(parseDurationToSeconds(secondsToIso(seconds))).toBe(seconds);
+    }
+  });
+});
+
+describe("formatSeconds", () => {
+  it("renders a column value the way formatDuration renders ISO", () => {
+    expect(formatSeconds(5400)).toBe("1 hr 30 min");
+    expect(formatSeconds(2700)).toBe("45 min");
+    expect(formatSeconds(14400)).toBe("4 hr");
+  });
+
+  it("returns null when there is no time", () => {
+    expect(formatSeconds(null)).toBeNull();
+    expect(formatSeconds(undefined)).toBeNull();
+  });
+});
+
+describe("formatTimeInput", () => {
+  it("renders H:MM with a padded minute", () => {
+    expect(formatTimeInput(5400)).toBe("1:30");
+    expect(formatTimeInput(2700)).toBe("0:45");
+    expect(formatTimeInput(14400)).toBe("4:00");
+    expect(formatTimeInput(300)).toBe("0:05");
+  });
+
+  it("rounds to the nearest minute — HH:MM cannot express finer", () => {
+    // The documented lossy edge: editing such a recipe rewrites the seconds
+    // away. Two values in the whole recipe set are affected.
+    expect(formatTimeInput(14730)).toBe("4:06");
+    expect(formatTimeInput(30)).toBe("0:01");
+  });
+
+  it("is blank for no time", () => {
+    expect(formatTimeInput(null)).toBe("");
+    expect(formatTimeInput(undefined)).toBe("");
+    expect(formatTimeInput(0)).toBe("");
+  });
+});
+
+describe("parseTimeInput", () => {
+  it("reads H:MM as hours and minutes, in seconds", () => {
+    expect(parseTimeInput("1:30")).toBe(5400);
+    expect(parseTimeInput("0:45")).toBe(2700);
+    expect(parseTimeInput("4:00")).toBe(14400);
+  });
+
+  it("reads the colon as hours, not the m:ss parseMS uses", () => {
+    // "1:30" on a recipe is an hour and a half; on a step timer it is 90
+    // seconds. Different fields, deliberately different readings.
+    expect(parseTimeInput("1:30")).toBe(5400);
+    expect(parseMS("1:30")).toEqual({ minutes: 1, seconds: 30 });
+  });
+
+  it("carries minutes past 59 into hours, as parseMS does", () => {
+    expect(parseTimeInput("1:75")).toBe(135 * 60);
+  });
+
+  it("reads a bare number as minutes", () => {
+    expect(parseTimeInput("90")).toBe(5400);
+    expect(parseTimeInput(" 45 ")).toBe(2700);
+  });
+
+  it("reads unit-tagged forms", () => {
+    expect(parseTimeInput("90 min")).toBe(5400);
+    expect(parseTimeInput("1h")).toBe(3600);
+    expect(parseTimeInput("1h30m")).toBe(5400);
+    expect(parseTimeInput("1 hr 30 min")).toBe(5400);
+    expect(parseTimeInput("2 hours")).toBe(7200);
+  });
+
+  it("returns null for blank or zero — both mean 'no time'", () => {
+    expect(parseTimeInput("")).toBeNull();
+    expect(parseTimeInput("   ")).toBeNull();
+    expect(parseTimeInput("0")).toBeNull();
+    expect(parseTimeInput("0:00")).toBeNull();
+    expect(parseTimeInput("0 min")).toBeNull();
+  });
+
+  it("returns undefined for unparseable input so a save degrades to no-change", () => {
+    expect(parseTimeInput("a while")).toBeUndefined();
+    expect(parseTimeInput("-5")).toBeUndefined();
+    expect(parseTimeInput("1:2:3")).toBeUndefined();
+  });
+});
+
+describe("canonicalizeTimeInput", () => {
+  it("re-spells every accepted form as H:MM", () => {
+    expect(canonicalizeTimeInput("45")).toBe("0:45");
+    expect(canonicalizeTimeInput("1h30m")).toBe("1:30");
+    expect(canonicalizeTimeInput("90 min")).toBe("1:30");
+    expect(canonicalizeTimeInput("1:75")).toBe("2:15");
+  });
+
+  it("leaves an already-canonical value alone", () => {
+    expect(canonicalizeTimeInput("1:30")).toBe("1:30");
+  });
+
+  it("blanks a cleared or zero field", () => {
+    expect(canonicalizeTimeInput("")).toBe("");
+    expect(canonicalizeTimeInput("0:00")).toBe("");
+  });
+
+  it("returns null for a typo, so the text stays visible to fix", () => {
+    expect(canonicalizeTimeInput("a while")).toBeNull();
+  });
+
+  it("round-trips with parseTimeInput", () => {
+    for (const raw of ["45", "1:30", "1h30m", "4:00"]) {
+      expect(parseTimeInput(canonicalizeTimeInput(raw) as string)).toBe(
+        parseTimeInput(raw),
+      );
+    }
   });
 });

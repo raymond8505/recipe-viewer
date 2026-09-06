@@ -382,6 +382,27 @@ export default function RecipeDetail({
               }
             : undefined
         }
+        timesEdit={
+          isEditing
+            ? {
+                prep: {
+                  value: draft.prepTime,
+                  onChange: (prepTime) => patch({ prepTime }),
+                  disabled: editState === "saving",
+                },
+                cook: {
+                  value: draft.cookTime,
+                  onChange: (cookTime) => patch({ cookTime }),
+                  disabled: editState === "saving",
+                },
+                total: {
+                  value: draft.totalTime,
+                  onChange: (totalTime) => patch({ totalTime }),
+                  disabled: editState === "saving",
+                },
+              }
+            : undefined
+        }
       />
 
       <div className="max-w-3xl lg:max-w-5xl mx-auto">

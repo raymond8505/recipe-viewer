@@ -1,3 +1,20 @@
+// The grammar both duration readers accept: the time-only subset of ISO 8601,
+// which is all a recipe ever carries. Date-bearing forms ("P4D", "P1DT13H20M")
+// are deliberately outside it — see isIsoDuration.
+const ISO_DURATION = /^PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?$/;
+
+/**
+ * Whether a string is a duration this module can read at all — as distinct
+ * from one that reads as *no* time. "PT0M" is a well-formed zero (a no-cook
+ * recipe says so explicitly); "P4D" and "20–22 min" are not durations we can
+ * interpret. Both make formatDuration and parseDurationToSeconds return null,
+ * so anything that must not silently discard a value — the time backfill —
+ * needs this to tell the two apart.
+ */
+export function isIsoDuration(value: string | undefined | null): boolean {
+  return !!value && ISO_DURATION.test(value);
+}
+
 /**
  * Parse an ISO 8601 duration string into a human-readable format.
  * e.g. "PT1H30M" → "1 hr 30 min", "PT45M" → "45 min"
@@ -5,7 +22,7 @@
 export function formatDuration(iso: string | undefined | null): string | null {
   if (!iso) return null;
 
-  const match = iso.match(/^PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?$/);
+  const match = iso.match(ISO_DURATION);
   if (!match) return null;
 
   const hours = match[1] ? parseInt(match[1], 10) : 0;
@@ -28,7 +45,7 @@ export function parseDurationToSeconds(
   iso: string | undefined | null,
 ): number | null {
   if (!iso) return null;
-  const match = iso.match(/^PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?$/);
+  const match = iso.match(ISO_DURATION);
   if (!match) return null;
   const hours = match[1] ? parseInt(match[1], 10) : 0;
   const minutes = match[2] ? parseInt(match[2], 10) : 0;
@@ -38,6 +55,107 @@ export function parseDurationToSeconds(
 }
 
 const pad = (n: number) => String(n).padStart(2, "0");
+
+// ---------------------------------------------------------------------------
+// Recipe times ↔ seconds.
+//
+// `recipes.prep_time` / `cook_time` / `total_time` are integer SECONDS, while
+// SchemaRecipe (and therefore JSON-LD, the MCP tools and every scraper) speaks
+// ISO 8601. `parseDurationToSeconds` above is already the ISO → column
+// direction, so there is no second reader to keep in step; these are the
+// return trip, all built on msToIsoDuration/formatDuration so the file still
+// has one parsing rule and one formatting rule.
+//
+// The editor works in HH:MM, which is coarser than the column. That is a
+// deliberate asymmetry — a recipe time is written in hours and minutes — but
+// it means a stored value carrying seconds cannot survive being edited: see
+// formatTimeInput.
+// ---------------------------------------------------------------------------
+
+/** Seconds (a column value) → ISO 8601, for the schema. */
+export function secondsToIso(
+  seconds: number | null | undefined,
+): string | undefined {
+  if (seconds == null) return undefined;
+  return msToIsoDuration(0, seconds);
+}
+
+/** Seconds (a column value) → "1 hr 30 min" display. */
+export function formatSeconds(
+  seconds: number | null | undefined,
+): string | null {
+  return formatDuration(secondsToIso(seconds));
+}
+
+/**
+ * Seconds (a column value) → the editor's `H:MM` text; blank for no time.
+ *
+ * ROUNDS TO THE NEAREST MINUTE, because HH:MM cannot express anything finer.
+ * A stored 4h5m30s seeds the field as "4:06", so focusing and blurring the
+ * input rewrites the value and the 30 seconds are gone. Accepted: two values
+ * in the entire recipe set carry a seconds component, and neither is a time a
+ * cook acts on to that precision.
+ */
+export function formatTimeInput(seconds: number | null | undefined): string {
+  if (seconds == null || seconds <= 0) return "";
+  const minutes = Math.round(seconds / 60);
+  return `${Math.floor(minutes / 60)}:${pad(minutes % 60)}`;
+}
+
+/**
+ * Parse a recipe-time field from the editor into SECONDS. Three-way, like
+ * `parseNumeric`: a number sets the time, `null` clears it, `undefined` means
+ * "unparseable — leave the stored value alone" (a save is never blocked by a
+ * bad time).
+ *
+ * `H:MM` is the canonical form and what the field is seeded and re-formatted
+ * with. A bare number is read as MINUTES ("45" → 0:45) and unit-tagged forms
+ * are accepted too ("1h30m", "1 hr 30 min"); both canonicalize on blur, which
+ * is how the field teaches its own format. Minutes past 59 carry into hours
+ * ("1:75" → 2:15), as `parseMS` already does for step timers.
+ *
+ * Note the colon means HOURS here, unlike `parseMS`, where "1:30" is a
+ * 90-second step timer — a recipe written "1:30" takes an hour and a half.
+ *
+ * Zero collapses to `null`: "0:00" and "no time" are not a distinction the
+ * label can render, and NULL is how the column spells the latter.
+ */
+export function parseTimeInput(raw: string): number | null | undefined {
+  const text = raw.trim().toLowerCase();
+  if (!text) return null;
+
+  const toSeconds = (minutes: number) => (minutes > 0 ? minutes * 60 : null);
+
+  if (/^\d+$/.test(text)) return toSeconds(parseInt(text, 10));
+
+  const clock = text.match(/^(\d+):(\d{1,2})$/);
+  if (clock) {
+    return toSeconds(parseInt(clock[1], 10) * 60 + parseInt(clock[2], 10));
+  }
+
+  const tagged = text.match(
+    /^(?:(\d+)\s*(?:h|hr|hrs|hour|hours))?\s*(?:(\d+)\s*(?:m|min|mins|minute|minutes))?$/,
+  );
+  if (tagged && (tagged[1] || tagged[2])) {
+    return toSeconds(
+      (tagged[1] ? parseInt(tagged[1], 10) : 0) * 60 +
+        (tagged[2] ? parseInt(tagged[2], 10) : 0),
+    );
+  }
+  return undefined;
+}
+
+/**
+ * Re-spell an editor time entry in canonical `H:MM`, for the input's blur
+ * handler. Returns null when the text doesn't parse, meaning "leave what the
+ * user typed alone" — the same degrade `parseTimeInput` does, so a typo is
+ * still visible to fix rather than silently rewritten or dropped.
+ */
+export function canonicalizeTimeInput(raw: string): string | null {
+  const seconds = parseTimeInput(raw);
+  if (seconds === undefined) return null;
+  return formatTimeInput(seconds);
+}
 
 /** minutes/seconds → "m:ss" display; a zero duration is blank (no timer).
  *  Minutes are not capped, so a long step reads e.g. "90:00". */

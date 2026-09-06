@@ -1,6 +1,7 @@
 import ServingsControl from "@/components/ServingsControl";
 import ServingsInputCell from "@/components/ServingsInputCell";
 import Stat from "@/components/Stat";
+import TimeInputCell from "@/components/TimeInputCell";
 import type { SchemaRecipe } from "@/types/recipe";
 import { getYieldLabel, getYieldUnit } from "@/lib/format";
 import { cn } from "@/lib/utils";
@@ -28,7 +29,24 @@ interface TimeYieldStatsProps {
     onChange: (value: string) => void;
     disabled?: boolean;
   };
+  /**
+   * When set, the three time cells become inputs over the persisted times and
+   * take precedence over the static stats. Like `servingsEdit`, this forces the
+   * band to render even with no stats at all — a recipe that has never had a
+   * cook time is exactly the one that needs somewhere to type it.
+   */
+  timesEdit?: {
+    prep: TimeEdit;
+    cook: TimeEdit;
+    total: TimeEdit;
+  };
   className?: string;
+}
+
+interface TimeEdit {
+  value: string;
+  onChange: (value: string) => void;
+  disabled?: boolean;
 }
 
 /**
@@ -47,9 +65,17 @@ export default function TimeYieldStats({
   currentServings,
   onServingsChange,
   servingsEdit,
+  timesEdit,
   className,
 }: TimeYieldStatsProps) {
-  if (!prepTime && !cookTime && !totalTime && !recipeYield && !servingsEdit)
+  if (
+    !prepTime &&
+    !cookTime &&
+    !totalTime &&
+    !recipeYield &&
+    !servingsEdit &&
+    !timesEdit
+  )
     return null;
 
   return (
@@ -58,9 +84,19 @@ export default function TimeYieldStats({
       className={cn("border-y border-border mb-8", className)}
     >
       <div className="max-w-3xl mx-auto grid grid-cols-2 sm:grid-cols-4 gap-4 px-4 sm:px-6 py-4">
-        {prepTime && <Stat label="Prep time" value={prepTime} />}
-        {cookTime && <Stat label="Cook time" value={cookTime} />}
-        {totalTime && <Stat label="Total time" value={totalTime} />}
+        {timesEdit ? (
+          <>
+            <TimeInputCell label="Prep time" {...timesEdit.prep} />
+            <TimeInputCell label="Cook time" {...timesEdit.cook} />
+            <TimeInputCell label="Total time" {...timesEdit.total} />
+          </>
+        ) : (
+          <>
+            {prepTime && <Stat label="Prep time" value={prepTime} />}
+            {cookTime && <Stat label="Cook time" value={cookTime} />}
+            {totalTime && <Stat label="Total time" value={totalTime} />}
+          </>
+        )}
         {servingsEdit ? (
           <ServingsInputCell
             label={getYieldUnit(recipeYield) ?? "Servings"}

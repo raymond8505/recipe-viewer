@@ -787,3 +787,147 @@ describe("updateRecipeRow", () => {
     expect(lines[1].id).not.toBe("L1");
   });
 });
+
+// ---------------------------------------------------------------------------
+// The 0019 hydrate/extract seam. The columns are the source of truth; the
+// metadata.schema copies are dead artifacts, and the repo layer is the only
+// thing that knows it. Every test here fixes a way that could quietly stop
+// being true — a missed read exit, or a write that repopulates the artifact.
+// ---------------------------------------------------------------------------
+describe("recipe time columns", () => {
+  // The blob says 999 minutes; the columns say 20/35/55 minutes, in seconds.
+  // A row shaped like this exists for real: the backfill copied the times
+  // forward and then the user edited them, leaving the blob frozen at its
+  // pre-0019 value.
+  const staleBlobRow = {
+    id: "r1",
+    url: "https://example.com",
+    source: "example.com",
+    status: "published",
+    prep_time: 1200,
+    cook_time: 2100,
+    total_time: 3300,
+    metadata: {
+      schema: {
+        name: "Enchiladas",
+        prepTime: "PT999M",
+        cookTime: "PT999M",
+        totalTime: "PT999M",
+      },
+    },
+  };
+
+  beforeEach(() => {
+    mockGenerateEmbedding.mockReset().mockResolvedValue(null);
+  });
+
+  it("reads times from the columns, not the stale blob copy", async () => {
+    makeSupabaseMock({ singleData: structuredClone(staleBlobRow) });
+
+    const row = await getRecipeById("r1");
+
+    expect(row?.metadata.schema).toMatchObject({
+      prepTime: "PT20M",
+      cookTime: "PT35M",
+      totalTime: "PT55M",
+    });
+  });
+
+  it("drops a schema time key when its column is null", async () => {
+    makeSupabaseMock({
+      singleData: { ...structuredClone(staleBlobRow), cook_time: null },
+    });
+
+    const row = await getRecipeById("r1");
+
+    // Deleted, not set to null: every downstream `if (schema.cookTime)` has to
+    // see the same shape a recipe that never had a cook time produces.
+    expect(row?.metadata.schema).not.toHaveProperty("cookTime");
+    expect(row?.metadata.schema.prepTime).toBe("PT20M");
+  });
+
+  it("hydrates every row in a list query, not just single reads", async () => {
+    makeSupabaseMock({ data: [structuredClone(staleBlobRow)], count: 1 });
+
+    const { data } = await getRecipes();
+
+    expect(data[0].metadata.schema.totalTime).toBe("PT55M");
+  });
+
+  it("writes times to columns and keeps them out of the blob on create", async () => {
+    const { inserts } = makeWriteSupabaseMock({
+      insertSingle: { data: { id: "x" }, error: null },
+    });
+
+    await createRecipeRow({
+      url: "https://example.com",
+      source: "example.com",
+      schema: { name: "Enchiladas", prepTime: "PT20M", totalTime: "PT1H30M" },
+    });
+
+    expect(inserts[0]).toMatchObject({
+      prep_time: 1200,
+      cook_time: null,
+      total_time: 5400,
+    });
+    const blob = (inserts[0].metadata as { schema: object }).schema;
+    expect(blob).not.toHaveProperty("prepTime");
+    expect(blob).not.toHaveProperty("totalTime");
+  });
+
+  it("still puts the times in the searchable markdown on create", async () => {
+    const { inserts } = makeWriteSupabaseMock({
+      insertSingle: { data: { id: "x" }, error: null },
+    });
+
+    await createRecipeRow({
+      url: "https://example.com",
+      source: "example.com",
+      schema: { name: "Enchiladas", prepTime: "PT20M" },
+    });
+
+    // The columns are where times LAND; that is not a reason for the text that
+    // gets embedded to stop mentioning them.
+    expect(inserts[0].content).toContain("Prep: 20 min");
+  });
+
+  it("clears a column when the patch sends an explicit null", async () => {
+    const { updates } = makeWriteSupabaseMock({
+      selectSingle: { data: structuredClone(staleBlobRow), error: null },
+      updateSingle: { data: structuredClone(staleBlobRow), error: null },
+    });
+
+    await updateRecipeRow("r1", { schema: { cookTime: null } });
+
+    expect(updates[0]).toMatchObject({ cook_time: null });
+  });
+
+  it("leaves an untouched time at its column value, not the blob's", async () => {
+    const { updates } = makeWriteSupabaseMock({
+      selectSingle: { data: structuredClone(staleBlobRow), error: null },
+      updateSingle: { data: structuredClone(staleBlobRow), error: null },
+    });
+
+    // A patch that says nothing about times — the blob's 999 must not win.
+    await updateRecipeRow("r1", { schema: { description: "Fresh blurb" } });
+
+    expect(updates[0]).toMatchObject({
+      prep_time: 1200,
+      cook_time: 2100,
+      total_time: 3300,
+    });
+  });
+
+  it("never writes time keys back into the blob on update", async () => {
+    const { updates } = makeWriteSupabaseMock({
+      selectSingle: { data: structuredClone(staleBlobRow), error: null },
+      updateSingle: { data: structuredClone(staleBlobRow), error: null },
+    });
+
+    await updateRecipeRow("r1", { schema: { prepTime: "PT45M" } });
+
+    expect(updates[0]).toMatchObject({ prep_time: 2700 });
+    const blob = (updates[0].metadata as { schema: object }).schema;
+    expect(blob).not.toHaveProperty("prepTime");
+  });
+});

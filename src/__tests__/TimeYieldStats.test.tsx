@@ -111,4 +111,66 @@ describe("TimeYieldStats", () => {
       expect(screen.getByLabelText("Servings")).toBeDisabled();
     });
   });
+  describe("timesEdit", () => {
+    const noop = { value: "", onChange: vi.fn() };
+
+    it("renders an input per time, wired to onChange", async () => {
+      const onChange = vi.fn();
+      render(
+        <TimeYieldStats
+          prepTime="15 min"
+          timesEdit={{ prep: { value: "0:15", onChange }, cook: noop, total: noop }}
+        />,
+      );
+      const input = screen.getByLabelText("Prep time") as HTMLInputElement;
+      expect(input.value).toBe("0:15");
+      await userEvent.type(input, "0");
+      expect(onChange).toHaveBeenCalledWith("0:150");
+      expect(screen.getByLabelText("Cook time")).toBeInTheDocument();
+      expect(screen.getByLabelText("Total time")).toBeInTheDocument();
+    });
+
+    it("takes precedence over the static stats", () => {
+      render(
+        <TimeYieldStats
+          prepTime="15 min"
+          cookTime="30 min"
+          totalTime="45 min"
+          timesEdit={{ prep: noop, cook: noop, total: noop }}
+        />,
+      );
+      expect(screen.queryByText("15 min")).not.toBeInTheDocument();
+      expect(screen.getByLabelText("Prep time")).toBeInTheDocument();
+    });
+
+    it("renders all three cells even for times the recipe does not have", () => {
+      // The whole point of the editor: a recipe with no cook time is exactly
+      // the one that needs somewhere to type one.
+      render(
+        <TimeYieldStats
+          prepTime="15 min"
+          timesEdit={{ prep: { value: "0:15", onChange: vi.fn() }, cook: noop, total: noop }}
+        />,
+      );
+      expect((screen.getByLabelText("Cook time") as HTMLInputElement).value).toBe("");
+    });
+
+    it("renders the band even when there are no stats at all", () => {
+      render(<TimeYieldStats timesEdit={{ prep: noop, cook: noop, total: noop }} />);
+      expect(screen.getByLabelText("Prep time")).toBeInTheDocument();
+    });
+
+    it("disables the inputs when disabled", () => {
+      render(
+        <TimeYieldStats
+          timesEdit={{
+            prep: { value: "0:15", onChange: vi.fn(), disabled: true },
+            cook: noop,
+            total: noop,
+          }}
+        />,
+      );
+      expect(screen.getByLabelText("Prep time")).toBeDisabled();
+    });
+  });
 });

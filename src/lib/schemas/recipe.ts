@@ -71,9 +71,11 @@ export const schemaRecipeSchema = z
         name: z.string(),
       })
       .optional(),
-    cookTime: z.string().optional(),
-    prepTime: z.string().optional(),
-    totalTime: z.string().optional(),
+    // Nullable so a partial update can clear a time outright; omitted still
+    // means "leave it alone". See RecipeRow's time columns.
+    cookTime: z.string().nullable().optional(),
+    prepTime: z.string().nullable().optional(),
+    totalTime: z.string().nullable().optional(),
     recipeYield: z
       .union([z.string(), z.array(z.string()), quantitativeValueSchema])
       .optional(),
