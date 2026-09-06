@@ -26,6 +26,16 @@ Edit mode edits the recipe's **base servings** (persisted `recipeYield`), distin
 - **UI:** `TimeYieldStats`'s `servingsEdit` prop takes precedence over the stepper and forces the band to render even with zero stats (so a yield-less recipe can gain one). The band's cell components `Stat` and `ServingsInputCell` live in their own modules in `src/components/` with their own stories (PR #60 review) — don't fold them back in.
 - A heavyweight multi-field `YieldEditor` was removed in 7e81735; don't re-add whole-yield editing, servings-only is intentional.
 
+## Recipe Times
+
+`prepTime` / `cookTime` / `totalTime` are **column-backed** as of 0019 — the values you read off `SchemaRecipe` were hydrated from `recipes.{prep,cook,total}_time` by the repo layer, and the copies in the stored blob are dead. Full rules → [supabase-data-layer.md](supabase-data-layer.md).
+
+Two consequences for anything touching `SchemaRecipe`:
+- The three fields are `string | null`, not `string | undefined`. `null` is a **clear**; omitting the key means "leave it alone". `toSchemaOrgJsonLd` already guards with `!= null`, so a cleared time drops out of JSON-LD correctly.
+- `totalTime` is **not** derived from prep + cook and must not be — a recipe can have resting or marinating time that belongs to neither.
+
+**UI:** editing mirrors servings exactly — `TimeYieldStats`'s `timesEdit` prop takes precedence over the static `Stat` cells and forces the band to render, so a recipe with no times can gain them. The cell component `TimeInputCell` lives in its own module in `src/components/` with its own stories (same rule as `Stat` / `ServingsInputCell`). It is **not** `editor/DurationInput` — that is the `m:ss` step timer, where "1:30" is ninety seconds; on a recipe it is an hour and a half.
+
 ## Schema.org JSON-LD Sanitization
 
 Custom fields (`notes`, ingredient `group` objects) must never appear in the JSON-LD `<script>` output — external tools only understand the standard Schema.org/Recipe spec.
