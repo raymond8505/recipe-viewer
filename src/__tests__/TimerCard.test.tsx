@@ -98,8 +98,8 @@ describe("TimerCard (running)", () => {
   });
 
   it("stretches the label across the middle column so truncate can engage", () => {
-    // The middle column is a flex Button; with `items-start` the label span
-    // sized to its own text and long names overflowed with no ellipsis.
+    // The middle column is a flex Button; the label only spans it (and can
+    // truncate) when the cross-axis stretches.
     render(<TimerCard timer={makeTimer()} {...defaultProps} />);
     const middle = screen.getByLabelText(/pause pasta/i);
     expect(middle).toHaveClass("items-stretch");

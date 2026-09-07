@@ -18,11 +18,9 @@ import { cn } from "@/lib/utils";
 // or padding. These two strings neutralise the Button primitive's defaults
 // (height, padding, rounding, centring, hover bg) for those two shapes.
 //
-// TAP_BLOCK is `items-stretch`, not `items-start`: the primitive is a flex
-// container, so the label/time spans are flex items and would otherwise size
-// to their own text — the label's `truncate` never engaged and long names
-// overflowed the column (clipped by the card, no ellipsis). Left alignment
-// comes from `text-left`, not from the cross-axis.
+// TAP_BLOCK is `items-stretch`: the primitive is a flex container, so the
+// label/time spans are flex items and only fill the column when stretched,
+// which is what lets the label `truncate`. `text-left` owns the alignment.
 const TAP_COL =
   "h-auto flex-1 rounded-none p-0 hover:bg-transparent active:opacity-60";
 const TAP_BLOCK =

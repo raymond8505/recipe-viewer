@@ -7,7 +7,7 @@
 - **Middle col (`flex-1`):** name + time, rendered as a `<button>` that calls `onTogglePause` (running/paused) or `onReset` (finished). This is the primary accessible tap target and carries the full aria-label.
 - **Right col (`w-12`, fixed):** edit (top) + delete (bottom).
 
-**The middle-col `TAP_BLOCK` must stay `items-stretch`.** The `Button` primitive is `inline-flex`, so the label/time spans are flex items; `items-start` sized them to their own text and the label's `truncate` never engaged — long names overflowed the column and were clipped by the card with no ellipsis (regression from routing the card through `Button`, PR-era June 2026). Left alignment comes from `text-left`.
+**The middle-col `TAP_BLOCK` must stay `items-stretch`.** The `Button` primitive is `inline-flex`, so the label/time spans are flex items; only stretched do they fill the column, which is what lets the label `truncate`. Left alignment comes from `text-left`.
 
 **Alarm state is intentionally 2-column** (dismiss left, reset+delete right) — there is no play/pause concept. Do not normalize it to 3-column.
 
@@ -23,4 +23,4 @@ The phrase "timer container" refers to the timer UI in **both** orientations:
 
 Both views render the same timer data. When making changes to timer display, interaction, or scroll behaviour, both views must be updated. Both render `<div data-timer-id={timer.id}>` wrappers around each `TimerCard` so features can target timers by ID in either view with `querySelectorAll` (not `querySelector` — both elements exist in the DOM simultaneously, only one is visible via CSS).
 
-**Ribbon children go through `RibbonItem`** (exported from `DraggableRibbon.tsx`), which is bounded (`min-w-56 max-w-72`), never a fixed `w-*`. The 3-column `TimerCard` has two fixed `w-12` side columns, so on a phone it needs ~212–245px to show `text-3xl` mono times like "1:30:00"; the original `w-44` was sized for the earlier stacked card and clipped the time once the columns landed. The cap is still required — without it a long label never `truncate`s and the card outgrows the viewport, which `snap-mandatory` can't scroll past.
+**Ribbon children go through `RibbonItem`** (exported from `DraggableRibbon.tsx`), which is bounded (`min-w-56 max-w-72`), never a fixed `w-*`. The 3-column `TimerCard` needs ~212–245px on a phone for `text-3xl` mono times like "1:30:00", so it must size to its content; the cap is what makes a long label `truncate` rather than push the card past the viewport, which `snap-mandatory` can't scroll to.

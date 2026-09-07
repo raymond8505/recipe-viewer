@@ -37,15 +37,13 @@ describe("DraggableRibbon", () => {
 });
 
 describe("RibbonItem", () => {
-  it("bounds its width instead of fixing it, and snaps", () => {
+  it("snaps and bounds its width, leaving the card to size to its content", () => {
     const { container } = render(<RibbonItem>child</RibbonItem>);
     const el = container.firstChild as HTMLElement;
     expect(el.className).toContain("snap-start");
     expect(el.className).toContain("shrink-0");
     expect(el.className).toContain("min-w-56");
     expect(el.className).toContain("max-w-72");
-    // A fixed width sized for the old stacked TimerCard is what clipped the
-    // time on phones — the 3-column card needs room to size to its content.
     // `\b` would match the `w-` inside `min-w-56`; anchor on a class start.
     expect(el.className).not.toMatch(/(^|\s)w-\d+/);
   });

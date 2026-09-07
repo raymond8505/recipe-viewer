@@ -26,11 +26,12 @@ const meta: Meta<typeof DraggableRibbon> = {
 export default meta;
 type Story = StoryObj<typeof DraggableRibbon>;
 
-// Same wrapper classes as CookingMode's mobile ribbon (`px-3 … gap-2`), so
-// the story shows the card widths the app actually gets. The last two timers
-// exist to show the two ways an item leaves the `min-w-56` floor: an
-// hour-format time widens the card, a long label hits the `max-w-72` cap and
-// truncates.
+/**
+ * The ribbon as CookingMode renders it on a phone (`px-3 … gap-2`). Cards hold
+ * the `RibbonItem` floor until their content needs more: the hour-format timer
+ * widens to fit its time, and the long-label timer stops at the cap and
+ * truncates.
+ */
 export const Default: Story = {
   render: () => (
     <DraggableRibbon className="bg-gray-900 px-3 py-2 gap-2">

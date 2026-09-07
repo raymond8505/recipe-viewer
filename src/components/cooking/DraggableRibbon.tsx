@@ -26,15 +26,14 @@ export default function DraggableRibbon({ className = "", children }: DraggableR
 }
 
 /**
- * RibbonItem — the sizing contract for a ribbon child. Bounded, not fixed:
- * the item sizes to its content between `min-w-56` and `max-w-72`.
+ * Sizes a ribbon child: snaps to the ribbon's start edge and holds its
+ * content width between `min-w-56` and `max-w-72`.
  *
- * The cap is what makes a long timer label `truncate` instead of pushing the
- * card past the phone's edge (where `snap-mandatory` can't reach the rest).
- * The floor keeps short timers uniform and stops a card shrinking when its
- * content swaps to the narrower delete-confirm overlay. A fixed `w-*` here
- * was sized for the old stacked TimerCard; the 3-column card's two fixed
- * side columns need ~212–245px on a phone, so a fixed width clipped the time.
+ * @remarks
+ * The cap keeps every card inside a phone viewport, which `snap-mandatory`
+ * requires to reach it, and is what lets a `truncate`d label overflow into
+ * an ellipsis. The floor holds a card's width steady when its content
+ * changes (e.g. the delete-confirm overlay).
  */
 export function RibbonItem({ className, ...props }: ComponentProps<"div">) {
   return (
