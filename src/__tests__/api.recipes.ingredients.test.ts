@@ -14,7 +14,7 @@ import {
 } from "@/lib/ingredientAliases";
 import { RecipeRepoError, getRecipeById, updateRecipeRow } from "@/lib/recipes";
 import { getIsLoggedIn } from "@/lib/auth";
-import { makeIngredient, makeRecipe, makeRecipeIngredient } from "@/fixtures";
+import { makeIngredient, makeRecipe, makeRecipeIngredientRow } from "@/fixtures";
 import { makeJsonRequest } from "@/fixtures/request";
 
 vi.mock("@/lib/ingredients", async (orig) => {
@@ -57,9 +57,9 @@ describe("GET /api/recipes/[id]/ingredients", () => {
 
   it("returns rows plus the deduplicated catalog joins", async () => {
     const rows = [
-      makeRecipeIngredient("r-1", 0, { ingredient_id: "ing-1" }),
-      makeRecipeIngredient("r-1", 1, { ingredient_id: "ing-1" }),
-      makeRecipeIngredient("r-1", 2, { ingredient_id: null }),
+      makeRecipeIngredientRow("r-1", 0, { ingredient_id: "ing-1" }),
+      makeRecipeIngredientRow("r-1", 1, { ingredient_id: "ing-1" }),
+      makeRecipeIngredientRow("r-1", 2, { ingredient_id: null }),
     ];
     const ingredients = [makeIngredient("ing-1", "cumin seed")];
     vi.mocked(getRecipeIngredients).mockResolvedValue(rows);
@@ -142,7 +142,7 @@ describe("PATCH /api/recipes/[id]/ingredients (line text)", () => {
   // show the edited line still carrying its match instead of blanking it.
   it("returns the re-parsed rows alongside the lines", async () => {
     const rows = [
-      makeRecipeIngredient("r-1", 1, {
+      makeRecipeIngredientRow("r-1", 1, {
         line_id: "L2",
         raw_text: "6 g magic dust",
         ingredient_id: "ing-dust",
@@ -233,14 +233,14 @@ describe("PATCH /api/recipes/[id]/ingredients/[riId]", () => {
     vi.mocked(getIsLoggedIn).mockResolvedValue(true);
     // Previously unassociated, so the default case is "add only".
     vi.mocked(getRecipeIngredientById).mockResolvedValue(
-      makeRecipeIngredient("r-1", 0, {
+      makeRecipeIngredientRow("r-1", 0, {
         ingredient_id: null,
         name_text: "cumin seed",
         match_status: "unmatched",
       }),
     );
     vi.mocked(updateRecipeIngredientAssociation).mockResolvedValue(
-      makeRecipeIngredient("r-1", 0, {
+      makeRecipeIngredientRow("r-1", 0, {
         ingredient_id: INGREDIENT_UUID,
         name_text: "cumin seed",
         match_status: "manual",
@@ -266,7 +266,7 @@ describe("PATCH /api/recipes/[id]/ingredients/[riId]", () => {
 
   it("clears an association with null", async () => {
     vi.mocked(updateRecipeIngredientAssociation).mockResolvedValue(
-      makeRecipeIngredient("r-1", 0, { ingredient_id: null, match_status: "unmatched" }),
+      makeRecipeIngredientRow("r-1", 0, { ingredient_id: null, match_status: "unmatched" }),
     );
 
     const res = await PATCH(
@@ -284,7 +284,7 @@ describe("PATCH /api/recipes/[id]/ingredients/[riId]", () => {
     // does not mean that food, so the alias is stripped unconditionally.
     // Automated re-matching never prunes — only this route does.
     function associatedWith(id: string | null, nameText = "cumin seed") {
-      return makeRecipeIngredient("r-1", 0, {
+      return makeRecipeIngredientRow("r-1", 0, {
         ingredient_id: id,
         name_text: nameText,
         match_status: id ? "manual" : "unmatched",

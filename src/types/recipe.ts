@@ -1,3 +1,5 @@
+import type { IngredientRow, RecipeIngredientRow } from "./ingredient";
+
 export interface SchemaOrgIngredientLine {
   name: string;
   group?: string;
@@ -14,6 +16,98 @@ export interface SchemaOrgIngredientLine {
    */
   id?: string;
 }
+
+/**
+ * One ingredient of a recipe, as the app thinks about it: the
+ * `recipe_ingredients` row IS the ingredient. `id` is its identity (what
+ * `recipes.ingredients` points at), `raw_text` is what the recipe says, the
+ * parse fields and the catalog association ride along.
+ *
+ * `recipe_id` is deliberately absent: inside a recipe it is redundant, and an
+ * ingredient drafted client-side (a re-scrape under review, a recipe handed in
+ * through the window API) has no recipe row yet.
+ */
+export interface RecipeIngredient
+  extends Omit<RecipeIngredientRow, "recipe_id" | "line_id" | "position"> {
+  /**
+   * The catalog ingredient this line resolves to. `undefined` means the
+   * catalog was not loaded (list queries hydrate rows only); `null` means it
+   * was loaded and the line is unmatched. Nutrition math treats both as "no
+   * catalog data", so a list-page row never computes a total by accident.
+   */
+  ingredient?: IngredientRow | null;
+}
+
+/**
+ * The unit of a recipe's ingredient list. An ungrouped recipe is exactly one
+ * group with no `name`; a grouped one is several, each named. Position is the
+ * array index at both levels — nothing tracks it separately.
+ */
+export interface RecipeIngredientGroup {
+  name?: string;
+  ingredients: RecipeIngredient[];
+}
+
+/**
+ * `recipes.ingredients` as stored (db/migrations/0016): the same groups, but
+ * each line is just the row id. The repo layer is the only reader and writer;
+ * everything above it sees `RecipeIngredientGroup`.
+ */
+export interface StoredIngredientGroup {
+  name?: string;
+  ingredients: string[];
+}
+
+/**
+ * What a writer sends for one ingredient. `id` names the row the line already
+ * is — send it back to keep the row (and the catalog association curated on
+ * it); leave it off for a genuinely new line and the write path mints one.
+ */
+export interface RecipeIngredientLineInput {
+  id?: string;
+  raw_text: string;
+}
+
+export interface RecipeIngredientGroupInput {
+  name?: string;
+  ingredients: RecipeIngredientLineInput[];
+}
+
+/**
+ * The `recipes` table, column for column — what `selectColumns<>` is checked
+ * against. `RecipeRow` is this with `ingredients` hydrated from the second
+ * table, which is why the two are separate types.
+ */
+export interface RecipeRowColumns {
+  id: string;
+  url: string;
+  source: string;
+  status: "published" | "archived" | "draft" | null;
+  prep_time: number | null;
+  cook_time: number | null;
+  total_time: number | null;
+  ingredients: StoredIngredientGroup[];
+  metadata: { schema: SchemaRecipe };
+}
+
+/**
+ * The client's unit of recipe state: the non-ingredient fields plus the
+ * ingredient groups, held together so an operation that replaces both (a
+ * re-scrape, an undo) does so atomically.
+ */
+export interface RecipeDocument {
+  schema: SchemaRecipe;
+  ingredients: RecipeIngredientGroup[];
+}
+
+/**
+ * A Schema.org/Recipe as served to the outside world: the stored fields plus
+ * `recipeIngredient` flattened to plain strings. Produced only at the edges
+ * (JSON-LD, webhooks, the window API); nothing internal reads it.
+ */
+export type SchemaOrgRecipe = Omit<SchemaRecipe, "recipeIngredient"> & {
+  recipeIngredient?: string[];
+};
 
 export interface RecipeRow {
   id: string;
@@ -82,6 +176,7 @@ export interface SchemaRecipe {
   recipeYield?: string | string[] | QuantitativeValue;
   recipeCuisine?: string;
   recipeCategory?: string | string[];
+  /** @deprecated Being replaced by `RecipeRow.ingredients` (`RecipeIngredientGroup[]`). */
   recipeIngredient?: Array<string | SchemaOrgIngredientLine>;
   recipeInstructions?: Array<HowToStep | HowToSection>;
   keywords?: string;

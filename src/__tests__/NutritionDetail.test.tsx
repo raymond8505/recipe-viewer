@@ -10,7 +10,7 @@ import {
   updateRecipeIngredientLine,
 } from "@/lib/api/recipes";
 import { importUsdaIngredient } from "@/lib/api/ingredients";
-import { makeIngredient, makeRecipeIngredient } from "@/fixtures";
+import { makeIngredient, makeRecipeIngredientRow } from "@/fixtures";
 import { clickAndConfirm } from "./helpers/confirmBar";
 import type {
   IngredientKeywordMatch,
@@ -61,7 +61,7 @@ const cumin = makeIngredient("ing-cumin", "cumin seed", {
 
 function makeRows(): RecipeIngredientRow[] {
   return [
-    makeRecipeIngredient("r-1", 0, {
+    makeRecipeIngredientRow("r-1", 0, {
       id: "ri-0",
       line_id: "L0",
       raw_text: "100 g butter",
@@ -70,7 +70,7 @@ function makeRows(): RecipeIngredientRow[] {
       ingredient_id: "ing-butter",
       match_status: "matched",
     }),
-    makeRecipeIngredient("r-1", 1, {
+    makeRecipeIngredientRow("r-1", 1, {
       id: "ri-1",
       line_id: "L1",
       raw_text: "2 eggs",
@@ -79,7 +79,7 @@ function makeRows(): RecipeIngredientRow[] {
       ingredient_id: "ing-eggs",
       match_status: "matched",
     }),
-    makeRecipeIngredient("r-1", 2, {
+    makeRecipeIngredientRow("r-1", 2, {
       id: "ri-2",
       line_id: "L2",
       raw_text: "1 tsp cumin",
@@ -88,7 +88,7 @@ function makeRows(): RecipeIngredientRow[] {
       ingredient_id: "ing-cumin",
       match_status: "matched",
     }),
-    makeRecipeIngredient("r-1", 3, {
+    makeRecipeIngredientRow("r-1", 3, {
       id: "ri-3",
       line_id: "L3",
       raw_text: "5 g magic dust",
@@ -579,7 +579,7 @@ describe("NutritionDetail", () => {
     };
     search.mockResolvedValue([magicMatch]);
     vi.mocked(updateRecipeIngredientAssociation).mockResolvedValue(
-      makeRecipeIngredient("r-1", 3, {
+      makeRecipeIngredientRow("r-1", 3, {
         id: "ri-3",
         line_id: "L3",
         raw_text: "5 g magic dust",
@@ -626,7 +626,7 @@ describe("NutritionDetail", () => {
       }),
     );
     vi.mocked(updateRecipeIngredientAssociation).mockResolvedValue(
-      makeRecipeIngredient("r-1", 3, {
+      makeRecipeIngredientRow("r-1", 3, {
         id: "ri-3",
         line_id: "L3",
         raw_text: "5 g magic dust",
@@ -667,7 +667,7 @@ describe("NutritionDetail", () => {
     // "2 eggs" is matched but count-based (no unit, no density) → excluded until
     // it gets an estimate.
     vi.mocked(estimateIngredientGrams).mockResolvedValue(
-      makeRecipeIngredient("r-1", 1, {
+      makeRecipeIngredientRow("r-1", 1, {
         id: "ri-1",
         line_id: "L1",
         raw_text: "2 eggs",
@@ -815,7 +815,7 @@ describe("NutritionDetail", () => {
   it("persists a user-typed gram value on blur", async () => {
     const user = userEvent.setup();
     vi.mocked(setIngredientGrams).mockResolvedValue(
-      makeRecipeIngredient("r-1", 1, {
+      makeRecipeIngredientRow("r-1", 1, {
         id: "ri-1",
         line_id: "L1",
         raw_text: "2 eggs",
@@ -845,7 +845,7 @@ describe("NutritionDetail", () => {
   it("accepts a typed 0 and stops flagging the line without changing totals", async () => {
     const user = userEvent.setup();
     vi.mocked(setIngredientGrams).mockResolvedValue(
-      makeRecipeIngredient("r-1", 1, {
+      makeRecipeIngredientRow("r-1", 1, {
         id: "ri-1",
         line_id: "L1",
         raw_text: "2 eggs",

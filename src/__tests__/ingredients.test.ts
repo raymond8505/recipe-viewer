@@ -20,7 +20,7 @@ import {
 } from "@/lib/ingredients";
 import { getSupabaseAdminClient, getSupabaseClient } from "@/lib/supabase";
 import { makeSupabaseQueue } from "@/fixtures/supabase";
-import { makeIngredient, makeRecipeIngredient } from "@/fixtures";
+import { makeIngredient, makeRecipeIngredientRow } from "@/fixtures";
 
 // Mock only the client getters; toVectorLiteral stays real so the bracketed
 // pgvector literal assertions exercise the actual formatting.
@@ -397,7 +397,7 @@ describe("searchIngredientsKeyword", () => {
 
 describe("getRecipeIngredients", () => {
   it("filters by recipe and orders by position", async () => {
-    const rows = [makeRecipeIngredient("r-1", 0), makeRecipeIngredient("r-1", 1)];
+    const rows = [makeRecipeIngredientRow("r-1", 0), makeRecipeIngredientRow("r-1", 1)];
     useQueue([{ data: rows }]);
 
     const result = await getRecipeIngredients("r-1");
@@ -456,7 +456,7 @@ describe("getIngredientsByIds", () => {
 describe("updateRecipeIngredientAssociation", () => {
   it("sets ingredient_id + manual status, nulls confidence, scoped to the recipe", async () => {
     const updated = {
-      ...makeRecipeIngredient("r-1", 0),
+      ...makeRecipeIngredientRow("r-1", 0),
       ingredient_id: "ing-2",
       match_status: "manual",
       confidence: null,
@@ -478,7 +478,7 @@ describe("updateRecipeIngredientAssociation", () => {
   });
 
   it("clearing the association marks the line unmatched", async () => {
-    useQueue([{ data: makeRecipeIngredient("r-1", 0) }]);
+    useQueue([{ data: makeRecipeIngredientRow("r-1", 0) }]);
 
     await updateRecipeIngredientAssociation("r-1", "ri-1", null);
 
@@ -526,7 +526,7 @@ describe("updateRecipeIngredientAssociation", () => {
 
 describe("getRecipeIngredientById", () => {
   it("fetches one row scoped to the recipe", async () => {
-    const row = makeRecipeIngredient("r-1", 0);
+    const row = makeRecipeIngredientRow("r-1", 0);
     useQueue([{ data: row }]);
 
     const result = await getRecipeIngredientById("r-1", "ri-1");
@@ -546,7 +546,7 @@ describe("getRecipeIngredientById", () => {
 
 describe("setRecipeIngredientGrams", () => {
   it("stores grams + source, scoped to the recipe", async () => {
-    const updated = makeRecipeIngredient("r-1", 0, {
+    const updated = makeRecipeIngredientRow("r-1", 0, {
       estimated_grams: 26,
       grams_source: "llm",
     });
@@ -565,7 +565,7 @@ describe("setRecipeIngredientGrams", () => {
   });
 
   it("clearing with null forces grams_source null regardless of the arg", async () => {
-    useQueue([{ data: makeRecipeIngredient("r-1", 0) }]);
+    useQueue([{ data: makeRecipeIngredientRow("r-1", 0) }]);
 
     await setRecipeIngredientGrams("r-1", "ri-1", null, "manual");
 

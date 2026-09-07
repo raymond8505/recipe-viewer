@@ -1,8 +1,13 @@
+import { newRecipeIngredient } from "@/lib/recipeIngredients";
 import type {
   IngredientRow,
   RecipeIngredientRow,
 } from "@/types/ingredient";
-import type { SchemaOrgIngredientLine } from "@/types/recipe";
+import type {
+  RecipeIngredient,
+  RecipeIngredientGroup,
+  SchemaOrgIngredientLine,
+} from "@/types/recipe";
 
 // Realistic catalog rows. Nutrition values are real USDA per-100g figures
 // (cumin: SR Legacy fdcId 170923 — the same payload the usda.ts tests fixture);
@@ -180,7 +185,7 @@ export function makeIngredient(
   };
 }
 
-export function makeRecipeIngredient(
+export function makeRecipeIngredientRow(
   recipeId: string,
   position: number,
   overrides?: Partial<RecipeIngredientRow>,
@@ -208,6 +213,41 @@ export function makeRecipeIngredient(
 }
 
 /**
+ * One ingredient as the app carries it. The id is derived from the text
+ * (`ri-2-tsp-cumin-seed`) so an assertion can name a line without a lookup;
+ * pass `id` in `overrides` when two lines share their text. Parse fields come
+ * from the deterministic parser, so "2 tsp cumin seed" arrives with quantity 2
+ * and unit "tsp" without the fixture restating them.
+ */
+export function makeRecipeIngredient(
+  text: string,
+  overrides?: Partial<RecipeIngredient>,
+): RecipeIngredient {
+  const slug = text.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+  return { ...newRecipeIngredient(text, `ri-${slug}`), ...overrides };
+}
+
+/** A group from a mix of bare texts and ready-made ingredients; `undefined` name = the nameless group. */
+export function makeIngredientGroup(
+  name: string | undefined,
+  items: Array<string | RecipeIngredient>,
+): RecipeIngredientGroup {
+  return {
+    ...(name != null ? { name } : {}),
+    ingredients: items.map((item) =>
+      typeof item === "string" ? makeRecipeIngredient(item) : item,
+    ),
+  };
+}
+
+/** The common case: an ungrouped list, as one nameless group. */
+export function makeIngredientLines(
+  texts: Array<string | RecipeIngredient>,
+): RecipeIngredientGroup[] {
+  return [makeIngredientGroup(undefined, texts)];
+}
+
+/**
  * The plain "nothing interesting is wrong" NutritionDetail scenario: two lines,
  * both matched to the catalog, both convertible to grams. Named and fully
  * defined so stories about *something else* — editing a line's text, confirming
@@ -230,7 +270,7 @@ export const matchedLinesScenario: {
   schemaIngredients: ["2 tsp cumin seed", "1 tbsp olive oil"],
   recipeYield: "2 servings",
   initialRows: [
-    makeRecipeIngredient("story-recipe", 0, {
+    makeRecipeIngredientRow("story-recipe", 0, {
       raw_text: "2 tsp cumin seed",
       quantity: 2,
       unit: "tsp",
@@ -238,7 +278,7 @@ export const matchedLinesScenario: {
       ingredient_id: ingredientFixtures[0].id,
       match_status: "matched",
     }),
-    makeRecipeIngredient("story-recipe", 1, {
+    makeRecipeIngredientRow("story-recipe", 1, {
       raw_text: "1 tbsp olive oil",
       quantity: 1,
       unit: "tbsp",

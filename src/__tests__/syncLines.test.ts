@@ -1,6 +1,6 @@
 // @vitest-environment node
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { makeRecipeIngredient } from "@/fixtures";
+import { makeRecipeIngredientRow } from "@/fixtures";
 
 vi.mock("@/lib/ingredients", () => ({
   getRecipeIngredients: vi.fn(),
@@ -26,7 +26,7 @@ function patchFor(rowId: string) {
 describe("syncRecipeIngredientText", () => {
   it("re-parses an edited line without touching its association", async () => {
     vi.mocked(getRecipeIngredients).mockResolvedValue([
-      makeRecipeIngredient("r-1", 0, {
+      makeRecipeIngredientRow("r-1", 0, {
         id: "ri-0",
         line_id: "L1",
         raw_text: "1 tsp cumin",
@@ -62,7 +62,7 @@ describe("syncRecipeIngredientText", () => {
     // estimated_grams OVERRIDES the density-derived value, so a weight
     // measured against "2 eggs" would silently keep applying to "3 eggs".
     vi.mocked(getRecipeIngredients).mockResolvedValue([
-      makeRecipeIngredient("r-1", 0, {
+      makeRecipeIngredientRow("r-1", 0, {
         id: "ri-0",
         line_id: "L1",
         raw_text: "2 eggs",
@@ -85,7 +85,7 @@ describe("syncRecipeIngredientText", () => {
 
   it("keeps a stored gram weight when only the wording changes", async () => {
     vi.mocked(getRecipeIngredients).mockResolvedValue([
-      makeRecipeIngredient("r-1", 0, {
+      makeRecipeIngredientRow("r-1", 0, {
         id: "ri-0",
         line_id: "L1",
         raw_text: "2 eggs",
@@ -111,8 +111,8 @@ describe("syncRecipeIngredientText", () => {
 
   it("re-points position when lines are reordered", async () => {
     vi.mocked(getRecipeIngredients).mockResolvedValue([
-      makeRecipeIngredient("r-1", 0, { id: "ri-0", line_id: "L1", raw_text: "1 tsp cumin" }),
-      makeRecipeIngredient("r-1", 1, { id: "ri-1", line_id: "L2", raw_text: "2 cups rice" }),
+      makeRecipeIngredientRow("r-1", 0, { id: "ri-0", line_id: "L1", raw_text: "1 tsp cumin" }),
+      makeRecipeIngredientRow("r-1", 1, { id: "ri-1", line_id: "L2", raw_text: "2 cups rice" }),
     ]);
 
     await syncRecipeIngredientText("r-1", [
@@ -131,7 +131,7 @@ describe("syncRecipeIngredientText", () => {
 
   it("writes nothing when text and order are unchanged", async () => {
     vi.mocked(getRecipeIngredients).mockResolvedValue([
-      makeRecipeIngredient("r-1", 0, { id: "ri-0", line_id: "L1", raw_text: "1 tsp cumin" }),
+      makeRecipeIngredientRow("r-1", 0, { id: "ri-0", line_id: "L1", raw_text: "1 tsp cumin" }),
     ]);
 
     await syncRecipeIngredientText("r-1", [{ name: "1 tsp cumin", id: "L1" }]);
@@ -145,7 +145,7 @@ describe("syncRecipeIngredientText", () => {
   // carries, which reads as "never normalized" forever.
   it("stamps a freshly minted id onto the legacy row at that position", async () => {
     vi.mocked(getRecipeIngredients).mockResolvedValue([
-      makeRecipeIngredient("r-1", 0, {
+      makeRecipeIngredientRow("r-1", 0, {
         id: "ri-0",
         line_id: null,
         raw_text: "1 tsp cumin",
@@ -177,7 +177,7 @@ describe("syncRecipeIngredientText", () => {
   // Stamping is the whole reason to write when nothing else moved.
   it("stamps a legacy row even when the text is unchanged", async () => {
     vi.mocked(getRecipeIngredients).mockResolvedValue([
-      makeRecipeIngredient("r-1", 0, {
+      makeRecipeIngredientRow("r-1", 0, {
         id: "ri-0",
         line_id: null,
         raw_text: "1 tsp cumin",
@@ -198,7 +198,7 @@ describe("syncRecipeIngredientText", () => {
   // — and a quantity/unit disagreement would take the gram weight with it.
   it("does not re-parse a stamped row whose text never moved", async () => {
     vi.mocked(getRecipeIngredients).mockResolvedValue([
-      makeRecipeIngredient("r-1", 0, {
+      makeRecipeIngredientRow("r-1", 0, {
         id: "ri-0",
         line_id: null,
         raw_text: "a good handful of parsley",
@@ -227,7 +227,7 @@ describe("syncRecipeIngredientText", () => {
 
   it("skips lines with no id and ids with no row", async () => {
     vi.mocked(getRecipeIngredients).mockResolvedValue([
-      makeRecipeIngredient("r-1", 0, { id: "ri-0", line_id: "L1", raw_text: "1 tsp cumin" }),
+      makeRecipeIngredientRow("r-1", 0, { id: "ri-0", line_id: "L1", raw_text: "1 tsp cumin" }),
     ]);
 
     await syncRecipeIngredientText("r-1", [

@@ -17,7 +17,7 @@ import {
 import { accreteAliasesFromLines } from "@/lib/ingredientAliases";
 import { getRecipeById } from "@/lib/recipes";
 import { UsdaError, getFoodDetail, searchFoods } from "@/lib/usda";
-import { makeIngredient, makeRecipe, makeRecipeIngredient } from "@/fixtures";
+import { makeIngredient, makeRecipe, makeRecipeIngredientRow } from "@/fixtures";
 import { cuminDetailResponse, cuminExpectedNutrition } from "@/fixtures/usda";
 import type { IngredientMatch } from "@/types/ingredient";
 import type { RecipeRow, SchemaRecipe } from "@/types/recipe";
@@ -148,7 +148,7 @@ describe("runNormalization — matching", () => {
   it("carries forward manual associations by raw_text over the automated match", async () => {
     // The user curated this line; a re-run's own matcher would pick ing-auto.
     vi.mocked(getRecipeIngredients).mockResolvedValue([
-      makeRecipeIngredient("r-1", 0, {
+      makeRecipeIngredientRow("r-1", 0, {
         raw_text: "1 tsp cumin seed",
         ingredient_id: "ing-manual",
         match_status: "manual",
@@ -176,7 +176,7 @@ describe("runNormalization — matching", () => {
   // user's pick and re-guessed.
   it("keeps an existing association when the line's text changed", async () => {
     vi.mocked(getRecipeIngredients).mockResolvedValue([
-      makeRecipeIngredient("r-1", 0, {
+      makeRecipeIngredientRow("r-1", 0, {
         raw_text: "1 tsp ground cumin", // recipe now says "1 tsp cumin seed"
         ingredient_id: "ing-manual",
         match_status: "manual",
@@ -209,14 +209,14 @@ describe("runNormalization — matching", () => {
       ]),
     );
     vi.mocked(getRecipeIngredients).mockResolvedValue([
-      makeRecipeIngredient("r-1", 0, {
+      makeRecipeIngredientRow("r-1", 0, {
         id: "ri-cumin",
         line_id: "L1",
         raw_text: "1 tsp cumin seed",
         ingredient_id: "ing-cumin",
         match_status: "manual",
       }),
-      makeRecipeIngredient("r-1", 1, {
+      makeRecipeIngredientRow("r-1", 1, {
         id: "ri-rice",
         line_id: "L2",
         raw_text: "2 cups rice",
@@ -581,7 +581,7 @@ describe("runNormalization — grams estimation", () => {
       makeIngredient("ing-1", "cumin seed", { density_g_per_ml: null }),
     ]);
     vi.mocked(getRecipeIngredients).mockResolvedValue([
-      makeRecipeIngredient("r-1", 0, {
+      makeRecipeIngredientRow("r-1", 0, {
         raw_text: "1 tsp cumin seed",
         estimated_grams: 40,
         grams_source: "manual",

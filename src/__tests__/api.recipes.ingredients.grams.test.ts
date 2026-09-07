@@ -7,7 +7,7 @@ import {
 } from "@/lib/ingredients";
 import { estimateLineGrams } from "@/lib/normalization/estimateGrams";
 import { getIsLoggedIn } from "@/lib/auth";
-import { makeRecipeIngredient } from "@/fixtures";
+import { makeRecipeIngredientRow } from "@/fixtures";
 import { makeJsonRequest } from "@/fixtures/request";
 
 vi.mock("@/lib/ingredients", async (orig) => {
@@ -38,7 +38,7 @@ describe("POST /api/recipes/[id]/ingredients/[riId]/grams (estimate)", () => {
     vi.clearAllMocks();
     vi.mocked(getIsLoggedIn).mockResolvedValue(true);
     vi.mocked(getRecipeIngredientById).mockResolvedValue(
-      makeRecipeIngredient("r-1", 0, {
+      makeRecipeIngredientRow("r-1", 0, {
         raw_text: "3 tbsp chopped garlic",
         name_text: "chopped garlic",
         quantity: 3,
@@ -47,7 +47,7 @@ describe("POST /api/recipes/[id]/ingredients/[riId]/grams (estimate)", () => {
     );
     vi.mocked(estimateLineGrams).mockResolvedValue(26);
     vi.mocked(setRecipeIngredientGrams).mockResolvedValue(
-      makeRecipeIngredient("r-1", 0, { estimated_grams: 26, grams_source: "llm" }),
+      makeRecipeIngredientRow("r-1", 0, { estimated_grams: 26, grams_source: "llm" }),
     );
   });
 
@@ -99,7 +99,7 @@ describe("PATCH /api/recipes/[id]/ingredients/[riId]/grams (manual set/clear)", 
     vi.clearAllMocks();
     vi.mocked(getIsLoggedIn).mockResolvedValue(true);
     vi.mocked(setRecipeIngredientGrams).mockResolvedValue(
-      makeRecipeIngredient("r-1", 0, { estimated_grams: 42, grams_source: "manual" }),
+      makeRecipeIngredientRow("r-1", 0, { estimated_grams: 42, grams_source: "manual" }),
     );
   });
 
@@ -115,7 +115,7 @@ describe("PATCH /api/recipes/[id]/ingredients/[riId]/grams (manual set/clear)", 
 
   it("clears with null (source null)", async () => {
     vi.mocked(setRecipeIngredientGrams).mockResolvedValue(
-      makeRecipeIngredient("r-1", 0, { estimated_grams: null, grams_source: null }),
+      makeRecipeIngredientRow("r-1", 0, { estimated_grams: null, grams_source: null }),
     );
 
     const res = await PATCH(
@@ -133,7 +133,7 @@ describe("PATCH /api/recipes/[id]/ingredients/[riId]/grams (manual set/clear)", 
   // the derived value and re-block the recipe's coverage.
   it("stores an explicit 0 as 'manual' rather than treating it as a clear", async () => {
     vi.mocked(setRecipeIngredientGrams).mockResolvedValue(
-      makeRecipeIngredient("r-1", 0, { estimated_grams: 0, grams_source: "manual" }),
+      makeRecipeIngredientRow("r-1", 0, { estimated_grams: 0, grams_source: "manual" }),
     );
 
     const res = await PATCH(

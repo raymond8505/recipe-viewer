@@ -2,7 +2,7 @@ import type { Meta, StoryObj } from "@storybook/nextjs-vite";
 import { userEvent, within } from "storybook/test";
 import {
   ingredientFixtures,
-  makeRecipeIngredient,
+  makeRecipeIngredientRow,
   matchedLinesScenario,
 } from "@/fixtures";
 import type { IngredientKeywordMatch } from "@/types/ingredient";
@@ -75,7 +75,7 @@ export const Default: Story = {
     ],
     recipeYield: "4 servings",
     initialRows: [
-      makeRecipeIngredient("story-recipe", 0, {
+      makeRecipeIngredientRow("story-recipe", 0, {
         raw_text: "2 tsp cumin seed",
         quantity: 2,
         unit: "tsp",
@@ -83,7 +83,7 @@ export const Default: Story = {
         ingredient_id: cumin.id,
         match_status: "matched",
       }),
-      makeRecipeIngredient("story-recipe", 1, {
+      makeRecipeIngredientRow("story-recipe", 1, {
         raw_text: "1 tbsp olive oil",
         quantity: 1,
         unit: "tbsp",
@@ -91,7 +91,7 @@ export const Default: Story = {
         ingredient_id: oliveOil.id,
         match_status: "matched",
       }),
-      makeRecipeIngredient("story-recipe", 2, {
+      makeRecipeIngredientRow("story-recipe", 2, {
         raw_text: "125 g all-purpose flour",
         quantity: 125,
         unit: "g",
@@ -99,7 +99,7 @@ export const Default: Story = {
         ingredient_id: flour.id,
         match_status: "matched",
       }),
-      makeRecipeIngredient("story-recipe", 3, {
+      makeRecipeIngredientRow("story-recipe", 3, {
         raw_text:
           "1 tsp Diamond Crystal kosher salt, plus more to season the pot generously",
         quantity: 1,
@@ -155,7 +155,7 @@ export const WithExclusions: Story = {
     ],
     recipeYield: "2 servings",
     initialRows: [
-      makeRecipeIngredient("story-recipe", 0, {
+      makeRecipeIngredientRow("story-recipe", 0, {
         raw_text: "125 g all-purpose flour",
         quantity: 125,
         unit: "g",
@@ -163,7 +163,7 @@ export const WithExclusions: Story = {
         ingredient_id: flour.id,
         match_status: "matched",
       }),
-      makeRecipeIngredient("story-recipe", 1, {
+      makeRecipeIngredientRow("story-recipe", 1, {
         raw_text: "1 cup diced yellow onion",
         quantity: 1,
         unit: "cup",
@@ -171,7 +171,7 @@ export const WithExclusions: Story = {
         ingredient_id: onion.id,
         match_status: "matched",
       }),
-      makeRecipeIngredient("story-recipe", 2, {
+      makeRecipeIngredientRow("story-recipe", 2, {
         raw_text: "2 eggs",
         quantity: 2,
         unit: null,
@@ -179,7 +179,7 @@ export const WithExclusions: Story = {
         ingredient_id: null,
         match_status: "unmatched",
       }),
-      makeRecipeIngredient("story-recipe", 3, {
+      makeRecipeIngredientRow("story-recipe", 3, {
         raw_text: "2 cumin pods",
         quantity: 2,
         unit: null,
@@ -187,7 +187,7 @@ export const WithExclusions: Story = {
         ingredient_id: cumin.id,
         match_status: "matched",
       }),
-      makeRecipeIngredient("story-recipe", 4, {
+      makeRecipeIngredientRow("story-recipe", 4, {
         raw_text: "kosher salt to taste",
         quantity: null,
         unit: null,
@@ -217,7 +217,7 @@ export const EstimatedGrams: Story = {
     ],
     recipeYield: "2 servings",
     initialRows: [
-      makeRecipeIngredient("story-recipe", 0, {
+      makeRecipeIngredientRow("story-recipe", 0, {
         raw_text: "3 tbsp diced yellow onion",
         quantity: 3,
         unit: "tbsp",
@@ -227,7 +227,7 @@ export const EstimatedGrams: Story = {
         estimated_grams: 30,
         grams_source: "llm",
       }),
-      makeRecipeIngredient("story-recipe", 1, {
+      makeRecipeIngredientRow("story-recipe", 1, {
         raw_text: "1 cup diced yellow onion",
         quantity: 1,
         unit: "cup",
@@ -235,7 +235,7 @@ export const EstimatedGrams: Story = {
         ingredient_id: onion.id,
         match_status: "matched",
       }),
-      makeRecipeIngredient("story-recipe", 2, {
+      makeRecipeIngredientRow("story-recipe", 2, {
         raw_text: "125 g all-purpose flour",
         quantity: 125,
         unit: "g",
@@ -269,7 +269,7 @@ export const NotCounted: Story = {
     ],
     recipeYield: "2 servings",
     initialRows: [
-      makeRecipeIngredient("story-recipe", 0, {
+      makeRecipeIngredientRow("story-recipe", 0, {
         raw_text: "125 g all-purpose flour",
         quantity: 125,
         unit: "g",
@@ -277,7 +277,7 @@ export const NotCounted: Story = {
         ingredient_id: flour.id,
         match_status: "matched",
       }),
-      makeRecipeIngredient("story-recipe", 1, {
+      makeRecipeIngredientRow("story-recipe", 1, {
         raw_text: "1 tbsp olive oil",
         quantity: 1,
         unit: "tbsp",
@@ -285,7 +285,7 @@ export const NotCounted: Story = {
         ingredient_id: oliveOil.id,
         match_status: "matched",
       }),
-      makeRecipeIngredient("story-recipe", 2, {
+      makeRecipeIngredientRow("story-recipe", 2, {
         raw_text: "kosher salt to taste",
         quantity: null,
         unit: null,
@@ -306,7 +306,7 @@ export const Flat: Story = {
     schemaIngredients: ["2 tsp cumin seed", "1 tbsp olive oil"],
     recipeYield: "2 servings",
     initialRows: [
-      makeRecipeIngredient("story-recipe", 0, {
+      makeRecipeIngredientRow("story-recipe", 0, {
         raw_text: "2 tsp cumin seed",
         quantity: 2,
         unit: "tsp",
@@ -314,7 +314,7 @@ export const Flat: Story = {
         ingredient_id: cumin.id,
         match_status: "matched",
       }),
-      makeRecipeIngredient("story-recipe", 1, {
+      makeRecipeIngredientRow("story-recipe", 1, {
         raw_text: "1 tbsp olive oil",
         quantity: 1,
         unit: "tbsp",
@@ -351,7 +351,7 @@ export const StaleNormalization: Story = {
     ],
     recipeYield: "2 servings",
     initialRows: [
-      makeRecipeIngredient("story-recipe", 0, {
+      makeRecipeIngredientRow("story-recipe", 0, {
         line_id: "line-cumin",
         raw_text: "1 tsp cumin seed",
         quantity: 1,
@@ -360,7 +360,7 @@ export const StaleNormalization: Story = {
         ingredient_id: cumin.id,
         match_status: "matched",
       }),
-      makeRecipeIngredient("story-recipe", 2, {
+      makeRecipeIngredientRow("story-recipe", 2, {
         raw_text: "1 tbsp olive oil",
         quantity: 1,
         unit: "tbsp",
@@ -414,7 +414,7 @@ export const NoServings: Story = {
     schemaIngredients: ["125 g all-purpose flour"],
     recipeYield: undefined,
     initialRows: [
-      makeRecipeIngredient("story-recipe", 0, {
+      makeRecipeIngredientRow("story-recipe", 0, {
         raw_text: "125 g all-purpose flour",
         quantity: 125,
         unit: "g",
