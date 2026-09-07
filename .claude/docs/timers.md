@@ -7,6 +7,8 @@
 - **Middle col (`flex-1`):** name + time, rendered as a `<button>` that calls `onTogglePause` (running/paused) or `onReset` (finished). This is the primary accessible tap target and carries the full aria-label.
 - **Right col (`w-12`, fixed):** edit (top) + delete (bottom).
 
+**The middle-col `TAP_BLOCK` must stay `items-stretch`.** The `Button` primitive is `inline-flex`, so the label/time spans are flex items; `items-start` sized them to their own text and the label's `truncate` never engaged — long names overflowed the column and were clipped by the card with no ellipsis (regression from routing the card through `Button`, PR-era June 2026). Left alignment comes from `text-left`.
+
 **Alarm state is intentionally 2-column** (dismiss left, reset+delete right) — there is no play/pause concept. Do not normalize it to 3-column.
 
 **TimerCard tests (`src/__tests__/TimerCard.test.tsx`) use aria-label regexes.** Before renaming any button label, grep the test file for the old string — broken labels cause hard `getByLabelText` failures, not soft mismatches.

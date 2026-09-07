@@ -96,6 +96,16 @@ describe("TimerCard (running)", () => {
     const { container } = render(<TimerCard timer={makeTimer({ remaining: 60 })} {...defaultProps} />);
     expect(container.firstChild).not.toHaveClass("animate-timer-done");
   });
+
+  it("stretches the label across the middle column so truncate can engage", () => {
+    // The middle column is a flex Button; with `items-start` the label span
+    // sized to its own text and long names overflowed with no ellipsis.
+    render(<TimerCard timer={makeTimer()} {...defaultProps} />);
+    const middle = screen.getByLabelText(/pause pasta/i);
+    expect(middle).toHaveClass("items-stretch");
+    expect(middle).not.toHaveClass("items-start");
+    expect(screen.getByText("Pasta")).toHaveClass("truncate");
+  });
 });
 
 describe("TimerCard (paused)", () => {
