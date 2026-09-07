@@ -19,7 +19,7 @@ import {
 } from "@/lib/api/recipes";
 import { importUsdaIngredient } from "@/lib/api/ingredients";
 import type { UsdaSearchFood } from "@/lib/usda";
-import type { QuantitativeValue, RecipeIngredient } from "@/types/recipe";
+import type { QuantitativeValue, SchemaOrgIngredientLine } from "@/types/recipe";
 import type {
   IngredientKeywordMatch,
   IngredientNutrition,
@@ -68,7 +68,7 @@ export interface NutritionDetailGroup {
 // and MCP get_recipe all keep resolving through ScalableRecipe.nutrition().
 export function useNutritionDetail(
   recipeId: string,
-  schemaIngredients: Array<string | RecipeIngredient>,
+  schemaIngredients: Array<string | SchemaOrgIngredientLine>,
   recipeYield: string | string[] | QuantitativeValue | undefined,
   initialRows: RecipeIngredientRow[],
   initialIngredients: IngredientRow[],

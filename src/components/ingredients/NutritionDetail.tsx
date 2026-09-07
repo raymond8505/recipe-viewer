@@ -13,7 +13,7 @@ import { Button } from "@/components/ui/button";
 import { WarningIcon } from "@/components/icons";
 import { pluralize } from "@/lib/format";
 import { useNutritionDetail } from "@/hooks/useNutritionDetail";
-import type { QuantitativeValue, RecipeIngredient } from "@/types/recipe";
+import type { QuantitativeValue, SchemaOrgIngredientLine } from "@/types/recipe";
 import type { IngredientRow, RecipeIngredientRow } from "@/types/ingredient";
 import type {
   IngredientAutocompleteSearch,
@@ -32,7 +32,7 @@ const COLUMN_COUNT = NUTRITION_DETAIL_COLUMNS.length + 2;
 
 interface NutritionDetailProps {
   recipeId: string;
-  schemaIngredients: Array<string | RecipeIngredient>;
+  schemaIngredients: Array<string | SchemaOrgIngredientLine>;
   recipeYield: string | string[] | QuantitativeValue | undefined;
   initialRows: RecipeIngredientRow[];
   initialIngredients: IngredientRow[];

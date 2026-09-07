@@ -2,7 +2,7 @@ import type {
   IngredientRow,
   RecipeIngredientRow,
 } from "@/types/ingredient";
-import type { RecipeIngredient } from "@/types/recipe";
+import type { SchemaOrgIngredientLine } from "@/types/recipe";
 
 // Realistic catalog rows. Nutrition values are real USDA per-100g figures
 // (cumin: SR Legacy fdcId 170923 — the same payload the usda.ts tests fixture);
@@ -222,7 +222,7 @@ export function makeRecipeIngredient(
  * `recipe_id` matches the `recipeId` arg on the NutritionDetail stories' meta.
  */
 export const matchedLinesScenario: {
-  schemaIngredients: Array<string | RecipeIngredient>;
+  schemaIngredients: Array<string | SchemaOrgIngredientLine>;
   recipeYield: string;
   initialRows: RecipeIngredientRow[];
   initialIngredients: IngredientRow[];

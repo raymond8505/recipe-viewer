@@ -1,4 +1,4 @@
-import type { SchemaRecipe, RecipeIngredient } from "@/types/recipe";
+import type { SchemaRecipe, SchemaOrgIngredientLine } from "@/types/recipe";
 import type { IngredientNutrition } from "@/types/ingredient";
 import {
   parseIngredient,
@@ -56,7 +56,7 @@ export interface ScalableRecipeState {
 export interface ScaledIngredient {
   index: number;
   group?: string;
-  /** Raw schema string (or .name when the source was a RecipeIngredient object). */
+  /** Raw schema string (or .name when the source was a SchemaOrgIngredientLine object). */
   original: string;
   /** Pre-scale parse, or null for unparseable strings like "salt to taste". */
   parsed: ParsedIngredient | null;
@@ -101,7 +101,7 @@ interface InternalEntry {
 }
 
 function parseEntry(
-  entry: string | RecipeIngredient,
+  entry: string | SchemaOrgIngredientLine,
   index: number,
 ): InternalEntry {
   const text = typeof entry === "string" ? entry : entry.name;

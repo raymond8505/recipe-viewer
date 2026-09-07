@@ -3,7 +3,7 @@
 // place and tests/stories can mock a single module.
 
 import type { IngredientRow, RecipeIngredientRow } from "@/types/ingredient";
-import type { RecipeIngredient } from "@/types/recipe";
+import type { SchemaOrgIngredientLine } from "@/types/recipe";
 
 export interface RecipeIngredientsPayload {
   rows: RecipeIngredientRow[];
@@ -31,7 +31,7 @@ export async function fetchRecipeIngredients(
 
 export interface RecipeLineTextUpdate {
   /** The full updated array — the edited line keeps its string/object shape. */
-  recipeIngredient: Array<string | RecipeIngredient>;
+  recipeIngredient: Array<string | SchemaOrgIngredientLine>;
   /** The derived rows after the server's deterministic re-parse. */
   rows: RecipeIngredientRow[];
 }

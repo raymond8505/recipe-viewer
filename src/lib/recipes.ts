@@ -18,7 +18,7 @@ import {
   RECIPE_STATUSES,
 } from "./schemas/recipe";
 import type {
-  RecipeIngredient,
+  SchemaOrgIngredientLine,
   RecipeRow,
   RecipesResult,
   SchemaRecipe,
@@ -342,7 +342,7 @@ export async function updateRecipeRow(
   // Line text still has to reach the rows, but that's a deterministic re-parse
   // (syncRecipeIngredientText below), not a matcher run.
   let shouldNormalize = false;
-  let syncLines: Array<string | RecipeIngredient> | null = null;
+  let syncLines: Array<string | SchemaOrgIngredientLine> | null = null;
   if (patch.schema !== undefined) {
     // Ids on the incoming lines win; id-less lines inherit from the current
     // array by text where possible. Skipping this would re-key every row on

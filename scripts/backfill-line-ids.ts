@@ -22,7 +22,7 @@
 
 import { withLineIds } from "@/lib/ingredientLines";
 import { getSupabaseAdminClient } from "@/lib/supabase";
-import type { RecipeIngredient, SchemaRecipe } from "@/types/recipe";
+import type { SchemaOrgIngredientLine, SchemaRecipe } from "@/types/recipe";
 
 interface BackfillRow {
   id: string;
@@ -74,7 +74,7 @@ async function main(): Promise<void> {
   for (const recipe of pending) {
     if (done >= limit) break;
     const schema = recipe.metadata!.schema!;
-    const lines: RecipeIngredient[] = withLineIds(schema.recipeIngredient ?? []);
+    const lines: SchemaOrgIngredientLine[] = withLineIds(schema.recipeIngredient ?? []);
 
     if (dryRun) {
       console.log(`[dry] ${recipe.name} (${recipe.id}): ${lines.length} lines`);

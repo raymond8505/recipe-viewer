@@ -260,7 +260,7 @@ describe("getIngredientText", () => {
     expect(getIngredientText("2 cups flour")).toBe("2 cups flour");
   });
 
-  it("returns the text field from a RecipeIngredient object", () => {
+  it("returns the text field from a SchemaOrgIngredientLine object", () => {
     expect(getIngredientText({ name: "1 cup sugar", group: "Cake" })).toBe("1 cup sugar");
   });
 });

@@ -1,5 +1,5 @@
 import { getIngredientText } from "@/lib/format";
-import type { RecipeIngredient } from "@/types/recipe";
+import type { SchemaOrgIngredientLine } from "@/types/recipe";
 
 // Identity for a recipe's ingredient LINES.
 //
@@ -12,7 +12,7 @@ import type { RecipeIngredient } from "@/types/recipe";
 // that dropped them would silently re-key every row and throw away curation.
 
 /** The stable id of a line, or null for a plain-string / legacy line. */
-export function lineId(line: string | RecipeIngredient): string | null {
+export function lineId(line: string | SchemaOrgIngredientLine): string | null {
   return typeof line === "string" ? null : (line.id ?? null);
 }
 
@@ -32,9 +32,9 @@ export function lineId(line: string | RecipeIngredient): string | null {
  * derived row yet, and normalization will guess one for it.
  */
 export function withLineIds(
-  next: ReadonlyArray<string | RecipeIngredient>,
-  current: ReadonlyArray<string | RecipeIngredient> = [],
-): RecipeIngredient[] {
+  next: ReadonlyArray<string | SchemaOrgIngredientLine>,
+  current: ReadonlyArray<string | SchemaOrgIngredientLine> = [],
+): SchemaOrgIngredientLine[] {
   const claimed = new Set(
     next.map(lineId).filter((id): id is string => id != null),
   );
@@ -52,7 +52,7 @@ export function withLineIds(
   }
 
   return next.map((line) => {
-    const base: RecipeIngredient =
+    const base: SchemaOrgIngredientLine =
       typeof line === "string" ? { name: line } : { ...line };
     const existing = lineId(line);
     if (existing != null) return { ...base, id: existing };
@@ -78,8 +78,8 @@ export function withLineIds(
  * against how many lines were id-less to begin with, rather than a set key.
  */
 export function lineSetChanged(
-  before: ReadonlyArray<string | RecipeIngredient>,
-  after: ReadonlyArray<string | RecipeIngredient>,
+  before: ReadonlyArray<string | SchemaOrgIngredientLine>,
+  after: ReadonlyArray<string | SchemaOrgIngredientLine>,
 ): boolean {
   const beforeIds = new Set(
     before.map(lineId).filter((id): id is string => id != null),

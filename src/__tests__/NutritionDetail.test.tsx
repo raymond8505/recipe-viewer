@@ -18,7 +18,7 @@ import type {
   RecipeIngredientRow,
 } from "@/types/ingredient";
 import type { UsdaSearchFood } from "@/lib/usda";
-import type { RecipeIngredient } from "@/types/recipe";
+import type { SchemaOrgIngredientLine } from "@/types/recipe";
 
 vi.mock("@/lib/api/recipes", () => ({
   normalizeRecipe: vi.fn(),
@@ -41,7 +41,7 @@ const usdaSearch = vi.fn<(q: string) => Promise<UsdaSearchFood[]>>();
 // Grouping reorders these, so passing tests prove index alignment. Every line
 // carries a stable id — the shape every persisted recipe has had since
 // db/migrations/0013; the legacy fixtures below opt out on purpose.
-const schemaIngredients: Array<string | RecipeIngredient> = [
+const schemaIngredients: Array<string | SchemaOrgIngredientLine> = [
   { name: "100 g butter", group: "Cake", id: "L0" },
   { name: "2 eggs", group: "Frosting", id: "L1" },
   { name: "1 tsp cumin", group: "Cake", id: "L2" },
@@ -103,7 +103,7 @@ function makeRows(): RecipeIngredientRow[] {
 
 function renderDetail(overrides?: {
   rows?: RecipeIngredientRow[];
-  schemaIngredients?: Array<string | RecipeIngredient>;
+  schemaIngredients?: Array<string | SchemaOrgIngredientLine>;
   recipeYield?: string | undefined;
   initialIngredients?: IngredientRow[];
 }) {

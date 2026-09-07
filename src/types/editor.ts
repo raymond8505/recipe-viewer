@@ -3,7 +3,7 @@
  *
  * CRITICAL: groups are a UI construct that exists ONLY in editor draft state.
  * The stored schema has no group type — ingredients are a flat
- * `Array<string | RecipeIngredient>` whose membership is carried on each
+ * `Array<string | SchemaOrgIngredientLine>` whose membership is carried on each
  * ingredient's own `group` field, and instructions are a flat
  * `Array<HowToStep | HowToSection>`. The converters in `src/lib/format.ts`
  * (`schemaToEditable*` / `editable*ToSchema`) are the ONLY place this

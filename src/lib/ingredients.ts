@@ -1,6 +1,6 @@
 import { getSupabaseAdminClient, selectColumns, toVectorLiteral } from "./supabase";
 import { computeRecipeNutrition, type RecipeNutritionResult } from "./nutritionMath";
-import type { RecipeIngredient } from "@/types/recipe";
+import type { SchemaOrgIngredientLine } from "@/types/recipe";
 import type {
   GramsSource,
   IngredientKeywordMatch,
@@ -428,7 +428,7 @@ export async function getRecipeIngredients(
  */
 export async function getRecipeNormalizedNutrition(
   recipeId: string,
-  schemaIngredients: Array<string | RecipeIngredient>,
+  schemaIngredients: Array<string | SchemaOrgIngredientLine>,
 ): Promise<RecipeNutritionResult | null> {
   const rows = await getRecipeIngredients(recipeId);
   if (rows.length === 0) return null;

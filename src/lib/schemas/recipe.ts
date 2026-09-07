@@ -15,7 +15,7 @@ export const ingredientSchema = z.union([
   z.object({
     name: z.string(),
     group: z.string().optional(),
-    // Stable line identity (see RecipeIngredient.id). Accepted so a client
+    // Stable line identity (see SchemaOrgIngredientLine.id). Accepted so a client
     // that read a recipe can hand its lines back unchanged and keep each
     // line's derived row; the write path mints one when it's absent.
     id: z.string().optional(),

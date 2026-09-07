@@ -1,4 +1,4 @@
-export interface RecipeIngredient {
+export interface SchemaOrgIngredientLine {
   name: string;
   group?: string;
   /**
@@ -82,7 +82,7 @@ export interface SchemaRecipe {
   recipeYield?: string | string[] | QuantitativeValue;
   recipeCuisine?: string;
   recipeCategory?: string | string[];
-  recipeIngredient?: Array<string | RecipeIngredient>;
+  recipeIngredient?: Array<string | SchemaOrgIngredientLine>;
   recipeInstructions?: Array<HowToStep | HowToSection>;
   keywords?: string;
   nutrition?: {

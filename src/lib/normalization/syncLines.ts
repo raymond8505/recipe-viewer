@@ -6,7 +6,7 @@ import {
   type RecipeIngredientParsePatch,
 } from "@/lib/ingredients";
 import type { RecipeIngredientRow } from "@/types/ingredient";
-import type { RecipeIngredient } from "@/types/recipe";
+import type { SchemaOrgIngredientLine } from "@/types/recipe";
 import { parseLineDeterministic } from "./parseLine";
 
 /**
@@ -34,7 +34,7 @@ import { parseLineDeterministic } from "./parseLine";
  */
 export async function syncRecipeIngredientText(
   recipeId: string,
-  lines: ReadonlyArray<string | RecipeIngredient>,
+  lines: ReadonlyArray<string | SchemaOrgIngredientLine>,
 ): Promise<void> {
   const rows = await getRecipeIngredients(recipeId);
   const rowByLineId = new Map(

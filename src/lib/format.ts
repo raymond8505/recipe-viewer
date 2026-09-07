@@ -233,7 +233,7 @@ import type {
   HowToSection,
   HowToStep,
   QuantitativeValue,
-  RecipeIngredient,
+  SchemaOrgIngredientLine,
   SchemaRecipe,
 } from "@/types/recipe";
 import type {
@@ -290,16 +290,16 @@ export function isBrowsableUrl(value: string | null | undefined): boolean {
 }
 
 /**
- * Get the ingredient text from a string or RecipeIngredient object.
+ * Get the ingredient text from a string or SchemaOrgIngredientLine object.
  */
 export function getIngredientText(
-  ingredient: string | RecipeIngredient,
+  ingredient: string | SchemaOrgIngredientLine,
 ): string {
   return typeof ingredient === "string" ? ingredient : ingredient.name;
 }
 
 export interface IndexedIngredient {
-  ingredient: string | RecipeIngredient;
+  ingredient: string | SchemaOrgIngredientLine;
   /**
    * Position in the original recipeIngredient array. Grouping reorders
    * interleaved groups, so this is the only stable join key back to derived
@@ -314,7 +314,7 @@ export interface IndexedIngredient {
  * when no ingredient defines group.
  */
 export function groupIngredientsWithIndex(
-  ingredients: Array<string | RecipeIngredient>,
+  ingredients: Array<string | SchemaOrgIngredientLine>,
 ): Array<{ heading: string | null; items: IndexedIngredient[] }> {
   const indexed = ingredients.map((ingredient, index) => ({ ingredient, index }));
   const hasGroups = ingredients.some(
@@ -341,8 +341,8 @@ export function groupIngredientsWithIndex(
  * a null heading when no ingredient defines group.
  */
 export function groupIngredients(
-  ingredients: Array<string | RecipeIngredient>,
-): Array<{ heading: string | null; items: Array<string | RecipeIngredient> }> {
+  ingredients: Array<string | SchemaOrgIngredientLine>,
+): Array<{ heading: string | null; items: Array<string | SchemaOrgIngredientLine> }> {
   return groupIngredientsWithIndex(ingredients).map(({ heading, items }) => ({
     heading,
     items: items.map((item) => item.ingredient),
@@ -636,7 +636,7 @@ export function msToIsoDuration(
 
 /** Stored ingredient list → editor groups (insertion order preserved). */
 export function schemaToEditableIngredients(
-  ingredients: Array<string | RecipeIngredient>,
+  ingredients: Array<string | SchemaOrgIngredientLine>,
 ): EditableIngredients {
   return groupIngredients(ingredients).map(({ heading, items }) => ({
     id: nanoid(),
@@ -649,8 +649,8 @@ export function schemaToEditableIngredients(
  *  group with a blank heading is treated as ungrouped (plain strings). */
 export function editableIngredientsToSchema(
   groups: EditableIngredients,
-): Array<string | RecipeIngredient> {
-  const result: Array<string | RecipeIngredient> = [];
+): Array<string | SchemaOrgIngredientLine> {
+  const result: Array<string | SchemaOrgIngredientLine> = [];
   for (const group of groups) {
     const heading = group.heading?.trim() || null;
     for (const item of group.items) {

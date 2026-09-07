@@ -13,7 +13,7 @@ import type {
   IngredientRow,
   RecipeIngredientRow,
 } from "@/types/ingredient";
-import type { RecipeIngredient, SchemaRecipe } from "@/types/recipe";
+import type { SchemaOrgIngredientLine, SchemaRecipe } from "@/types/recipe";
 
 /** The Schema.org NutritionInformation shape carried on SchemaRecipe. */
 export type SchemaNutrition = NonNullable<SchemaRecipe["nutrition"]>;
@@ -268,7 +268,7 @@ export function indexRowsForLines(
  * Position is only for legacy lines that predate ids (db/migrations/0013).
  */
 export function resolveLineRow(
-  line: string | RecipeIngredient,
+  line: string | SchemaOrgIngredientLine,
   index: number,
   rowIndex: LineRowIndex,
 ): ResolvedLineRow {
@@ -328,7 +328,7 @@ export interface RecipeNutritionResult {
  * total. `ingredientsById` maps `ingredient_id` → catalog nutrition/density.
  */
 export function computeRecipeNutrition(
-  schemaIngredients: Array<string | RecipeIngredient>,
+  schemaIngredients: Array<string | SchemaOrgIngredientLine>,
   rows: RecipeIngredientRow[],
   ingredientsById: Map<string, CatalogNutritionSource>,
 ): RecipeNutritionResult {
