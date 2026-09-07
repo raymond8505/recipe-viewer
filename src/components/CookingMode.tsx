@@ -25,7 +25,7 @@ import {
 import TimerColumn from "@/components/cooking/TimerColumn";
 import TimerCard from "@/components/cooking/TimerCard";
 import AddTimerModal from "@/components/cooking/AddTimerModal";
-import DraggableRibbon from "@/components/cooking/DraggableRibbon";
+import DraggableRibbon, { RibbonItem } from "@/components/cooking/DraggableRibbon";
 import MealSearch from "@/components/cooking/MealSearch";
 import MealTabs from "@/components/cooking/MealTabs";
 import {
@@ -429,11 +429,7 @@ export default function CookingMode({
         {timers.length > 0 ? (
           <DraggableRibbon className="px-3 pb-3 pt-1 gap-2">
             {sortedTimers(timers).map((timer) => (
-              <div
-                key={timer.id}
-                data-timer-id={timer.id}
-                className="snap-start shrink-0 w-44"
-              >
+              <RibbonItem key={timer.id} data-timer-id={timer.id}>
                 <TimerCard
                   timer={timer}
                   onTogglePause={togglePause}
@@ -446,7 +442,7 @@ export default function CookingMode({
                   }}
                   recipeName={timerRecipeNames.get(timer.id)}
                 />
-              </div>
+              </RibbonItem>
             ))}
           </DraggableRibbon>
         ) : (

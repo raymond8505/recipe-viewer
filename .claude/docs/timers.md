@@ -20,3 +20,5 @@ The phrase "timer container" refers to the timer UI in **both** orientations:
 - **Landscape / desktop (`lg:flex`):** vertical `TimerColumn` on the right side
 
 Both views render the same timer data. When making changes to timer display, interaction, or scroll behaviour, both views must be updated. Both render `<div data-timer-id={timer.id}>` wrappers around each `TimerCard` so features can target timers by ID in either view with `querySelectorAll` (not `querySelector` — both elements exist in the DOM simultaneously, only one is visible via CSS).
+
+**Ribbon children go through `RibbonItem`** (exported from `DraggableRibbon.tsx`), which is bounded (`min-w-56 max-w-72`), never a fixed `w-*`. The 3-column `TimerCard` has two fixed `w-12` side columns, so on a phone it needs ~212–245px to show `text-3xl` mono times like "1:30:00"; the original `w-44` was sized for the earlier stacked card and clipped the time once the columns landed. The cap is still required — without it a long label never `truncate`s and the card outgrows the viewport, which `snap-mandatory` can't scroll past.

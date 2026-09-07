@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { render, screen } from "@testing-library/react";
-import DraggableRibbon from "@/components/cooking/DraggableRibbon";
+import DraggableRibbon, { RibbonItem } from "@/components/cooking/DraggableRibbon";
 
 describe("DraggableRibbon", () => {
   it("renders children", () => {
@@ -33,5 +33,27 @@ describe("DraggableRibbon", () => {
     const el = container.firstChild as HTMLElement;
     expect(el.className).toContain("gap-4");
     expect(el.className).toContain("px-3");
+  });
+});
+
+describe("RibbonItem", () => {
+  it("bounds its width instead of fixing it, and snaps", () => {
+    const { container } = render(<RibbonItem>child</RibbonItem>);
+    const el = container.firstChild as HTMLElement;
+    expect(el.className).toContain("snap-start");
+    expect(el.className).toContain("shrink-0");
+    expect(el.className).toContain("min-w-56");
+    expect(el.className).toContain("max-w-72");
+    // A fixed width sized for the old stacked TimerCard is what clipped the
+    // time on phones — the 3-column card needs room to size to its content.
+    // `\b` would match the `w-` inside `min-w-56`; anchor on a class start.
+    expect(el.className).not.toMatch(/(^|\s)w-\d+/);
+  });
+
+  it("forwards data attributes so both timer views can be targeted by id", () => {
+    const { container } = render(
+      <RibbonItem data-timer-id="t1">child</RibbonItem>
+    );
+    expect(container.querySelector("[data-timer-id='t1']")).not.toBeNull();
   });
 });
