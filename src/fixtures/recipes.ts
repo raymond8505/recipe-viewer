@@ -1,4 +1,4 @@
-import { getIngredientText } from "@/lib/format";
+import { getIngredientText, parseDurationToSeconds } from "@/lib/format";
 import { parseLineDeterministic } from "@/lib/normalization/parseLine";
 import { toIngredientGroups } from "@/lib/recipeSchema";
 import type { RecipeIngredientRow } from "@/types/ingredient";
@@ -16,6 +16,12 @@ export interface RecipeRowInput {
  * Build a RecipeRow the way the repo layer does: ingredient lines become
  * `recipe_ingredients` rows plus a group array of their ids, instructions
  * become their own column, and what is left stays in metadata.schema.
+ *
+ * The result is a HYDRATED row — what every consumer above src/lib/recipes.ts
+ * sees. The time columns (SECONDS) are derived from the schema's ISO values
+ * and the ISO values are left in place, exactly as hydrateTimes leaves a row
+ * it has read. A raw post-0019 database row would carry the columns and NO
+ * schema time keys; only repo-layer tests should model that.
  *
  * Row ids are derived from the recipe id (`<id>-i0`, `-i1`, …) rather than
  * random, so a fixture's line ids are stable and assertable. Lines are parsed
@@ -63,6 +69,9 @@ export function makeRecipeRow({
     url,
     source,
     status,
+    prep_time: parseDurationToSeconds(stored.prepTime),
+    cook_time: parseDurationToSeconds(stored.cookTime),
+    total_time: parseDurationToSeconds(stored.totalTime),
     ingredients: toIngredientGroups(
       lines.map((line, index) => ({
         ...(typeof line === "string" ? {} : { group: line.group }),

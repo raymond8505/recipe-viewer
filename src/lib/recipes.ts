@@ -1,6 +1,6 @@
 import { getSupabaseClient, selectColumns, toVectorLiteral } from "./supabase";
 import { getFeatures } from "./features";
-import { schemaToMarkdown } from "./format";
+import { parseDurationToSeconds, schemaToMarkdown, secondsToIso } from "./format";
 import { generateEmbedding } from "./embedding";
 import {
   deleteRecipeIngredientRows,
@@ -53,6 +53,9 @@ const RECIPE_COLUMNS = selectColumns<RecipeRowColumns>()([
   "url",
   "source",
   "status",
+  "prep_time",
+  "cook_time",
+  "total_time",
   "ingredients",
   "instructions",
   "metadata",
@@ -62,6 +65,8 @@ const RECIPE_COLUMNS = selectColumns<RecipeRowColumns>()([
 // lines and instruction steps become columns, everything else stays in
 // metadata.schema. The lines are handed back rather than stored, because turning
 // them into `ingredients` needs the recipe_ingredients ids the reconcile mints.
+// (`stored` still carries the three time keys at this point — the time seam
+// below takes them out of the blob and puts them in their columns.)
 function splitSchema(schema: SchemaRecipe): {
   stored: StoredRecipeSchema;
   instructions: SchemaRecipe["recipeInstructions"];
@@ -71,12 +76,64 @@ function splitSchema(schema: SchemaRecipe): {
   return { stored, instructions: recipeInstructions, lines: recipeIngredient };
 }
 
-// Attach the recipe_ingredients rows a row's `ingredients` groups point at.
+// ---------------------------------------------------------------------------
+// The time hydrate/extract seam.
+//
+// 0019 made `prep_time`/`cook_time`/`total_time` the source of truth for a
+// recipe's times; the copies still sitting in `metadata.schema` are dead
+// artifacts of the old shape. This pair is the ONLY code that knows that —
+// hydrateTimes runs at every read exit below (via `hydrate`) and stripTimes at
+// every write, so everything above this module (composeRecipeSchema, JSON-LD,
+// schemaToMarkdown, the MCP tools, RecipeCard, RecipeDetail, CookingMode) goes
+// on speaking SchemaRecipe and never observes the stale value.
+//
+// Note the asymmetry with 0016's ingredients/instructions: those are REMOVED
+// from the blob's type and reassembled by composeRecipeSchema; times are
+// hydrated INTO the blob here, so the composer's spread carries them for free.
+//
+// The corollary is the thing to protect: a reader that queries `recipes`
+// without coming through here gets a pre-0019 answer, silently.
+// ---------------------------------------------------------------------------
+
+const TIME_FIELDS = [
+  ["prepTime", "prep_time"],
+  ["cookTime", "cook_time"],
+  ["totalTime", "total_time"],
+] as const;
+
+/**
+ * Overwrite a row's schema time keys from its columns, in place. A null column
+ * DELETES the key rather than writing null, so a hydrated schema is
+ * indistinguishable from one that never had the time — which is what every
+ * downstream `if (schema.prepTime)` already expects.
+ */
+function hydrateTimes(row: RecipeRowColumns): RecipeRowColumns {
+  const schema = row.metadata?.schema;
+  if (!schema) return row;
+  for (const [key, column] of TIME_FIELDS) {
+    const iso = secondsToIso(row[column]);
+    if (iso === undefined) delete schema[key];
+    else schema[key] = iso;
+  }
+  return row;
+}
+
+/** The blob-safe copy of a schema: times removed, so a write can never put a
+ *  fresh value back into the artifact. */
+function stripTimes(schema: StoredRecipeSchema): StoredRecipeSchema {
+  const next = { ...schema };
+  for (const [key] of TIME_FIELDS) delete next[key];
+  return next;
+}
+
+// The one read exit: hydrate the times from their columns and attach the
+// recipe_ingredients rows a row's `ingredients` groups point at. Every path
+// that hands a row out of this module goes through here.
 function hydrate(
   row: RecipeRowColumns,
   ingredientRows: RecipeIngredientRow[],
 ): RecipeRow {
-  return { ...row, ingredientRows };
+  return { ...hydrateTimes(row), ingredientRows };
 }
 
 export interface CreateRecipeInput {
@@ -236,8 +293,10 @@ export async function createRecipeRow(input: CreateRecipeInput): Promise<RecipeR
   // rows in the order they were sent, which it does not promise.
   const { inserts, groups } = reconcileRecipeIngredients(lines ?? [], []);
 
-  // Derived from the schema as given: it still carries the line text, and the
-  // rows about to be written say exactly the same thing.
+  // Derived from the schema as given: it still carries the line text and the
+  // times, and the rows and columns about to be written say exactly the same
+  // thing — the columns are where those LAND, not a reason for the searchable
+  // text to stop mentioning them.
   const content = schemaToMarkdown(input.schema);
   const embedding = await generateEmbedding(content);
   const { data, error } = await supabase
@@ -250,9 +309,12 @@ export async function createRecipeRow(input: CreateRecipeInput): Promise<RecipeR
       url: input.url,
       source: input.source,
       status: input.status ?? DEFAULT_RECIPE_STATUS,
+      prep_time: parseDurationToSeconds(stored.prepTime),
+      cook_time: parseDurationToSeconds(stored.cookTime),
+      total_time: parseDurationToSeconds(stored.totalTime),
       ingredients: groups,
       instructions: instructions ?? [],
-      metadata: { schema: stored },
+      metadata: { schema: stripTimes(stored) },
     })
     .select(RECIPE_COLUMNS)
     .single();
@@ -302,6 +364,11 @@ export async function updateRecipeRow(
     throw new RecipeRepoError("not_found", `Recipe ${id} not found`);
   }
 
+  // Hydrated (times from their columns) BEFORE the merge below, so
+  // `current.metadata.schema` carries the times the columns hold. That is what
+  // makes the three-way patch semantics fall out of the plain schema spread:
+  // an absent key inherits the column's current value, an explicit null clears
+  // it, an ISO string sets it.
   const current = hydrate(existing as RecipeRowColumns, await getRecipeIngredients(id));
   const writePatch: Partial<{
     name: string;
@@ -310,6 +377,9 @@ export async function updateRecipeRow(
     url: string;
     source: string;
     status: RecipeStatus;
+    prep_time: number | null;
+    cook_time: number | null;
+    total_time: number | null;
     ingredients: RecipeIngredientGroup[];
     instructions: SchemaRecipe["recipeInstructions"];
     metadata: { schema: StoredRecipeSchema };
@@ -338,7 +408,12 @@ export async function updateRecipeRow(
     }
     if (instructions !== undefined) writePatch.instructions = instructions;
 
-    writePatch.metadata = { ...current.metadata, schema: mergedStored };
+    // The blob is written WITHOUT times; the columns carry them. `mergedStored`
+    // itself keeps them, because schemaToMarkdown below still has to see them.
+    writePatch.metadata = { ...current.metadata, schema: stripTimes(mergedStored) };
+    writePatch.prep_time = parseDurationToSeconds(mergedStored.prepTime);
+    writePatch.cook_time = parseDurationToSeconds(mergedStored.cookTime);
+    writePatch.total_time = parseDurationToSeconds(mergedStored.totalTime);
     // Keep the top-level name in sync when the schema patch touches it —
     // otherwise list/search views keep showing the old value.
     if (stored.name !== undefined) writePatch.name = stored.name;

@@ -32,6 +32,11 @@ export interface RecipeIngredientGroup {
  * What `metadata.schema` still holds: a Schema.org Recipe minus the two fields
  * that are now their own columns. Nothing should read the two off this type —
  * that's what the composer is for (src/lib/recipeSchema.ts).
+ *
+ * The three time keys are ALSO column-backed (0019) but stay on this type:
+ * the repo layer hydrates them into the blob from the columns on every read
+ * and strips them on every write, so above src/lib/recipes.ts they read as
+ * live. See the hydrate/extract seam in .claude/docs/supabase-data-layer.md.
  */
 export type StoredRecipeSchema = Omit<
   SchemaRecipe,
@@ -48,6 +53,20 @@ export interface RecipeRowColumns {
   url: string;
   source: string;
   status: "published" | "archived" | "draft" | null;
+  /**
+   * Whole seconds; null means no time recorded. These three are the source of
+   * truth for a recipe's times — `metadata.schema.{prepTime,cookTime,totalTime}`
+   * still holds a pre-0019 copy on older rows, but the repo layer overwrites it
+   * from these columns on every read and never writes it again. See the
+   * hydrate/extract seam in .claude/docs/supabase-data-layer.md.
+   *
+   * Seconds, not minutes, so the column can hold any ISO 8601 duration a
+   * scraper produces without rounding. The editor is coarser (HH:MM) — that
+   * asymmetry is deliberate and documented on `formatTimeInput`.
+   */
+  prep_time: number | null;
+  cook_time: number | null;
+  total_time: number | null;
   ingredients: RecipeIngredientGroup[];
   instructions: Array<HowToStep | HowToSection>;
   metadata: { schema: StoredRecipeSchema };
@@ -100,9 +119,12 @@ export interface SchemaRecipe {
   description?: string;
   image?: string | string[];
   author?: { "@type"?: "Person"; name: string };
-  cookTime?: string;
-  prepTime?: string;
-  totalTime?: string;
+  // ISO 8601 durations, backed by the recipes.{prep,cook,total}_time columns.
+  // Explicitly nullable so a patch can CLEAR a time: `undefined` disappears in
+  // JSON and would read as "field absent, leave it alone" after the round trip.
+  cookTime?: string | null;
+  prepTime?: string | null;
+  totalTime?: string | null;
   recipeYield?: string | string[] | QuantitativeValue;
   recipeCuisine?: string;
   recipeCategory?: string | string[];
