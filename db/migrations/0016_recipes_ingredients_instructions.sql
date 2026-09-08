@@ -72,9 +72,8 @@
 -- shape — nothing reads them, and dropping them buys nothing worth a second
 -- rollout window. That makes the blob copies frozen at backfill time, which is
 -- exactly why every reader must go through composeRecipeSchema
--- (src/lib/recipeSchema.ts) rather than metadata.schema. The RPC rewrite that
--- hands n8n a composed schema is a separate 0018, to land after this build
--- deploys.
+-- (src/lib/recipeSchema.ts) rather than metadata.schema. The RPCs that hand
+-- n8n the blob have no callers left and are dropped in 0018.
 
 alter table public.recipes
   add column if not exists ingredients  jsonb not null default '[]'::jsonb,

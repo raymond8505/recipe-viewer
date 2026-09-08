@@ -38,7 +38,7 @@ A line's **position is its index** in those arrays and its **identity is the row
 
 **Normalization only updates rows** (`updateRecipeIngredientRows`, an upsert on the primary key): it never creates or prunes, because the reconcile owns the row set. A row the reconcile dropped mid-run is simply absent from the ids the run carries.
 
-**Outside the app**, the n8n-facing RPCs `match_recipes` and `find_dinner` hand out `metadata->'schema'` with `recipeIngredient` composed from the column and rows by `recipe_schema_with_ingredients` (0018). Anything else that reads the blob directly gets the frozen copy.
+**Nothing outside the app reads the blob.** The RPCs that once handed `metadata->'schema'` to n8n are dropped (0018) — agent search goes through the MCP `search_recipes` tool. Anything that queries the blob directly gets the frozen copy, so don't add such a reader.
 
 ## Promoted time columns — the hydrate/extract seam
 
@@ -58,6 +58,6 @@ Conversions live in `src/lib/format.ts` — never re-derive them. The ISO → co
 
 ## Migrations
 
-**Migration records in `db/migrations/` are applied out-of-band** via Supabase MCP `apply_migration` (project `xonkmdhnjpjkapnsmltu`); 0006+ show up in the project's migrations table, 0002–0005 predate that and don't — check `information_schema` for actual state, not the migrations list. 0016/0017 are applied (as `recipes_ingredients_instructions` / `recipe_ingredients_position_optional`); 0018 is the RPC rewrite that lands with the ingredients cutover. `recipes.instructions` (0016) is populated but unread — instructions stay in the blob.
+**Migration records in `db/migrations/` are applied out-of-band** via Supabase MCP `apply_migration` (project `xonkmdhnjpjkapnsmltu`); 0006+ show up in the project's migrations table, 0002–0005 predate that and don't — check `information_schema` for actual state, not the migrations list. 0016/0017 are applied (as `recipes_ingredients_instructions` / `recipe_ingredients_position_optional`); 0018 drops the dead `match_recipes` / `find_dinner` RPCs. `recipes.instructions` (0016) is populated but unread — instructions stay in the blob.
 
 **`yarn sync:ingredient-columns [--dry-run] [--limit=N]`** brings a recipe's column and rows up to its blob's `recipeIngredient` — the one-shot for recipes edited through a blob-writing build after the 0016 backfill, and the last reader of the dead key. Deterministic only: new rows land unmatched; the matcher is never invoked.
