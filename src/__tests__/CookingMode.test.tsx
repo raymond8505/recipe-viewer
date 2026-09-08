@@ -23,6 +23,7 @@ function makeRecipe(schema: Partial<SchemaRecipe> = {}): RecipeRow {
     id: "1",
     url: "https://example.com",
     source: "example.com",
+    ingredients: [],
     metadata: { schema: { name: "Test Recipe", ...schema } },
   };
 }

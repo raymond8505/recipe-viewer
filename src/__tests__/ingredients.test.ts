@@ -4,12 +4,14 @@ import {
   IngredientRepoError,
   createIngredientRow,
   deleteIngredientRow,
+  getCatalogForRows,
   getIngredientByFdcId,
   getIngredientById,
   getIngredients,
   getIngredientsByIds,
   getRecipeIngredientById,
   getRecipeIngredients,
+  getRecipeIngredientsByRecipeIds,
   matchIngredients,
   replaceRecipeIngredients,
   searchIngredientsKeyword,
@@ -396,7 +398,9 @@ describe("searchIngredientsKeyword", () => {
 });
 
 describe("getRecipeIngredients", () => {
-  it("filters by recipe and orders by position", async () => {
+  // No ordering: `recipes.ingredients` says where each row goes, and `position`
+  // is a dead column since db/migrations/0016.
+  it("filters by recipe and leaves order to the recipe's group array", async () => {
     const rows = [makeRecipeIngredientRow("r-1", 0), makeRecipeIngredientRow("r-1", 1)];
     useQueue([{ data: rows }]);
 
@@ -405,7 +409,7 @@ describe("getRecipeIngredients", () => {
     expect(result).toEqual(rows);
     const builder = builderAt(0);
     expect(builder.eq).toHaveBeenCalledWith("recipe_id", "r-1");
-    expect(builder.order).toHaveBeenCalledWith("position", { ascending: true });
+    expect(builder.order).not.toHaveBeenCalled();
   });
 
   it("returns an empty array on supabase error", async () => {
@@ -418,6 +422,72 @@ describe("getRecipeIngredients", () => {
       expect.anything(),
     );
     errorSpy.mockRestore();
+  });
+});
+
+describe("getRecipeIngredientsByRecipeIds", () => {
+  it("buckets one batched query's rows by recipe", async () => {
+    const a = makeRecipeIngredientRow("r-a", 0, { id: "ri-a" });
+    const b = makeRecipeIngredientRow("r-b", 0, { id: "ri-b" });
+    const a2 = makeRecipeIngredientRow("r-a", 1, { id: "ri-a2" });
+    useQueue([{ data: [a, b, a2] }]);
+
+    const result = await getRecipeIngredientsByRecipeIds(["r-a", "r-b", "r-none"]);
+
+    expect(builderAt(0).in).toHaveBeenCalledWith("recipe_id", ["r-a", "r-b", "r-none"]);
+    expect(result.get("r-a")).toEqual([a, a2]);
+    expect(result.get("r-b")).toEqual([b]);
+    expect(result.has("r-none")).toBe(false);
+  });
+
+  // The ids travel in the URL, which the gateway caps; one request per 100 keeps
+  // a full recipe listing clear of the limit.
+  it("splits a long id list into requests of 100", async () => {
+    const ids = Array.from({ length: 250 }, (_, i) => `r-${i}`);
+    useQueue([{ data: [] }, { data: [] }, { data: [] }]);
+
+    await getRecipeIngredientsByRecipeIds(ids);
+
+    expect(client.from).toHaveBeenCalledTimes(3);
+    expect(builderAt(0).in).toHaveBeenCalledWith("recipe_id", ids.slice(0, 100));
+    expect(builderAt(2).in).toHaveBeenCalledWith("recipe_id", ids.slice(200));
+  });
+
+  it("issues no query for no ids", async () => {
+    useQueue([]);
+    expect(await getRecipeIngredientsByRecipeIds([])).toEqual(new Map());
+    expect(client.from).not.toHaveBeenCalled();
+  });
+
+  it("returns what it has on supabase error", async () => {
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    useQueue([{ data: null, error: { message: "DB error" } }]);
+
+    expect(await getRecipeIngredientsByRecipeIds(["r-a"])).toEqual(new Map());
+    expect(errorSpy).toHaveBeenCalled();
+    errorSpy.mockRestore();
+  });
+});
+
+describe("getCatalogForRows", () => {
+  it("fetches each distinct ingredient_id once and keys the result by id", async () => {
+    const cumin = makeIngredient("ing-1", "cumin seed");
+    useQueue([{ data: [cumin] }]);
+
+    const result = await getCatalogForRows([
+      makeRecipeIngredientRow("r-1", 0, { ingredient_id: "ing-1" }),
+      makeRecipeIngredientRow("r-1", 1, { ingredient_id: "ing-1" }),
+      makeRecipeIngredientRow("r-1", 2, { ingredient_id: null }),
+    ]);
+
+    expect(builderAt(0).in).toHaveBeenCalledWith("id", ["ing-1"]);
+    expect(result.get("ing-1")).toBe(cumin);
+  });
+
+  it("skips the query when no row is matched", async () => {
+    useQueue([]);
+    expect(await getCatalogForRows([makeRecipeIngredientRow("r-1", 0)])).toEqual(new Map());
+    expect(client.from).not.toHaveBeenCalled();
   });
 });
 

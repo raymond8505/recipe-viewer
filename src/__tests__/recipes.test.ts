@@ -16,6 +16,12 @@ const mockGenerateEmbedding = vi.hoisted(() => vi.fn().mockResolvedValue(null));
 // ingredient-text comparison.
 const mockScheduleNormalization = vi.hoisted(() => vi.fn());
 const mockSyncRecipeIngredientText = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
+// The recipe_ingredients side of a read goes through @/lib/ingredients on the
+// admin client. Mocked at the module boundary: what these tests care about is
+// that the repo layer asks for the rows and joins them, not how they're fetched.
+const mockGetRecipeIngredients = vi.hoisted(() => vi.fn());
+const mockGetRecipeIngredientsByRecipeIds = vi.hoisted(() => vi.fn());
+const mockGetCatalogForRows = vi.hoisted(() => vi.fn());
 
 vi.mock("@/lib/features", () => ({ getFeatures: () => mockFeatures }));
 // importOriginal keeps toVectorLiteral real — the embedding tests assert the
@@ -31,6 +37,11 @@ vi.mock("@/lib/normalization/syncLines", () => ({
 vi.mock("@/lib/normalization/trigger", () => ({
   scheduleNormalization: mockScheduleNormalization,
 }));
+vi.mock("@/lib/ingredients", () => ({
+  getRecipeIngredients: mockGetRecipeIngredients,
+  getRecipeIngredientsByRecipeIds: mockGetRecipeIngredientsByRecipeIds,
+  getCatalogForRows: mockGetCatalogForRows,
+}));
 
 import {
   createRecipeRow,
@@ -41,6 +52,13 @@ import {
   updateRecipeRow,
 } from "@/lib/recipes";
 import { schemaToMarkdown } from "@/lib/format";
+import { ingredientFixtures, makeRecipeIngredientRow } from "@/fixtures";
+
+beforeEach(() => {
+  mockGetRecipeIngredients.mockReset().mockResolvedValue([]);
+  mockGetRecipeIngredientsByRecipeIds.mockReset().mockResolvedValue(new Map());
+  mockGetCatalogForRows.mockReset().mockResolvedValue(new Map());
+});
 
 /**
  * Builds a mock Supabase client whose query builder is fully chainable.
@@ -91,7 +109,7 @@ describe("getRecipes", () => {
   });
 
   it("returns data and count from supabase", async () => {
-    const data = [{ id: "1", url: "u", source: "s", metadata: { schema: { name: "Pasta" } } }];
+    const data = [{ id: "1", url: "u", source: "s", ingredients: [], metadata: { schema: { name: "Pasta" } } }];
     makeSupabaseMock({ data, count: 1 });
 
     const result = await getRecipes();
@@ -163,7 +181,7 @@ describe("getRecipes", () => {
   // Note: mock cannot verify SQL NULL semantics — this test confirms the correct filter
   // method is called; validate against a real DB if this regresses in production.
   it("includes null-status recipes in the logged-in default view", async () => {
-    const nullStatusRecipe = { id: "99", url: "u", source: "s", status: null, metadata: { schema: { name: "Test" } } };
+    const nullStatusRecipe = { id: "99", url: "u", source: "s", status: null, ingredients: [], metadata: { schema: { name: "Test" } } };
     const { builder } = makeSupabaseMock({ data: [nullStatusRecipe], count: 1 });
     const result = await getRecipes();
 
@@ -290,7 +308,7 @@ describe("getStatusCounts", () => {
 
 describe("getRecipeById", () => {
   it("returns the recipe when found", async () => {
-    const recipe = { id: "42", url: "u", source: "s", metadata: { schema: { name: "Pizza" } } };
+    const recipe = { id: "42", url: "u", source: "s", ingredients: [], metadata: { schema: { name: "Pizza" } } };
     makeSupabaseMock({ singleData: recipe });
 
     const result = await getRecipeById("42");
@@ -316,6 +334,7 @@ describe("getRecipeById", () => {
       id: "99",
       url: "u",
       source: "s",
+      ingredients: [],
       metadata: { schema: { name: "Soup", recipeInstructions: "Boil water." } },
     };
     makeSupabaseMock({ singleData: recipe });
@@ -389,6 +408,7 @@ describe("createRecipeRow", () => {
       url: "https://example.com",
       source: "example.com",
       status: "draft",
+      ingredients: [],
       metadata: { schema },
     };
     const { inserts } = makeWriteSupabaseMock({ insertSingle: { data: inserted, error: null } });
@@ -411,7 +431,7 @@ describe("createRecipeRow", () => {
   it("includes the embedding as a pgvector literal when generation succeeds", async () => {
     mockGenerateEmbedding.mockResolvedValueOnce([0.1, 0.2, 0.3]);
     const { inserts } = makeWriteSupabaseMock({
-      insertSingle: { data: { id: "x" }, error: null },
+      insertSingle: { data: { id: "x", ingredients: [] }, error: null },
     });
 
     await createRecipeRow({
@@ -426,7 +446,7 @@ describe("createRecipeRow", () => {
   it("omits the embedding column when generation fails (null)", async () => {
     mockGenerateEmbedding.mockResolvedValueOnce(null);
     const { inserts } = makeWriteSupabaseMock({
-      insertSingle: { data: { id: "x" }, error: null },
+      insertSingle: { data: { id: "x", ingredients: [] }, error: null },
     });
 
     await createRecipeRow({
@@ -453,7 +473,7 @@ describe("createRecipeRow", () => {
   it("schedules normalization for the inserted row when the schema has ingredients", async () => {
     mockScheduleNormalization.mockClear();
     makeWriteSupabaseMock({
-      insertSingle: { data: { id: "new-id" }, error: null },
+      insertSingle: { data: { id: "new-id", ingredients: [] }, error: null },
     });
 
     await createRecipeRow({
@@ -468,7 +488,7 @@ describe("createRecipeRow", () => {
   it("does not schedule normalization when the schema has no ingredients", async () => {
     mockScheduleNormalization.mockClear();
     makeWriteSupabaseMock({
-      insertSingle: { data: { id: "new-id" }, error: null },
+      insertSingle: { data: { id: "new-id", ingredients: [] }, error: null },
     });
 
     await createRecipeRow({
@@ -487,6 +507,7 @@ describe("updateRecipeRow", () => {
     url: "https://example.com",
     source: "example.com",
     status: "published",
+    ingredients: [],
     metadata: { schema: { name: "Original", description: "Old blurb" } },
   };
 
@@ -807,6 +828,7 @@ describe("recipe time columns", () => {
     prep_time: 1200,
     cook_time: 2100,
     total_time: 3300,
+    ingredients: [],
     metadata: {
       schema: {
         name: "Enchiladas",
@@ -856,7 +878,7 @@ describe("recipe time columns", () => {
 
   it("writes times to columns and keeps them out of the blob on create", async () => {
     const { inserts } = makeWriteSupabaseMock({
-      insertSingle: { data: { id: "x" }, error: null },
+      insertSingle: { data: { id: "x", ingredients: [] }, error: null },
     });
 
     await createRecipeRow({
@@ -877,7 +899,7 @@ describe("recipe time columns", () => {
 
   it("still puts the times in the searchable markdown on create", async () => {
     const { inserts } = makeWriteSupabaseMock({
-      insertSingle: { data: { id: "x" }, error: null },
+      insertSingle: { data: { id: "x", ingredients: [] }, error: null },
     });
 
     await createRecipeRow({
@@ -929,5 +951,82 @@ describe("recipe time columns", () => {
     expect(updates[0]).toMatchObject({ prep_time: 2700 });
     const blob = (updates[0].metadata as { schema: object }).schema;
     expect(blob).not.toHaveProperty("prepTime");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// The 0016 ingredients seam. `recipes.ingredients` holds groups of row ids;
+// the repo layer joins them to the recipe_ingredients rows at every read exit
+// so everything above it sees RecipeIngredientGroup[].
+// ---------------------------------------------------------------------------
+describe("recipe ingredients hydration", () => {
+  const cumin = ingredientFixtures[0];
+  const storedRow = {
+    id: "r1",
+    url: "https://example.com",
+    source: "example.com",
+    status: "published",
+    prep_time: null,
+    cook_time: null,
+    total_time: null,
+    ingredients: [
+      { name: "Rub", ingredients: ["ri-b", "ri-a"] },
+      { ingredients: ["ri-c"] },
+    ],
+    metadata: { schema: { name: "Curry" } },
+  };
+  const rows = [
+    makeRecipeIngredientRow("r1", 0, { id: "ri-a", raw_text: "1 tsp salt" }),
+    makeRecipeIngredientRow("r1", 1, {
+      id: "ri-b",
+      raw_text: "2 tsp cumin seed",
+      ingredient_id: cumin.id,
+      match_status: "matched",
+    }),
+    makeRecipeIngredientRow("r1", 2, { id: "ri-c", raw_text: "2 cups rice" }),
+  ];
+
+  it("joins a single read to its rows AND the catalog, in column order", async () => {
+    makeSupabaseMock({ singleData: structuredClone(storedRow) });
+    mockGetRecipeIngredients.mockResolvedValue(rows);
+    mockGetCatalogForRows.mockResolvedValue(new Map([[cumin.id, cumin]]));
+
+    const recipe = await getRecipeById("r1");
+
+    expect(mockGetRecipeIngredients).toHaveBeenCalledWith("r1");
+    expect(mockGetCatalogForRows).toHaveBeenCalledWith(rows);
+    expect(recipe?.ingredients).toHaveLength(2);
+    expect(recipe?.ingredients[0].name).toBe("Rub");
+    expect(recipe?.ingredients[0].ingredients.map((i) => i.raw_text)).toEqual([
+      "2 tsp cumin seed",
+      "1 tsp salt",
+    ]);
+    expect(recipe?.ingredients[0].ingredients[0].ingredient).toBe(cumin);
+    expect(recipe?.ingredients[0].ingredients[1].ingredient).toBeNull();
+    expect(recipe?.ingredients[1]).not.toHaveProperty("name");
+    // The entity is the row minus what only the table cares about.
+    expect(recipe?.ingredients[1].ingredients[0]).not.toHaveProperty("recipe_id");
+  });
+
+  it("joins a list read to its rows in one batch and skips the catalog", async () => {
+    makeSupabaseMock({ data: [structuredClone(storedRow)], count: 1 });
+    mockGetRecipeIngredientsByRecipeIds.mockResolvedValue(new Map([["r1", rows]]));
+
+    const { data } = await getRecipes();
+
+    expect(mockGetRecipeIngredientsByRecipeIds).toHaveBeenCalledWith(["r1"]);
+    expect(mockGetCatalogForRows).not.toHaveBeenCalled();
+    expect(data[0].ingredients[1].ingredients[0].raw_text).toBe("2 cups rice");
+    // Not loaded, as opposed to unmatched — the key is absent, not null.
+    expect(data[0].ingredients[0].ingredients[0]).not.toHaveProperty("ingredient");
+  });
+
+  it("renders a recipe short rather than failing when an id has no row", async () => {
+    makeSupabaseMock({ singleData: structuredClone(storedRow) });
+    mockGetRecipeIngredients.mockResolvedValue(rows.slice(0, 2));
+
+    const recipe = await getRecipeById("r1");
+
+    expect(recipe?.ingredients[1].ingredients).toEqual([]);
   });
 });

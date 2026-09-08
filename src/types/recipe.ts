@@ -83,6 +83,17 @@ export interface RecipeRowColumns {
   url: string;
   source: string;
   status: "published" | "archived" | "draft" | null;
+  /**
+   * Whole seconds; null means no time recorded. These three are the source of
+   * truth for a recipe's times — `metadata.schema.{prepTime,cookTime,totalTime}`
+   * still holds a pre-0019 copy on older rows, but the repo layer overwrites it
+   * from these columns on every read and never writes it again. See the
+   * hydrate/extract seam in .claude/docs/supabase-data-layer.md.
+   *
+   * Seconds, not minutes, so the column can hold any ISO 8601 duration a
+   * scraper produces without rounding. The editor is coarser (HH:MM) — that
+   * asymmetry is deliberate and documented on `formatTimeInput`.
+   */
   prep_time: number | null;
   cook_time: number | null;
   total_time: number | null;
@@ -109,26 +120,15 @@ export type SchemaOrgRecipe = Omit<SchemaRecipe, "recipeIngredient"> & {
   recipeIngredient?: string[];
 };
 
-export interface RecipeRow {
-  id: string;
-  url: string;
-  source: string;
-  status: "published" | "archived" | "draft" | null;
-  /**
-   * Whole seconds; null means no time recorded. These three are the source of
-   * truth for a recipe's times — `metadata.schema.{prepTime,cookTime,totalTime}`
-   * still holds a pre-0019 copy on older rows, but the repo layer overwrites it
-   * from these columns on every read and never writes it again. See the
-   * hydrate/extract seam in .claude/docs/supabase-data-layer.md.
-   *
-   * Seconds, not minutes, so the column can hold any ISO 8601 duration a
-   * scraper produces without rounding. The editor is coarser (HH:MM) — that
-   * asymmetry is deliberate and documented on `formatTimeInput`.
-   */
-  prep_time: number | null;
-  cook_time: number | null;
-  total_time: number | null;
-  metadata: { schema: SchemaRecipe };
+/**
+ * A recipe as the app passes it around: the row with its `ingredients` column
+ * hydrated into groups of `RecipeIngredient` from the `recipe_ingredients`
+ * rows the column names. Only the repo layer (`src/lib/recipes.ts`) builds one;
+ * a reader that queries `recipes` directly gets `RecipeRowColumns` — ids, not
+ * ingredients — and stale times.
+ */
+export interface RecipeRow extends Omit<RecipeRowColumns, "ingredients"> {
+  ingredients: RecipeIngredientGroup[];
 }
 
 export interface HowToStep {

@@ -408,14 +408,61 @@ export async function getRecipeIngredients(
   const { data, error } = await supabase
     .from("recipe_ingredients")
     .select(RECIPE_INGREDIENT_COLUMNS)
-    .eq("recipe_id", recipeId)
-    .order("position", { ascending: true });
+    .eq("recipe_id", recipeId);
 
   if (error) {
     console.error("Supabase error fetching recipe ingredients:", error);
     return [];
   }
   return (data as unknown as RecipeIngredientRow[]) ?? [];
+}
+
+// A `.in()` list travels in the URL, and the gateway drops the connection
+// above ~16 KB without a status code (see the supabase skill). 100 uuids is
+// ~4 KB, well clear of it.
+const RECIPE_ID_CHUNK = 100;
+
+/**
+ * Rows for several recipes in one round trip per chunk, keyed by recipe id —
+ * for list pages, so a page of recipes costs one query rather than one per
+ * recipe. Order within a recipe is not this function's business:
+ * `recipes.ingredients` says where each row goes.
+ */
+export async function getRecipeIngredientsByRecipeIds(
+  recipeIds: string[],
+): Promise<Map<string, RecipeIngredientRow[]>> {
+  const byRecipe = new Map<string, RecipeIngredientRow[]>();
+  if (recipeIds.length === 0) return byRecipe;
+  const supabase = getSupabaseAdminClient();
+
+  for (let i = 0; i < recipeIds.length; i += RECIPE_ID_CHUNK) {
+    const { data, error } = await supabase
+      .from("recipe_ingredients")
+      .select(RECIPE_INGREDIENT_COLUMNS)
+      .in("recipe_id", recipeIds.slice(i, i + RECIPE_ID_CHUNK));
+
+    if (error) {
+      console.error("Supabase error fetching recipe ingredients:", error);
+      return byRecipe;
+    }
+    for (const row of (data as unknown as RecipeIngredientRow[]) ?? []) {
+      const bucket = byRecipe.get(row.recipe_id);
+      if (bucket) bucket.push(row);
+      else byRecipe.set(row.recipe_id, [row]);
+    }
+  }
+  return byRecipe;
+}
+
+/** The catalog rows a set of recipe rows point at, keyed by id. */
+export async function getCatalogForRows(
+  rows: readonly RecipeIngredientRow[],
+): Promise<Map<string, IngredientRow>> {
+  const ids = [
+    ...new Set(rows.map((r) => r.ingredient_id).filter((x): x is string => x != null)),
+  ];
+  const ingredients = await getIngredientsByIds(ids);
+  return new Map(ingredients.map((ing) => [ing.id, ing]));
 }
 
 /**

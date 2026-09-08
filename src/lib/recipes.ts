@@ -8,18 +8,26 @@ import {
 } from "./format";
 import { generateEmbedding } from "./embedding";
 import { lineId, lineSetChanged, withLineIds } from "./ingredientLines";
+import {
+  getCatalogForRows,
+  getRecipeIngredients,
+  getRecipeIngredientsByRecipeIds,
+} from "./ingredients";
 import { ingredientFingerprint } from "./normalization/fingerprint";
 import { syncRecipeIngredientText } from "./normalization/syncLines";
 import { scheduleNormalization } from "./normalization/trigger";
+import { hydrateIngredientGroups } from "./recipeIngredients";
 import {
   ARCHIVED_RECIPE_STATUS,
   DEFAULT_RECIPE_STATUS,
   PUBLISHED_RECIPE_STATUS,
   RECIPE_STATUSES,
 } from "./schemas/recipe";
+import type { IngredientRow, RecipeIngredientRow } from "@/types/ingredient";
 import type {
   SchemaOrgIngredientLine,
   RecipeRow,
+  RecipeRowColumns,
   RecipesResult,
   SchemaRecipe,
 } from "@/types/recipe";
@@ -41,8 +49,10 @@ export class RecipeRepoError extends Error {
 }
 
 // `content` and `embedding` are write-only (derived on create/update), so they
-// are not on RecipeRow — selectColumns rejects them here at compile time.
-const RECIPE_COLUMNS = selectColumns<RecipeRow>()([
+// are not on RecipeRowColumns — selectColumns rejects them here at compile
+// time. Checked against RecipeRowColumns rather than RecipeRow because the
+// latter's `ingredients` is hydrated from a second table, not selected.
+const RECIPE_COLUMNS = selectColumns<RecipeRowColumns>()([
   "id",
   "url",
   "source",
@@ -50,6 +60,7 @@ const RECIPE_COLUMNS = selectColumns<RecipeRow>()([
   "prep_time",
   "cook_time",
   "total_time",
+  "ingredients",
   "metadata",
 ]);
 
@@ -80,7 +91,7 @@ const TIME_FIELDS = [
  * indistinguishable from one that never had the time — which is what every
  * downstream `if (schema.prepTime)` already expects.
  */
-function hydrateTimes(row: RecipeRow): RecipeRow {
+function hydrateTimes(row: RecipeRowColumns): RecipeRowColumns {
   const schema = row.metadata?.schema;
   if (!schema) return row;
   for (const [key, column] of TIME_FIELDS) {
@@ -97,6 +108,24 @@ function stripTimes(schema: SchemaRecipe): SchemaRecipe {
   const next = { ...schema };
   for (const [key] of TIME_FIELDS) delete next[key];
   return next;
+}
+
+/**
+ * The one read exit. Times come from their columns; `ingredients` comes from
+ * the column's id groups joined to the `recipe_ingredients` rows the caller
+ * fetched. With a `catalog` map every line carries its catalog ingredient
+ * (`null` when unmatched); without one the key is left off — list pages skip
+ * that round trip, and nutrition math treats "not loaded" as "no data".
+ */
+function hydrate(
+  row: RecipeRowColumns,
+  rows: readonly RecipeIngredientRow[],
+  catalog?: ReadonlyMap<string, IngredientRow>,
+): RecipeRow {
+  return {
+    ...hydrateTimes(row),
+    ingredients: hydrateIngredientGroups(row.ingredients, rows, catalog),
+  };
 }
 
 export interface CreateRecipeInput {
@@ -213,8 +242,15 @@ export async function getRecipes(opts?: {
     return { data: [], count: 0 };
   }
 
+  const rows = (data as RecipeRowColumns[]) ?? [];
+  // One round trip for the page rather than one per recipe, and not optional:
+  // /api/recipes feeds MealSearch, whose rows go straight into a
+  // ScalableRecipe when a recipe joins a meal, and that needs the line text.
+  // The catalog is skipped — nothing on a list page computes nutrition.
+  const rowsByRecipe = await getRecipeIngredientsByRecipeIds(rows.map((r) => r.id));
+
   return {
-    data: ((data as RecipeRow[]) ?? []).map(hydrateTimes),
+    data: rows.map((row) => hydrate(row, rowsByRecipe.get(row.id) ?? [])),
     count: count ?? 0,
   };
 }
@@ -230,7 +266,12 @@ export async function getRecipeById(id: string): Promise<RecipeRow | null> {
 
   if (error || !data) return null;
 
-  const row = hydrateTimes(data as RecipeRow);
+  const ingredientRows = await getRecipeIngredients(id);
+  const row = hydrate(
+    data as RecipeRowColumns,
+    ingredientRows,
+    await getCatalogForRows(ingredientRows),
+  );
   const raw = row.metadata?.schema?.recipeInstructions;
   if (raw !== undefined && !Array.isArray(raw)) {
     row.metadata.schema.recipeInstructions = normalizeRecipeInstructions(raw as unknown);
@@ -279,7 +320,9 @@ export async function createRecipeRow(input: CreateRecipeInput): Promise<RecipeR
   if (error || !data) {
     throw new RecipeRepoError("insert_failed", error?.message ?? "Insert returned no row");
   }
-  const row = hydrateTimes(data as RecipeRow);
+  // No recipe_ingredients rows exist for a row this new; normalization below
+  // is what creates them.
+  const row = hydrate(data as RecipeRowColumns, []);
   // Post-response ingredient normalization (see src/lib/normalization/).
   // scheduleNormalization never throws — a normalization problem must not
   // fail the insert that just succeeded.
@@ -315,7 +358,8 @@ export async function updateRecipeRow(
   // times the COLUMNS hold. That is what makes the three-way patch semantics
   // fall out of the plain schema spread: an absent key inherits the column's
   // current value, an explicit null clears it, an ISO string sets it.
-  const current = hydrateTimes(existing as RecipeRow);
+  const ingredientRows = await getRecipeIngredients(id);
+  const current = hydrate(existing as RecipeRowColumns, ingredientRows);
   const writePatch: Partial<{
     name: string;
     content: string;
@@ -422,7 +466,7 @@ export async function updateRecipeRow(
       console.error(`Failed to re-sync ingredient lines for ${id}:`, err);
     });
   }
-  return hydrateTimes(data as RecipeRow);
+  return hydrate(data as RecipeRowColumns, ingredientRows);
 }
 
 // Soft-delete by setting status to ARCHIVED_RECIPE_STATUS. Verifies the row

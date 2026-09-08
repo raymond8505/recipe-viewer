@@ -25,6 +25,7 @@ function makeRecipe(
     url: "https://example.com",
     source: "example.com",
     status: "draft",
+    ingredients: [],
     ...row,
     metadata: {
       schema: {
