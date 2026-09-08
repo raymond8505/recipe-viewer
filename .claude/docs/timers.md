@@ -7,6 +7,8 @@
 - **Middle col (`flex-1`):** name + time, rendered as a `<button>` that calls `onTogglePause` (running/paused) or `onReset` (finished). This is the primary accessible tap target and carries the full aria-label.
 - **Right col (`w-12`, fixed):** edit (top) + delete (bottom).
 
+**The middle-col `TAP_BLOCK` must stay `items-stretch`.** The `Button` primitive is `inline-flex`, so the label/time spans are flex items; only stretched do they fill the column, which is what lets the label `truncate`. Left alignment comes from `text-left`.
+
 **Alarm state is intentionally 2-column** (dismiss left, reset+delete right) — there is no play/pause concept. Do not normalize it to 3-column.
 
 **TimerCard tests (`src/__tests__/TimerCard.test.tsx`) use aria-label regexes.** Before renaming any button label, grep the test file for the old string — broken labels cause hard `getByLabelText` failures, not soft mismatches.
@@ -20,3 +22,5 @@ The phrase "timer container" refers to the timer UI in **both** orientations:
 - **Landscape / desktop (`lg:flex`):** vertical `TimerColumn` on the right side
 
 Both views render the same timer data. When making changes to timer display, interaction, or scroll behaviour, both views must be updated. Both render `<div data-timer-id={timer.id}>` wrappers around each `TimerCard` so features can target timers by ID in either view with `querySelectorAll` (not `querySelector` — both elements exist in the DOM simultaneously, only one is visible via CSS).
+
+**Ribbon children go through `RibbonItem`** (exported from `DraggableRibbon.tsx`), which is bounded (`min-w-56 max-w-72`), never a fixed `w-*`. The 3-column `TimerCard` needs ~212–245px on a phone for `text-3xl` mono times like "1:30:00", so it must size to its content; the cap is what makes a long label `truncate` rather than push the card past the viewport, which `snap-mandatory` can't scroll to.

@@ -17,10 +17,14 @@ import { cn } from "@/lib/utils";
 // standalone icon buttons — they fill their flex column/row with no rounding
 // or padding. These two strings neutralise the Button primitive's defaults
 // (height, padding, rounding, centring, hover bg) for those two shapes.
+//
+// TAP_BLOCK is `items-stretch`: the primitive is a flex container, so the
+// label/time spans are flex items and only fill the column when stretched,
+// which is what lets the label `truncate`. `text-left` owns the alignment.
 const TAP_COL =
   "h-auto flex-1 rounded-none p-0 hover:bg-transparent active:opacity-60";
 const TAP_BLOCK =
-  "h-auto flex-1 min-w-0 flex-col items-start justify-center gap-0 whitespace-normal rounded-none px-4 py-3 text-left hover:bg-transparent active:opacity-70";
+  "h-auto flex-1 min-w-0 flex-col items-stretch justify-center gap-0 whitespace-normal rounded-none px-4 py-3 text-left hover:bg-transparent active:opacity-70";
 
 interface TimerCardProps {
   timer: Timer;
