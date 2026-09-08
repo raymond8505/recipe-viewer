@@ -16,7 +16,7 @@ Cook mode supports grouping multiple recipes into a "meal" session. State lives 
 
 **Key invariants:**
 - `mealRecipes[0]` is always the primary recipe and cannot be removed
-- The primary recipe is held as one `doc: RecipeDocument` (`{ schema, ingredients }`), which the window API can replace wholesale via `registerCookingModeRecipe(initialDoc, setDoc)`; `activeScalable = scalables.get(mealRecipes[activeIndex].id)` is what drives ingredients rendering (`groupedIngredients`) and `activeScalable.schema` drives instructions/notes. Server-computed `normalizedNutrition` applies only while `doc === initialDoc`
+- The primary recipe is held as one `doc: RecipeDocument` (`recipeDocument(recipe)` — schema, groups, time columns), which the window API can replace wholesale via `registerCookingModeRecipe(initialDoc, setDoc)`; `activeScalable = scalables.get(mealRecipes[activeIndex].id)` is what drives ingredients rendering (`groupedIngredients`) and `activeScalable.schema` drives instructions/notes. Server-computed `normalizedNutrition` applies only while `doc === initialDoc`
 - `useScaling` is called once on the primary recipe's `recipeYield`; non-primary recipes get `scale={1}` with no `onScaleChange` — scaling is intentionally primary-only for now
 - All timers (primary + added recipes) land in a single localStorage bucket keyed by the primary recipe's URL hash. Timers from added recipes are seeded imperatively in `handleAddToMeal` and are **not** deduplicated — if a recipe is added a second time its timers are re-seeded
 

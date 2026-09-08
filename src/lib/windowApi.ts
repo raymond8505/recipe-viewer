@@ -1,5 +1,5 @@
 import { toSchemaOrgRecipe } from "./format";
-import { draftIngredientGroups, fromSchemaOrgIngredients } from "./recipeIngredients";
+import { documentFromSchemaOrg } from "./recipeDocument";
 import type { RecipeDocument, SchemaOrgRecipe } from "@/types/recipe";
 
 // The window.recipeTools API is an EXTERNAL edge: whatever drives it (a
@@ -114,16 +114,6 @@ export function notifyRecipeUpdate(recipes: SchemaOrgRecipe[]): void {
   recipeUpdateResolver = null;
 }
 
-/** The inbound conversion: a Schema.org Recipe → the app's document, with
- *  every line drafted (parsed, unmatched, freshly identified). */
-export function documentFromSchemaOrg(recipe: SchemaOrgRecipe): RecipeDocument {
-  const { recipeIngredient, ...schema } = recipe;
-  return {
-    schema,
-    ingredients: draftIngredientGroups(fromSchemaOrgIngredients(recipeIngredient ?? [])),
-  };
-}
-
 export function createRecipeToolsApi(
   navigate: (url: string) => void
 ): RecipeToolsApi {
@@ -147,9 +137,7 @@ export function createRecipeToolsApi(
       return promise;
     },
     getRecipeViewerRecipe: () =>
-      currentCookingRecipe
-        ? toSchemaOrgRecipe(currentCookingRecipe.schema, currentCookingRecipe.ingredients)
-        : null,
+      currentCookingRecipe ? toSchemaOrgRecipe(currentCookingRecipe) : null,
     setRecipeViewerRecipe: (recipe: SchemaOrgRecipe) => {
       const doc = documentFromSchemaOrg(recipe);
       currentCookingRecipe = doc;

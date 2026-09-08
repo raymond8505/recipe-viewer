@@ -126,10 +126,14 @@ describe("WindowApiProvider", () => {
     const mockDoc: RecipeDocument = {
       schema: { name: "Spaghetti", "@type": "Recipe" },
       ingredients: makeIngredientLines(["200 g spaghetti"]),
+      prep_time: null,
+      cook_time: 600,
+      total_time: null,
     };
     const updatedRecipe = {
       name: "Carbonara",
       "@type": "Recipe" as const,
+      cookTime: "PT20M",
       recipeIngredient: ["1 egg", { name: "50 g guanciale", group: "Sauce" }],
     };
 
@@ -141,9 +145,11 @@ describe("WindowApiProvider", () => {
     it("getRecipeViewerRecipe returns the registered recipe as Schema.org while cooking mode is active", () => {
       render(<WindowApiProvider />);
       registerCookingModeRecipe(mockDoc, vi.fn());
+      // Times come from the document's columns, ingredients from its groups.
       expect(window.recipeTools.getRecipeViewerRecipe()).toEqual({
         name: "Spaghetti",
         "@type": "Recipe",
+        cookTime: "PT10M",
         recipeIngredient: ["200 g spaghetti"],
       });
     });
@@ -155,17 +161,19 @@ describe("WindowApiProvider", () => {
       expect(window.recipeTools.getRecipeViewerRecipe()).toEqual({
         name: "Carbonara",
         "@type": "Recipe",
+        cookTime: "PT20M",
         recipeIngredient: ["1 egg", "50 g guanciale"],
       });
     });
 
-    it("setRecipeViewerRecipe hands the registered setter the recipe as a document, lines drafted", () => {
+    it("setRecipeViewerRecipe hands the registered setter the recipe as a document, lines drafted, times parsed", () => {
       render(<WindowApiProvider />);
       const setter = vi.fn();
       registerCookingModeRecipe(mockDoc, setter);
       window.recipeTools.setRecipeViewerRecipe(updatedRecipe);
       const doc = setter.mock.calls[0][0] as RecipeDocument;
-      expect(doc.schema).toEqual({ name: "Carbonara", "@type": "Recipe" });
+      expect(doc.schema).toEqual({ name: "Carbonara", "@type": "Recipe", cookTime: "PT20M" });
+      expect(doc).toMatchObject({ prep_time: null, cook_time: 1200, total_time: null });
       expect(doc.ingredients.map((g) => g.name)).toEqual([undefined, "Sauce"]);
       expect(doc.ingredients[1].ingredients[0]).toMatchObject({
         raw_text: "50 g guanciale",

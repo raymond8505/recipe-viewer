@@ -159,6 +159,30 @@ describe("POST /api/recipes/[id]/update", () => {
     expect(await res.json()).toMatchObject({ source: "custom" });
   });
 
+  // The client's document carries the times as column seconds and the
+  // Schema.org edges read them from there, so the echo must include the
+  // columns as the repo parsed them — not just the ISO strings in the schema.
+  it("echoes the persisted time columns", async () => {
+    const { updateRecipeRow } = await import("@/lib/recipes");
+    vi.mocked(updateRecipeRow).mockResolvedValueOnce({
+      ...storedRecipe,
+      prep_time: 900,
+      cook_time: null,
+      total_time: 900,
+    });
+
+    const res = await POST(
+      makeJsonRequest({ schema: { name: "Test", prepTime: "PT15M" }, status: "draft" }),
+      makeParams(),
+    );
+
+    expect(await res.json()).toMatchObject({
+      prep_time: 900,
+      cook_time: null,
+      total_time: 900,
+    });
+  });
+
   // isOwnRecipe reads casing leniently, but the column also feeds the ?source=
   // browse filter and MCP search_recipes, which match exactly — so the stored
   // own-recipe value is folded to the lowercase literal on the way in.

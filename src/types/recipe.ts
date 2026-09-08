@@ -95,13 +95,21 @@ export interface RecipeRowColumns {
 }
 
 /**
- * The client's unit of recipe state: the non-ingredient fields plus the
- * ingredient groups, held together so an operation that replaces both (a
- * re-scrape, an undo) does so atomically.
+ * A recipe's content as the app carries it, independent of the row it came
+ * from: the stored schema, the ingredient groups, and the three column-backed
+ * times in seconds. Held together so an operation that replaces the whole
+ * recipe (a re-scrape, an undo) does so atomically, and so the outbound
+ * Schema.org edges (`toSchemaOrgRecipe` / `toSchemaOrgJsonLd`) read every
+ * column-backed field from its column rather than from the blob's copy.
+ * Built by `recipeDocument(row)` / `draftRecipeDocument(...)` in
+ * src/lib/recipeDocument.ts.
  */
 export interface RecipeDocument {
   schema: SchemaRecipe;
   ingredients: RecipeIngredientGroup[];
+  prep_time: number | null;
+  cook_time: number | null;
+  total_time: number | null;
 }
 
 /**

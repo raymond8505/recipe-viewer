@@ -234,6 +234,7 @@ import type {
   HowToSection,
   HowToStep,
   QuantitativeValue,
+  RecipeDocument,
   RecipeIngredientGroup,
   RecipeIngredientGroupInput,
   SchemaOrgRecipe,
@@ -362,34 +363,58 @@ export function getYieldUnit(
 // ---------------------------------------------------------------------------
 // The outbound Schema.org edge.
 //
-// Internally a recipe is a SchemaRecipe (no ingredients) plus
-// RecipeIngredientGroup[]. Anything that leaves the app as a Schema.org
-// Recipe — the JSON-LD script, the image-generation webhook, the window API —
-// is assembled here and nowhere else, so the flattening rule (groups in order,
-// lines in order, text only) has one home. The inbound half is
-// `fromSchemaOrgIngredients` in ./recipeIngredients.
+// Internally a recipe is a RecipeDocument: the stored schema, the ingredient
+// groups, and the column-backed times. Anything that leaves the app as a
+// Schema.org Recipe — the JSON-LD script, the image-generation webhook, the
+// window API — is assembled here and nowhere else. Every column-backed field
+// is read from its column (times in seconds → ISO 8601; lines → their text,
+// groups in order), never from the copy the blob may still carry, so this is
+// the translation layer that grows as more of `metadata.schema` moves out.
+// The inbound half is `documentFromSchemaOrg` in ./recipeDocument.
 // ---------------------------------------------------------------------------
+
+const DOCUMENT_TIME_FIELDS = [
+  ["prepTime", "prep_time"],
+  ["cookTime", "cook_time"],
+  ["totalTime", "total_time"],
+] as const;
+
+/** The Schema.org time keys a document's columns produce: ISO strings, absent for a null column. */
+function schemaOrgTimes(doc: RecipeDocument): Partial<Pick<SchemaOrgRecipe, "prepTime" | "cookTime" | "totalTime">> {
+  const times: Partial<Pick<SchemaOrgRecipe, "prepTime" | "cookTime" | "totalTime">> = {};
+  for (const [key, column] of DOCUMENT_TIME_FIELDS) {
+    const iso = secondsToIso(doc[column]);
+    if (iso !== undefined) times[key] = iso;
+  }
+  return times;
+}
 
 /**
  * The whole recipe as a Schema.org Recipe, custom fields included: the stored
- * schema with `recipeIngredient` flattened to the lines' text. For consumers
- * that want the full document (the image webhook reads `notes`; the window API
- * hands agents everything). JSON-LD, which must be spec-clean, goes through
+ * schema, its three time keys replaced from the columns, and
+ * `recipeIngredient` flattened to the lines' text. For consumers that want the
+ * full document (the image webhook reads `notes`; the window API hands agents
+ * everything). JSON-LD, which must be spec-clean, goes through
  * `toSchemaOrgJsonLd` instead.
  */
-export function toSchemaOrgRecipe(
-  schema: SchemaRecipe,
-  ingredients: readonly RecipeIngredientGroup[],
-): SchemaOrgRecipe {
-  const texts = ingredientTexts(ingredients);
-  return texts.length > 0 ? { ...schema, recipeIngredient: texts } : { ...schema };
+export function toSchemaOrgRecipe(doc: RecipeDocument): SchemaOrgRecipe {
+  const { prepTime: _p, cookTime: _c, totalTime: _t, ...rest } = doc.schema;
+  void _p;
+  void _c;
+  void _t;
+  const texts = ingredientTexts(doc.ingredients);
+  return {
+    ...rest,
+    ...schemaOrgTimes(doc),
+    ...(texts.length > 0 ? { recipeIngredient: texts } : {}),
+  };
 }
 
 /**
  * Return a Schema.org-compliant JSON-LD object for a recipe. An explicit
  * allowlist of standard fields, so custom extensions (notes, cookingNotes) can
- * never leak, and `recipeIngredient` as plain strings — group names and row
- * ids are ours, not Schema.org's.
+ * never leak; times from the columns; `recipeIngredient` as plain strings —
+ * group names and row ids are ours, not Schema.org's.
  *
  * `nutritionOverride` replaces the schema's own `nutrition` in the output when
  * provided — used to emit the normalized-ingredient nutrition (already
@@ -397,10 +422,10 @@ export function toSchemaOrgRecipe(
  * flows through the same allowlist, so no custom fields leak.
  */
 export function toSchemaOrgJsonLd(
-  schema: SchemaRecipe,
-  ingredients: readonly RecipeIngredientGroup[],
+  doc: RecipeDocument,
   options?: { nutritionOverride?: SchemaRecipe["nutrition"] },
 ): object {
+  const { schema } = doc;
   const result: Record<string, unknown> = {
     "@context": schema["@context"] ?? "https://schema.org",
     "@type": schema["@type"] ?? "Recipe",
@@ -411,9 +436,6 @@ export function toSchemaOrgJsonLd(
     "description",
     "image",
     "author",
-    "cookTime",
-    "prepTime",
-    "totalTime",
     "recipeYield",
     "recipeCuisine",
     "recipeCategory",
@@ -424,8 +446,9 @@ export function toSchemaOrgJsonLd(
   for (const key of optionalFields) {
     if (schema[key] != null) result[key] = schema[key];
   }
+  Object.assign(result, schemaOrgTimes(doc));
   if (nutrition != null) result.nutrition = nutrition;
-  const texts = ingredientTexts(ingredients);
+  const texts = ingredientTexts(doc.ingredients);
   if (texts.length > 0) result.recipeIngredient = texts;
   return result;
 }

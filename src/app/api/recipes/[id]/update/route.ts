@@ -59,13 +59,17 @@ export const POST = requireSessionOrRecipeToken(
       throw err;
     }
 
-    // Every field the editor seeds from is echoed back, so the client can
-    // re-seed its state from what was actually persisted rather than from its
-    // own draft — the two differ whenever a value degrades (blank source), is
-    // canonicalized server-side, or, for ingredients, gained a row id.
+    // Every field the client's document holds is echoed back, so it can
+    // re-seed from what was actually persisted rather than from its own draft
+    // — the two differ whenever a value degrades (blank source), is
+    // canonicalized server-side, gained a row id (a new ingredient), or was
+    // parsed into a column (a time).
     return NextResponse.json({
       schema: saved.metadata.schema,
       ingredients: saved.ingredients,
+      prep_time: saved.prep_time,
+      cook_time: saved.cook_time,
+      total_time: saved.total_time,
       status: saved.status,
       url: saved.url,
       source: saved.source,

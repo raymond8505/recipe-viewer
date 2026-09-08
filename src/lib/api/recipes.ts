@@ -24,6 +24,10 @@ export interface SaveRecipeBody {
 export interface SavedRecipe {
   schema: SchemaRecipe;
   ingredients: RecipeIngredientGroup[];
+  /** The column-backed times, in seconds — the document's, not the blob's. */
+  prep_time: number | null;
+  cook_time: number | null;
+  total_time: number | null;
   status: RecipeStatus;
   url: string;
   source: string;
@@ -31,10 +35,10 @@ export interface SavedRecipe {
 
 /**
  * Persist an edit (the editor's Save). The response echoes what was actually
- * stored — including the ingredient groups with every line's row id — so the
- * caller re-seeds its state from that rather than from its own draft: values
- * degrade or canonicalize server-side, and a new line only has an id after
- * the round trip.
+ * stored — the ingredient groups with every line's row id, the time columns
+ * — so the caller re-seeds its document from that rather than from its own
+ * draft: values degrade or canonicalize server-side, and a new line only has
+ * an id after the round trip.
  */
 export async function saveRecipe(
   recipeId: string,

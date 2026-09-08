@@ -82,6 +82,9 @@ describe("saveRecipe", () => {
     const saved = {
       schema: { name: "Cake" },
       ingredients: makeIngredientLines(["2 cups flour"]),
+      prep_time: 600,
+      cook_time: null,
+      total_time: 600,
       status: "draft",
       url: "https://example.com",
       source: "example.com",

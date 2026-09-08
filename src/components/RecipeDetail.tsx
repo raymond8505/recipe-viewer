@@ -22,7 +22,7 @@ import {
   type NormalizedNutrition,
 } from "@/lib/ScalableRecipe";
 import { nutrientValuesToSchema } from "@/lib/nutritionMath";
-import { draftIngredientGroups } from "@/lib/recipeIngredients";
+import { draftRecipeDocument, recipeDocument } from "@/lib/recipeDocument";
 import { useScalableRecipe } from "@/hooks/useScalableRecipe";
 import { useRecipeEditor } from "@/hooks/useRecipeEditor";
 import { useUndoableOp, type OpState } from "@/hooks/useUndoableOp";
@@ -67,13 +67,11 @@ export default function RecipeDetail({
   maxImageBytes = DEFAULT_MAX_IMAGE_BYTES,
   normalizedNutrition,
 }: RecipeDetailProps) {
-  // The recipe as one document — the stored schema plus the ingredient groups
-  // — so a re-scrape, an undo and a save each replace both halves atomically.
-  // `initialDoc` is the server's version, kept for one comparison below.
-  const [initialDoc] = useState<RecipeDocument>(() => ({
-    schema: recipe.metadata.schema,
-    ingredients: recipe.ingredients,
-  }));
+  // The recipe as one document — the stored schema, the ingredient groups and
+  // the time columns — so a re-scrape, an undo and a save each replace the
+  // whole thing atomically. `initialDoc` is the server's version, kept for
+  // one comparison below.
+  const [initialDoc] = useState<RecipeDocument>(() => recipeDocument(recipe));
   const [doc, setDoc] = useState(initialDoc);
   const { schema } = doc;
   const [status, setStatus] = useState(recipe.status ?? "draft");
@@ -131,7 +129,7 @@ export default function RecipeDetail({
       if (!updated || !Array.isArray(ingredients)) throw new Error();
       // The scraped lines are text only until the review is saved; drafting
       // them gives the page real ingredients to render and scale meanwhile.
-      return { schema: updated, ingredients: draftIngredientGroups(ingredients) };
+      return draftRecipeDocument(updated, ingredients);
     }, [recipe.id]),
   );
   const regenImage = useUndoableOp<RecipeDocument>(
@@ -257,7 +255,13 @@ export default function RecipeDetail({
       // ("Custom" → "custom"), or — for ingredients — a new line gained its
       // row id. Adopting the echo is what keeps the next save handing every
       // line's id back.
-      setDoc({ schema: result.schema, ingredients: result.ingredients });
+      setDoc({
+        schema: result.schema,
+        ingredients: result.ingredients,
+        prep_time: result.prep_time,
+        cook_time: result.cook_time,
+        total_time: result.total_time,
+      });
       setStatus(result.status);
       // The url guard is a type check, not a truthiness one: url is persisted
       // verbatim, so a cleared field must survive as "" — only an absent key
@@ -603,7 +607,7 @@ export default function RecipeDetail({
           type="application/ld+json"
           dangerouslySetInnerHTML={{
             __html: JSON.stringify(
-              toSchemaOrgJsonLd(doc.schema, doc.ingredients, {
+              toSchemaOrgJsonLd(doc, {
                 nutritionOverride: jsonLdNutrition
                   ? {
                       "@type": "NutritionInformation",

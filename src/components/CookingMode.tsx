@@ -23,6 +23,7 @@ import {
   type NormalizedNutrition,
 } from "@/lib/ScalableRecipe";
 import { useWakeLock } from "@/hooks/useWakeLock";
+import { recipeDocument } from "@/lib/recipeDocument";
 import {
   registerCookingModeRecipe,
   unregisterCookingModeRecipe,
@@ -106,10 +107,7 @@ export default function CookingMode({
   // The primary recipe as one document (schema + ingredient groups), which the
   // window API may replace wholesale. `initialDoc` is the server's version,
   // kept for the normalized-nutrition check below.
-  const [initialDoc] = useState<RecipeDocument>(() => ({
-    schema: recipe.metadata.schema,
-    ingredients: recipe.ingredients,
-  }));
+  const [initialDoc] = useState<RecipeDocument>(() => recipeDocument(recipe));
   const [doc, setDoc] = useState(initialDoc);
   const { schema } = doc;
   const [cookingNotes, setCookingNotes] = useState(

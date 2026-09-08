@@ -37,6 +37,7 @@ import type {
   EditableIngredients,
   EditableInstructions,
 } from "@/types/editor";
+import type { RecipeDocument, SchemaRecipe } from "@/types/recipe";
 import {
   makeIngredientGroup,
   makeIngredientLines,
@@ -509,41 +510,82 @@ describe("schemaToEditableInstructions / editableInstructionsToSchema", () => {
   });
 });
 
+/** A document with no lines and no times, for cases about the schema half. */
+function doc(schema: SchemaRecipe, overrides: Partial<RecipeDocument> = {}): RecipeDocument {
+  return {
+    schema,
+    ingredients: [],
+    prep_time: null,
+    cook_time: null,
+    total_time: null,
+    ...overrides,
+  };
+}
+
 describe("toSchemaOrgJsonLd", () => {
   it("excludes notes from JSON-LD output", () => {
-    const result = toSchemaOrgJsonLd({ name: "Pasta", notes: "use fresh herbs" }, []) as Record<string, unknown>;
+    const result = toSchemaOrgJsonLd(doc({ name: "Pasta", notes: "use fresh herbs" })) as Record<string, unknown>;
     expect(result.notes).toBeUndefined();
   });
 
   it("excludes cookingNotes from JSON-LD output", () => {
-    const result = toSchemaOrgJsonLd({ name: "Pasta", cookingNotes: "less salt next time" }, []) as Record<string, unknown>;
+    const result = toSchemaOrgJsonLd(doc({ name: "Pasta", cookingNotes: "less salt next time" })) as Record<string, unknown>;
     expect(result.cookingNotes).toBeUndefined();
   });
 
   it("includes standard fields in JSON-LD output", () => {
     const result = toSchemaOrgJsonLd(
-      { name: "Pasta", description: "A classic dish", cookTime: "PT20M" },
-      [],
+      doc({ name: "Pasta", description: "A classic dish" }),
     ) as Record<string, unknown>;
     expect(result.name).toBe("Pasta");
     expect(result.description).toBe("A classic dish");
-    expect(result.cookTime).toBe("PT20M");
+  });
+
+  it("emits the times from the columns as ISO 8601", () => {
+    const result = toSchemaOrgJsonLd(
+      doc({ name: "Pasta" }, { prep_time: 900, cook_time: 5400, total_time: 6300 }),
+    ) as Record<string, unknown>;
+    expect(result.prepTime).toBe("PT15M");
+    expect(result.cookTime).toBe("PT1H30M");
+    expect(result.totalTime).toBe("PT1H45M");
+  });
+
+  it("reads a time from its column, not from a copy the blob still carries", () => {
+    // The columns are the times. A blob written before the columns existed, or
+    // by a client that still sends `cookTime`, must not leak its stale copy.
+    const result = toSchemaOrgJsonLd(
+      doc({ name: "Pasta", cookTime: "PT20M" }, { cook_time: 1800 }),
+    ) as Record<string, unknown>;
+    expect(result.cookTime).toBe("PT30M");
+  });
+
+  it("drops a time whose column is null even when the blob has one", () => {
+    const result = toSchemaOrgJsonLd(
+      doc({ name: "Pasta", prepTime: "PT20M", cookTime: "PT1H" }),
+    ) as Record<string, unknown>;
+    expect(result).not.toHaveProperty("prepTime");
+    expect(result).not.toHaveProperty("cookTime");
+    expect(result).not.toHaveProperty("totalTime");
   });
 
   it("flattens the ingredient groups to strings, in order", () => {
     // Group names and row ids are ours, not Schema.org's — flattening to text
     // is what keeps them out of the public JSON-LD.
-    const result = toSchemaOrgJsonLd({ name: "Pasta" }, [
-      makeIngredientGroup("Dough", ["2 cups flour"]),
-      makeIngredientGroup(undefined, ["1 tsp salt"]),
-    ]) as Record<string, unknown>;
+    const result = toSchemaOrgJsonLd(
+      doc({ name: "Pasta" }, {
+        ingredients: [
+          makeIngredientGroup("Dough", ["2 cups flour"]),
+          makeIngredientGroup(undefined, ["1 tsp salt"]),
+        ],
+      }),
+    ) as Record<string, unknown>;
     expect(result.recipeIngredient).toEqual(["2 cups flour", "1 tsp salt"]);
     expect(JSON.stringify(result)).not.toContain("Dough");
     expect(JSON.stringify(result)).not.toContain("ri-");
   });
 
   it("omits recipeIngredient for a recipe with no lines", () => {
-    const result = toSchemaOrgJsonLd({ name: "Pasta" }, []) as Record<string, unknown>;
+    const result = toSchemaOrgJsonLd(doc({ name: "Pasta" })) as Record<string, unknown>;
     expect(result).not.toHaveProperty("recipeIngredient");
   });
 
@@ -551,16 +593,14 @@ describe("toSchemaOrgJsonLd", () => {
     // All keys (@type/value/unitText/valueReference) are standard Schema.org,
     // so no sanitization is needed — the object survives verbatim.
     const result = toSchemaOrgJsonLd(
-      { name: "Kebabs", recipeYield: quantitativeValueYield },
-      [],
+      doc({ name: "Kebabs", recipeYield: quantitativeValueYield }),
     ) as Record<string, unknown>;
     expect(result.recipeYield).toEqual(quantitativeValueYield);
   });
 
   it("emits nutritionOverride in place of the schema's own nutrition", () => {
     const result = toSchemaOrgJsonLd(
-      { name: "Pasta", nutrition: { calories: "300 kcal" } },
-      [],
+      doc({ name: "Pasta", nutrition: { calories: "300 kcal" } }),
       { nutritionOverride: { calories: "500 kcal", proteinContent: "10 g" } },
     ) as Record<string, unknown>;
     expect(result.nutrition).toEqual({
@@ -571,16 +611,14 @@ describe("toSchemaOrgJsonLd", () => {
 
   it("still emits the schema's own nutrition without an override", () => {
     const result = toSchemaOrgJsonLd(
-      { name: "Pasta", nutrition: { calories: "300 kcal" } },
-      [],
+      doc({ name: "Pasta", nutrition: { calories: "300 kcal" } }),
     ) as Record<string, unknown>;
     expect(result.nutrition).toEqual({ calories: "300 kcal" });
   });
 
   it("keeps custom fields out even with a nutrition override", () => {
     const result = toSchemaOrgJsonLd(
-      { name: "Pasta", notes: "secret", nutrition: { calories: "300 kcal" } },
-      [],
+      doc({ name: "Pasta", notes: "secret", nutrition: { calories: "300 kcal" } }),
       { nutritionOverride: { calories: "500 kcal" } },
     ) as Record<string, unknown>;
     expect(result.notes).toBeUndefined();
@@ -591,8 +629,7 @@ describe("toSchemaOrgJsonLd", () => {
 describe("toSchemaOrgRecipe", () => {
   it("keeps every stored field, custom ones included, and flattens the lines", () => {
     const out = toSchemaOrgRecipe(
-      { name: "Pasta", notes: "secret" },
-      makeIngredientLines(["2 cups flour"]),
+      doc({ name: "Pasta", notes: "secret" }, { ingredients: makeIngredientLines(["2 cups flour"]) }),
     );
     expect(out).toEqual({
       name: "Pasta",
@@ -602,7 +639,23 @@ describe("toSchemaOrgRecipe", () => {
   });
 
   it("leaves recipeIngredient off when there are no lines", () => {
-    expect(toSchemaOrgRecipe({ name: "Pasta" }, [])).toEqual({ name: "Pasta" });
+    expect(toSchemaOrgRecipe(doc({ name: "Pasta" }))).toEqual({ name: "Pasta" });
+  });
+
+  it("emits the times from the columns, overriding any copy in the blob", () => {
+    const out = toSchemaOrgRecipe(
+      doc(
+        { name: "Pasta", prepTime: "PT5M", cookTime: "PT1H", totalTime: "PT1H5M" },
+        { prep_time: 600, cook_time: null, total_time: 600 },
+      ),
+    );
+    expect(out).toEqual({ name: "Pasta", prepTime: "PT10M", totalTime: "PT10M" });
+  });
+
+  it("does not mutate the document's schema", () => {
+    const input = doc({ name: "Pasta", cookTime: "PT1H" }, { cook_time: null });
+    toSchemaOrgRecipe(input);
+    expect(input.schema).toEqual({ name: "Pasta", cookTime: "PT1H" });
   });
 });
 

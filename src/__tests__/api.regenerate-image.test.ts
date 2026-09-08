@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { POST } from "@/app/api/recipes/[id]/regenerate-image/route";
-import { makeRecipe } from "@/fixtures";
+import { makeIngredientLines, makeRecipe } from "@/fixtures";
 
 vi.mock("@/lib/recipes", async (orig) => {
   const actual = await orig<typeof import("@/lib/recipes")>();
@@ -85,5 +85,33 @@ describe("POST /api/recipes/[id]/regenerate-image", () => {
     const res = await POST(postReq(), makeParams());
     expect(res.status).toBe(200);
     expect((await res.json()).image).toBe("https://cdn.example.com/regen.png");
+  });
+
+  // The webhook is an external consumer: it gets the Schema.org form, with
+  // the lines flattened from the groups and the times from the columns — a
+  // stale copy the blob still carries must not reach it.
+  it("sends the webhook the recipe as Schema.org, times and lines from the columns", async () => {
+    const { getRecipeById } = await import("@/lib/recipes");
+    vi.mocked(getRecipeById).mockResolvedValueOnce(
+      makeRecipe("recipe-1", "Old Recipe", {
+        prep_time: 900,
+        ingredients: makeIngredientLines(["2 cups flour", "1 egg"]),
+        metadata: { schema: { name: "Old Recipe", prepTime: "PT5M", notes: "draw it rustic" } },
+      }),
+    );
+    const fetchSpy = vi.fn(() => makeWebhookResponse(true));
+    vi.stubGlobal("fetch", fetchSpy);
+
+    await POST(postReq(), makeParams());
+
+    const [, init] = fetchSpy.mock.calls[0] as unknown as [string, RequestInit];
+    expect(JSON.parse(init.body as string)).toEqual({
+      schema: {
+        name: "Old Recipe",
+        notes: "draw it rustic",
+        prepTime: "PT15M",
+        recipeIngredient: ["2 cups flour", "1 egg"],
+      },
+    });
   });
 });

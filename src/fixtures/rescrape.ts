@@ -1,9 +1,6 @@
-import { draftIngredientGroups, fromSchemaOrgIngredients } from "@/lib/recipeIngredients";
-import type {
-  RecipeIngredientGroup,
-  SchemaOrgRecipe,
-  SchemaRecipe,
-} from "@/types/recipe";
+import { draftRecipeDocument } from "@/lib/recipeDocument";
+import { fromSchemaOrgIngredients } from "@/lib/recipeIngredients";
+import type { RecipeDocument, SchemaOrgRecipe, SchemaRecipe } from "@/types/recipe";
 
 /** What the re-scrape webhook returns: a Schema.org Recipe, lines as strings. */
 export const rescrapeFixture: SchemaOrgRecipe = {
@@ -30,11 +27,9 @@ export const rescrapeResponseFixture: {
   ingredients: fromSchemaOrgIngredients(recipeIngredient ?? []),
 };
 
-/** The same recipe as /update echoes it after a save: every line a row with an id. */
-export const rescrapeSavedFixture: {
-  schema: SchemaRecipe;
-  ingredients: RecipeIngredientGroup[];
-} = {
-  schema: rescrapeSchema,
-  ingredients: draftIngredientGroups(rescrapeResponseFixture.ingredients),
-};
+/** The same recipe as /update echoes it after a save: every line a row with
+ *  an id, the times as column seconds (PT45M → 2700). */
+export const rescrapeSavedFixture: RecipeDocument = draftRecipeDocument(
+  rescrapeSchema,
+  rescrapeResponseFixture.ingredients,
+);

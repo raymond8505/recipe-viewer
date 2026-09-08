@@ -5,8 +5,9 @@ import type { RecipeDocument } from "@/types/recipe";
 
 // The value is a whole document, not just a schema: a re-scrape replaces the
 // ingredients too, and undo has to bring both halves back together.
-const current: RecipeDocument = { schema: { name: "Before" }, ingredients: [] };
-const produced: RecipeDocument = { schema: { name: "After" }, ingredients: [] };
+const times = { prep_time: null, cook_time: null, total_time: null };
+const current: RecipeDocument = { schema: { name: "Before" }, ingredients: [], ...times };
+const produced: RecipeDocument = { schema: { name: "After" }, ingredients: [], ...times };
 
 describe("useUndoableOp", () => {
   it("starts idle with no review buffer", () => {

@@ -13,6 +13,9 @@ const doc: RecipeDocument = {
     notes: "Use buttermilk.",
   },
   ingredients: makeIngredientLines(["2 cups flour", "1 egg"]),
+  prep_time: null,
+  cook_time: null,
+  total_time: null,
 };
 
 /** The same document with some schema fields swapped. */
@@ -306,12 +309,18 @@ describe("useRecipeEditor", () => {
     expect(result.current.draft.name).toBe("Edited");
   });
   describe("recipe times", () => {
+    // The columns carry the times; the schema deliberately carries stale
+    // copies (a different prep, a total the column has cleared) so a read
+    // that consults the blob rather than the column fails visibly.
     const timed: RecipeDocument = {
-      schema: { name: "Pancakes", prepTime: "PT15M", cookTime: "PT1H30M" },
+      schema: { name: "Pancakes", prepTime: "PT5M", cookTime: "PT1H30M", totalTime: "PT2H" },
       ingredients: [],
+      prep_time: 900,
+      cook_time: 5400,
+      total_time: null,
     };
 
-    it("begin seeds the time fields as H:MM", () => {
+    it("begin seeds the time fields as H:MM from the columns", () => {
       const { result } = renderHook(() => useRecipeEditor());
       act(() => result.current.begin(timed, ROW));
       expect(result.current.draft.prepTime).toBe("0:15");
@@ -339,7 +348,7 @@ describe("useRecipeEditor", () => {
       expect(result.current.buildPatch(timed).schema.cookTime).toBeNull();
     });
 
-    it("degrades an unparseable time to no-change rather than blocking the save", () => {
+    it("degrades an unparseable time to the column's value rather than blocking the save", () => {
       const { result } = renderHook(() => useRecipeEditor());
       act(() => result.current.begin(timed, ROW));
       act(() => result.current.patch({ prepTime: "a while" }));
@@ -347,7 +356,7 @@ describe("useRecipeEditor", () => {
       expect(result.current.canSave).toBe(true);
     });
 
-    it("round-trips an untouched recipe's times unchanged", () => {
+    it("round-trips an untouched recipe's column times unchanged", () => {
       const { result } = renderHook(() => useRecipeEditor());
       act(() => result.current.begin(timed, ROW));
       const built = result.current.buildPatch(timed).schema;

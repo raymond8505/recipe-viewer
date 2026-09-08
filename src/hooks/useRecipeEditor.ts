@@ -105,15 +105,15 @@ export interface UseRecipeEditor {
  * One recipe time's contribution to the saved schema. `parseTimeInput`'s
  * three-way result maps straight onto the patch semantics `updateRecipeRow`
  * expects: a number sets the time, `null` clears it, and an unparseable entry
- * falls back to the stored value — a bad time degrades to "no change" rather
- * than blocking the save, exactly as an invalid servings input does.
+ * falls back to the stored column value — a bad time degrades to "no change"
+ * rather than blocking the save, exactly as an invalid servings input does.
  */
 function buildTime(
   raw: string,
-  base: string | null | undefined,
+  baseSeconds: number | null,
 ): string | null | undefined {
   const seconds = parseTimeInput(raw);
-  if (seconds === undefined) return base;
+  if (seconds === undefined) return secondsToIso(baseSeconds);
   if (seconds === null) return null;
   return secondsToIso(seconds) ?? null;
 }
@@ -150,7 +150,8 @@ export function useRecipeEditor(): UseRecipeEditor {
   );
 
   const begin = useCallback(
-    ({ schema, ingredients }: RecipeDocument, { status, url, source }: EditRowFields) => {
+    (doc: RecipeDocument, { status, url, source }: EditRowFields) => {
+      const { schema, ingredients } = doc;
       setDraft({
         name: schema.name,
         url,
@@ -163,9 +164,10 @@ export function useRecipeEditor(): UseRecipeEditor {
         status,
         source,
         servings: parseServings(schema.recipeYield)?.toString() ?? "",
-        prepTime: formatTimeInput(parseDurationToSeconds(schema.prepTime)),
-        cookTime: formatTimeInput(parseDurationToSeconds(schema.cookTime)),
-        totalTime: formatTimeInput(parseDurationToSeconds(schema.totalTime)),
+        // The columns are the times; the schema's copies are not read.
+        prepTime: formatTimeInput(doc.prep_time),
+        cookTime: formatTimeInput(doc.cook_time),
+        totalTime: formatTimeInput(doc.total_time),
       });
       setEditState("editing");
     },
@@ -175,7 +177,8 @@ export function useRecipeEditor(): UseRecipeEditor {
   const cancel = useCallback(() => setEditState("idle"), []);
 
   const buildPatch = useCallback(
-    ({ schema: base }: RecipeDocument) => {
+    (doc: RecipeDocument) => {
+      const { schema: base } = doc;
       // Only rewrite the yield when the parsed input is a valid count that
       // differs from the base. The changed-check is load-bearing: a range
       // like "6-8 servings" seeds the input with its midpoint ("7"), so an
@@ -193,9 +196,9 @@ export function useRecipeEditor(): UseRecipeEditor {
           recipeYield: servingsChanged
             ? applyServings(base.recipeYield, n)
             : base.recipeYield,
-          prepTime: buildTime(draft.prepTime, base.prepTime),
-          cookTime: buildTime(draft.cookTime, base.cookTime),
-          totalTime: buildTime(draft.totalTime, base.totalTime),
+          prepTime: buildTime(draft.prepTime, doc.prep_time),
+          cookTime: buildTime(draft.cookTime, doc.cook_time),
+          totalTime: buildTime(draft.totalTime, doc.total_time),
         },
         ingredients: editableToIngredientInput(draft.ingredients),
       };
