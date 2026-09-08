@@ -105,7 +105,6 @@ export function reconcileRecipeIngredients(
         const insert: RecipeIngredientRow = {
           id: fresh.id,
           recipe_id: recipeId,
-          line_id: null,
           ingredient_id: fresh.ingredient_id,
           raw_text: fresh.raw_text,
           quantity: fresh.quantity,
@@ -114,7 +113,6 @@ export function reconcileRecipeIngredients(
           note: fresh.note,
           match_status: fresh.match_status,
           confidence: fresh.confidence,
-          position: 0,
           estimated_grams: fresh.estimated_grams,
           grams_source: fresh.grams_source,
         };

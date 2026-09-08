@@ -2,67 +2,84 @@
 // here instead of calling `fetch` directly so the network shape stays in one
 // place and tests/stories can mock a single module.
 
-import type { IngredientRow, RecipeIngredientRow } from "@/types/ingredient";
-import type { SchemaOrgIngredientLine } from "@/types/recipe";
+import type { RecipeIngredientRow } from "@/types/ingredient";
+import type {
+  RecipeIngredientGroup,
+  RecipeIngredientGroupInput,
+  SchemaRecipe,
+} from "@/types/recipe";
+// Type-only: the repo module reaches @/env at runtime, which a client bundle
+// must never do, but its status union is the one the route echoes back.
+import type { RecipeStatus } from "@/lib/recipes";
 
-export interface RecipeIngredientsPayload {
-  rows: RecipeIngredientRow[];
-  ingredients: IngredientRow[];
+export interface SaveRecipeBody {
+  schema: SchemaRecipe;
+  /** The whole list; the editor always sends it. Lines keep their rows by id. */
+  ingredients: RecipeIngredientGroupInput[];
+  status: string;
+  url: string;
+  source: string;
+}
+
+export interface SavedRecipe {
+  schema: SchemaRecipe;
+  ingredients: RecipeIngredientGroup[];
+  status: RecipeStatus;
+  url: string;
+  source: string;
 }
 
 /**
- * A recipe's normalized ingredient rows plus the catalog rows they point at
- * (the NutritionDetail data set) — for client-side refresh after a
- * re-normalization run; the page's initial load is server-side.
+ * Persist an edit (the editor's Save). The response echoes what was actually
+ * stored — including the ingredient groups with every line's row id — so the
+ * caller re-seeds its state from that rather than from its own draft: values
+ * degrade or canonicalize server-side, and a new line only has an id after
+ * the round trip.
  */
-export async function fetchRecipeIngredients(
+export async function saveRecipe(
   recipeId: string,
-): Promise<RecipeIngredientsPayload> {
-  const res = await fetch(`/api/recipes/${recipeId}/ingredients`);
+  body: SaveRecipeBody,
+): Promise<SavedRecipe> {
+  const res = await fetch(`/api/recipes/${recipeId}/update`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
   if (!res.ok) {
-    throw new Error(`Recipe ingredients fetch failed with status ${res.status}`);
+    throw new Error(`Recipe save failed with status ${res.status}`);
   }
-  const body = await res.json();
-  if (!Array.isArray(body.rows) || !Array.isArray(body.ingredients)) {
-    throw new Error("Recipe ingredients fetch returned no rows");
+  const saved = await res.json();
+  if (!saved.schema || !Array.isArray(saved.ingredients)) {
+    throw new Error("Recipe save returned no recipe");
   }
-  return body;
-}
-
-export interface RecipeLineTextUpdate {
-  /** The full updated array — the edited line keeps its string/object shape. */
-  recipeIngredient: Array<string | SchemaOrgIngredientLine>;
-  /** The derived rows after the server's deterministic re-parse. */
-  rows: RecipeIngredientRow[];
+  return saved;
 }
 
 /**
- * Edit one schema ingredient line's text in place (the NutritionDetail inline
- * edit). This edits the RECIPE — the server merges the patched line into the
- * schema and deterministically re-parses the derived rows. It does NOT
- * re-match: the line's catalog association is the user's, not the matcher's.
- *
- * The re-parsed rows come back with the lines so the caller can replace its
- * copy of both at once — holding the old rows would misreport the edited line.
+ * Edit one ingredient's text in place (the NutritionDetail inline edit). This
+ * edits the RECIPE — the server re-parses the row deterministically. It does
+ * NOT re-match: the line's catalog association is the user's, not the
+ * matcher's. The groups come back current so the caller replaces its copy
+ * wholesale — a stale row misreports the edited line.
  */
 export async function updateRecipeIngredientLine(
   recipeId: string,
-  index: number,
+  lineId: string,
   text: string,
-): Promise<RecipeLineTextUpdate> {
+): Promise<{ ingredients: RecipeIngredientGroup[] }> {
   const res = await fetch(`/api/recipes/${recipeId}/ingredients`, {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ index, text }),
+    body: JSON.stringify({ id: lineId, text }),
   });
   if (!res.ok) {
     throw new Error(`Ingredient line update failed with status ${res.status}`);
   }
   const body = await res.json();
-  if (!Array.isArray(body.recipeIngredient) || !Array.isArray(body.rows)) {
-    throw new Error("Ingredient line update returned no lines");
+  if (!Array.isArray(body.ingredients)) {
+    throw new Error("Ingredient line update returned no ingredients");
   }
-  return { recipeIngredient: body.recipeIngredient, rows: body.rows };
+  return { ingredients: body.ingredients };
 }
 
 /**

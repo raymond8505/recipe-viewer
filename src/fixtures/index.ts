@@ -4,11 +4,16 @@ export {
   makeIngredient,
   makeRecipeIngredientRow,
   makeRecipeIngredient,
+  makeMatchedIngredient,
   makeIngredientGroup,
   makeIngredientLines,
   matchedLinesScenario,
 } from "./ingredients";
-export { rescrapeFixture } from "./rescrape";
+export {
+  rescrapeFixture,
+  rescrapeResponseFixture,
+  rescrapeSavedFixture,
+} from "./rescrape";
 export {
   fullSchemaNutrition,
   sparseSchemaNutrition,
@@ -18,6 +23,7 @@ export {
 export { makeTimer } from "./timers";
 export {
   scalableBaseSchema,
+  scalableBaseIngredients,
   quantitativeValueYield,
   makeSchemaRecipe,
   makeScalableRecipe,

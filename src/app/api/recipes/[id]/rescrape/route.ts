@@ -1,8 +1,15 @@
 import { NextResponse } from "next/server";
 import { getRecipeById } from "@/lib/recipes";
+import { fromSchemaOrgIngredients } from "@/lib/recipeIngredients";
+import { schemaOrgRecipeInputSchema } from "@/lib/schemas/recipe";
 import { env } from "@/env";
 import { requireSessionOrRecipeToken } from "@/lib/api/guard";
 
+// The inbound Schema.org edge for a re-scrape: the webhook speaks Schema.org
+// because the page it scraped does. The recipe comes back split the way the
+// app stores it — `schema` without recipeIngredient, plus `ingredients` as
+// groups of text-only lines — so the client can render the review straight
+// from the response and save it through the ordinary /update contract.
 export const POST = requireSessionOrRecipeToken(
   async (req: Request, { params }: RouteContext<"/api/recipes/[id]/rescrape">) => {
     const { id } = await params;
@@ -28,11 +35,15 @@ export const POST = requireSessionOrRecipeToken(
     }
 
     const body = await webhookRes.json();
-    const updatedSchema = body?.schema;
-    if (!updatedSchema || typeof updatedSchema !== "object" || !updatedSchema.name) {
+    const parsed = schemaOrgRecipeInputSchema.safeParse(body?.schema);
+    if (!parsed.success) {
       return NextResponse.json({ error: "Invalid webhook response" }, { status: 502 });
     }
 
-    return NextResponse.json({ schema: updatedSchema });
+    const { recipeIngredient, ...schema } = parsed.data;
+    return NextResponse.json({
+      schema,
+      ingredients: fromSchemaOrgIngredients(recipeIngredient ?? []),
+    });
   },
 );

@@ -10,9 +10,6 @@ import {
   formatDate,
   getFirstImage,
   toArray,
-  groupIngredients,
-  groupIngredientsWithIndex,
-  getIngredientText,
   isOwnRecipe,
   isBrowsableUrl,
   canonicalizeRecipeSource,
@@ -27,9 +24,10 @@ import {
   formatTimeInput,
   parseTimeInput,
   canonicalizeTimeInput,
-  schemaToEditableIngredients,
-  editableIngredientsToSchema,
+  ingredientsToEditable,
+  editableToIngredientInput,
   schemaToEditableInstructions,
+  toSchemaOrgRecipe,
   editableInstructionsToSchema,
   getYieldLabel,
   getYieldValueReference,
@@ -39,7 +37,11 @@ import type {
   EditableIngredients,
   EditableInstructions,
 } from "@/types/editor";
-import { quantitativeValueYield } from "@/fixtures";
+import {
+  makeIngredientGroup,
+  makeIngredientLines,
+  quantitativeValueYield,
+} from "@/fixtures";
 
 describe("formatDuration", () => {
   it("formats hours and minutes", () => {
@@ -255,16 +257,6 @@ describe("toArray", () => {
   });
 });
 
-describe("getIngredientText", () => {
-  it("returns a plain string as-is", () => {
-    expect(getIngredientText("2 cups flour")).toBe("2 cups flour");
-  });
-
-  it("returns the text field from a SchemaOrgIngredientLine object", () => {
-    expect(getIngredientText({ name: "1 cup sugar", group: "Cake" })).toBe("1 cup sugar");
-  });
-});
-
 // The one marker of "this recipe is mine" — deliberately an exact match on a
 // literal rather than anything derived from the site's hostname, which is what
 // this replaced (see db/migrations/0015).
@@ -340,90 +332,6 @@ describe("isBrowsableUrl", () => {
   });
 });
 
-describe("groupIngredients", () => {
-  it("returns a single null-headed group when no group is set", () => {
-    const result = groupIngredients(["2 cups flour", "1 cup sugar"]);
-    expect(result).toHaveLength(1);
-    expect(result[0].heading).toBeNull();
-    expect(result[0].items).toHaveLength(2);
-  });
-
-  it("groups ingredients by group", () => {
-    const ingredients = [
-      { name: "2 cups flour", group: "Cake" },
-      { name: "1 tsp vanilla", group: "Frosting" },
-      { name: "1 cup sugar", group: "Cake" },
-    ];
-    const result = groupIngredients(ingredients);
-    expect(result).toHaveLength(2);
-    expect(result[0].heading).toBe("Cake");
-    expect(result[0].items).toHaveLength(2);
-    expect(result[1].heading).toBe("Frosting");
-    expect(result[1].items).toHaveLength(1);
-  });
-
-  it("preserves insertion order of groups", () => {
-    const ingredients = [
-      { name: "a", group: "B" },
-      { name: "b", group: "A" },
-      { name: "c", group: "B" },
-    ];
-    const result = groupIngredients(ingredients);
-    expect(result.map((g) => g.heading)).toEqual(["B", "A"]);
-  });
-
-  it("puts ingredients without group into a null-headed group", () => {
-    const ingredients = [
-      "plain string",
-      { name: "grouped", group: "Sauce" },
-    ];
-    const result = groupIngredients(ingredients);
-    expect(result).toHaveLength(2);
-    expect(result[0].heading).toBeNull();
-    expect(result[1].heading).toBe("Sauce");
-  });
-});
-
-describe("groupIngredientsWithIndex", () => {
-  it("carries original array indices through flat lists", () => {
-    const result = groupIngredientsWithIndex(["2 cups flour", "1 cup sugar"]);
-    expect(result).toHaveLength(1);
-    expect(result[0].items).toEqual([
-      { ingredient: "2 cups flour", index: 0 },
-      { ingredient: "1 cup sugar", index: 1 },
-    ]);
-  });
-
-  it("preserves original indices when interleaved groups are reordered", () => {
-    const ingredients = [
-      { name: "2 cups flour", group: "Cake" },
-      { name: "1 tsp vanilla", group: "Frosting" },
-      { name: "1 cup sugar", group: "Cake" },
-    ];
-    const result = groupIngredientsWithIndex(ingredients);
-    expect(result.map((g) => g.heading)).toEqual(["Cake", "Frosting"]);
-    // "1 cup sugar" moved into the Cake bucket but keeps index 2 — the join
-    // key back to recipe_ingredients.position.
-    expect(result[0].items.map((i) => i.index)).toEqual([0, 2]);
-    expect(result[1].items.map((i) => i.index)).toEqual([1]);
-  });
-
-  it("stays structurally equivalent to groupIngredients", () => {
-    const ingredients = [
-      "plain string",
-      { name: "grouped", group: "Sauce" },
-      { name: "also grouped", group: "Sauce" },
-    ];
-    const indexed = groupIngredientsWithIndex(ingredients);
-    expect(
-      indexed.map(({ heading, items }) => ({
-        heading,
-        items: items.map((i) => i.ingredient),
-      })),
-    ).toEqual(groupIngredients(ingredients));
-  });
-});
-
 describe("markdownToInstructions", () => {
   it("parses bullet lines as flat HowToStep list", () => {
     const result = markdownToInstructions("- Boil water.\n- Add pasta.");
@@ -489,36 +397,57 @@ describe("msToIsoDuration", () => {
   });
 });
 
-describe("schemaToEditableIngredients / editableIngredientsToSchema", () => {
-  it("round-trips a mix of grouped and ungrouped ingredients", () => {
-    const original = [
-      "1 tsp salt",
-      { name: "2 cups flour", group: "Dough" },
-      { name: "1 egg", group: "Dough" },
-    ];
-    const editable = schemaToEditableIngredients(original);
-    // ungrouped section + one named group, in insertion order
+describe("ingredientsToEditable / editableToIngredientInput", () => {
+  const groups = [
+    makeIngredientGroup(undefined, ["1 tsp salt"]),
+    makeIngredientGroup("Dough", ["2 cups flour", "1 egg"]),
+  ];
+
+  it("round-trips groups, carrying every row id through the draft", () => {
+    const editable = ingredientsToEditable(groups);
     expect(editable.map((g) => g.heading)).toEqual([null, "Dough"]);
-    expect(editableIngredientsToSchema(editable)).toEqual(original);
+    expect(editable[1].items.map((i) => i.recipeIngredientId)).toEqual([
+      "ri-2-cups-flour",
+      "ri-1-egg",
+    ]);
+    expect(editableToIngredientInput(editable)).toEqual([
+      { ingredients: [{ id: "ri-1-tsp-salt", raw_text: "1 tsp salt" }] },
+      {
+        name: "Dough",
+        ingredients: [
+          { id: "ri-2-cups-flour", raw_text: "2 cups flour" },
+          { id: "ri-1-egg", raw_text: "1 egg" },
+        ],
+      },
+    ]);
   });
 
-  it("assigns stable ids to groups and items", () => {
-    const editable = schemaToEditableIngredients(["a", "b"]);
+  it("assigns stable drag ids to groups and items, distinct from row ids", () => {
+    const editable = ingredientsToEditable(makeIngredientLines(["a", "b"]));
     expect(editable[0].id).toBeTruthy();
     expect(editable[0].items[0].id).toBeTruthy();
     expect(editable[0].items[0].id).not.toBe(editable[0].items[1].id);
+    expect(editable[0].items[0].id).not.toBe(editable[0].items[0].recipeIngredientId);
   });
 
-  it("drops blank-name rows and treats a blank heading as ungrouped", () => {
+  it("seeds one empty nameless group for a recipe with no ingredients", () => {
+    const editable = ingredientsToEditable([]);
+    expect(editable).toHaveLength(1);
+    expect(editable[0]).toMatchObject({ heading: null, items: [] });
+  });
+
+  it("sends a new row without an id, drops blank rows and empty groups, and treats a blank heading as nameless", () => {
     const editable: EditableIngredients = [
       { id: "g0", heading: "  ", items: [{ id: "a", name: "1 onion" }] },
       { id: "g1", heading: "Spices", items: [{ id: "b", name: "  " }] },
     ];
-    expect(editableIngredientsToSchema(editable)).toEqual(["1 onion"]);
+    expect(editableToIngredientInput(editable)).toEqual([
+      { ingredients: [{ raw_text: "1 onion" }] },
+    ]);
   });
 
   it("empties to an empty list", () => {
-    expect(editableIngredientsToSchema([])).toEqual([]);
+    expect(editableToIngredientInput([])).toEqual([]);
   });
 });
 
@@ -582,53 +511,56 @@ describe("schemaToEditableInstructions / editableInstructionsToSchema", () => {
 
 describe("toSchemaOrgJsonLd", () => {
   it("excludes notes from JSON-LD output", () => {
-    const result = toSchemaOrgJsonLd({ name: "Pasta", notes: "use fresh herbs" }) as Record<string, unknown>;
+    const result = toSchemaOrgJsonLd({ name: "Pasta", notes: "use fresh herbs" }, []) as Record<string, unknown>;
     expect(result.notes).toBeUndefined();
   });
 
   it("excludes cookingNotes from JSON-LD output", () => {
-    const result = toSchemaOrgJsonLd({ name: "Pasta", cookingNotes: "less salt next time" }) as Record<string, unknown>;
+    const result = toSchemaOrgJsonLd({ name: "Pasta", cookingNotes: "less salt next time" }, []) as Record<string, unknown>;
     expect(result.cookingNotes).toBeUndefined();
   });
 
   it("includes standard fields in JSON-LD output", () => {
-    const result = toSchemaOrgJsonLd({
-      name: "Pasta",
-      description: "A classic dish",
-      cookTime: "PT20M",
-    }) as Record<string, unknown>;
+    const result = toSchemaOrgJsonLd(
+      { name: "Pasta", description: "A classic dish", cookTime: "PT20M" },
+      [],
+    ) as Record<string, unknown>;
     expect(result.name).toBe("Pasta");
     expect(result.description).toBe("A classic dish");
     expect(result.cookTime).toBe("PT20M");
   });
 
-  it("normalizes ingredient objects to strings", () => {
-    // `group` and `id` are both app-level fields with no Schema.org meaning —
-    // flattening to text is what keeps them out of the public JSON-LD.
-    const result = toSchemaOrgJsonLd({
-      name: "Pasta",
-      recipeIngredient: [
-        { name: "2 cups flour", group: "Dough", id: "L1" },
-        "1 tsp salt",
-      ],
-    }) as Record<string, unknown>;
+  it("flattens the ingredient groups to strings, in order", () => {
+    // Group names and row ids are ours, not Schema.org's — flattening to text
+    // is what keeps them out of the public JSON-LD.
+    const result = toSchemaOrgJsonLd({ name: "Pasta" }, [
+      makeIngredientGroup("Dough", ["2 cups flour"]),
+      makeIngredientGroup(undefined, ["1 tsp salt"]),
+    ]) as Record<string, unknown>;
     expect(result.recipeIngredient).toEqual(["2 cups flour", "1 tsp salt"]);
-    expect(JSON.stringify(result)).not.toContain("L1");
+    expect(JSON.stringify(result)).not.toContain("Dough");
+    expect(JSON.stringify(result)).not.toContain("ri-");
+  });
+
+  it("omits recipeIngredient for a recipe with no lines", () => {
+    const result = toSchemaOrgJsonLd({ name: "Pasta" }, []) as Record<string, unknown>;
+    expect(result).not.toHaveProperty("recipeIngredient");
   });
 
   it("passes a QuantitativeValue recipeYield through unchanged", () => {
     // All keys (@type/value/unitText/valueReference) are standard Schema.org,
     // so no sanitization is needed — the object survives verbatim.
-    const result = toSchemaOrgJsonLd({
-      name: "Kebabs",
-      recipeYield: quantitativeValueYield,
-    }) as Record<string, unknown>;
+    const result = toSchemaOrgJsonLd(
+      { name: "Kebabs", recipeYield: quantitativeValueYield },
+      [],
+    ) as Record<string, unknown>;
     expect(result.recipeYield).toEqual(quantitativeValueYield);
   });
 
   it("emits nutritionOverride in place of the schema's own nutrition", () => {
     const result = toSchemaOrgJsonLd(
       { name: "Pasta", nutrition: { calories: "300 kcal" } },
+      [],
       { nutritionOverride: { calories: "500 kcal", proteinContent: "10 g" } },
     ) as Record<string, unknown>;
     expect(result.nutrition).toEqual({
@@ -638,20 +570,39 @@ describe("toSchemaOrgJsonLd", () => {
   });
 
   it("still emits the schema's own nutrition without an override", () => {
-    const result = toSchemaOrgJsonLd({
-      name: "Pasta",
-      nutrition: { calories: "300 kcal" },
-    }) as Record<string, unknown>;
+    const result = toSchemaOrgJsonLd(
+      { name: "Pasta", nutrition: { calories: "300 kcal" } },
+      [],
+    ) as Record<string, unknown>;
     expect(result.nutrition).toEqual({ calories: "300 kcal" });
   });
 
   it("keeps custom fields out even with a nutrition override", () => {
     const result = toSchemaOrgJsonLd(
       { name: "Pasta", notes: "secret", nutrition: { calories: "300 kcal" } },
+      [],
       { nutritionOverride: { calories: "500 kcal" } },
     ) as Record<string, unknown>;
     expect(result.notes).toBeUndefined();
     expect(result.nutrition).toEqual({ calories: "500 kcal" });
+  });
+});
+
+describe("toSchemaOrgRecipe", () => {
+  it("keeps every stored field, custom ones included, and flattens the lines", () => {
+    const out = toSchemaOrgRecipe(
+      { name: "Pasta", notes: "secret" },
+      makeIngredientLines(["2 cups flour"]),
+    );
+    expect(out).toEqual({
+      name: "Pasta",
+      notes: "secret",
+      recipeIngredient: ["2 cups flour"],
+    });
+  });
+
+  it("leaves recipeIngredient off when there are no lines", () => {
+    expect(toSchemaOrgRecipe({ name: "Pasta" }, [])).toEqual({ name: "Pasta" });
   });
 });
 

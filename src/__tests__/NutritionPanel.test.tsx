@@ -6,6 +6,7 @@ import { ScalableRecipe } from "@/lib/ScalableRecipe";
 import {
   fullSchemaNutrition,
   makeScalableRecipe,
+  makeSchemaRecipe,
   quantitativeValueYield,
 } from "@/fixtures";
 
@@ -30,9 +31,11 @@ function Harness({
 describe("NutritionPanel", () => {
   it("renders nutrition section with fields", () => {
     const r = makeScalableRecipe({
-      recipeIngredient: undefined,
-      recipeYield: "4 servings",
-      nutrition: { calories: "350 kcal", proteinContent: "20g" },
+      ingredients: [],
+      schema: {
+        recipeYield: "4 servings",
+        nutrition: { calories: "350 kcal", proteinContent: "20g" },
+      },
     });
     render(<Harness initial={r} />);
     expect(screen.getByText("Nutrition")).toBeTruthy();
@@ -44,9 +47,11 @@ describe("NutritionPanel", () => {
 
   it("returns null when no countable nutrition data is present", () => {
     const r = makeScalableRecipe({
-      recipeIngredient: undefined,
-      recipeYield: "4 servings",
-      nutrition: { servingSize: "1 cup" },
+      ingredients: [],
+      schema: {
+        recipeYield: "4 servings",
+        nutrition: { servingSize: "1 cup" },
+      },
     });
     const { container } = render(<Harness initial={r} />);
     expect(container.firstChild).toBeNull();
@@ -56,11 +61,8 @@ describe("NutritionPanel", () => {
     // Fully covered → the whole panel serves the ingredients view: one badge,
     // and the recipe-only fat field does NOT fill the gap (all-or-nothing).
     const r = new ScalableRecipe(
-      makeScalableRecipe({
-        recipeIngredient: undefined,
-        recipeYield: "4 servings",
-        nutrition: { fatContent: "5 g" },
-      }).schema,
+      makeSchemaRecipe({ recipeYield: "4 servings", nutrition: { fatContent: "5 g" } }),
+      [],
       undefined,
       { total: { calories_kcal: 2000, protein_g: 40 }, fullyCovered: true },
     );
@@ -73,11 +75,8 @@ describe("NutritionPanel", () => {
 
   it("hides the source badge when showSources is false, even if normalized", () => {
     const r = new ScalableRecipe(
-      makeScalableRecipe({
-        recipeIngredient: undefined,
-        recipeYield: "4 servings",
-        nutrition: { fatContent: "5 g" },
-      }).schema,
+      makeSchemaRecipe({ recipeYield: "4 servings", nutrition: { fatContent: "5 g" } }),
+      [],
       undefined,
       { total: { calories_kcal: 2000, protein_g: 40 }, fullyCovered: true },
     );
@@ -88,9 +87,11 @@ describe("NutritionPanel", () => {
 
   it("shows one 'recipe' header badge for a non-normalized recipe", () => {
     const r = makeScalableRecipe({
-      recipeIngredient: undefined,
-      recipeYield: "4 servings",
-      nutrition: { calories: "350 kcal" },
+      ingredients: [],
+      schema: {
+        recipeYield: "4 servings",
+        nutrition: { calories: "350 kcal" },
+      },
     });
     render(<Harness initial={r} showSources />);
     expect(screen.getAllByText("recipe")).toHaveLength(1);
@@ -99,9 +100,11 @@ describe("NutritionPanel", () => {
 
   it("shows 'per serving' at the default portion count", () => {
     const r = makeScalableRecipe({
-      recipeIngredient: undefined,
-      recipeYield: "4 servings",
-      nutrition: { calories: "350 kcal" },
+      ingredients: [],
+      schema: {
+        recipeYield: "4 servings",
+        nutrition: { calories: "350 kcal" },
+      },
     });
     render(<Harness initial={r} />);
     expect(screen.getByText("per serving")).toBeTruthy();
@@ -110,9 +113,11 @@ describe("NutritionPanel", () => {
 
   it("rounds displayed values over 1 to the nearest integer, keeping sub-1 precision", () => {
     const r = makeScalableRecipe({
-      recipeIngredient: undefined,
-      recipeYield: "4 servings",
-      nutrition: { proteinContent: "9.96 g", fiberContent: "0.2 g" },
+      ingredients: [],
+      schema: {
+        recipeYield: "4 servings",
+        nutrition: { proteinContent: "9.96 g", fiberContent: "0.2 g" },
+      },
     });
     render(<Harness initial={r} />);
     expect(screen.getByText("10 g")).toBeTruthy();
@@ -121,9 +126,11 @@ describe("NutritionPanel", () => {
 
   it("shows unscaled values at the default portion count", () => {
     const r = makeScalableRecipe({
-      recipeIngredient: undefined,
-      recipeYield: "4 servings",
-      nutrition: { calories: "350 kcal" },
+      ingredients: [],
+      schema: {
+        recipeYield: "4 servings",
+        nutrition: { calories: "350 kcal" },
+      },
     });
     render(<Harness initial={r} />);
     expect(screen.getByText("350 kcal")).toBeTruthy();
@@ -132,9 +139,11 @@ describe("NutritionPanel", () => {
   it("scales values and flips to 'per portion' when portions differ from servings", () => {
     // 4 servings, 350 kcal per serving; split into 2 portions → each portion is 2 servings → 700 kcal.
     const r = makeScalableRecipe({
-      recipeIngredient: undefined,
-      recipeYield: "4 servings",
-      nutrition: { calories: "350 kcal" },
+      ingredients: [],
+      schema: {
+        recipeYield: "4 servings",
+        nutrition: { calories: "350 kcal" },
+      },
     });
     render(<Harness initial={r} />);
     fireEvent.click(screen.getByRole("button", { name: /larger portion size/i }));
@@ -146,9 +155,11 @@ describe("NutritionPanel", () => {
   it("increases portions and scales down per-portion values", () => {
     // 4 servings, 400 kcal each; split into 8 portions → each is half a serving → 200 kcal.
     const r = makeScalableRecipe({
-      recipeIngredient: undefined,
-      recipeYield: "4 servings",
-      nutrition: { calories: "400 kcal" },
+      ingredients: [],
+      schema: {
+        recipeYield: "4 servings",
+        nutrition: { calories: "400 kcal" },
+      },
     });
     render(<Harness initial={r} />);
     const more = screen.getByRole("button", { name: /smaller portion size/i });
@@ -162,9 +173,11 @@ describe("NutritionPanel", () => {
 
   it("disables decrease button at minimum of 1 portion", () => {
     const r = makeScalableRecipe({
-      recipeIngredient: undefined,
-      recipeYield: "4 servings",
-      nutrition: { calories: "300 kcal" },
+      ingredients: [],
+      schema: {
+        recipeYield: "4 servings",
+        nutrition: { calories: "300 kcal" },
+      },
     });
     render(<Harness initial={r} />);
     const decreaseBtn = screen.getByRole("button", { name: /larger portion size/i });
@@ -176,9 +189,11 @@ describe("NutritionPanel", () => {
 
   it("hides stepper when recipe has no parsed yield", () => {
     const r = makeScalableRecipe({
-      recipeIngredient: undefined,
-      recipeYield: undefined,
-      nutrition: { calories: "350 kcal" },
+      ingredients: [],
+      schema: {
+        recipeYield: undefined,
+        nutrition: { calories: "350 kcal" },
+      },
     });
     render(<Harness initial={r} />);
     expect(screen.queryByRole("button", { name: /larger portion size/i })).toBeNull();
@@ -189,9 +204,11 @@ describe("NutritionPanel", () => {
   it("shows the per-serving weight when the yield carries a valueReference", () => {
     // 4 kebabs from 454 g → 454/4 = 113.5 → "per 114 g serving".
     const r = makeScalableRecipe({
-      recipeIngredient: undefined,
-      recipeYield: quantitativeValueYield,
-      nutrition: { calories: "350 kcal" },
+      ingredients: [],
+      schema: {
+        recipeYield: quantitativeValueYield,
+        nutrition: { calories: "350 kcal" },
+      },
     });
     render(<Harness initial={r} />);
     expect(screen.getByText("per 114 g serving")).toBeTruthy();
@@ -207,9 +224,11 @@ describe("NutritionPanel — summary/label view toggle", () => {
 
   const makeFull = () =>
     makeScalableRecipe({
-      recipeIngredient: undefined,
-      recipeYield: "4 servings",
-      nutrition: fullSchemaNutrition,
+      ingredients: [],
+      schema: {
+        recipeYield: "4 servings",
+        nutrition: fullSchemaNutrition,
+      },
     });
 
   it("lands on the summary grid, not the label", () => {
@@ -273,9 +292,11 @@ describe("NutritionPanel — summary/label view toggle", () => {
 
   it("stays available on a sparse recipe, where the em dashes are the signal", () => {
     const r = makeScalableRecipe({
-      recipeIngredient: undefined,
-      recipeYield: "4 servings",
-      nutrition: { calories: "350 kcal" },
+      ingredients: [],
+      schema: {
+        recipeYield: "4 servings",
+        nutrition: { calories: "350 kcal" },
+      },
     });
     render(<Harness initial={r} />);
     fireEvent.click(screen.getByRole("button", { name: "Full label" }));
@@ -289,9 +310,11 @@ describe("NutritionPanel — summary/label view toggle", () => {
 
   it("offers no toggle in the no-nutrition shell", () => {
     const r = makeScalableRecipe({
-      recipeIngredient: undefined,
-      recipeYield: "4 servings",
-      nutrition: undefined,
+      ingredients: [],
+      schema: {
+        recipeYield: "4 servings",
+        nutrition: undefined,
+      },
     });
     render(
       <NutritionPanel
@@ -308,9 +331,11 @@ describe("NutritionPanel — summary/label view toggle", () => {
 describe("NutritionPanel — ingredient breakdown link", () => {
   it("renders the link with the given href alongside nutrition data", () => {
     const r = makeScalableRecipe({
-      recipeIngredient: undefined,
-      recipeYield: "4 servings",
-      nutrition: { calories: "350 kcal" },
+      ingredients: [],
+      schema: {
+        recipeYield: "4 servings",
+        nutrition: { calories: "350 kcal" },
+      },
     });
     render(
       <NutritionPanel
@@ -326,9 +351,11 @@ describe("NutritionPanel — ingredient breakdown link", () => {
 
   it("renders a shell with the link when the recipe has no nutrition", () => {
     const r = makeScalableRecipe({
-      recipeIngredient: undefined,
-      recipeYield: "4 servings",
-      nutrition: undefined,
+      ingredients: [],
+      schema: {
+        recipeYield: "4 servings",
+        nutrition: undefined,
+      },
     });
     render(
       <NutritionPanel
@@ -344,9 +371,11 @@ describe("NutritionPanel — ingredient breakdown link", () => {
 
   it("still renders nothing without nutrition or an href (anonymous view)", () => {
     const r = makeScalableRecipe({
-      recipeIngredient: undefined,
-      recipeYield: "4 servings",
-      nutrition: undefined,
+      ingredients: [],
+      schema: {
+        recipeYield: "4 servings",
+        nutrition: undefined,
+      },
     });
     const { container } = render(
       <NutritionPanel recipe={r} onSplitPortions={() => {}} />,

@@ -10,17 +10,30 @@ import { z } from "zod";
 import { CUSTOM_RECIPE_SOURCE } from "@/lib/format";
 import { METRIC_YIELD_UNITS } from "@/lib/units";
 
-export const ingredientSchema = z.union([
+// A Schema.org `recipeIngredient` entry as it arrives from outside (a scrape,
+// create_recipe): a bare string, or an object carrying this app's `group`
+// extension. Inbound only — see SchemaOrgIngredientLine.
+export const schemaOrgIngredientLineSchema = z.union([
   z.string(),
   z.object({
     name: z.string(),
     group: z.string().optional(),
-    // Stable line identity (see SchemaOrgIngredientLine.id). Accepted so a client
-    // that read a recipe can hand its lines back unchanged and keep each
-    // line's derived row; the write path mints one when it's absent.
-    id: z.string().optional(),
   }),
 ]);
+
+// What a writer sends for a recipe's ingredients: groups of lines, each line
+// naming the row it already is (`id`) or arriving as text alone (a new row).
+export const recipeIngredientLineInputSchema = z.object({
+  id: z.string().min(1).optional(),
+  raw_text: z.string().trim().min(1).max(500),
+});
+
+export const recipeIngredientGroupInputSchema = z.object({
+  name: z.string().trim().min(1).optional(),
+  ingredients: z.array(recipeIngredientLineInputSchema),
+});
+
+export const recipeIngredientsInputSchema = z.array(recipeIngredientGroupInputSchema);
 
 // Schema.org/QuantitativeValue — the structured form of recipeYield. Top level:
 // value = serving count, unitText = its (free-text) label e.g. "kebabs".
@@ -81,7 +94,6 @@ export const schemaRecipeSchema = z
       .optional(),
     recipeCuisine: z.string().optional(),
     recipeCategory: z.union([z.string(), z.array(z.string())]).optional(),
-    recipeIngredient: z.array(ingredientSchema).optional(),
     recipeInstructions: z.array(z.union([howToStepSchema, howToSectionSchema])).optional(),
     keywords: z.string().optional(),
     nutrition: z
@@ -105,6 +117,15 @@ export const schemaRecipeSchema = z
     cookingNotes: z.string().optional(),
   })
   .passthrough();
+
+// The inbound Schema.org edge: the stored recipe plus `recipeIngredient`, for
+// writers that speak Schema.org because their source does (a scrape landing
+// through create_recipe or the re-scrape webhook). `fromSchemaOrgIngredients`
+// turns the list into ingredient groups at the boundary; the stored schema
+// never carries it.
+export const schemaOrgRecipeInputSchema = schemaRecipeSchema.extend({
+  recipeIngredient: z.array(schemaOrgIngredientLineSchema).optional(),
+});
 
 // Recipe row `status` column — used as a zod enum at boundaries (MCP tool
 // args, future form handlers) and as the source of valid values in the
@@ -158,16 +179,21 @@ export const recipeCreateInputSchema = z
     // Optional only in that same case — see sourceRequiredWithUrl above.
     source: z.string().min(1).optional(),
     status: recipeStatusSchema.optional(),
-    schema: schemaRecipeSchema,
+    schema: schemaOrgRecipeInputSchema,
   })
   .refine(sourceRequiredWithUrl, SOURCE_REQUIRED_WITH_URL_ISSUE);
 
+// Update speaks the app's own shape: `ingredients` replaces the whole list
+// (lines keep their rows by id), and `schema` is the stored recipe — it has no
+// recipeIngredient key, and the tool rejects one rather than silently
+// ignoring it.
 export const recipeUpdateInputSchema = z.object({
   id: z.string().min(1),
   url: z.string().url().optional(),
   source: z.string().min(1).optional(),
   status: recipeStatusSchema.optional(),
   schema: schemaRecipeSchema.partial().optional(),
+  ingredients: recipeIngredientsInputSchema.optional(),
 });
 
 // The MCP tool only fetches images from a URL. Local files go through the

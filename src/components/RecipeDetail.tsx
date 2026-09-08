@@ -6,7 +6,7 @@ import type {
   RecipeRow,
   HowToStep,
   HowToSection,
-  SchemaRecipe,
+  RecipeDocument,
 } from "@/types/recipe";
 import {
   formatDuration,
@@ -22,11 +22,12 @@ import {
   type NormalizedNutrition,
 } from "@/lib/ScalableRecipe";
 import { nutrientValuesToSchema } from "@/lib/nutritionMath";
+import { draftIngredientGroups } from "@/lib/recipeIngredients";
 import { useScalableRecipe } from "@/hooks/useScalableRecipe";
 import { useRecipeEditor } from "@/hooks/useRecipeEditor";
-import { useUndoableSchemaOp, type OpState } from "@/hooks/useUndoableSchemaOp";
+import { useUndoableOp, type OpState } from "@/hooks/useUndoableOp";
 import { useImageUpload } from "@/hooks/useImageUpload";
-import { normalizeRecipe } from "@/lib/api/recipes";
+import { normalizeRecipe, saveRecipe } from "@/lib/api/recipes";
 import { DEFAULT_MAX_IMAGE_BYTES } from "@/lib/imageTypes";
 import CookingModeButton from "./CookingModeButton";
 import RecipeControls from "./RecipeControls";
@@ -66,7 +67,15 @@ export default function RecipeDetail({
   maxImageBytes = DEFAULT_MAX_IMAGE_BYTES,
   normalizedNutrition,
 }: RecipeDetailProps) {
-  const [schema, setSchema] = useState(recipe.metadata.schema);
+  // The recipe as one document — the stored schema plus the ingredient groups
+  // — so a re-scrape, an undo and a save each replace both halves atomically.
+  // `initialDoc` is the server's version, kept for one comparison below.
+  const [initialDoc] = useState<RecipeDocument>(() => ({
+    schema: recipe.metadata.schema,
+    ingredients: recipe.ingredients,
+  }));
+  const [doc, setDoc] = useState(initialDoc);
+  const { schema } = doc;
   const [status, setStatus] = useState(recipe.status ?? "draft");
   // Tracked in state alongside `status` rather than read off the prop: editing
   // it must flip the Re-scrape button immediately (isOwnRecipe reads it), and
@@ -82,23 +91,28 @@ export default function RecipeDetail({
   const cookTime = formatDuration(schema.cookTime);
   const totalTime = formatDuration(schema.totalTime);
   const categories = toArray(schema.recipeCategory);
-  // The normalized total was computed against the original, unedited schema; a
-  // client-side edit/re-scrape swaps `schema`, invalidating it — so only apply
-  // it while the schema is still the one it was derived from.
-  const normalizedForSchema =
-    schema === recipe.metadata.schema ? normalizedNutrition : undefined;
+  // The normalized total was computed against the server's document; a
+  // client-side edit/re-scrape swaps `doc`, invalidating it — so only apply it
+  // while the document is still the one it was derived from.
+  const normalizedForDoc = doc === initialDoc ? normalizedNutrition : undefined;
   const {
     recipe: scalable,
     scalePortionsTo,
     splitPortions,
     anchorIngredientAmount,
-  } = useScalableRecipe(schema, normalizedForSchema);
+  } = useScalableRecipe(doc, normalizedForDoc);
   // JSON-LD serializes the base per-serving nutrition. A default-state
   // instance keeps it independent of the user's live scale/split (which
   // `scalable` tracks).
   const jsonLdNutrition = useMemo(
-    () => new ScalableRecipe(schema, undefined, normalizedForSchema ?? null).nutrition(),
-    [schema, normalizedForSchema],
+    () =>
+      new ScalableRecipe(
+        doc.schema,
+        doc.ingredients,
+        undefined,
+        normalizedForDoc ?? null,
+      ).nutrition(),
+    [doc, normalizedForDoc],
   );
 
   // Edit buffer + the two undoable schema operations (re-scrape / regen image)
@@ -107,20 +121,22 @@ export default function RecipeDetail({
   const editor = useRecipeEditor();
   const { editState, draft, patch } = editor;
   const imageUpload = useImageUpload(maxImageBytes);
-  const rescrape = useUndoableSchemaOp(
+  const rescrape = useUndoableOp<RecipeDocument>(
     useCallback(async () => {
       const res = await fetch(`/api/recipes/${recipe.id}/rescrape`, {
         method: "POST",
       });
       if (!res.ok) throw new Error();
-      const { schema: updated } = await res.json();
-      if (!updated) throw new Error();
-      return updated as SchemaRecipe;
+      const { schema: updated, ingredients } = await res.json();
+      if (!updated || !Array.isArray(ingredients)) throw new Error();
+      // The scraped lines are text only until the review is saved; drafting
+      // them gives the page real ingredients to render and scale meanwhile.
+      return { schema: updated, ingredients: draftIngredientGroups(ingredients) };
     }, [recipe.id]),
   );
-  const regenImage = useUndoableSchemaOp(
+  const regenImage = useUndoableOp<RecipeDocument>(
     useCallback(
-      async (current: SchemaRecipe) => {
+      async (current) => {
         const res = await fetch(`/api/recipes/${recipe.id}/regenerate-image`, {
           method: "POST",
         });
@@ -128,7 +144,7 @@ export default function RecipeDetail({
         const result = await res.json();
         if (!result.image || typeof result.image !== "string")
           throw new Error();
-        return { ...current, image: result.image };
+        return { ...current, schema: { ...current.schema, image: result.image } };
       },
       [recipe.id],
     ),
@@ -193,16 +209,16 @@ export default function RecipeDetail({
   // seeding the draft from the stale prop would silently revert the edit.
   const editRowFields = { status, url, source };
 
-  // Adopt an op's resulting schema and open the editor on it for review.
-  const beginReview = (next: SchemaRecipe) => {
-    setSchema(next);
+  // Adopt an op's resulting document and open the editor on it for review.
+  const beginReview = (next: RecipeDocument) => {
+    setDoc(next);
     editor.begin(next, editRowFields);
   };
 
-  const handleRescrape = () => rescrape.run(schema, beginReview);
+  const handleRescrape = () => rescrape.run(doc, beginReview);
 
   const handleRegenImage = () =>
-    regenImage.run(schema, (next) => {
+    regenImage.run(doc, (next) => {
       rescrape.clear();
       beginReview(next);
     });
@@ -211,44 +227,41 @@ export default function RecipeDetail({
     imageUpload.onFileChange(e, () => {
       rescrape.clear();
       regenImage.clear();
-      editor.begin(schema, editRowFields);
+      editor.begin(doc, editRowFields);
     });
 
-  const handleEditStart = () => editor.begin(schema, editRowFields);
+  const handleEditStart = () => editor.begin(doc, editRowFields);
 
   const handleEditCancel = () => {
-    if (rescrape.isReview) rescrape.undo(setSchema);
-    else if (regenImage.isReview) regenImage.undo(setSchema);
+    if (rescrape.isReview) rescrape.undo(setDoc);
+    else if (regenImage.isReview) regenImage.undo(setDoc);
     imageUpload.clear();
     editor.cancel();
   };
 
   const handleEditSave = () =>
     editor.runSave(async () => {
-      const updatedSchema = editor.buildSchema(schema);
+      const { schema: updatedSchema, ingredients } = editor.buildPatch(doc);
       if (imageUpload.isStaged) {
         updatedSchema.image = await imageUpload.upload(recipe.id);
       }
-      const res = await fetch(`/api/recipes/${recipe.id}/update`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          schema: updatedSchema,
-          status: draft.status,
-          url: draft.url,
-          source: draft.source,
-        }),
+      const result = await saveRecipe(recipe.id, {
+        schema: updatedSchema,
+        ingredients,
+        status: draft.status,
+        url: draft.url,
+        source: draft.source,
       });
-      if (!res.ok) throw new Error();
-      const result = await res.json();
-      if (!result.schema) throw new Error();
-      setSchema(result.schema);
+      // The route echoes what was persisted, which differs from the draft
+      // whenever a value degrades (blank source → no change), canonicalizes
+      // ("Custom" → "custom"), or — for ingredients — a new line gained its
+      // row id. Adopting the echo is what keeps the next save handing every
+      // line's id back.
+      setDoc({ schema: result.schema, ingredients: result.ingredients });
       setStatus(result.status);
-      // The route echoes the persisted values, which may differ from the draft
-      // (a blank source degrades to "no change" server-side, and "Custom" is
-      // stored canonically). The url guard is a type check, not a truthiness
-      // one: url is persisted verbatim, so a cleared field must survive as ""
-      // — only an absent key (a malformed response) leaves the state alone.
+      // The url guard is a type check, not a truthiness one: url is persisted
+      // verbatim, so a cleared field must survive as "" — only an absent key
+      // (a malformed response) leaves the state alone.
       if (typeof result.url === "string") setUrl(result.url);
       if (result.source) setSource(result.source);
       rescrape.clear();
@@ -256,20 +269,21 @@ export default function RecipeDetail({
       imageUpload.clear();
     });
 
-  const toggleIngredient = (text: string) => {
+  const toggleIngredient = (id: string) => {
     setSelectedIngredients((prev) => {
       const next = new Set(prev);
-      if (next.has(text)) next.delete(text);
-      else next.add(text);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
       return next;
     });
   };
 
   const copyShoppingList = async () => {
-    // Selection is keyed by raw schema text (scale-stable), but the copied
-    // line reflects the current scale — see formatScaledIngredient.
+    // Selection is keyed by the line's id (stable across scaling and across a
+    // reword), but the copied line reflects the current scale — see
+    // formatScaledIngredient.
     const lines = scalable.ingredients
-      .filter((ing) => selectedIngredients.has(ing.original))
+      .filter((ing) => selectedIngredients.has(ing.id))
       .map(formatScaledIngredient);
     try {
       await navigator.clipboard.writeText(lines.join("\n"));
@@ -440,9 +454,7 @@ export default function RecipeDetail({
 
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-8">
           {/* Ingredients */}
-          {(isEditing ||
-            (schema.recipeIngredient &&
-              schema.recipeIngredient.length > 0)) && (
+          {(isEditing || scalable.ingredients.length > 0) && (
             <div className="sm:col-span-1">
               <div className="flex items-center justify-between mb-4">
                 <h2 className="text-xl text-gray-900">Ingredients</h2>
@@ -469,14 +481,14 @@ export default function RecipeDetail({
                       </h3>
                     )}
                     <ul className="space-y-2">
-                      {items.map((ing, i) => {
+                      {items.map((ing) => {
                         const text = ing.original;
-                        const selected = selectedIngredients.has(text);
+                        const selected = selectedIngredients.has(ing.id);
                         return (
                           <li
-                            key={i}
+                            key={ing.id}
                             className={`flex items-start gap-2 text-sm rounded-lg px-2 py-1 -mx-2 cursor-pointer select-none transition-colors active:opacity-60 ${selected ? "bg-green-50 text-gray-700" : "text-gray-700"}`}
-                            onClick={() => toggleIngredient(text)}
+                            onClick={() => toggleIngredient(ing.id)}
                             role="checkbox"
                             aria-checked={selected}
                             aria-label={text}
@@ -591,7 +603,7 @@ export default function RecipeDetail({
           type="application/ld+json"
           dangerouslySetInnerHTML={{
             __html: JSON.stringify(
-              toSchemaOrgJsonLd(schema, {
+              toSchemaOrgJsonLd(doc.schema, doc.ingredients, {
                 nutritionOverride: jsonLdNutrition
                   ? {
                       "@type": "NutritionInformation",

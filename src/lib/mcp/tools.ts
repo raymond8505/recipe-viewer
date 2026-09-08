@@ -10,7 +10,6 @@ import {
   createIngredientRow,
   deleteIngredientRow,
   getIngredientById,
-  getRecipeNormalizedNutrition,
   IngredientRepoError,
   matchIngredients,
   updateIngredientRow,
@@ -19,8 +18,10 @@ import {
 import { ScalableRecipe } from "@/lib/ScalableRecipe";
 import {
   nutrientValuesToSchema,
+  recipeNormalizedNutrition,
   scalePortionNutritionToPer100g,
 } from "@/lib/nutritionMath";
+import { fromSchemaOrgIngredients } from "@/lib/recipeIngredients";
 import { generateEmbedding } from "@/lib/embedding";
 import { exhaustiveKeys } from "@/lib/exhaustive";
 import { ingredientEmbeddingText, ingredientQueryText } from "@/lib/ingredientAliases";
@@ -243,11 +244,12 @@ export async function getRecipe(args: RecipeIdInput): Promise<RecipeRow> {
   // ingredients-sourced result overrides; otherwise the row's own nutrition is
   // already what nutrition() would serve.
   const schema = row.metadata.schema;
-  const normalized = await getRecipeNormalizedNutrition(
-    args.id,
-    schema.recipeIngredient ?? [],
-  );
-  const resolved = new ScalableRecipe(schema, undefined, normalized).nutrition();
+  const resolved = new ScalableRecipe(
+    schema,
+    row.ingredients,
+    undefined,
+    recipeNormalizedNutrition(row),
+  ).nutrition();
   if (resolved?.source !== "ingredients") return row;
 
   return {
@@ -288,7 +290,9 @@ export type RecipeRowWithWarnings = RecipeRow & { warnings?: string[] };
 export async function createRecipe(
   args: RecipeCreateInput,
 ): Promise<RecipeRowWithWarnings> {
-  const { cookingNotes, ...schema } = args.schema;
+  // The inbound Schema.org edge: scrapes arrive with `recipeIngredient`, which
+  // becomes ingredient groups here and never reaches the stored schema.
+  const { cookingNotes, recipeIngredient, ...schema } = args.schema;
   const id = crypto.randomUUID();
   // Default to the recipe's own canonical page on this instance.
   // MCP_PUBLIC_URL is the app's base-URL source of truth (also the OAuth /
@@ -307,6 +311,7 @@ export async function createRecipe(
       source,
       status: args.status,
       schema,
+      ingredients: fromSchemaOrgIngredients(recipeIngredient ?? []),
     });
     return cookingNotes !== undefined
       ? { ...row, warnings: [COOKING_NOTES_IGNORED_WARNING] }
@@ -316,16 +321,26 @@ export async function createRecipe(
   }
 }
 
+const RECIPE_INGREDIENT_ON_UPDATE_ERROR =
+  "schema.recipeIngredient is not accepted on update. Pass `ingredients` — groups of { id?, raw_text } — and keep each line's id from get_recipe so it keeps its catalog match; leave id off only for a new line.";
+
 export async function updateRecipe(
   args: RecipeUpdateInput,
 ): Promise<RecipeRowWithWarnings> {
   const { cookingNotes, ...schema } = args.schema ?? {};
+  // The zod schema is passthrough, so without this check the dead key sails
+  // into the merge and is silently stripped — a loud failure teaches the agent
+  // the shape to use.
+  if ("recipeIngredient" in schema) {
+    throw new ToolError("invalid_input", RECIPE_INGREDIENT_ON_UPDATE_ERROR);
+  }
   try {
     const row = await updateRecipeRow(args.id, {
       url: args.url,
       source: args.source,
       status: args.status,
       schema: args.schema !== undefined ? schema : undefined,
+      ingredients: args.ingredients,
     });
     return cookingNotes !== undefined
       ? { ...row, warnings: [COOKING_NOTES_IGNORED_WARNING] }

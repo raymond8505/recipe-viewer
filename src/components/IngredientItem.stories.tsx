@@ -1,18 +1,7 @@
 import type { Meta, StoryObj } from "@storybook/nextjs-vite";
 import { userEvent, fn } from "storybook/test";
 import IngredientItem from "./IngredientItem";
-import { ScalableRecipe, type ScaledIngredient } from "@/lib/ScalableRecipe";
-import type { SchemaRecipe } from "@/types/recipe";
-
-/** Build a ScaledIngredient from a single ingredient string for story args. */
-function scaled(text: string, ingredientScale = 1): ScaledIngredient {
-  const schema: SchemaRecipe = {
-    name: "story",
-    recipeYield: "1 serving",
-    recipeIngredient: [text],
-  };
-  return new ScalableRecipe(schema, { ingredientScale }).ingredients[0];
-}
+import { makeScaledIngredient as scaled } from "@/fixtures";
 
 const meta: Meta<typeof IngredientItem> = {
   component: IngredientItem,

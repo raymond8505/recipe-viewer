@@ -51,9 +51,11 @@ type Story = StoryObj<typeof StatefulNutritionPanel>;
 export const FullData: Story = {
   args: {
     initial: makeScalableRecipe({
-      recipeIngredient: undefined,
-      recipeYield: "4 servings",
-      nutrition: fullSchemaNutrition,
+      ingredients: [],
+      schema: {
+        recipeYield: "4 servings",
+        nutrition: fullSchemaNutrition,
+      },
     }),
   },
   play: async ({ canvas }) => {
@@ -65,9 +67,11 @@ export const FullData: Story = {
 export const PartialData: Story = {
   args: {
     initial: makeScalableRecipe({
-      recipeIngredient: undefined,
-      recipeYield: "2 servings",
-      nutrition: sparseSchemaNutrition,
+      ingredients: [],
+      schema: {
+        recipeYield: "2 servings",
+        nutrition: sparseSchemaNutrition,
+      },
     }),
   },
 };
@@ -84,9 +88,11 @@ export const PartialData: Story = {
 export const FullLabelView: Story = {
   args: {
     initial: makeScalableRecipe({
-      recipeIngredient: undefined,
-      recipeYield: "4 servings",
-      nutrition: fullSchemaNutrition,
+      ingredients: [],
+      schema: {
+        recipeYield: "4 servings",
+        nutrition: fullSchemaNutrition,
+      },
     }),
   },
   play: async ({ canvas }) => {
@@ -102,9 +108,11 @@ export const FullLabelView: Story = {
 export const FullLabelWide: Story = {
   args: {
     initial: makeScalableRecipe({
-      recipeIngredient: undefined,
-      recipeYield: "4 servings",
-      nutrition: fullSchemaNutrition,
+      ingredients: [],
+      schema: {
+        recipeYield: "4 servings",
+        nutrition: fullSchemaNutrition,
+      },
     }),
   },
   globals: { viewport: { value: "page" } },
@@ -121,9 +129,11 @@ export const FullLabelWide: Story = {
 export const FullLabelSparse: Story = {
   args: {
     initial: makeScalableRecipe({
-      recipeIngredient: undefined,
-      recipeYield: "4 servings",
-      nutrition: sparseSchemaNutrition,
+      ingredients: [],
+      schema: {
+        recipeYield: "4 servings",
+        nutrition: sparseSchemaNutrition,
+      },
     }),
   },
   play: async ({ canvas }) => {
@@ -142,10 +152,10 @@ export const FromNormalizedIngredients: Story = {
     showSources: true,
     initial: new ScalableRecipe(
       makeSchemaRecipe({
-        recipeIngredient: undefined,
         recipeYield: "4 servings",
         nutrition: undefined,
       }),
+      [],
       undefined,
       {
         fullyCovered: true,
@@ -170,9 +180,11 @@ export const FromRecipeFields: Story = {
   args: {
     showSources: true,
     initial: makeScalableRecipe({
-      recipeIngredient: undefined,
-      recipeYield: "4 servings",
-      nutrition: fullSchemaNutrition,
+      ingredients: [],
+      schema: {
+        recipeYield: "4 servings",
+        nutrition: fullSchemaNutrition,
+      },
     }),
   },
 };
@@ -184,9 +196,11 @@ export const FromRecipeFields: Story = {
 export const WithYieldWeight: Story = {
   args: {
     initial: makeScalableRecipe({
-      recipeIngredient: undefined,
-      recipeYield: quantitativeValueYield,
-      nutrition: fullSchemaNutrition,
+      ingredients: [],
+      schema: {
+        recipeYield: quantitativeValueYield,
+        nutrition: fullSchemaNutrition,
+      },
     }),
   },
 };
@@ -198,9 +212,11 @@ export const WithYieldWeight: Story = {
 export const WithBreakdownLink: Story = {
   args: {
     initial: makeScalableRecipe({
-      recipeIngredient: undefined,
-      recipeYield: "4 servings",
-      nutrition: fullSchemaNutrition,
+      ingredients: [],
+      schema: {
+        recipeYield: "4 servings",
+        nutrition: fullSchemaNutrition,
+      },
     }),
     ingredientsHref: "/recipes/story-recipe/ingredients",
   },
@@ -214,9 +230,11 @@ export const WithBreakdownLink: Story = {
 export const NoNutritionShell: Story = {
   args: {
     initial: makeScalableRecipe({
-      recipeIngredient: undefined,
-      recipeYield: "4 servings",
-      nutrition: undefined,
+      ingredients: [],
+      schema: {
+        recipeYield: "4 servings",
+        nutrition: undefined,
+      },
     }),
     ingredientsHref: "/recipes/story-recipe/ingredients",
   },

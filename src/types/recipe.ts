@@ -1,20 +1,14 @@
 import type { IngredientRow, RecipeIngredientRow } from "./ingredient";
 
+/**
+ * The object form of a Schema.org `recipeIngredient` entry as it arrives from
+ * outside — a scrape, `create_recipe`, the window API — carrying this app's
+ * `group` extension. Inbound only: `fromSchemaOrgIngredients` turns a list of
+ * these (or bare strings) into write input, and nothing internal reads them.
+ */
 export interface SchemaOrgIngredientLine {
   name: string;
   group?: string;
-  /**
-   * Stable identity of this line, independent of its text and its position.
-   * `recipe_ingredients.line_id` points at it, so the derived row — and any
-   * association a user curated on it — survives rewording, reordering, and
-   * insertions above it.
-   *
-   * Optional only because legacy rows predate it and plain-string lines can't
-   * carry one; the write path (`withLineIds`) mints one for every line it
-   * persists, so anything saved since is guaranteed to have it. Custom field:
-   * deliberately absent from `toSchemaOrgJsonLd` output.
-   */
-  id?: string;
 }
 
 /**
@@ -27,8 +21,7 @@ export interface SchemaOrgIngredientLine {
  * ingredient drafted client-side (a re-scrape under review, a recipe handed in
  * through the window API) has no recipe row yet.
  */
-export interface RecipeIngredient
-  extends Omit<RecipeIngredientRow, "recipe_id" | "line_id" | "position"> {
+export interface RecipeIngredient extends Omit<RecipeIngredientRow, "recipe_id"> {
   /**
    * The catalog ingredient this line resolves to. `undefined` means the
    * catalog was not loaded (list queries hydrate rows only); `null` means it
@@ -116,9 +109,7 @@ export interface RecipeDocument {
  * `recipeIngredient` flattened to plain strings. Produced only at the edges
  * (JSON-LD, webhooks, the window API); nothing internal reads it.
  */
-export type SchemaOrgRecipe = Omit<SchemaRecipe, "recipeIngredient"> & {
-  recipeIngredient?: string[];
-};
+export type SchemaOrgRecipe = SchemaRecipe & { recipeIngredient?: string[] };
 
 /**
  * A recipe as the app passes it around: the row with its `ingredients` column
@@ -176,8 +167,11 @@ export interface SchemaRecipe {
   recipeYield?: string | string[] | QuantitativeValue;
   recipeCuisine?: string;
   recipeCategory?: string | string[];
-  /** @deprecated Being replaced by `RecipeRow.ingredients` (`RecipeIngredientGroup[]`). */
-  recipeIngredient?: Array<string | SchemaOrgIngredientLine>;
+  // No `recipeIngredient`: a recipe's ingredients are `RecipeRow.ingredients`
+  // (RecipeIngredientGroup[]), and the Schema.org list exists only on
+  // SchemaOrgRecipe, at the edges. The key still sits in the stored blob of
+  // every pre-0016 row, frozen at backfill time; the repo layer deletes it on
+  // read and strips it on write so nothing above it can see it.
   recipeInstructions?: Array<HowToStep | HowToSection>;
   keywords?: string;
   nutrition?: {

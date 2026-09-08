@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, type ChangeEvent, type MutableRefObject } from "react";
-import type { OpState } from "@/hooks/useUndoableSchemaOp";
+import type { OpState } from "@/hooks/useUndoableOp";
 import type { EditState } from "@/hooks/useRecipeEditor";
 import { CUSTOM_RECIPE_SOURCE, isBrowsableUrl } from "@/lib/format";
 import { ALLOWED_IMAGE_CONTENT_TYPES } from "@/lib/imageTypes";

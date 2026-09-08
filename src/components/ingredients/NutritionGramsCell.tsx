@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { formatAmount } from "@/lib/units";
 import type { LineComputation } from "@/lib/nutritionMath";
-import type { RecipeIngredientRow } from "@/types/ingredient";
+import type { RecipeIngredient } from "@/types/recipe";
 
 /**
  * The editable per-line grams control under the Normalized cell. Shows the
@@ -33,7 +33,7 @@ export default function NutritionGramsCell({
   onEstimate,
   onSetGrams,
 }: {
-  row: RecipeIngredientRow;
+  row: Pick<RecipeIngredient, "id" | "estimated_grams" | "grams_source">;
   computation: LineComputation;
   saving: boolean;
   /** The line's display text, for distinct per-row aria-labels. */

@@ -112,12 +112,11 @@ export const recipeIngredientPatchSchema = z.object({
   ingredient_id: z.uuid().nullable(),
 });
 
-// PATCH /api/recipes/[id]/ingredients — edit one schema ingredient line's
-// text in place (the NutritionDetail inline edit). Index-addressed because
-// the schema line, not the recipe_ingredients row, is the edit target — a
-// stale or never-normalized line has no row to key on.
+// PATCH /api/recipes/[id]/ingredients — edit one ingredient's text in place
+// (the NutritionDetail inline edit). Addressed by the recipe_ingredients row
+// id, which since db/migrations/0016 IS the line's identity.
 export const recipeLineTextPatchSchema = z.object({
-  index: z.number().int().min(0),
+  id: z.string().min(1),
   text: z.string().trim().min(1).max(500),
 });
 

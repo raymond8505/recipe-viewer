@@ -1,21 +1,29 @@
 /**
  * UI-only editable shapes for the structured recipe editor.
  *
- * CRITICAL: groups are a UI construct that exists ONLY in editor draft state.
- * The stored schema has no group type — ingredients are a flat
- * `Array<string | SchemaOrgIngredientLine>` whose membership is carried on each
- * ingredient's own `group` field, and instructions are a flat
- * `Array<HowToStep | HowToSection>`. The converters in `src/lib/format.ts`
- * (`schemaToEditable*` / `editable*ToSchema`) are the ONLY place this
- * UI-tree ⇄ flat-with-`group` translation happens. Never persist these types.
- *
  * Every node carries a stable `id` (from `nanoid`) so dnd-kit sortable ids and
- * React keys survive reordering.
+ * React keys survive reordering. These types are never persisted: the
+ * converters in `src/lib/format.ts` (`ingredientsToEditable` /
+ * `editableToIngredientInput`, `schemaToEditableInstructions` /
+ * `editableInstructionsToSchema`) are the only translation in and out.
+ *
+ * Ingredient groups mirror the recipe's own `RecipeIngredientGroup[]` one to
+ * one. Instruction groups do not: the stored instructions are a flat
+ * `Array<HowToStep | HowToSection>`, and the null-heading group collects the
+ * top-level steps.
  */
 
-/** A single ingredient row — one free-text input ("1 tsp cumin"). */
+/**
+ * A single ingredient row — one free-text input ("1 tsp cumin").
+ *
+ * `recipeIngredientId` is the `recipe_ingredients` row this line IS, carried
+ * through the draft so a save hands it back and the row — with the catalog
+ * association a user curated on it — survives the edit. Absent on a line the
+ * user just added, which is how the write path knows to mint a row.
+ */
 export interface EditableIngredient {
   id: string;
+  recipeIngredientId?: string;
   name: string;
 }
 
@@ -34,7 +42,7 @@ export interface EditableStep {
 /**
  * A draggable group of items. `heading === null` is the implicit
  * ungrouped/top-level section: it always exists, is never deletable, and has
- * no drag handle. A non-null `heading` maps to the ingredient `group` string /
+ * no drag handle. A non-null `heading` maps to the ingredient group's `name` /
  * `HowToSection.name` on conversion.
  */
 export interface EditableGroup<T> {

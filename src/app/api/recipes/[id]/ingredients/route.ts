@@ -1,13 +1,13 @@
 import { NextResponse } from "next/server";
 import { requireSessionOrDev } from "@/lib/api/guard";
-import { getIngredientsByIds, getRecipeIngredients } from "@/lib/ingredients";
 import { RecipeRepoError, getRecipeById, updateRecipeRow } from "@/lib/recipes";
+import { flattenIngredients, toIngredientInput } from "@/lib/recipeIngredients";
 import { recipeLineTextPatchSchema } from "@/lib/schemas/ingredient";
 
-// A recipe's normalized ingredient rows plus the catalog rows they point at,
-// for the NutritionDetail screen. The page itself fetches repo-direct
-// server-side; this route exists for client-side refresh (e.g. after a
-// re-normalization run completes).
+// A recipe's ingredient groups — every line with its catalog ingredient — for
+// the NutritionDetail screen. The page itself reads repo-direct server-side;
+// this route exists for client-side refresh (e.g. after a re-normalization run
+// completes).
 export const GET = requireSessionOrDev(
   async (_req: Request, { params }: RouteContext<"/api/recipes/[id]/ingredients">) => {
     const { id } = await params;
@@ -17,26 +17,17 @@ export const GET = requireSessionOrDev(
       return NextResponse.json({ error: "Recipe not found" }, { status: 404 });
     }
 
-    const rows = await getRecipeIngredients(id);
-    const ingredientIds = [
-      ...new Set(rows.map((r) => r.ingredient_id).filter((x): x is string => x != null)),
-    ];
-    const ingredients = await getIngredientsByIds(ingredientIds);
-
-    return NextResponse.json({ rows, ingredients });
+    return NextResponse.json({ ingredients: recipe.ingredients });
   },
 );
 
-// Edit one schema ingredient line's text in place (the NutritionDetail inline
-// edit). This writes the RECIPE — updateRecipeRow merges the patched
-// recipeIngredient array into metadata.schema and recomputes content/embedding.
-// Object lines keep their `group` (and their `id`); string lines stay strings.
+// Edit one ingredient's text in place (the NutritionDetail inline edit). This
+// writes the RECIPE — updateRecipeRow re-parses the row deterministically and
+// recomputes content/embedding — and the line is addressed by its row id, so
+// its group, its position and its catalog match are all untouched.
 //
-// Rewording does NOT re-normalize: updateRecipeRow runs the deterministic
-// re-parse instead, in-band, so the derived rows are already current here. They
-// come back with the response because the client's copy of them is now stale in
-// exactly the fields the edit moved — and without them the edited line would
-// render as if it had lost its match.
+// Rewording does NOT re-normalize: the row keeps its association and the new
+// parse lands in-band, so the groups that come back are already current.
 export const PATCH = requireSessionOrDev(
   async (req: Request, { params }: RouteContext<"/api/recipes/[id]/ingredients">) => {
     const { id } = await params;
@@ -52,22 +43,20 @@ export const PATCH = requireSessionOrDev(
       return NextResponse.json({ error: "Invalid patch" }, { status: 400 });
     }
 
-    const lines = [...(recipe.metadata.schema.recipeIngredient ?? [])];
-    const { index, text } = parsed.data;
-    if (index >= lines.length) {
+    const { id: lineId, text } = parsed.data;
+    if (!flattenIngredients(recipe.ingredients).some((line) => line.id === lineId)) {
       return NextResponse.json({ error: "No such line" }, { status: 400 });
     }
-    const current = lines[index];
-    lines[index] = typeof current === "string" ? text : { ...current, name: text };
+    const ingredients = toIngredientInput(recipe.ingredients).map((group) => ({
+      ...group,
+      ingredients: group.ingredients.map((line) =>
+        line.id === lineId ? { ...line, raw_text: text } : line,
+      ),
+    }));
 
     try {
-      const saved = await updateRecipeRow(id, {
-        schema: { recipeIngredient: lines },
-      });
-      return NextResponse.json({
-        recipeIngredient: saved.metadata.schema.recipeIngredient ?? lines,
-        rows: await getRecipeIngredients(id),
-      });
+      const saved = await updateRecipeRow(id, { ingredients });
+      return NextResponse.json({ ingredients: saved.ingredients });
     } catch (err) {
       if (err instanceof RecipeRepoError) {
         return err.kind === "not_found"

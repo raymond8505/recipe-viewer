@@ -2,7 +2,10 @@ import type { Meta, StoryObj } from "@storybook/nextjs-vite";
 import { userEvent, within } from "storybook/test";
 import {
   ingredientFixtures,
-  makeRecipeIngredientRow,
+  makeIngredientGroup,
+  makeIngredientLines,
+  makeMatchedIngredient,
+  makeRecipeIngredient,
   matchedLinesScenario,
 } from "@/fixtures";
 import type { IngredientKeywordMatch } from "@/types/ingredient";
@@ -56,60 +59,32 @@ export default meta;
 type Story = StoryObj<typeof NutritionDetail>;
 
 /**
- * A fully normalized recipe with interleaved groups ("Spice rub" lines are
- * split around a "Sauce" line in the schema, and regroup for display exactly
- * like the recipe page). Every line converts to grams, so the totals and
- * per-portion rows are fully populated. The long salt line shows the
- * ingredient column wrapping to its full text instead of truncating. Each
- * matched line also carries an external-link icon that opens that catalog row
- * in the ingredient manager (`/ingredients?q=…`, new tab) for editing. The
- * play() opens one line's autocomplete to show the match-editing affordance.
+ * A fully normalized recipe with two named groups and an ungrouped tail,
+ * rendered in the recipe's own group order. Every line converts to grams, so
+ * the totals and per-portion rows are fully populated. The long salt line
+ * shows the ingredient column wrapping to its full text rather than
+ * truncating. Each matched line also carries an external-link icon that opens
+ * that catalog row in the ingredient manager (`/ingredients?q=…`, new tab) for
+ * editing. The play() opens one line's autocomplete to show the match-editing
+ * affordance.
  */
 export const Default: Story = {
   args: {
-    schemaIngredients: [
-      { name: "2 tsp cumin seed", group: "Spice rub" },
-      { name: "1 tbsp olive oil", group: "Sauce" },
-      { name: "125 g all-purpose flour", group: "Spice rub" },
-      "1 tsp Diamond Crystal kosher salt, plus more to season the pot generously",
+    ingredients: [
+      makeIngredientGroup("Spice rub", [
+        makeMatchedIngredient("2 tsp cumin seed", cumin),
+        makeMatchedIngredient("125 g all-purpose flour", flour),
+      ]),
+      makeIngredientGroup("Sauce", [makeMatchedIngredient("1 tbsp olive oil", oliveOil)]),
+      makeIngredientGroup(undefined, [
+        makeMatchedIngredient(
+          "1 tsp Diamond Crystal kosher salt, plus more to season the pot generously",
+          salt,
+          { name_text: "kosher salt", match_status: "manual" },
+        ),
+      ]),
     ],
     recipeYield: "4 servings",
-    initialRows: [
-      makeRecipeIngredientRow("story-recipe", 0, {
-        raw_text: "2 tsp cumin seed",
-        quantity: 2,
-        unit: "tsp",
-        name_text: "cumin seed",
-        ingredient_id: cumin.id,
-        match_status: "matched",
-      }),
-      makeRecipeIngredientRow("story-recipe", 1, {
-        raw_text: "1 tbsp olive oil",
-        quantity: 1,
-        unit: "tbsp",
-        name_text: "olive oil",
-        ingredient_id: oliveOil.id,
-        match_status: "matched",
-      }),
-      makeRecipeIngredientRow("story-recipe", 2, {
-        raw_text: "125 g all-purpose flour",
-        quantity: 125,
-        unit: "g",
-        name_text: "all-purpose flour",
-        ingredient_id: flour.id,
-        match_status: "matched",
-      }),
-      makeRecipeIngredientRow("story-recipe", 3, {
-        raw_text:
-          "1 tsp Diamond Crystal kosher salt, plus more to season the pot generously",
-        quantity: 1,
-        unit: "tsp",
-        name_text: "kosher salt",
-        ingredient_id: salt.id,
-        match_status: "manual",
-      }),
-    ],
-    initialIngredients: [cumin, flour, oliveOil, salt],
   },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
@@ -146,57 +121,14 @@ export const WithDisabledIngredients: Story = {
  */
 export const WithExclusions: Story = {
   args: {
-    schemaIngredients: [
-      "125 g all-purpose flour",
-      "1 cup diced yellow onion",
-      "2 eggs",
-      "2 cumin pods",
-      "kosher salt to taste",
-    ],
+    ingredients: makeIngredientLines([
+      makeMatchedIngredient("125 g all-purpose flour", flour),
+      makeMatchedIngredient("1 cup diced yellow onion", onion, { name_text: "yellow onion" }),
+      makeRecipeIngredient("2 eggs"),
+      makeMatchedIngredient("2 cumin pods", cumin),
+      makeMatchedIngredient("kosher salt to taste", salt, { name_text: "kosher salt" }),
+    ]),
     recipeYield: "2 servings",
-    initialRows: [
-      makeRecipeIngredientRow("story-recipe", 0, {
-        raw_text: "125 g all-purpose flour",
-        quantity: 125,
-        unit: "g",
-        name_text: "all-purpose flour",
-        ingredient_id: flour.id,
-        match_status: "matched",
-      }),
-      makeRecipeIngredientRow("story-recipe", 1, {
-        raw_text: "1 cup diced yellow onion",
-        quantity: 1,
-        unit: "cup",
-        name_text: "yellow onion",
-        ingredient_id: onion.id,
-        match_status: "matched",
-      }),
-      makeRecipeIngredientRow("story-recipe", 2, {
-        raw_text: "2 eggs",
-        quantity: 2,
-        unit: null,
-        name_text: "eggs",
-        ingredient_id: null,
-        match_status: "unmatched",
-      }),
-      makeRecipeIngredientRow("story-recipe", 3, {
-        raw_text: "2 cumin pods",
-        quantity: 2,
-        unit: null,
-        name_text: "cumin pods",
-        ingredient_id: cumin.id,
-        match_status: "matched",
-      }),
-      makeRecipeIngredientRow("story-recipe", 4, {
-        raw_text: "kosher salt to taste",
-        quantity: null,
-        unit: null,
-        name_text: "kosher salt",
-        ingredient_id: salt.id,
-        match_status: "matched",
-      }),
-    ],
-    initialIngredients: [flour, onion, cumin, salt],
   },
 };
 
@@ -210,47 +142,22 @@ export const WithExclusions: Story = {
  */
 export const EstimatedGrams: Story = {
   args: {
-    schemaIngredients: [
-      "3 tbsp diced yellow onion",
-      "1 cup diced yellow onion",
-      "125 g all-purpose flour",
-    ],
-    recipeYield: "2 servings",
-    initialRows: [
-      makeRecipeIngredientRow("story-recipe", 0, {
-        raw_text: "3 tbsp diced yellow onion",
-        quantity: 3,
-        unit: "tbsp",
+    ingredients: makeIngredientLines([
+      makeMatchedIngredient("3 tbsp diced yellow onion", onion, {
         name_text: "yellow onion",
-        ingredient_id: onion.id,
-        match_status: "matched",
         estimated_grams: 30,
         grams_source: "llm",
       }),
-      makeRecipeIngredientRow("story-recipe", 1, {
-        raw_text: "1 cup diced yellow onion",
-        quantity: 1,
-        unit: "cup",
-        name_text: "yellow onion",
-        ingredient_id: onion.id,
-        match_status: "matched",
-      }),
-      makeRecipeIngredientRow("story-recipe", 2, {
-        raw_text: "125 g all-purpose flour",
-        quantity: 125,
-        unit: "g",
-        name_text: "all-purpose flour",
-        ingredient_id: flour.id,
-        match_status: "matched",
-      }),
-    ],
-    initialIngredients: [onion, flour],
+      makeMatchedIngredient("1 cup diced yellow onion", onion, { name_text: "yellow onion" }),
+      makeMatchedIngredient("125 g all-purpose flour", flour),
+    ]),
+    recipeYield: "2 servings",
   },
 };
 
 /**
  * The un-weighable line, zeroed. "kosher salt to taste" carries no amount and
- * no honest estimate exists for it, so it used to sit flagged and hold the whole
+ * no honest estimate exists for it, so it would sit flagged and hold the whole
  * recipe off its ingredient-derived total (coverage is all-or-nothing). A typed
  * 0 settles it: the line reads "not counted" rather than "est." — it's a
  * decision about the line, not a guess at its weight — its nutrition cells show
@@ -262,114 +169,51 @@ export const EstimatedGrams: Story = {
  */
 export const NotCounted: Story = {
   args: {
-    schemaIngredients: [
-      "125 g all-purpose flour",
-      "1 tbsp olive oil",
-      "kosher salt to taste",
-    ],
-    recipeYield: "2 servings",
-    initialRows: [
-      makeRecipeIngredientRow("story-recipe", 0, {
-        raw_text: "125 g all-purpose flour",
-        quantity: 125,
-        unit: "g",
-        name_text: "all-purpose flour",
-        ingredient_id: flour.id,
-        match_status: "matched",
-      }),
-      makeRecipeIngredientRow("story-recipe", 1, {
-        raw_text: "1 tbsp olive oil",
-        quantity: 1,
-        unit: "tbsp",
-        name_text: "olive oil",
-        ingredient_id: oliveOil.id,
-        match_status: "matched",
-      }),
-      makeRecipeIngredientRow("story-recipe", 2, {
-        raw_text: "kosher salt to taste",
-        quantity: null,
-        unit: null,
+    ingredients: makeIngredientLines([
+      makeMatchedIngredient("125 g all-purpose flour", flour),
+      makeMatchedIngredient("1 tbsp olive oil", oliveOil),
+      makeMatchedIngredient("kosher salt to taste", salt, {
         name_text: "kosher salt",
-        ingredient_id: salt.id,
-        match_status: "matched",
         estimated_grams: 0,
         grams_source: "manual",
       }),
-    ],
-    initialIngredients: [flour, oliveOil, salt],
+    ]),
+    recipeYield: "2 servings",
   },
 };
 
 /** A recipe with no ingredient groups renders flat, without heading rows. */
 export const Flat: Story = {
+  args: matchedLinesScenario,
+};
+
+/**
+ * A recipe the matcher has not seen yet: every line is a row (a line IS its
+ * row from the moment it is saved) but none carries a catalog match, so each
+ * is flagged unmatched and the totals are empty. The ever-present Normalize
+ * button (manual matches survive re-runs) is what fills the associations in.
+ */
+export const NeverNormalized: Story = {
   args: {
-    schemaIngredients: ["2 tsp cumin seed", "1 tbsp olive oil"],
+    ingredients: makeIngredientLines([
+      "2 tsp cumin seed",
+      "1 pinch saffron",
+      "1 tbsp olive oil, warmed",
+    ]),
     recipeYield: "2 servings",
-    initialRows: [
-      makeRecipeIngredientRow("story-recipe", 0, {
-        raw_text: "2 tsp cumin seed",
-        quantity: 2,
-        unit: "tsp",
-        name_text: "cumin seed",
-        ingredient_id: cumin.id,
-        match_status: "matched",
-      }),
-      makeRecipeIngredientRow("story-recipe", 1, {
-        raw_text: "1 tbsp olive oil",
-        quantity: 1,
-        unit: "tbsp",
-        name_text: "olive oil",
-        ingredient_id: oliveOil.id,
-        match_status: "matched",
-      }),
-    ],
-    initialIngredients: [cumin, oliveOil],
   },
 };
 
 /**
- * The three states a line's join can be in, side by side.
- *
- * - **Cumin** was reworded after its last normalization run — the row still
- *   says "1 tsp cumin seed". The line is keyed by a stable id, so the reword
- *   costs it neither its match nor its place in the totals. Text is display
- *   copy; only the curator changes an association.
- * - **Saffron** has no normalized row at all, so it is flagged and excluded.
- * - **Olive oil** is a legacy line with no id: its row can only be found by
- *   position, which makes the text the sole evidence the row belongs to it —
- *   and the recipe has moved past what the row says. Still flagged.
- *
- * The ever-present Normalize button (manual matches survive re-runs) builds
- * the missing rows.
+ * Normalize awaiting confirmation. The run costs model parsing plus a USDA
+ * lookup per line and the route returns before any of it happens, so there is
+ * nothing to undo — the confirm is the only guard.
  */
-export const StaleNormalization: Story = {
-  args: {
-    schemaIngredients: [
-      { name: "2 tsp cumin seed", id: "line-cumin" },
-      { name: "1 pinch saffron", id: "line-saffron" },
-      "1 tbsp olive oil, warmed",
-    ],
-    recipeYield: "2 servings",
-    initialRows: [
-      makeRecipeIngredientRow("story-recipe", 0, {
-        line_id: "line-cumin",
-        raw_text: "1 tsp cumin seed",
-        quantity: 1,
-        unit: "tsp",
-        name_text: "cumin seed",
-        ingredient_id: cumin.id,
-        match_status: "matched",
-      }),
-      makeRecipeIngredientRow("story-recipe", 2, {
-        raw_text: "1 tbsp olive oil",
-        quantity: 1,
-        unit: "tbsp",
-        name_text: "olive oil",
-        ingredient_id: oliveOil.id,
-        match_status: "matched",
-      }),
-    ],
-    initialIngredients: [cumin, oliveOil],
+export const NormalizeConfirm: Story = {
+  args: matchedLinesScenario,
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await userEvent.click(canvas.getByRole("button", { name: "Normalize" }));
   },
 };
 
@@ -380,20 +224,6 @@ export const StaleNormalization: Story = {
  * real API wrapper (no DI seam), same reason the Default story stops at the
  * USDA list.
  */
-/**
- * Normalize awaiting confirmation. The run costs model parsing plus a USDA
- * lookup per line and the route returns before any of it happens, so there is
- * nothing to undo — the confirm is the only guard. The bar replaces the button
- * inside its wrapper, so the stale-lines warning opposite it stays put.
- */
-export const NormalizeConfirm: Story = {
-  args: matchedLinesScenario,
-  play: async ({ canvasElement }) => {
-    const canvas = within(canvasElement);
-    await userEvent.click(canvas.getByRole("button", { name: "Normalize" }));
-  },
-};
-
 export const EditingLineText: Story = {
   args: matchedLinesScenario,
   play: async ({ canvasElement }) => {
@@ -411,18 +241,7 @@ export const EditingLineText: Story = {
  */
 export const NoServings: Story = {
   args: {
-    schemaIngredients: ["125 g all-purpose flour"],
+    ingredients: makeIngredientLines([makeMatchedIngredient("125 g all-purpose flour", flour)]),
     recipeYield: undefined,
-    initialRows: [
-      makeRecipeIngredientRow("story-recipe", 0, {
-        raw_text: "125 g all-purpose flour",
-        quantity: 125,
-        unit: "g",
-        name_text: "all-purpose flour",
-        ingredient_id: flour.id,
-        match_status: "matched",
-      }),
-    ],
-    initialIngredients: [flour],
   },
 };

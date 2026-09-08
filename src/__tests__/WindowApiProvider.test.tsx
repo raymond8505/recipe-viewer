@@ -2,6 +2,8 @@ import { describe, it, expect, vi, afterEach, beforeEach } from "vitest";
 import { render, cleanup } from "@testing-library/react";
 import WindowApiProvider from "@/components/WindowApiProvider";
 import { notifyRecipeUpdate, registerCookingModeRecipe, unregisterCookingModeRecipe } from "@/lib/windowApi";
+import { makeIngredientLines } from "@/fixtures";
+import type { RecipeDocument } from "@/types/recipe";
 import { useRouter } from "next/navigation";
 
 afterEach(() => {
@@ -119,38 +121,63 @@ describe("WindowApiProvider", () => {
   });
 
   describe("getRecipeViewerRecipe / setRecipeViewerRecipe", () => {
-    const mockRecipe = { name: "Spaghetti", "@type": "Recipe" as const };
-    const updatedRecipe = { name: "Carbonara", "@type": "Recipe" as const };
+    // Cooking mode registers the app's own document; the window API speaks
+    // Schema.org in both directions.
+    const mockDoc: RecipeDocument = {
+      schema: { name: "Spaghetti", "@type": "Recipe" },
+      ingredients: makeIngredientLines(["200 g spaghetti"]),
+    };
+    const updatedRecipe = {
+      name: "Carbonara",
+      "@type": "Recipe" as const,
+      recipeIngredient: ["1 egg", { name: "50 g guanciale", group: "Sauce" }],
+    };
 
     it("getRecipeViewerRecipe returns null when cooking mode is not active", () => {
       render(<WindowApiProvider />);
       expect(window.recipeTools.getRecipeViewerRecipe()).toBeNull();
     });
 
-    it("getRecipeViewerRecipe returns the registered recipe while cooking mode is active", () => {
+    it("getRecipeViewerRecipe returns the registered recipe as Schema.org while cooking mode is active", () => {
       render(<WindowApiProvider />);
-      registerCookingModeRecipe(mockRecipe as never, vi.fn());
-      expect(window.recipeTools.getRecipeViewerRecipe()).toEqual(mockRecipe);
+      registerCookingModeRecipe(mockDoc, vi.fn());
+      expect(window.recipeTools.getRecipeViewerRecipe()).toEqual({
+        name: "Spaghetti",
+        "@type": "Recipe",
+        recipeIngredient: ["200 g spaghetti"],
+      });
     });
 
     it("setRecipeViewerRecipe updates what getRecipeViewerRecipe returns", () => {
       render(<WindowApiProvider />);
-      registerCookingModeRecipe(mockRecipe as never, vi.fn());
-      window.recipeTools.setRecipeViewerRecipe(updatedRecipe as never);
-      expect(window.recipeTools.getRecipeViewerRecipe()).toEqual(updatedRecipe);
+      registerCookingModeRecipe(mockDoc, vi.fn());
+      window.recipeTools.setRecipeViewerRecipe(updatedRecipe);
+      expect(window.recipeTools.getRecipeViewerRecipe()).toEqual({
+        name: "Carbonara",
+        "@type": "Recipe",
+        recipeIngredient: ["1 egg", "50 g guanciale"],
+      });
     });
 
-    it("setRecipeViewerRecipe calls the registered setter with the new recipe", () => {
+    it("setRecipeViewerRecipe hands the registered setter the recipe as a document, lines drafted", () => {
       render(<WindowApiProvider />);
       const setter = vi.fn();
-      registerCookingModeRecipe(mockRecipe as never, setter);
-      window.recipeTools.setRecipeViewerRecipe(updatedRecipe as never);
-      expect(setter).toHaveBeenCalledWith(updatedRecipe);
+      registerCookingModeRecipe(mockDoc, setter);
+      window.recipeTools.setRecipeViewerRecipe(updatedRecipe);
+      const doc = setter.mock.calls[0][0] as RecipeDocument;
+      expect(doc.schema).toEqual({ name: "Carbonara", "@type": "Recipe" });
+      expect(doc.ingredients.map((g) => g.name)).toEqual([undefined, "Sauce"]);
+      expect(doc.ingredients[1].ingredients[0]).toMatchObject({
+        raw_text: "50 g guanciale",
+        quantity: 50,
+        unit: "g",
+        match_status: "unmatched",
+      });
     });
 
     it("getRecipeViewerRecipe returns null after unregisterCookingModeRecipe", () => {
       render(<WindowApiProvider />);
-      registerCookingModeRecipe(mockRecipe as never, vi.fn());
+      registerCookingModeRecipe(mockDoc, vi.fn());
       unregisterCookingModeRecipe();
       expect(window.recipeTools.getRecipeViewerRecipe()).toBeNull();
     });
@@ -158,7 +185,7 @@ describe("WindowApiProvider", () => {
     it("setRecipeViewerRecipe does not throw when cooking mode is not active", () => {
       render(<WindowApiProvider />);
       expect(() =>
-        window.recipeTools.setRecipeViewerRecipe(updatedRecipe as never)
+        window.recipeTools.setRecipeViewerRecipe(updatedRecipe)
       ).not.toThrow();
     });
   });

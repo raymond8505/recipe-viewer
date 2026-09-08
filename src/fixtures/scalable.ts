@@ -3,7 +3,12 @@ import {
   type ScaledIngredient,
   type ScalableRecipeState,
 } from "@/lib/ScalableRecipe";
-import type { QuantitativeValue, SchemaRecipe } from "@/types/recipe";
+import type {
+  QuantitativeValue,
+  RecipeIngredientGroup,
+  SchemaRecipe,
+} from "@/types/recipe";
+import { makeIngredientGroup, makeIngredientLines } from "./ingredients";
 
 /**
  * Structured QuantitativeValue yield: 4 kebabs made from 454 g of raw
@@ -20,14 +25,6 @@ export const quantitativeValueYield: QuantitativeValue = {
 export const scalableBaseSchema: SchemaRecipe = {
   name: "Test Recipe",
   recipeYield: "4 servings",
-  recipeIngredient: [
-    "2 cups flour",
-    "1/2 tsp salt",
-    "3-5 cloves garlic",
-    "salt to taste",
-    { name: "1 cup butter", group: "Wet" },
-    { name: "1/4 cup sugar", group: "Wet" },
-  ],
   nutrition: {
     "@type": "NutritionInformation",
     calories: "200 kcal",
@@ -36,6 +33,18 @@ export const scalableBaseSchema: SchemaRecipe = {
   },
 };
 
+/** Four ungrouped lines (a single, a fraction, a range, an unparseable) and a
+ *  named "Wet" group — the scaling tests' fixture list. */
+export const scalableBaseIngredients: RecipeIngredientGroup[] = [
+  makeIngredientGroup(undefined, [
+    "2 cups flour",
+    "1/2 tsp salt",
+    "3-5 cloves garlic",
+    "salt to taste",
+  ]),
+  makeIngredientGroup("Wet", ["1 cup butter", "1/4 cup sugar"]),
+];
+
 export function makeSchemaRecipe(
   overrides: Partial<SchemaRecipe> = {},
 ): SchemaRecipe {
@@ -43,17 +52,22 @@ export function makeSchemaRecipe(
 }
 
 export function makeScalableRecipe(
-  overrides: Partial<SchemaRecipe> = {},
+  overrides: {
+    schema?: Partial<SchemaRecipe>;
+    ingredients?: RecipeIngredientGroup[];
+  } = {},
   state?: Partial<ScalableRecipeState>,
 ): ScalableRecipe {
-  return new ScalableRecipe(makeSchemaRecipe(overrides), state);
+  return new ScalableRecipe(
+    makeSchemaRecipe(overrides.schema),
+    overrides.ingredients ?? scalableBaseIngredients,
+    state,
+  );
 }
 
 export function makeScaledIngredient(text: string, scale = 1): ScaledIngredient {
-  const schema: SchemaRecipe = {
-    name: "test",
-    recipeYield: "1 serving",
-    recipeIngredient: [text],
-  };
-  return new ScalableRecipe(schema, { ingredientScale: scale }).ingredients[0];
+  const schema: SchemaRecipe = { name: "test", recipeYield: "1 serving" };
+  return new ScalableRecipe(schema, makeIngredientLines([text]), {
+    ingredientScale: scale,
+  }).ingredients[0];
 }

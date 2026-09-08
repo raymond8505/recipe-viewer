@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getRecipeById } from "@/lib/recipes";
+import { toSchemaOrgRecipe } from "@/lib/format";
 import { env } from "@/env";
 import { requireSessionOrRecipeToken } from "@/lib/api/guard";
 
@@ -12,12 +13,17 @@ export const POST = requireSessionOrRecipeToken(
       return NextResponse.json({ error: "Recipe not found" }, { status: 404 });
     }
 
+    // The webhook (n8n "Generate Recipe Image") puts the whole recipe into the
+    // image prompt and asks the model to draw its ingredients, so it gets the
+    // outbound Schema.org form: the stored schema with the lines flattened in.
     let webhookRes: Response;
     try {
       webhookRes = await fetch(env.REGEN_IMAGE_WEBHOOK_URL, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ schema: recipe.metadata.schema }),
+        body: JSON.stringify({
+          schema: toSchemaOrgRecipe(recipe.metadata.schema, recipe.ingredients),
+        }),
       });
     } catch {
       return NextResponse.json({ error: "Webhook unreachable" }, { status: 502 });

@@ -101,12 +101,10 @@ describe("toIngredientInput / toStoredGroups", () => {
 });
 
 describe("toRecipeIngredient", () => {
-  it("drops recipe_id and the dead columns, and only sets ingredient when told", () => {
-    const row = makeRecipeIngredientRow("r-1", 3, { id: "ri-a", line_id: "L1" });
+  it("drops recipe_id, and only sets ingredient when told", () => {
+    const row = makeRecipeIngredientRow("r-1", 3, { id: "ri-a" });
     const bare = toRecipeIngredient(row);
     expect(bare).not.toHaveProperty("recipe_id");
-    expect(bare).not.toHaveProperty("line_id");
-    expect(bare).not.toHaveProperty("position");
     expect(bare).not.toHaveProperty("ingredient");
     expect(toRecipeIngredient(row, null).ingredient).toBeNull();
   });

@@ -5,9 +5,6 @@ import {
   explicitWeightGrams,
   gramsForLine,
   formatNutrientString,
-  indexRowsForLines,
-  lineComputationForSchema,
-  resolveLineRow,
   normalizedTotalToPerServing,
   nutrientValuesToSchema,
   parseNutrientValue,
@@ -15,29 +12,29 @@ import {
   schemaNutritionToValues,
   scaleNutritionToGrams,
   scalePortionNutritionToPer100g,
+  recipeNormalizedNutrition,
   sumNutrition,
 } from "@/lib/nutritionMath";
-import type { IngredientRow, RecipeIngredientRow } from "@/types/ingredient";
+import { makeIngredientLines } from "@/fixtures";
+import type { IngredientRow } from "@/types/ingredient";
+import type { RecipeIngredient } from "@/types/recipe";
 
-// Minimal recipe_ingredients row builder for the recipe-wide aggregation tests.
-function makeRow(
-  position: number,
-  overrides: Partial<RecipeIngredientRow> = {},
-): RecipeIngredientRow {
+// Minimal ingredient builder for the recipe-wide aggregation tests: a matched
+// 100 g line carrying its catalog row, unless overridden.
+function makeLine(
+  n: number,
+  overrides: Partial<RecipeIngredient> = {},
+): RecipeIngredient {
   return {
-    id: `ri-${position}`,
-    recipe_id: "r-1",
-    // Legacy by default — the tests that care about id-keying opt in.
-    line_id: null,
-    ingredient_id: `ing-${position}`,
-    raw_text: overrides.raw_text ?? `${position} g thing`,
+    id: `ri-${n}`,
+    ingredient_id: `ing-${n}`,
+    raw_text: overrides.raw_text ?? `${n} g thing`,
     quantity: 100,
     unit: "g",
     name_text: "thing",
     note: null,
     match_status: "matched",
     confidence: 1,
-    position,
     estimated_grams: null,
     grams_source: null,
     ...overrides,
@@ -451,187 +448,59 @@ describe("perPortionNutrition", () => {
   });
 });
 
-describe("resolveLineRow", () => {
-  it("joins by the line's stable id, ignoring position", () => {
-    const rows = [
-      makeRow(0, { id: "ri-0", line_id: "L1" }),
-      makeRow(1, { id: "ri-1", line_id: "L2" }),
-    ];
-    const resolved = resolveLineRow(
-      { name: "1 tsp cumin", id: "L2" },
-      0,
-      indexRowsForLines(rows),
-    );
-    expect(resolved).toMatchObject({ joinedById: true });
-    expect(resolved.row?.id).toBe("ri-1");
-  });
-
-  // An id with no row is a genuinely new line. Falling back to position would
-  // hand it whichever row happens to sit at that index.
-  it("does not fall back to position for a line that has an id", () => {
-    const rows = [makeRow(0, { id: "ri-0", line_id: "L1" })];
-    expect(
-      resolveLineRow({ name: "new", id: "L-unknown" }, 0, indexRowsForLines(rows)),
-    ).toEqual({ row: null, joinedById: true });
-  });
-
-  it("falls back to position for a legacy line with no id", () => {
-    const rows = [makeRow(0, { id: "ri-0", line_id: null })];
-    const resolved = resolveLineRow("1 tsp cumin", 0, indexRowsForLines(rows));
-    expect(resolved).toMatchObject({ joinedById: false });
-    expect(resolved.row?.id).toBe("ri-0");
-  });
-});
-
-describe("lineComputationForSchema", () => {
-  it("excludes a line with no row as stale", () => {
-    expect(
-      lineComputationForSchema(
-        "2 cups flour",
-        { row: null, joinedById: true },
-        null,
-      ),
-    ).toEqual({ kind: "excluded", reason: "stale" });
-  });
-
-  // The whole point of keying rows to line ids: the words are display copy,
-  // the id is the identity. Rewording must not cost the line its association
-  // or its place in the totals — only the curator changes a match.
-  it("computes normally for an id-joined row whose stored text has moved", () => {
-    const row = makeRow(0, {
-      line_id: "L1",
-      raw_text: "100 g Acme brand thing",
-      quantity: 100,
-      unit: "g",
-    });
-    expect(
-      lineComputationForSchema(
-        "100 g thing",
-        { row, joinedById: true },
-        catalog({ calories_kcal: 50 }),
-      ),
-    ).toMatchObject({ kind: "ok", nutrition: { calories_kcal: 50 } });
-  });
-
-  // Position-joined is the legacy case, where text is the only evidence the
-  // row belongs to this line at all.
-  it("excludes a position-joined row whose stored text no longer matches", () => {
-    const row = makeRow(0, { line_id: null, raw_text: "1 cup flour" });
-    expect(
-      lineComputationForSchema(
-        "2 cups flour",
-        { row, joinedById: false },
-        catalog({ calories_kcal: 100 }),
-      ),
-    ).toEqual({ kind: "excluded", reason: "stale" });
-  });
-
-  it("defers to computeLineNutrition when the text matches", () => {
-    const row = makeRow(0, { raw_text: "100 g thing", quantity: 100, unit: "g" });
-    expect(
-      lineComputationForSchema(
-        "100 g thing",
-        { row, joinedById: false },
-        catalog({ calories_kcal: 50 }),
-      ),
-    ).toMatchObject({ kind: "ok", nutrition: { calories_kcal: 50 } });
-  });
-});
-
 describe("computeRecipeNutrition", () => {
   it("sums matched lines and reports full coverage", () => {
-    const schema = ["100 g thing", "100 g thing"];
-    const rows = [
-      makeRow(0, { raw_text: "100 g thing", ingredient_id: "a" }),
-      makeRow(1, { raw_text: "100 g thing", ingredient_id: "b" }),
-    ];
-    const byId = new Map([
-      ["a", catalog({ calories_kcal: 100, protein_g: 5 })],
-      ["b", catalog({ calories_kcal: 50 })],
+    const result = computeRecipeNutrition([
+      makeLine(0, { ingredient: catalog({ calories_kcal: 100, protein_g: 5 }) }),
+      makeLine(1, { ingredient: catalog({ calories_kcal: 50 }) }),
     ]);
-    const result = computeRecipeNutrition(schema, rows, byId);
     expect(result.total).toEqual({ calories_kcal: 150, protein_g: 5 });
     expect(result).toMatchObject({
       lineCount: 2,
       excludedCount: 0,
-      hasStaleLines: false,
       fullyCovered: true,
     });
   });
 
   it("is not fully covered when a line is unmatched", () => {
-    const schema = ["100 g thing", "salt to taste"];
-    const rows = [
-      makeRow(0, { raw_text: "100 g thing", ingredient_id: "a" }),
-      makeRow(1, { raw_text: "salt to taste", ingredient_id: null, match_status: "unmatched" }),
-    ];
-    const byId = new Map([["a", catalog({ calories_kcal: 100 })]]);
-    const result = computeRecipeNutrition(schema, rows, byId);
+    const result = computeRecipeNutrition([
+      makeLine(0, { ingredient: catalog({ calories_kcal: 100 }) }),
+      makeLine(1, {
+        raw_text: "salt to taste",
+        ingredient_id: null,
+        match_status: "unmatched",
+        ingredient: null,
+      }),
+    ]);
     expect(result.total).toEqual({ calories_kcal: 100 });
     expect(result).toMatchObject({ excludedCount: 1, fullyCovered: false });
   });
 
-  // Legacy: no line ids anywhere, so the row is only reachable by position and
-  // its text is the sole evidence it belongs to this line.
-  it("is not fully covered when a legacy schema line was edited after normalization", () => {
-    const schema = ["2 cups flour"];
-    const rows = [
-      makeRow(0, { line_id: null, raw_text: "1 cup flour", ingredient_id: "a" }),
-    ];
-    const byId = new Map([["a", catalog({ calories_kcal: 100 })]]);
-    const result = computeRecipeNutrition(schema, rows, byId);
-    expect(result).toMatchObject({
-      hasStaleLines: true,
-      excludedCount: 1,
-      fullyCovered: false,
-    });
+  // A list-page row has no catalog loaded (the key is absent, not null). That
+  // must read as "no data", never as a line that somehow counts.
+  it("treats an absent catalog the same as an unmatched line", () => {
+    const line = makeLine(0);
+    delete line.ingredient;
+    const result = computeRecipeNutrition([line]);
+    expect(result).toMatchObject({ excludedCount: 1, fullyCovered: false });
   });
 
-  // Once the line has an id, a reword is invisible to the totals — the row
-  // followed the edit and the association is untouched.
-  it("stays fully covered when an id-keyed line is reworded", () => {
-    const schema = [{ name: "100 g thing", id: "L1" }];
-    const rows = [
-      makeRow(0, {
-        line_id: "L1",
-        raw_text: "100 g Acme brand thing",
-        quantity: 100,
-        unit: "g",
-        ingredient_id: "a",
-      }),
-    ];
-    const byId = new Map([["a", catalog({ calories_kcal: 100 })]]);
-    const result = computeRecipeNutrition(schema, rows, byId);
-    expect(result.total).toEqual({ calories_kcal: 100 });
-    expect(result).toMatchObject({
-      hasStaleLines: false,
-      excludedCount: 0,
-      fullyCovered: true,
-    });
-  });
-
-  // The whole point of the 0 signal: one un-weighable line used to hold the
-  // entire recipe off its ingredient-derived total, because fullyCovered
-  // demands zero exclusions. Zeroing it clears the gate without inventing a
-  // weight, and the total is unchanged from the line that does carry mass.
+  // The whole point of the 0 signal: one un-weighable line holds the entire
+  // recipe off its ingredient-derived total, because fullyCovered demands zero
+  // exclusions. Zeroing it clears the gate without inventing a weight, and the
+  // total is unchanged from the line that does carry mass.
   it("is fully covered when the only amount-less line is zeroed", () => {
-    const schema = ["100 g thing", "salt to taste"];
-    const rows = [
-      makeRow(0, { raw_text: "100 g thing", ingredient_id: "a" }),
-      makeRow(1, {
+    const result = computeRecipeNutrition([
+      makeLine(0, { ingredient: catalog({ calories_kcal: 100 }) }),
+      makeLine(1, {
         raw_text: "salt to taste",
         quantity: null,
         unit: null,
-        ingredient_id: "b",
         estimated_grams: 0,
         grams_source: "manual",
+        ingredient: catalog({ sodium_mg: 38758 }),
       }),
-    ];
-    const byId = new Map([
-      ["a", catalog({ calories_kcal: 100 })],
-      ["b", catalog({ sodium_mg: 38758 })],
     ]);
-    const result = computeRecipeNutrition(schema, rows, byId);
     expect(result.total).toEqual({ calories_kcal: 100, sodium_mg: 0 });
     expect(result).toMatchObject({
       lineCount: 2,
@@ -641,7 +510,32 @@ describe("computeRecipeNutrition", () => {
   });
 
   it("is not fully covered for a recipe with no ingredient lines", () => {
-    expect(computeRecipeNutrition([], [], new Map()).fullyCovered).toBe(false);
+    expect(computeRecipeNutrition([]).fullyCovered).toBe(false);
+  });
+});
+
+describe("recipeNormalizedNutrition", () => {
+  it("computes over every group's lines in order", () => {
+    const result = recipeNormalizedNutrition({
+      ingredients: [
+        { name: "A", ingredients: [makeLine(0, { ingredient: catalog({ calories_kcal: 100 }) })] },
+        { ingredients: [makeLine(1, { ingredient: catalog({ calories_kcal: 50 }) })] },
+      ],
+    });
+    expect(result?.total).toEqual({ calories_kcal: 150 });
+    expect(result?.fullyCovered).toBe(true);
+  });
+
+  it("is null for a recipe with no lines — nothing to prefer over the schema fields", () => {
+    expect(recipeNormalizedNutrition({ ingredients: [] })).toBeNull();
+    expect(recipeNormalizedNutrition({ ingredients: [{ ingredients: [] }] })).toBeNull();
+  });
+
+  it("is present but not covered for unmatched lines", () => {
+    const result = recipeNormalizedNutrition({
+      ingredients: makeIngredientLines(["1 tsp cumin"]),
+    });
+    expect(result).toMatchObject({ lineCount: 1, excludedCount: 1, fullyCovered: false });
   });
 });
 

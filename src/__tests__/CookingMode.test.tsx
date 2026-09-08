@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import CookingMode from "@/components/CookingMode";
 import type { RecipeRow, SchemaRecipe } from "@/types/recipe";
+import { makeIngredientLines } from "@/fixtures";
 
 // useTimers is irrelevant to instruction completion; stub it out
 vi.mock("@/hooks/useTimers", () => ({
@@ -18,12 +19,15 @@ vi.mock("@/hooks/useTimers", () => ({
   timerState: vi.fn(),
 }));
 
-function makeRecipe(schema: Partial<SchemaRecipe> = {}): RecipeRow {
+function makeRecipe(
+  schema: Partial<SchemaRecipe> = {},
+  ingredients: string[] = [],
+): RecipeRow {
   return {
     id: "1",
     url: "https://example.com",
     source: "example.com",
-    ingredients: [],
+    ingredients: makeIngredientLines(ingredients),
     metadata: { schema: { name: "Test Recipe", ...schema } },
   };
 }
@@ -127,7 +131,7 @@ describe("CookingMode — shopping list", () => {
   });
 
   it("ingredient rows render as unchecked checkboxes", () => {
-    const recipe = makeRecipe({ recipeIngredient: ["2 cups flour", "1 tsp salt"] });
+    const recipe = makeRecipe({}, ["2 cups flour", "1 tsp salt"]);
     render(<CookingMode recipe={recipe} onClose={vi.fn()} />);
     const boxes = screen.getAllByRole("checkbox");
     expect(boxes[0].getAttribute("aria-checked")).toBe("false");
@@ -135,7 +139,7 @@ describe("CookingMode — shopping list", () => {
   });
 
   it("clicking an ingredient marks it checked", () => {
-    const recipe = makeRecipe({ recipeIngredient: ["2 cups flour"] });
+    const recipe = makeRecipe({}, ["2 cups flour"]);
     render(<CookingMode recipe={recipe} onClose={vi.fn()} />);
     const box = screen.getByRole("checkbox", { name: "2 cups flour" });
     fireEvent.click(box);
@@ -143,7 +147,7 @@ describe("CookingMode — shopping list", () => {
   });
 
   it("clicking a checked ingredient unchecks it", () => {
-    const recipe = makeRecipe({ recipeIngredient: ["2 cups flour"] });
+    const recipe = makeRecipe({}, ["2 cups flour"]);
     render(<CookingMode recipe={recipe} onClose={vi.fn()} />);
     const box = screen.getByRole("checkbox", { name: "2 cups flour" });
     fireEvent.click(box);
@@ -152,20 +156,20 @@ describe("CookingMode — shopping list", () => {
   });
 
   it("copy button is disabled when no ingredients are selected", () => {
-    const recipe = makeRecipe({ recipeIngredient: ["2 cups flour"] });
+    const recipe = makeRecipe({}, ["2 cups flour"]);
     render(<CookingMode recipe={recipe} onClose={vi.fn()} />);
     expect(screen.getByRole("button", { name: /copy shopping list/i })).toBeDisabled();
   });
 
   it("copy button becomes enabled when an ingredient is selected", () => {
-    const recipe = makeRecipe({ recipeIngredient: ["2 cups flour", "1 tsp salt"] });
+    const recipe = makeRecipe({}, ["2 cups flour", "1 tsp salt"]);
     render(<CookingMode recipe={recipe} onClose={vi.fn()} />);
     fireEvent.click(screen.getByRole("checkbox", { name: "2 cups flour" }));
     expect(screen.getByRole("button", { name: /copy shopping list, 1 item$/i })).not.toBeDisabled();
   });
 
   it("copy button aria-label reflects selection count", () => {
-    const recipe = makeRecipe({ recipeIngredient: ["2 cups flour", "1 tsp salt"] });
+    const recipe = makeRecipe({}, ["2 cups flour", "1 tsp salt"]);
     render(<CookingMode recipe={recipe} onClose={vi.fn()} />);
     fireEvent.click(screen.getByRole("checkbox", { name: "2 cups flour" }));
     fireEvent.click(screen.getByRole("checkbox", { name: "1 tsp salt" }));
@@ -173,7 +177,7 @@ describe("CookingMode — shopping list", () => {
   });
 
   it("clicking copy writes selected ingredient text to clipboard", async () => {
-    const recipe = makeRecipe({ recipeIngredient: ["2 cups flour", "1 tsp salt"] });
+    const recipe = makeRecipe({}, ["2 cups flour", "1 tsp salt"]);
     render(<CookingMode recipe={recipe} onClose={vi.fn()} />);
     fireEvent.click(screen.getByRole("checkbox", { name: "2 cups flour" }));
     fireEvent.click(screen.getByRole("checkbox", { name: "1 tsp salt" }));
@@ -186,12 +190,9 @@ describe("CookingMode — shopping list", () => {
   });
 
   it("copies scaled amounts after the recipe is scaled", async () => {
-    const recipe = makeRecipe({
-      recipeYield: "1 serving",
-      recipeIngredient: ["2 cups flour", "1 tsp salt"],
-    });
+    const recipe = makeRecipe({ recipeYield: "1 serving" }, ["2 cups flour", "1 tsp salt"]);
     render(<CookingMode recipe={recipe} onClose={vi.fn()} />);
-    // Selection is keyed by the raw text, so it survives the scale change.
+    // Selection is keyed by the line's id, so it survives the scale change.
     fireEvent.click(screen.getByRole("checkbox", { name: "2 cups flour" }));
     fireEvent.click(screen.getByRole("checkbox", { name: "1 tsp salt" }));
     fireEvent.click(screen.getByRole("button", { name: "Increase servings" }));
@@ -205,19 +206,13 @@ describe("CookingMode — shopping list", () => {
     // Scaling is primary-only, and the copy now reads through `scalables`
     // rather than each recipe's schema — a secondary must still contribute its
     // selected lines, unscaled.
-    const secondary = makeRecipe({
-      name: "Side Salad",
-      recipeIngredient: ["1 cup rice"],
-    });
+    const secondary = makeRecipe({ name: "Side Salad" }, ["1 cup rice"]);
     secondary.id = "2";
     vi.stubGlobal(
       "fetch",
       vi.fn().mockResolvedValue({ json: async () => ({ data: [secondary] }) }),
     );
-    const recipe = makeRecipe({
-      recipeYield: "1 serving",
-      recipeIngredient: ["2 cups flour"],
-    });
+    const recipe = makeRecipe({ recipeYield: "1 serving" }, ["2 cups flour"]);
     render(<CookingMode recipe={recipe} onClose={vi.fn()} />);
 
     fireEvent.change(screen.getByPlaceholderText("Add recipe to meal…"), {

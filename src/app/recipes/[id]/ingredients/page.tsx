@@ -2,7 +2,6 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import { getRecipeById } from "@/lib/recipes";
-import { getIngredientsByIds, getRecipeIngredients } from "@/lib/ingredients";
 import { getIsLoggedIn } from "@/lib/auth";
 import { canCurateNutrition } from "@/lib/devAccess";
 import NutritionDetail from "@/components/ingredients/NutritionDetail";
@@ -46,12 +45,6 @@ export default async function RecipeIngredientsPage({
     );
   }
 
-  const rows = await getRecipeIngredients(id);
-  const ingredientIds = [
-    ...new Set(rows.map((r) => r.ingredient_id).filter((x): x is string => x != null)),
-  ];
-  const ingredients = await getIngredientsByIds(ingredientIds);
-
   const { schema } = recipe.metadata;
 
   return (
@@ -72,10 +65,8 @@ export default async function RecipeIngredientsPage({
       </div>
       <NutritionDetail
         recipeId={id}
-        schemaIngredients={schema.recipeIngredient ?? []}
+        ingredients={recipe.ingredients}
         recipeYield={schema.recipeYield}
-        initialRows={rows}
-        initialIngredients={ingredients}
       />
     </section>
   );

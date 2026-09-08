@@ -13,9 +13,11 @@ interface IngredientsEditorProps {
 
 /**
  * Structured ingredient editor: each ingredient is a draggable text input;
- * groups (the schema's `group` string) are reorderable and carry their items.
- * The grouping is UI-only — `useRecipeEditor` converts to/from the flat stored
- * shape via `editableIngredientsToSchema` / `schemaToEditableIngredients`.
+ * groups mirror the recipe's own `RecipeIngredientGroup`s and are reorderable
+ * with their items. `useRecipeEditor` converts to/from the recipe via
+ * `ingredientsToEditable` / `editableToIngredientInput`. A row added here has
+ * no `recipeIngredientId`, which is what tells the write path to mint a row
+ * for it; every seeded row keeps its id so a save keeps its catalog match.
  */
 export default function IngredientsEditor({
   value,

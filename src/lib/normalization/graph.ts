@@ -1,27 +1,30 @@
 import { Annotation, END, START, StateGraph } from "@langchain/langgraph";
 import { generateEmbedding } from "@/lib/embedding";
 import { generateStructured } from "@/lib/gemini";
-import { getIngredientText } from "@/lib/format";
 import {
   IngredientRepoError,
   getIngredientsByIds,
   getRecipeIngredients,
   matchIngredients,
-  replaceRecipeIngredients,
   setRecipeNormalization,
-  type RecipeIngredientInsert,
+  updateRecipeIngredientRows,
 } from "@/lib/ingredients";
 import { importUsdaIngredient } from "@/lib/ingredientImport";
-import { lineId } from "@/lib/ingredientLines";
 import {
   accreteAliasesFromLines,
   ingredientQueryText,
 } from "@/lib/ingredientAliases";
 import { explicitWeightGrams, gramsForLine } from "@/lib/nutritionMath";
+import { flattenIngredients, ingredientTexts } from "@/lib/recipeIngredients";
 import { getRecipeById } from "@/lib/recipes";
 import { parseIngredient, unitKeyForAlias } from "@/lib/units";
 import { UsdaError, searchFoods } from "@/lib/usda";
-import type { GramsSource, IngredientMatch, MatchStatus } from "@/types/ingredient";
+import type {
+  GramsSource,
+  IngredientMatch,
+  MatchStatus,
+  RecipeIngredientRow,
+} from "@/types/ingredient";
 import { estimateLineGrams } from "./estimateGrams";
 import { ingredientFingerprint } from "./fingerprint";
 import { parseLineDeterministic, type ParsedLine } from "./parseLine";
@@ -71,10 +74,10 @@ const NormalizationState = Annotation.Root({
   recipeId: Annotation<string>,
   fingerprint: Annotation<string>,
   rawLines: Annotation<string[]>,
-  // Stable schema-line id per position (null for legacy lines that predate
-  // them). This is what a persisted row keys on, so it — not raw_text, not
-  // position — decides which prior row a line inherits from.
-  lineIds: Annotation<Array<string | null>>,
+  // Each line's `recipe_ingredients` row id, by position. Every line IS a row
+  // (the reconcile creates one before this run is ever scheduled), so this is
+  // what persist writes back to — not raw_text, not position.
+  rowIds: Annotation<string[]>,
   parsed: Annotation<ParsedLine[]>,
   matches: Annotation<LineMatch[]>,
   // position → resolved gram weight for lines the density path can't convert
@@ -414,18 +417,12 @@ async function fetchNovel(state: State): Promise<Partial<State>> {
 // hit the LLM. Best-effort: a failed estimate simply leaves the line excluded.
 async function estimate(state: State): Promise<Partial<State>> {
   const existing = await getRecipeIngredients(state.recipeId);
-  const priorByLineId = new Map(
-    existing.filter((row) => row.line_id != null).map((row) => [row.line_id!, row]),
-  );
-  const priorByPosition = new Map(
-    existing.filter((row) => row.line_id == null).map((row) => [row.position, row]),
-  );
+  const priorById = new Map(existing.map((row) => [row.id, row]));
 
-  // Carry a stored weight forward when the AMOUNT it was measured against
-  // hasn't moved. That condition used to be approximated by "raw_text is
-  // byte-identical", which was both too strict (a typo fix dropped a perfectly
-  // good weight) and beside the point. quantity+unit is the thing that
-  // actually invalidates a gram weight — the same rule syncLines applies.
+  // Carry a stored weight forward when the AMOUNT it was measured against is
+  // unchanged. quantity+unit is the thing that invalidates a gram weight — a
+  // typo fix leaves a perfectly good weight alone — and it is the same rule
+  // the reconcile applies on a reword.
   //
   // The SOURCE travels with the value: a user-typed weight and an LLM guess
   // are not interchangeable (the UI marks one "est."), so re-labelling a
@@ -433,10 +430,7 @@ async function estimate(state: State): Promise<Partial<State>> {
   // covers legacy rows — grams_source is non-null exactly when
   // estimated_grams is.
   const carriedFor = (line: ParsedLine): LineEstimate | undefined => {
-    const id = state.lineIds[line.position] ?? null;
-    const prior =
-      (id != null ? priorByLineId.get(id) : undefined) ??
-      priorByPosition.get(line.position);
+    const prior = priorById.get(state.rowIds[line.position]);
     if (!prior || prior.estimated_grams == null) return undefined;
     if (prior.quantity !== line.quantity || prior.unit !== line.unit) return undefined;
     return { grams: prior.estimated_grams, source: prior.grams_source ?? "llm" };
@@ -490,7 +484,7 @@ async function persist(state: State): Promise<Partial<State>> {
 
   // A newer save changed the ingredient text while this run was in flight; its
   // own trigger owns the result. Writing ours would clobber it with stale data.
-  if (ingredientFingerprint(recipe.metadata.schema) !== state.fingerprint) {
+  if (ingredientFingerprint(ingredientTexts(recipe.ingredients)) !== state.fingerprint) {
     console.warn(`Normalization for ${state.recipeId} superseded mid-run — skipping persist`);
     return {};
   }
@@ -502,67 +496,50 @@ async function persist(state: State): Promise<Partial<State>> {
   // existing association always survives, and the matcher's opinion is used
   // only to fill gaps.
   //
-  // Inheritance is by line_id (db/migrations/0013). It used to be by raw_text,
-  // which meant fixing a typo silently orphaned the row and threw the curation
-  // away. Rows written before 0013 have no line_id, so they fall back to
-  // position — the old behaviour, for recipes not yet backfilled.
+  // Every line already has its row (the reconcile made it on save), so this
+  // run only ever UPDATES rows by id — it creates none and deletes none. A row
+  // the save dropped since this run began is simply not in `rowIds`.
   const existingRows = await getRecipeIngredients(state.recipeId);
-  const priorByLineId = new Map(
-    existingRows
-      .filter((row) => row.line_id != null)
-      .map((row) => [row.line_id!, row]),
-  );
-  const priorByPosition = new Map(
-    existingRows
-      .filter((row) => row.line_id == null)
-      .map((row) => [row.position, row]),
-  );
+  const priorById = new Map(existingRows.map((row) => [row.id, row]));
 
   const matchByPosition = new Map(state.matches.map((m) => [m.position, m]));
-  const rows: RecipeIngredientInsert[] = state.parsed.map((line) => {
-    const id = state.lineIds[line.position] ?? null;
-    const prior =
-      (id != null ? priorByLineId.get(id) : undefined) ??
-      priorByPosition.get(line.position);
+  const rows: RecipeIngredientRow[] = state.parsed.flatMap((line) => {
+    const id = state.rowIds[line.position];
+    const prior = priorById.get(id);
+    if (!prior) return [];
 
     // The estimate node carries prior values forward and only adds new ones
     // for grams-less lines, so this covers both. Its `source` rides along:
     // writing a flat "llm" here would re-label every carried user-entered
     // weight as a machine guess.
     const estimate = state.estimates[line.position] ?? null;
-    const parseFields = {
-      line_id: id,
+    const parseFields: RecipeIngredientRow = {
+      ...prior,
       raw_text: line.rawText,
       quantity: line.quantity,
       unit: line.unit,
       name_text: line.name,
       note: line.note,
-      position: line.position,
       estimated_grams: estimate?.grams ?? null,
       grams_source: estimate?.source ?? null,
     };
 
-    if (prior?.ingredient_id != null) {
-      return {
-        ...parseFields,
-        ingredient_id: prior.ingredient_id,
-        match_status: prior.match_status,
-        confidence: prior.confidence,
-      };
-    }
+    if (prior.ingredient_id != null) return [parseFields];
 
     const match = matchByPosition.get(line.position);
     const status: MatchStatus =
       !match || match.status === "ambiguous" ? "unmatched" : match.status;
-    return {
-      ...parseFields,
-      ingredient_id: match?.ingredientId ?? null,
-      match_status: status,
-      confidence: match?.confidence ?? null,
-    };
+    return [
+      {
+        ...parseFields,
+        ingredient_id: match?.ingredientId ?? null,
+        match_status: status,
+        confidence: match?.confidence ?? null,
+      },
+    ];
   });
 
-  await replaceRecipeIngredients(state.recipeId, rows);
+  await updateRecipeIngredientRows(state.recipeId, rows);
 
   // Teach the catalog the recipe language these lines actually used. This is
   // the single accretion point for the whole workflow — it covers auto-accepted
@@ -621,14 +598,14 @@ export async function runNormalization(recipeId: string): Promise<void> {
     const recipe = await getRecipeById(recipeId);
     if (!recipe) return; // deleted between schedule and run
 
-    const schema = recipe.metadata.schema;
-    const schemaLines = schema.recipeIngredient ?? [];
-    const rawLines = schemaLines.map(getIngredientText);
-    const lineIds = schemaLines.map(lineId);
-    const fingerprint = ingredientFingerprint(schema);
+    const lines = flattenIngredients(recipe.ingredients);
+    const rawLines = lines.map((line) => line.raw_text);
+    const rowIds = lines.map((line) => line.id);
+    const fingerprint = ingredientFingerprint(rawLines);
 
+    // Nothing to match, and nothing to prune either — the save that emptied
+    // the list already deleted its rows.
     if (rawLines.length === 0) {
-      await replaceRecipeIngredients(recipeId, []);
       await setRecipeNormalization(recipeId, {
         status: "completed",
         error: null,
@@ -639,7 +616,7 @@ export async function runNormalization(recipeId: string): Promise<void> {
     }
 
     await setRecipeNormalization(recipeId, { status: "running", error: null });
-    await graph.invoke({ recipeId, fingerprint, rawLines, lineIds });
+    await graph.invoke({ recipeId, fingerprint, rawLines, rowIds });
   } catch (err) {
     console.error(`Normalization failed for ${recipeId}:`, err);
     try {

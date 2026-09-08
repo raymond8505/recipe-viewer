@@ -3,9 +3,7 @@ import { GET, PATCH as PATCH_LINE } from "@/app/api/recipes/[id]/ingredients/rou
 import { PATCH } from "@/app/api/recipes/[id]/ingredients/[riId]/route";
 import {
   IngredientRepoError,
-  getIngredientsByIds,
   getRecipeIngredientById,
-  getRecipeIngredients,
   updateRecipeIngredientAssociation,
 } from "@/lib/ingredients";
 import {
@@ -13,17 +11,21 @@ import {
   removeAliasAndReembed,
 } from "@/lib/ingredientAliases";
 import { RecipeRepoError, getRecipeById, updateRecipeRow } from "@/lib/recipes";
+import { draftIngredientGroups } from "@/lib/recipeIngredients";
 import { getIsLoggedIn } from "@/lib/auth";
-import { makeIngredient, makeRecipe, makeRecipeIngredientRow } from "@/fixtures";
+import {
+  makeIngredientGroup,
+  makeIngredientLines,
+  makeRecipe,
+  makeRecipeIngredientRow,
+} from "@/fixtures";
 import { makeJsonRequest } from "@/fixtures/request";
 
 vi.mock("@/lib/ingredients", async (orig) => {
   const actual = await orig<typeof import("@/lib/ingredients")>();
   return {
     ...actual,
-    getRecipeIngredients: vi.fn(),
     getRecipeIngredientById: vi.fn(),
-    getIngredientsByIds: vi.fn(),
     updateRecipeIngredientAssociation: vi.fn(),
   };
 });
@@ -50,20 +52,13 @@ describe("GET /api/recipes/[id]/ingredients", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(getIsLoggedIn).mockResolvedValue(true);
-    vi.mocked(getRecipeById).mockResolvedValue(makeRecipe("r-1", "Test Recipe"));
-    vi.mocked(getRecipeIngredients).mockResolvedValue([]);
-    vi.mocked(getIngredientsByIds).mockResolvedValue([]);
   });
 
-  it("returns rows plus the deduplicated catalog joins", async () => {
-    const rows = [
-      makeRecipeIngredientRow("r-1", 0, { ingredient_id: "ing-1" }),
-      makeRecipeIngredientRow("r-1", 1, { ingredient_id: "ing-1" }),
-      makeRecipeIngredientRow("r-1", 2, { ingredient_id: null }),
-    ];
-    const ingredients = [makeIngredient("ing-1", "cumin seed")];
-    vi.mocked(getRecipeIngredients).mockResolvedValue(rows);
-    vi.mocked(getIngredientsByIds).mockResolvedValue(ingredients);
+  it("returns the recipe's ingredient groups as hydrated", async () => {
+    const ingredients = makeIngredientLines(["1 tsp cumin", "2 cups rice"]);
+    vi.mocked(getRecipeById).mockResolvedValue(
+      makeRecipe("r-1", "Test Recipe", { ingredients }),
+    );
 
     const res = await GET(
       new Request("http://localhost/api/recipes/r-1/ingredients"),
@@ -71,9 +66,7 @@ describe("GET /api/recipes/[id]/ingredients", () => {
     );
 
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ rows, ingredients });
-    // Duplicate and null ingredient_ids collapse before the catalog fetch.
-    expect(getIngredientsByIds).toHaveBeenCalledWith(["ing-1"]);
+    expect(await res.json()).toEqual({ ingredients });
   });
 
   it("404s for an unknown recipe", async () => {
@@ -85,20 +78,18 @@ describe("GET /api/recipes/[id]/ingredients", () => {
     );
 
     expect(res.status).toBe(404);
-    expect(getRecipeIngredients).not.toHaveBeenCalled();
   });
 });
 
 describe("PATCH /api/recipes/[id]/ingredients (line text)", () => {
   const makeParams = (id = "r-1") => ({ params: Promise.resolve({ id }) });
-  const lines = [
-    { name: "100 g butter", group: "Cake" },
-    "5 g magic dust",
-  ];
 
   function recipeWithLines() {
     return makeRecipe("r-1", "Test Recipe", {
-      metadata: { schema: { name: "Test Recipe", recipeIngredient: lines } },
+      ingredients: [
+        makeIngredientGroup("Cake", ["100 g butter"]),
+        makeIngredientGroup(undefined, ["5 g magic dust"]),
+      ],
     });
   }
 
@@ -106,79 +97,39 @@ describe("PATCH /api/recipes/[id]/ingredients (line text)", () => {
     vi.clearAllMocks();
     vi.mocked(getIsLoggedIn).mockResolvedValue(true);
     vi.mocked(getRecipeById).mockResolvedValue(recipeWithLines());
-    vi.mocked(getRecipeIngredients).mockResolvedValue([]);
+    // Echo the groups the patch asked for, as the repo would after the write.
     vi.mocked(updateRecipeRow).mockImplementation(async (id, patch) =>
       makeRecipe(id, "Test Recipe", {
-        metadata: {
-          schema: {
-            name: "Test Recipe",
-            recipeIngredient: patch.schema?.recipeIngredient,
-          },
-        },
+        ingredients: draftIngredientGroups(patch.ingredients ?? []),
       }),
     );
   });
 
-  it("replaces a string line and returns the updated array", async () => {
+  it("rewrites one line's text in place, keeping its id, group and neighbours", async () => {
     const res = await PATCH_LINE(
-      makeJsonRequest({ index: 1, text: "6 g magic dust" }, { method: "PATCH" }),
+      makeJsonRequest({ id: "ri-5-g-magic-dust", text: "6 g magic dust" }, { method: "PATCH" }),
       makeParams(),
     );
 
     expect(res.status).toBe(200);
-    expect((await res.json()).recipeIngredient).toEqual([
-      { name: "100 g butter", group: "Cake" },
-      "6 g magic dust",
-    ]);
     expect(updateRecipeRow).toHaveBeenCalledWith("r-1", {
-      schema: {
-        recipeIngredient: [{ name: "100 g butter", group: "Cake" }, "6 g magic dust"],
-      },
+      ingredients: [
+        { name: "Cake", ingredients: [{ id: "ri-100-g-butter", raw_text: "100 g butter" }] },
+        { ingredients: [{ id: "ri-5-g-magic-dust", raw_text: "6 g magic dust" }] },
+      ],
+    });
+    // The response is the recipe's groups after the write, id and all.
+    const body = await res.json();
+    expect(body.ingredients[1].ingredients[0]).toMatchObject({
+      id: "ri-5-g-magic-dust",
+      raw_text: "6 g magic dust",
+      quantity: 6,
     });
   });
 
-  // updateRecipeRow re-parses the derived rows in-band (no matcher run), so
-  // they are already current here. Sending them back is what lets the client
-  // show the edited line still carrying its match instead of blanking it.
-  it("returns the re-parsed rows alongside the lines", async () => {
-    const rows = [
-      makeRecipeIngredientRow("r-1", 1, {
-        line_id: "L2",
-        raw_text: "6 g magic dust",
-        ingredient_id: "ing-dust",
-      }),
-    ];
-    vi.mocked(getRecipeIngredients).mockResolvedValue(rows);
-
+  it("rejects an id that names no line with 400", async () => {
     const res = await PATCH_LINE(
-      makeJsonRequest({ index: 1, text: "6 g magic dust" }, { method: "PATCH" }),
-      makeParams(),
-    );
-
-    expect((await res.json()).rows).toEqual(rows);
-    // Read AFTER the write, or the response carries the pre-edit rows.
-    expect(getRecipeIngredients).toHaveBeenCalledWith("r-1");
-    expect(vi.mocked(updateRecipeRow).mock.invocationCallOrder[0]).toBeLessThan(
-      vi.mocked(getRecipeIngredients).mock.invocationCallOrder[0],
-    );
-  });
-
-  it("edits an object line's name while preserving its group", async () => {
-    const res = await PATCH_LINE(
-      makeJsonRequest({ index: 0, text: "150 g butter" }, { method: "PATCH" }),
-      makeParams(),
-    );
-
-    expect(res.status).toBe(200);
-    expect((await res.json()).recipeIngredient[0]).toEqual({
-      name: "150 g butter",
-      group: "Cake",
-    });
-  });
-
-  it("rejects an out-of-range index with 400", async () => {
-    const res = await PATCH_LINE(
-      makeJsonRequest({ index: 2, text: "anything" }, { method: "PATCH" }),
+      makeJsonRequest({ id: "ri-nope", text: "anything" }, { method: "PATCH" }),
       makeParams(),
     );
 
@@ -188,7 +139,7 @@ describe("PATCH /api/recipes/[id]/ingredients (line text)", () => {
 
   it("rejects blank text with 400", async () => {
     const res = await PATCH_LINE(
-      makeJsonRequest({ index: 0, text: "   " }, { method: "PATCH" }),
+      makeJsonRequest({ id: "ri-100-g-butter", text: "   " }, { method: "PATCH" }),
       makeParams(),
     );
 
@@ -200,7 +151,7 @@ describe("PATCH /api/recipes/[id]/ingredients (line text)", () => {
     vi.mocked(getRecipeById).mockResolvedValue(null);
 
     const res = await PATCH_LINE(
-      makeJsonRequest({ index: 0, text: "150 g butter" }, { method: "PATCH" }),
+      makeJsonRequest({ id: "ri-100-g-butter", text: "150 g butter" }, { method: "PATCH" }),
       makeParams("nope"),
     );
 
@@ -213,7 +164,7 @@ describe("PATCH /api/recipes/[id]/ingredients (line text)", () => {
     );
 
     const res = await PATCH_LINE(
-      makeJsonRequest({ index: 0, text: "150 g butter" }, { method: "PATCH" }),
+      makeJsonRequest({ id: "ri-100-g-butter", text: "150 g butter" }, { method: "PATCH" }),
       makeParams(),
     );
 

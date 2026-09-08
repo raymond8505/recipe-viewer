@@ -1,4 +1,4 @@
-import type { SchemaRecipe, SchemaOrgIngredientLine } from "@/types/recipe";
+import type { RecipeIngredientGroup, SchemaRecipe } from "@/types/recipe";
 import type { IngredientNutrition } from "@/types/ingredient";
 import {
   parseIngredient,
@@ -54,9 +54,13 @@ export interface ScalableRecipeState {
 }
 
 export interface ScaledIngredient {
+  /** Position in reading order (group by group, line by line). */
   index: number;
+  /** The `RecipeIngredient.id` — the line's identity across scaling, editing and reordering. */
+  id: string;
+  /** The name of the group the line sits in; undefined in the nameless group. */
   group?: string;
-  /** Raw schema string (or .name when the source was a SchemaOrgIngredientLine object). */
+  /** The line's text as the recipe says it. */
   original: string;
   /** Pre-scale parse, or null for unparseable strings like "salt to taste". */
   parsed: ParsedIngredient | null;
@@ -95,31 +99,25 @@ function refIndex(ref: IngredientRef): number {
 
 interface InternalEntry {
   index: number;
+  id: string;
   group?: string;
   text: string;
   parsed: ParsedIngredient | null;
 }
 
-function parseEntry(
-  entry: string | SchemaOrgIngredientLine,
-  index: number,
-): InternalEntry {
-  const text = typeof entry === "string" ? entry : entry.name;
-  const group = typeof entry === "string" ? undefined : entry.group;
-  return { index, group, text, parsed: parseIngredient(text) };
-}
-
 /**
- * Immutable wrapper around SchemaRecipe owning three scaling dimensions:
+ * Immutable wrapper around a recipe's schema and ingredient groups, owning
+ * three scaling dimensions:
  *   - ingredientScale: multiplier applied to every ingredient amount
  *   - nutritionPortions: divisor for nutrition; null = per scaled serving
  *
  * Anchor operations resolve to changes in these fields; they do not introduce
- * new state. Every mutation method returns a new instance; the schema itself
- * is never modified.
+ * new state. Every mutation method returns a new instance; the schema and the
+ * groups are never modified.
  */
 export class ScalableRecipe {
   readonly schema: SchemaRecipe;
+  readonly ingredientGroups: readonly RecipeIngredientGroup[];
   readonly state: ScalableRecipeState;
   readonly baseServings: number | null;
   /**
@@ -132,10 +130,12 @@ export class ScalableRecipe {
 
   constructor(
     schema: SchemaRecipe,
+    ingredients: readonly RecipeIngredientGroup[] = [],
     state?: Partial<ScalableRecipeState>,
     normalized?: NormalizedNutrition | null,
   ) {
     this.schema = schema;
+    this.ingredientGroups = ingredients;
     this.baseServings = parseServings(schema.recipeYield);
     this.normalized = normalized ?? null;
     this.state = Object.freeze({
@@ -143,9 +143,23 @@ export class ScalableRecipe {
       nutritionPortions: state?.nutritionPortions ?? null,
       rangeAnchors: state?.rangeAnchors ?? {},
     });
-    this._entries = Object.freeze(
-      (schema.recipeIngredient ?? []).map(parseEntry),
-    );
+    const entries: InternalEntry[] = [];
+    for (const group of ingredients) {
+      for (const ing of group.ingredients) {
+        entries.push({
+          index: entries.length,
+          id: ing.id,
+          group: group.name,
+          text: ing.raw_text,
+          parsed: parseIngredient(ing.raw_text),
+        });
+      }
+    }
+    this._entries = Object.freeze(entries);
+  }
+
+  private with(state: ScalableRecipeState): ScalableRecipe {
+    return new ScalableRecipe(this.schema, this.ingredientGroups, state, this.normalized);
   }
 
   scalePortionsTo(targetServings: number): ScalableRecipe {
@@ -154,22 +168,14 @@ export class ScalableRecipe {
     const clamped = Math.max(1, targetServings);
     const newScale = clamped / this.baseServings;
     if (newScale === this.state.ingredientScale) return this;
-    return new ScalableRecipe(
-      this.schema,
-      { ...this.state, ingredientScale: newScale },
-      this.normalized,
-    );
+    return this.with({ ...this.state, ingredientScale: newScale });
   }
 
   splitPortions(portions: number): ScalableRecipe {
     if (!Number.isFinite(portions)) return this;
     const clamped = Math.max(1, Math.round(portions));
     if (clamped === this.state.nutritionPortions) return this;
-    return new ScalableRecipe(
-      this.schema,
-      { ...this.state, nutritionPortions: clamped },
-      this.normalized,
-    );
+    return this.with({ ...this.state, nutritionPortions: clamped });
   }
 
   anchorIngredientAmount(ref: IngredientRef, amount: number): ScalableRecipe {
@@ -192,11 +198,7 @@ export class ScalableRecipe {
     const rangeAnchors = wasRange
       ? { ...this.state.rangeAnchors, [idx]: base }
       : this.state.rangeAnchors;
-    return new ScalableRecipe(
-      this.schema,
-      { ...this.state, ingredientScale: newScale, rangeAnchors },
-      this.normalized,
-    );
+    return this.with({ ...this.state, ingredientScale: newScale, rangeAnchors });
   }
 
   reset(): ScalableRecipe {
@@ -207,7 +209,7 @@ export class ScalableRecipe {
     ) {
       return this;
     }
-    return new ScalableRecipe(this.schema, undefined, this.normalized);
+    return new ScalableRecipe(this.schema, this.ingredientGroups, undefined, this.normalized);
   }
 
   get ingredients(): ScaledIngredient[] {
@@ -223,6 +225,7 @@ export class ScalableRecipe {
             : entry.parsed.amount;
       return {
         index: entry.index,
+        id: entry.id,
         group: entry.group,
         original: entry.text,
         parsed: entry.parsed,
@@ -234,25 +237,18 @@ export class ScalableRecipe {
   }
 
   /**
-   * Same partitioning rule as format.ts/groupIngredients: returns one
-   * unlabeled group when no ingredient has `group`; otherwise partitions by
-   * group in insertion order, with ungrouped items collected under a null heading.
+   * The scaled lines in their groups, as the recipe stores them: one entry per
+   * group in order, `heading` null for the nameless group. A recipe with no
+   * ingredients yields no groups.
    */
   get groupedIngredients(): Array<{ heading: string | null; items: ScaledIngredient[] }> {
     const items = this.ingredients;
-    const hasGroups = items.some((i) => i.group != null);
-    if (!hasGroups) return [{ heading: null, items }];
-    const order: Array<string | null> = [];
-    const map = new Map<string | null, ScaledIngredient[]>();
-    for (const ing of items) {
-      const g = ing.group ?? null;
-      if (!map.has(g)) {
-        order.push(g);
-        map.set(g, []);
-      }
-      map.get(g)!.push(ing);
-    }
-    return order.map((heading) => ({ heading, items: map.get(heading)! }));
+    let offset = 0;
+    return this.ingredientGroups.map((group) => {
+      const slice = items.slice(offset, offset + group.ingredients.length);
+      offset += group.ingredients.length;
+      return { heading: group.name ?? null, items: slice };
+    });
   }
 
   get currentServings(): number | null {
@@ -399,7 +395,7 @@ function amountsEqual(a: ParsedAmount, b: ParsedAmount): boolean {
 /**
  * Render a `ScaledIngredient` back to source-shaped text ("2 cups flour" at 2×
  * → "4 cups flour"). Used by the shopping-list copy so the clipboard reflects
- * the amounts on screen rather than the base schema.
+ * the amounts on screen rather than the base recipe.
  *
  * Two cases return `original` untouched: unparseable lines ("salt to taste"),
  * and lines still sitting at their base amount. The latter guard matters —

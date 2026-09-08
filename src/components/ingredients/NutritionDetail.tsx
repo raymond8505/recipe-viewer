@@ -13,8 +13,7 @@ import { Button } from "@/components/ui/button";
 import { WarningIcon } from "@/components/icons";
 import { pluralize } from "@/lib/format";
 import { useNutritionDetail } from "@/hooks/useNutritionDetail";
-import type { QuantitativeValue, SchemaOrgIngredientLine } from "@/types/recipe";
-import type { IngredientRow, RecipeIngredientRow } from "@/types/ingredient";
+import type { QuantitativeValue, RecipeIngredientGroup } from "@/types/recipe";
 import type {
   IngredientAutocompleteSearch,
   UsdaFoodSearch,
@@ -32,10 +31,9 @@ const COLUMN_COUNT = NUTRITION_DETAIL_COLUMNS.length + 2;
 
 interface NutritionDetailProps {
   recipeId: string;
-  schemaIngredients: Array<string | SchemaOrgIngredientLine>;
+  /** The recipe's ingredient groups, each line carrying its catalog `ingredient`. */
+  ingredients: RecipeIngredientGroup[];
   recipeYield: string | string[] | QuantitativeValue | undefined;
-  initialRows: RecipeIngredientRow[];
-  initialIngredients: IngredientRow[];
   /** DI seam for the autocomplete so stories/tests run without a backend. */
   search?: IngredientAutocompleteSearch;
   /** DI seam for the autocomplete's USDA fallback search. */
@@ -43,13 +41,13 @@ interface NutritionDetailProps {
 }
 
 /**
- * Nutrition breakdown of a recipe's normalized ingredient lines, grouped like
- * the recipe display. Each row shows the line's contribution (per-100g catalog
- * nutrition scaled by the parsed amount converted to grams). Editable cells:
- * the recipe line text (edits the recipe schema itself — a deterministic
- * re-parse, never a re-match) and the normalized-ingredient autocomplete, which
- * persists the association and recomputes the row + totals. Table chrome
- * (frozen columns, sticky header, capped scroll box) mirrors IngredientsTable.
+ * Nutrition breakdown of a recipe's ingredients, grouped like the recipe
+ * display. Each row shows the line's contribution (per-100g catalog nutrition
+ * scaled by the parsed amount converted to grams). Editable cells: the recipe
+ * line text (edits the recipe itself — a deterministic re-parse, never a
+ * re-match) and the normalized-ingredient autocomplete, which persists the
+ * association and recomputes the row + totals. Table chrome (frozen columns,
+ * sticky header, capped scroll box) mirrors IngredientsTable.
  *
  * Re-matching is only ever something the CURATOR asks for: the autocomplete,
  * the Estimate action, or the Normalize button. Rewording a line is not a
@@ -63,10 +61,8 @@ interface NutritionDetailProps {
  */
 export default function NutritionDetail({
   recipeId,
-  schemaIngredients,
+  ingredients,
   recipeYield,
-  initialRows,
-  initialIngredients,
   search,
   usdaSearch,
 }: NutritionDetailProps) {
@@ -76,10 +72,8 @@ export default function NutritionDetail({
     perPortion,
     servings,
     excludedCount,
-    hasStaleLines,
     disabledCount,
     savingRowId,
-    savingLineIndex,
     error,
     selectIngredient,
     importUsda,
@@ -89,27 +83,11 @@ export default function NutritionDetail({
     toggleLine,
     setLinesEnabled,
     enableAll,
-  } = useNutritionDetail(
-    recipeId,
-    schemaIngredients,
-    recipeYield,
-    initialRows,
-    initialIngredients,
-  );
+  } = useNutritionDetail(recipeId, ingredients, recipeYield);
 
   return (
     <div className="space-y-4">
-      {/* NormalizeAction carries `ml-auto`, which is what right-aligns it
-          whether or not the stale-lines warning is there — `justify-between`
-          would need a placeholder element when the warning is absent. */}
       <div className="flex flex-wrap items-center gap-3">
-        {hasStaleLines && (
-          <p className="flex items-center gap-2 text-sm text-muted-foreground">
-            <WarningIcon />
-            Some lines have never been normalized and are excluded from totals —
-            normalize to build their rows.
-          </p>
-        )}
         <NormalizeAction recipeId={recipeId} />
       </div>
 
@@ -159,7 +137,7 @@ export default function NutritionDetail({
                       columnCount={COLUMN_COUNT}
                       onToggle={(enabled) =>
                         setLinesEnabled(
-                          group.lines.map((l) => l.index),
+                          group.lines.map((l) => l.id),
                           enabled,
                         )
                       }
@@ -167,12 +145,9 @@ export default function NutritionDetail({
                   )}
                   {group.lines.map((line) => (
                     <NutritionDetailRow
-                      key={line.index}
+                      key={line.id}
                       line={line}
-                      saving={
-                        (savingRowId != null && savingRowId === line.row?.id) ||
-                        savingLineIndex === line.index
-                      }
+                      saving={savingRowId === line.id}
                       search={search}
                       usdaSearch={usdaSearch}
                       onSelect={selectIngredient}

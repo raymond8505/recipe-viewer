@@ -116,20 +116,6 @@ export const recipeFixtures: RecipeRow[] = [
         recipeCuisine: "Thai",
         recipeCategory: "Main Course",
         datePublished: "2026-01-09",
-        recipeIngredient: [
-          { name: "1 lb ground chicken", group: "Meatballs" },
-          { name: "3 cloves garlic, minced", group: "Meatballs" },
-          { name: "1 tbsp fish sauce", group: "Meatballs" },
-          { name: "1/4 cup panko breadcrumbs", group: "Meatballs" },
-          { name: "1 egg", group: "Meatballs" },
-          { name: "300 ml full-fat coconut milk", group: "Curry sauce" },
-          { name: "2 tbsp red curry paste", group: "Curry sauce" },
-          { name: "1 tbsp brown sugar", group: "Curry sauce" },
-          { name: "1 tbsp lime juice", group: "Curry sauce" },
-          { name: "3-5 thai basil leaves, torn", group: "Curry sauce" },
-          { name: "1/4 cup crushed peanuts, for garnish", group: "Garnish" },
-          { name: "cilantro, to taste", group: "Garnish" },
-        ],
         recipeInstructions: [
           {
             "@type": "HowToSection",
