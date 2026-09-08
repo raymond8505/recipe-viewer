@@ -2,6 +2,7 @@
 //
 //   yarn sync:ingredient-columns              # every drifted recipe
 //   yarn sync:ingredient-columns --limit=10   # cap a pass (smoke-testing)
+//   yarn sync:ingredient-columns --id=<uuid>  # one recipe only
 //   yarn sync:ingredient-columns --dry-run    # report only, write nothing
 //
 // `recipes.ingredients` + `recipe_ingredients` (db/migrations/0016) are the
@@ -61,6 +62,20 @@ function parseLimit(): number {
   return value;
 }
 
+// A single recipe to sync, for the case where a drifted recipe should be left
+// as it is: the column may carry an edit the blob never saw, and a blanket
+// pass would revert it.
+function parseId(): string | null {
+  const arg = process.argv.find((a) => a.startsWith("--id="));
+  if (!arg) return null;
+  const value = arg.slice("--id=".length).trim();
+  if (!value) {
+    console.error(`Invalid --id value: ${arg}`);
+    process.exit(1);
+  }
+  return value;
+}
+
 /**
  * The blob's lines as write input, with each line naming its row where the
  * blob's line_id resolves to one. Grouping goes through the same
@@ -93,13 +108,16 @@ function planInput(lines: BlobLine[], rows: LegacyRow[]): RecipeIngredientGroupI
 
 async function main(): Promise<void> {
   const limit = parseLimit();
+  const onlyId = parseId();
   const dryRun = process.argv.includes("--dry-run");
   const supabase = getSupabaseAdminClient();
 
-  const { data, error } = await supabase
+  let query = supabase
     .from("recipes")
     .select("id, name, metadata, ingredients")
     .order("created_at", { ascending: true });
+  if (onlyId) query = query.eq("id", onlyId);
+  const { data, error } = await query;
 
   if (error) {
     console.error(`Failed to list recipes: ${error.message}`);
@@ -107,6 +125,10 @@ async function main(): Promise<void> {
   }
 
   const recipes = (data ?? []) as unknown as SyncRow[];
+  if (onlyId && recipes.length === 0) {
+    console.error(`No recipe with id ${onlyId}`);
+    process.exit(1);
+  }
   console.log(`${recipes.length} recipes; scanning for drift${dryRun ? " (dry run)" : ""}`);
 
   let scanned = 0;
