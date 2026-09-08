@@ -1,28 +1,41 @@
 # Recipe Schema — Custom Fields and Serialization
 
-## Ingredient Grouping System
+## Ingredients are not on `SchemaRecipe`
 
-The app uses a custom schema that extends Schema.org/Recipe. Individual ingredients in `recipeIngredient` can be either plain strings (legacy/ungrouped) or objects with the following shape:
+Internally a recipe is two things: `SchemaRecipe` (`metadata.schema` — name, yield, times, instructions, nutrition, notes) and its ingredients, `RecipeRow.ingredients: RecipeIngredientGroup[]`. The two travel together on the client as a `RecipeDocument` (`{ schema, ingredients }`). There is no `recipeIngredient` field anywhere inside the app; the type does not have one, and the repo layer deletes the key from the stored blob at every read exit (full rules → [supabase-data-layer.md](supabase-data-layer.md)).
 
 ```ts
-{ name: string; group?: string }
+interface RecipeIngredientGroup { name?: string; ingredients: RecipeIngredient[] }
+interface RecipeIngredient extends Omit<RecipeIngredientRow, "recipe_id"> {
+  ingredient?: IngredientRow | null;   // catalog row; undefined = not loaded, null = unmatched
+}
 ```
 
-- `name` — the ingredient text (e.g. `"1 tsp cumin"`)
-- `group` — optional; when set, its value matches the `name` of a `HowToSection` in `recipeInstructions`
+- A group's `name` is absent for the nameless group. An ungrouped recipe is exactly one nameless group; a grouped one is several, each named. Position is the array index at both levels.
+- A `RecipeIngredient` IS its `recipe_ingredients` row: `id` is its identity, `raw_text` is what the recipe says, the parse fields and the catalog association ride along. `newRecipeIngredient` (`src/lib/recipeIngredients.ts`) builds one from text alone — parsed deterministically, unmatched, freshly identified — for previews that exist before any row does (a re-scrape under review, a recipe pushed in through the window API).
+- Renderers read the groups directly (`ScalableRecipe.groupedIngredients` is the groups, scaled). There is no partition rule to apply.
 
-**Rendering rule:** if any ingredient has a `group` value, all ingredients are partitioned into labeled sections using `group` as the heading. Ingredients without `group` fall into an unlabeled section. If no ingredient has `group`, the list renders flat with no section headings.
+**The write input is `RecipeIngredientGroupInput`** — the same groups with each line reduced to `{ id?, raw_text }`. `id` names the row the line already is; leave it off only for a new line. The editor draft carries it as `EditableIngredient.recipeIngredientId`, and `editableToIngredientInput` hands it back on save — that is what keeps a line's catalog match across an edit.
 
-The helpers that implement this live in `src/lib/format.ts`:
-- `getIngredientText(ingredient)` — extracts the display string from either format
-- `groupIngredients(ingredients)` — returns `{ heading: string | null; items: [...] }[]` in insertion order
+## The four Schema.org edges
+
+Schema.org is a wire format for the outside world, produced and consumed in exactly four places. Nothing else may build a `recipeIngredient` array or read one.
+
+| Edge | Direction | Function |
+| --- | --- | --- |
+| JSON-LD `<script>` in `RecipeDetail` | out | `toSchemaOrgJsonLd(schema, ingredients, options?)` — explicit allowlist of standard fields; lines flattened to strings |
+| Image-generation webhook (`/regenerate-image`) | out | `toSchemaOrgRecipe(schema, ingredients)` — the whole document, custom fields included, lines flattened |
+| `window.recipeTools` (`src/lib/windowApi.ts`) | both | `toSchemaOrgRecipe` out; `documentFromSchemaOrg` in (lines drafted) |
+| Scraped input — MCP `create_recipe`, the `/rescrape` webhook response | in | `fromSchemaOrgIngredients(lines)` → `RecipeIngredientGroupInput[]`; groups by first appearance, ungrouped lines join the one nameless group |
+
+The types: `SchemaOrgRecipe = SchemaRecipe & { recipeIngredient?: string[] }` (outbound) and `SchemaOrgIngredientLine` (`{ name, group? }`, accepted alongside bare strings inbound). MCP `update_recipe` speaks the internal shape — `ingredients` groups — and rejects `schema.recipeIngredient` outright rather than silently stripping it.
 
 ## Base Servings Editing
 
 Edit mode edits the recipe's **base servings** (persisted `recipeYield`), distinct from the `ServingsControl` stepper which only scales the display. `recipeYield` is `string | string[] | QuantitativeValue`; `parseServings` (read) and `applyServings` (write-back) in `src/lib/units.ts` are inverses: `parseServings(applyServings(yld, n)) === n`.
 
 - **`applyServings` preserves shape:** QV keeps `unitText`/`valueReference` (whole-recipe weight — per-serving weight recomputes); strings get their first amount token replaced ("Makes 6" → "Makes 8"); ranges and arrays deliberately collapse to a single string; no/unparseable yield becomes `{ "@type": "QuantitativeValue", value: n }`.
-- **`useRecipeEditor.buildSchema` only applies servings when the parsed input differs from `parseServings(base.recipeYield)`.** Load-bearing: `"6-8 servings"` seeds the input with midpoint "7", so an untouched save must not collapse the range (regression test in `useRecipeEditor.test.ts`). Invalid input (blank/non-integer/<1) degrades to "no change" — it never blocks Save.
+- **`useRecipeEditor.buildPatch` only applies servings when the parsed input differs from `parseServings(base.recipeYield)`.** Load-bearing: `"6-8 servings"` seeds the input with midpoint "7", so an untouched save must not collapse the range (pinned by a test in `useRecipeEditor.test.ts`). Invalid input (blank/non-integer/<1) degrades to "no change" — it never blocks Save.
 - **UI:** `TimeYieldStats`'s `servingsEdit` prop takes precedence over the stepper and forces the band to render even with zero stats (so a yield-less recipe can gain one). The band's cell components `Stat` and `ServingsInputCell` live in their own modules in `src/components/` with their own stories (PR #60 review) — don't fold them back in.
 - A heavyweight multi-field `YieldEditor` was removed in 7e81735; don't re-add whole-yield editing, servings-only is intentional.
 
@@ -38,11 +51,11 @@ Two consequences for anything touching `SchemaRecipe`:
 
 ## Schema.org JSON-LD Sanitization
 
-Custom fields (`notes`, ingredient `group` objects) must never appear in the JSON-LD `<script>` output — external tools only understand the standard Schema.org/Recipe spec.
+Custom fields (`notes`, `cookingNotes`, ingredient group names, row ids) must never appear in the JSON-LD `<script>` output — external tools only understand the standard Schema.org/Recipe spec.
 
-`toSchemaOrgJsonLd(schema)` in `src/lib/format.ts` is the single gatekeeper: it uses an **explicit allowlist** of standard fields and normalizes `recipeIngredient` objects to plain strings via `getIngredientText`.
+`toSchemaOrgJsonLd(schema, ingredients)` in `src/lib/format.ts` is the single gatekeeper: it uses an **explicit allowlist** of standard fields and emits `recipeIngredient` as the lines' `raw_text`, in group order.
 
 **Rules:**
 - Any new standard Schema.org/Recipe property added to `SchemaRecipe` must also be added to the `optionalFields` array in `toSchemaOrgJsonLd`, or it won't appear in JSON-LD output
 - Any new custom/app-level field on `SchemaRecipe` must be intentionally left out of `toSchemaOrgJsonLd`
-- `recipeIngredient` objects (`{ name, group }`) are internal-only — always flatten to strings before external serialization
+- Ingredient groups and entities are internal-only — only their text crosses this boundary

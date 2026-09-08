@@ -9,12 +9,14 @@ or shaped goes here. Files are named `src/fixtures/<topic>.ts` with a barrel at 
 
 | Module | Exports |
 | --- | --- |
-| `recipes` | `recipeFixtures` (5 real production recipes with Supabase image URLs), `makeRecipe(id, name, overrides?)` |
-| `ingredients` | `ingredientFixtures` (real USDA per-100g figures), `makeIngredient`, `makeRecipeIngredient`, `matchedLinesScenario` |
-| `rescrape` | `rescrapeFixture: SchemaRecipe` — used by the rescrape and update tests |
+| `recipes` | `recipeFixtures` (5 real production recipes with Supabase image URLs; `[2]` carries three ingredient groups), `makeRecipe(id, name, overrides?)` (`ingredients: []` by default) |
+| `ingredients` | `ingredientFixtures` (real USDA per-100g figures), `makeIngredient` (catalog row), `makeRecipeIngredient(text, overrides?)` (an entity — id `ri-<slug of text>`, parse fields from the deterministic parser), `makeMatchedIngredient(text, catalogRow, overrides?)`, `makeIngredientGroup(name \| undefined, items)`, `makeIngredientLines(texts)` (one nameless group), `makeRecipeIngredientRow(recipeId, n, overrides?)` (a table row, for repo tests), `matchedLinesScenario` |
+| `rescrape` | `rescrapeFixture: SchemaOrgRecipe` (what the webhook returns), `rescrapeResponseFixture` (what `/rescrape` hands the client: `schema` + input groups), `rescrapeSavedFixture` (what `/update` echoes: `schema` + hydrated groups) |
 | `nutrition` | `fullSchemaNutrition` (all ten Schema.org nutrients), `sparseSchemaNutrition`, and their parsed forms `fullNutrientValues` / `sparseNutrientValues` |
 | `timers` | `makeTimer` |
-| `scalable` | `scalableBaseSchema`, `quantitativeValueYield`, `makeSchemaRecipe`, `makeScalableRecipe`, `makeScaledIngredient` |
+| `scalable` | `scalableBaseSchema`, `scalableBaseIngredients` (four nameless lines + a "Wet" group), `quantitativeValueYield`, `makeSchemaRecipe`, `makeScalableRecipe({ schema?, ingredients? }, state?)`, `makeScaledIngredient(text, scale?)` |
+
+Ingredient groups in a story or test are built from text: `makeIngredientLines(["2 cups flour"])` for an ungrouped list, `makeIngredientGroup("Sauce", [...])` per named group, `makeMatchedIngredient(text, catalogRow)` when the line must carry its catalog data. The entity's id is derived from its text, so an assertion can name a line without a lookup; pass `id` in the overrides when two lines share their text.
 
 ## Test-only fixtures are direct-import, not in the barrel
 
