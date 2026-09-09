@@ -19,6 +19,7 @@ import { METRIC_YIELD_UNITS } from "@/lib/units";
 import {
   METRIC_UNIT_OR_LIST,
   METRIC_UNIT_SLASHES,
+  RECIPE_INGREDIENT_ON_UPDATE_ERROR,
   TBSP_ML_EXAMPLE,
 } from "./copy";
 import { TOOL, type ToolName } from "./toolNames";
@@ -338,8 +339,7 @@ export const TOOL_SCHEMAS = {
       schema: {
         ...storedRecipeJsonSchema,
         required: [],
-        description:
-          "Partial recipe fields, merged into what is stored — only the keys you pass change. Has NO recipeIngredient: send ingredient changes through `ingredients`.",
+        description: `Partial recipe fields, merged into what is stored — only the keys you pass change. ${RECIPE_INGREDIENT_ON_UPDATE_ERROR}`,
       },
       ingredients: recipeIngredientsJsonSchema,
     },

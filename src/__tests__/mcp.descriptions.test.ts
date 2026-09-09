@@ -39,6 +39,7 @@ import {
   METRIC_UNIT_OR_LIST,
   METRIC_UNIT_SLASHES,
   orList,
+  RECIPE_INGREDIENT_ON_UPDATE_ERROR,
   TBSP_ML_EXAMPLE,
 } from "@/lib/mcp/copy";
 import { NUTRITION_FIELDS } from "@/lib/nutritionFields";
@@ -174,5 +175,30 @@ describe("enum defaults", () => {
     expect(descriptionOf("delete_recipe")).toContain(
       `status to '${ARCHIVED_RECIPE_STATUS}'`,
     );
+  });
+});
+
+describe("update_recipe's ingredient contract", () => {
+  // An agent must be able to get the payload shape right from the docs alone.
+  // Both description surfaces carry the same words the tool throws on failure,
+  // so reading and failing teach the same lesson — and the shared constant is
+  // what stops the three drifting apart.
+  it("states the rule in the tool description", () => {
+    expect(descriptionOf("update_recipe")).toContain(
+      RECIPE_INGREDIENT_ON_UPDATE_ERROR,
+    );
+  });
+
+  it("states the rule on the schema field it constrains", () => {
+    expect(TOOL_SCHEMAS.update_recipe.properties.schema.description).toContain(
+      RECIPE_INGREDIENT_ON_UPDATE_ERROR,
+    );
+  });
+
+  it("is the message the tool actually throws", async () => {
+    const { updateRecipe } = await import("@/lib/mcp/tools");
+    await expect(
+      updateRecipe({ id: "r1", schema: { recipeIngredient: ["1 egg"] } as never }),
+    ).rejects.toMatchObject({ message: RECIPE_INGREDIENT_ON_UPDATE_ERROR });
   });
 });

@@ -26,6 +26,7 @@ import { generateEmbedding } from "@/lib/embedding";
 import { exhaustiveKeys } from "@/lib/exhaustive";
 import { ingredientEmbeddingText, ingredientQueryText } from "@/lib/ingredientAliases";
 import { CUSTOM_RECIPE_SOURCE } from "@/lib/format";
+import { RECIPE_INGREDIENT_ON_UPDATE_ERROR } from "./copy";
 import { ARCHIVED_RECIPE_STATUS } from "@/lib/schemas/recipe";
 import { RECIPE_TOKEN_TTL_SECONDS, signRecipeToken } from "./recipeToken";
 import { env } from "@/env";
@@ -323,9 +324,6 @@ export async function createRecipe(
     throw toToolError(err, "create_failed");
   }
 }
-
-const RECIPE_INGREDIENT_ON_UPDATE_ERROR =
-  "schema.recipeIngredient is not accepted on update. Pass `ingredients` — groups of { id?, raw_text } — and keep each line's id from get_recipe so it keeps its catalog match; leave id off only for a new line.";
 
 export async function updateRecipe(
   args: RecipeUpdateInput,

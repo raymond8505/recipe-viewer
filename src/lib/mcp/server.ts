@@ -7,6 +7,7 @@ import {
   INGREDIENT_DETAIL_ONLY_LIST,
   METRIC_UNIT_SLASHES,
   NUTRITION_FIELD_LIST,
+  RECIPE_INGREDIENT_ON_UPDATE_ERROR,
   TBSP_ML_EXAMPLE,
 } from "./copy";
 import {
@@ -115,7 +116,7 @@ const TOOL_IMPLS: {
     call: (args) => createRecipe(recipeCreateInputSchema.parse(args)),
   },
   update_recipe: {
-    description: `Patch fields on an existing recipe — only the fields you pass change. \`schema\` is merged into what is stored (not replaced) and has NO recipeIngredient: the call fails if you send one. Ingredients go through \`ingredients\`, which REPLACES the whole list: send every line back with the id ${TOOL.get_recipe} returned for it (rewording is fine — the id is what keeps the line's catalog match), and leave id off only for a genuinely new line. Prefer a structured QuantitativeValue for recipeYield (value = serving count, unitText = its label, valueReference = raw weight/volume in metric units ${METRIC_UNIT_SLASHES} for per-serving nutrition); plain-string yields are accepted but deprecated. cookingNotes is read-only for agents: if present it is ignored (the call still succeeds) and the response carries a 'warnings' note. Use ${TOOL.clear_cooking_notes} to clear it.`,
+    description: `Patch fields on an existing recipe — only the fields you pass change. \`schema\` is merged into what is stored (not replaced). ${RECIPE_INGREDIENT_ON_UPDATE_ERROR} Prefer a structured QuantitativeValue for recipeYield (value = serving count, unitText = its label, valueReference = raw weight/volume in metric units ${METRIC_UNIT_SLASHES} for per-serving nutrition); plain-string yields are accepted but deprecated. cookingNotes is read-only for agents: if present it is ignored (the call still succeeds) and the response carries a 'warnings' note. Use ${TOOL.clear_cooking_notes} to clear it.`,
     call: (args) => updateRecipe(recipeUpdateInputSchema.parse(args)),
   },
   clear_cooking_notes: {
