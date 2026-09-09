@@ -35,7 +35,7 @@ Unit tests follow the code: helpers moved into `format.ts` are tested in `format
 - **Working on the Nutrition Facts label** (`NutritionFactsLabel`, `labelRows.ts`, `NutrientRowTr`) → [docs/nutrition-label.md](docs/nutrition-label.md)
 - **Any visual/CSS work** — theme tokens, fonts, badges, shadcn primitives, the radius doctrine → [docs/styling.md](docs/styling.md)
 - **Writing or editing a story** — story-vs-test discipline, nav structure, `main.ts` config → [docs/storybook.md](docs/storybook.md)
-- **Needing sample data in a story or a test** — a `RecipeRow`/`SchemaRecipe`, a `makeX` factory, a Supabase or fetch mock → [docs/fixtures.md](docs/fixtures.md)
+- **Writing, rewriting, or migrating any story or test file** — every shaped or repeated object in it (a `RecipeRow`/`SchemaRecipe`, a `makeX` factory, a Supabase or fetch mock) → [docs/fixtures.md](docs/fixtures.md)
 - **Touching `deploy.yml`, `staging.yml`, a compose file, or adding an env var** → [docs/deployment.md](docs/deployment.md)
 - **A test times out at 5000ms, or you're loading modules inside a test body** → [docs/testing.md](docs/testing.md)
 - **A test fails to *collect* with `Failed to resolve import "../../../c:/…"`** (relative path with an embedded drive letter, usually from the husky pre-push hook, passing when run directly) — known-flaky, usually clears on re-push → [troubleshooting/vite-glob-drive-letter.md](troubleshooting/vite-glob-drive-letter.md)
