@@ -162,10 +162,17 @@ describe("RecipeDetail", () => {
     expect(screen.getByText("Boil salted water.")).toBeTruthy();
   });
 
-  it("shows nutrition section when at least one nutrient field is present", () => {
+  // The nutrition the page shows comes from the catalog total the server
+  // resolved, never from the recipe's own stored fields. Totals are
+  // whole-recipe and the yield below is four servings, so they read as ÷4.
+  it("shows the nutrition section from the normalized catalog total", () => {
     render(
       <RecipeDetail
-        recipe={makeRecipe({ nutrition: { calories: "350 kcal" } })}
+        recipe={makeRecipe({ recipeYield: "4 servings" })}
+        normalizedNutrition={{
+          total: { calories_kcal: 1400 },
+          fullyCovered: true,
+        }}
       />,
     );
     expect(screen.getByText("Nutrition")).toBeTruthy();
@@ -175,36 +182,56 @@ describe("RecipeDetail", () => {
   it("shows all present nutrition fields", () => {
     render(
       <RecipeDetail
-        recipe={makeRecipe({
-          nutrition: {
-            calories: "350 kcal",
-            proteinContent: "20g",
-            carbohydrateContent: "40g",
-            fatContent: "10g",
+        recipe={makeRecipe({ recipeYield: "4 servings" })}
+        normalizedNutrition={{
+          total: {
+            calories_kcal: 1400,
+            protein_g: 80,
+            carbs_g: 160,
+            fat_g: 40,
           },
-        })}
+          fullyCovered: true,
+        }}
       />,
     );
     expect(screen.getByText("350 kcal")).toBeTruthy();
-    // Attached units ("20g") normalize to spaced display — values are
-    // re-rendered from parsed NutrientValues, not echoed from the raw string.
+    // Units are re-attached from the parsed NutrientValue, so they render spaced.
     expect(screen.getByText("20 g")).toBeTruthy();
     expect(screen.getByText("40 g")).toBeTruthy();
     expect(screen.getByText("10 g")).toBeTruthy();
   });
 
-  it("hides nutrition section when only non-counted fields are present (e.g. servingSize)", () => {
+  it("hides the nutrition section when the total covers no countable nutrient", () => {
     render(
       <RecipeDetail
-        recipe={makeRecipe({ nutrition: { servingSize: "1 cup" } })}
+        recipe={makeRecipe({
+          recipeYield: "4 servings",
+          nutrition: { servingSize: "1 cup" },
+        })}
+        normalizedNutrition={{ total: {}, fullyCovered: true }}
       />,
     );
     expect(screen.queryByText("Nutrition")).toBeNull();
   });
 
-  it("hides nutrition section when nutrition is absent", () => {
+  it("hides the nutrition section when the recipe was never normalized", () => {
     render(<RecipeDetail recipe={makeRecipe()} />);
     expect(screen.queryByText("Nutrition")).toBeNull();
+  });
+
+  it("hides the nutrition section even when the recipe has its own stored fields", () => {
+    // The catalog is the only source, so a recipe nobody has normalized shows
+    // nothing regardless of how complete its stored fields are.
+    render(
+      <RecipeDetail
+        recipe={makeRecipe({
+          recipeYield: "4 servings",
+          nutrition: { calories: "350 kcal", proteinContent: "20 g" },
+        })}
+      />,
+    );
+    expect(screen.queryByText("Nutrition")).toBeNull();
+    expect(screen.queryByText("350 kcal")).toBeNull();
   });
 
   it("renders ingredients list", () => {

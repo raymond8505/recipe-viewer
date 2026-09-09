@@ -335,7 +335,6 @@ export default function RecipeDetail({
                 <CookingModeButton
                   recipe={recipe}
                   isLoggedIn={isLoggedIn}
-                  canCurateNutrition={canCurateNutrition}
                   normalizedNutrition={normalizedNutrition}
                 />
               </>
@@ -598,7 +597,6 @@ export default function RecipeDetail({
           ingredientsHref={
             canCurateNutrition ? `/recipes/${recipe.id}/ingredients` : undefined
           }
-          showSources={canCurateNutrition}
         />
 
         {/* JSON-LD — Schema.org-compliant only; escape </script> sequences to prevent tag injection.
@@ -611,7 +609,7 @@ export default function RecipeDetail({
                 nutritionOverride: jsonLdNutrition
                   ? {
                       "@type": "NutritionInformation",
-                      ...nutrientValuesToSchema(jsonLdNutrition.values),
+                      ...nutrientValuesToSchema(jsonLdNutrition),
                     }
                   : undefined,
               }),

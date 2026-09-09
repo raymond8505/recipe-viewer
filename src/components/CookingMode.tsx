@@ -54,12 +54,9 @@ interface CookingModeProps {
   recipe: RecipeRow;
   onClose: () => void;
   isLoggedIn?: boolean;
-  // Whether the viewer may see the nutrition source badge: logged in, or running
-  // locally in dev. Separate from `isLoggedIn`, which still gates cooking notes.
-  // Resolved server-side — see src/lib/devAccess.ts.
-  canCurateNutrition?: boolean;
-  // Normalized ingredient nutrition for the PRIMARY recipe only. Meal (added)
-  // recipes keep their schema nutrition — scaling is primary-only here too.
+  // Normalized ingredient nutrition for the PRIMARY recipe only — the only
+  // source the panel has, and scaling is primary-only here too, so a meal's
+  // added recipes show no nutrition of their own.
   normalizedNutrition?: NormalizedNutrition | null;
 }
 
@@ -79,7 +76,6 @@ export default function CookingMode({
   recipe,
   onClose,
   isLoggedIn = false,
-  canCurateNutrition = isLoggedIn,
   normalizedNutrition,
 }: CookingModeProps) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -767,7 +763,6 @@ export default function CookingMode({
               onSplitPortions={(n) =>
                 updateScalable(recipe.id, (r) => r.splitPortions(n))
               }
-              showSources={canCurateNutrition}
             />
           </div>
         </div>

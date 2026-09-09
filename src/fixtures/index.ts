@@ -17,6 +17,8 @@ export {
 export {
   fullSchemaNutrition,
   sparseSchemaNutrition,
+  fullCatalogTotal,
+  sparseCatalogTotal,
   fullNutrientValues,
   sparseNutrientValues,
 } from "./nutrition";
@@ -27,6 +29,7 @@ export {
   quantitativeValueYield,
   makeSchemaRecipe,
   makeScalableRecipe,
+  makeNutritionRecipe,
   makeScaledIngredient,
 } from "./scalable";
 

@@ -598,7 +598,7 @@ describe("toSchemaOrgJsonLd", () => {
     expect(result.recipeYield).toEqual(quantitativeValueYield);
   });
 
-  it("emits nutritionOverride in place of the schema's own nutrition", () => {
+  it("emits the nutritionOverride, not the schema's own nutrition", () => {
     const result = toSchemaOrgJsonLd(
       doc({ name: "Pasta", nutrition: { calories: "300 kcal" } }),
       { nutritionOverride: { calories: "500 kcal", proteinContent: "10 g" } },
@@ -609,11 +609,14 @@ describe("toSchemaOrgJsonLd", () => {
     });
   });
 
-  it("still emits the schema's own nutrition without an override", () => {
+  it("omits nutrition entirely without an override, however full the schema is", () => {
+    // The override carries the catalog-derived values and is the only source.
+    // Publishing the stored fields as a fallback would put a number in the
+    // page's structured data that nothing in the app is willing to display.
     const result = toSchemaOrgJsonLd(
       doc({ name: "Pasta", nutrition: { calories: "300 kcal" } }),
     ) as Record<string, unknown>;
-    expect(result.nutrition).toEqual({ calories: "300 kcal" });
+    expect(result).not.toHaveProperty("nutrition");
   });
 
   it("keeps custom fields out even with a nutrition override", () => {

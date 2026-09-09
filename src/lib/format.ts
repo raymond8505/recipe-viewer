@@ -416,10 +416,11 @@ export function toSchemaOrgRecipe(doc: RecipeDocument): SchemaOrgRecipe {
  * never leak; times from the columns; `recipeIngredient` as plain strings —
  * group names and row ids are ours, not Schema.org's.
  *
- * `nutritionOverride` replaces the schema's own `nutrition` in the output when
- * provided — used to emit the normalized-ingredient nutrition (already
- * per-serving, Schema.org-shaped) in place of the hand-entered fields. It still
- * flows through the same allowlist, so no custom fields leak.
+ * `nutritionOverride` is the ONLY source of the output's `nutrition` — the
+ * normalized-ingredient nutrition, already per-serving and Schema.org-shaped.
+ * Omit it and the key is omitted: the stored `schema.nutrition` is deliberately
+ * not a fallback here, for the same reason `ScalableRecipe.nutrition()` won't
+ * serve it, so what we publish always traces back to the ingredient catalog.
  */
 export function toSchemaOrgJsonLd(
   doc: RecipeDocument,
@@ -431,7 +432,7 @@ export function toSchemaOrgJsonLd(
     "@type": schema["@type"] ?? "Recipe",
     name: schema.name,
   };
-  const nutrition = options?.nutritionOverride ?? schema.nutrition;
+  const nutrition = options?.nutritionOverride;
   const optionalFields = [
     "description",
     "image",

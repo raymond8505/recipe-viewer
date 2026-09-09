@@ -11,27 +11,19 @@ import { getYieldValueReference } from "./format";
 import {
   NUTRIENT_FIELDS,
   normalizedTotalToPerServing,
-  schemaNutritionToValues,
   type NutrientValues,
 } from "./nutritionMath";
 
 /**
  * Normalized ingredient nutrition for a recipe, supplied to the ScalableRecipe
  * constructor (its only consumer). `total` is the whole-recipe sum;
- * `fullyCovered` gates whether `nutrition()` trusts it over the recipe's own
- * fields.
+ * `fullyCovered` gates whether `nutrition()` will serve it at all — the
+ * ingredient catalog is the only source, so an incompletely covered list means
+ * no nutrition rather than a fallback.
  */
 export interface NormalizedNutrition {
   total: IngredientNutrition;
   fullyCovered: boolean;
-}
-
-/** Which of the two nutrition views `nutrition()` is serving. */
-export type NutritionSource = "ingredients" | "recipe";
-
-export interface ResolvedNutrition {
-  values: ScaledNutrition;
-  source: NutritionSource;
 }
 
 export interface ScalableRecipeState {
@@ -333,16 +325,6 @@ export class ScalableRecipe {
   }
 
   /**
-   * The recipe's own (manually set) `schema.nutrition` fields at the current
-   * scale/split, or null when the schema has none. Wire strings are parsed to
-   * NutrientValues here — fields without a leading number are dropped.
-   */
-  recipeNutrition(): ScaledNutrition | null {
-    const n = this.schema.nutrition;
-    return this.scaleNutrition(n ? schemaNutritionToValues(n) : undefined);
-  }
-
-  /**
    * The nutrition computed from the normalized ingredient list (per serving,
    * at the current scale/split), or null when the recipe isn't normalized or
    * has no parseable serving count. Deliberately NOT gated on `fullyCovered` —
@@ -357,27 +339,25 @@ export class ScalableRecipe {
   }
 
   /**
-   * The single nutrition view to display/serialize: the ingredients-derived
-   * values when they're trusted (every line covered and servings known), else
-   * the recipe's own fields — all-or-nothing, never a per-field mix. `source`
-   * says which side won; `servingSize` always rides along from the schema.
+   * The single nutrition view to display/serialize, or null when the recipe
+   * has none. The ingredient catalog is the only source: the values are served
+   * when every line is covered and the servings are known, and otherwise
+   * nothing is — `schema.nutrition` is stored but deliberately never read back
+   * as nutrition, so a half-normalized recipe reports no data rather than a
+   * number nobody can trace to an ingredient.
+   *
+   * `servingSize` is the exception, and it isn't a fallback: it's the free-text
+   * serving descriptor ("1 cup"), not a nutrient, and the catalog has no slot
+   * for it — so it still rides along from the schema.
    */
-  nutrition(): ResolvedNutrition | null {
-    const fromIngredients = this.normalized?.fullyCovered
-      ? this.ingredientsNutrition()
-      : null;
-    if (fromIngredients) {
-      const servingSize = this.schema.nutrition?.servingSize;
-      return {
-        values:
-          servingSize != null
-            ? { servingSize, ...fromIngredients }
-            : fromIngredients,
-        source: "ingredients",
-      };
-    }
-    const fromRecipe = this.recipeNutrition();
-    return fromRecipe ? { values: fromRecipe, source: "recipe" } : null;
+  nutrition(): ScaledNutrition | null {
+    if (!this.normalized?.fullyCovered) return null;
+    const fromIngredients = this.ingredientsNutrition();
+    if (!fromIngredients) return null;
+    const servingSize = this.schema.nutrition?.servingSize;
+    return servingSize != null
+      ? { servingSize, ...fromIngredients }
+      : fromIngredients;
   }
 
   get hasNutrition(): boolean {

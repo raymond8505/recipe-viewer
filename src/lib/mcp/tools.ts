@@ -239,10 +239,13 @@ export async function getRecipe(args: RecipeIdInput): Promise<RecipeRow> {
   const row = await getRecipeById(args.id);
   if (!row) throw new ToolError("not_found", `Recipe ${args.id} not found`);
 
-  // Serve the recipe's single resolved nutrition view — the same
-  // ScalableRecipe.nutrition() decision as the UI panel and JSON-LD. Only an
-  // ingredients-sourced result overrides; otherwise the row's own nutrition is
-  // already what nutrition() would serve.
+  // Overlay the catalog-derived nutrition — the same ScalableRecipe.nutrition()
+  // decision as the UI panel and JSON-LD, so all three agree. When it resolves
+  // to nothing (the list isn't fully covered) the row passes through untouched,
+  // which means any hand-entered schema.nutrition still on the document is what
+  // the agent sees. That is deliberate: get_recipe reports what is STORED, and
+  // we kept storing those fields even though nothing reads them back as
+  // nutrition any more.
   const schema = row.metadata.schema;
   const resolved = new ScalableRecipe(
     schema,
@@ -250,7 +253,7 @@ export async function getRecipe(args: RecipeIdInput): Promise<RecipeRow> {
     undefined,
     recipeNormalizedNutrition(row),
   ).nutrition();
-  if (resolved?.source !== "ingredients") return row;
+  if (!resolved) return row;
 
   return {
     ...row,
@@ -260,7 +263,7 @@ export async function getRecipe(args: RecipeIdInput): Promise<RecipeRow> {
         ...schema,
         nutrition: {
           "@type": "NutritionInformation",
-          ...nutrientValuesToSchema(resolved.values),
+          ...nutrientValuesToSchema(resolved),
         },
       },
     },

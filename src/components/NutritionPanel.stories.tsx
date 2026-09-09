@@ -4,11 +4,10 @@ import { userEvent, fn } from "storybook/test";
 import NutritionPanel from "./NutritionPanel";
 import { ScalableRecipe } from "@/lib/ScalableRecipe";
 import {
-  fullSchemaNutrition,
-  makeScalableRecipe,
-  makeSchemaRecipe,
+  fullCatalogTotal,
+  makeNutritionRecipe,
   quantitativeValueYield,
-  sparseSchemaNutrition,
+  sparseCatalogTotal,
 } from "@/fixtures";
 
 /** Stateful wrapper so the ± stepper visibly updates inside the story. */
@@ -16,12 +15,10 @@ function StatefulNutritionPanel({
   initial,
   onSplitPortions,
   ingredientsHref,
-  showSources,
 }: {
   initial: ScalableRecipe;
   onSplitPortions?: (n: number) => void;
   ingredientsHref?: string;
-  showSources?: boolean;
 }) {
   const [recipe, setRecipe] = useState(initial);
   return (
@@ -32,7 +29,6 @@ function StatefulNutritionPanel({
         setRecipe((r) => r.splitPortions(n));
       }}
       ingredientsHref={ingredientsHref}
-      showSources={showSources}
     />
   );
 }
@@ -48,16 +44,13 @@ const meta: Meta<typeof StatefulNutritionPanel> = {
 export default meta;
 type Story = StoryObj<typeof StatefulNutritionPanel>;
 
+// Every recipe below comes from a fully-covered catalog total, because that is
+// the panel's only nutrition source — a recipe's own stored Schema.org fields
+// render nothing. Totals are whole-recipe over four servings, so
+// fullCatalogTotal's 2080 kcal shows as 520 kcal per serving.
+
 export const FullData: Story = {
-  args: {
-    initial: makeScalableRecipe({
-      ingredients: [],
-      schema: {
-        recipeYield: "4 servings",
-        nutrition: fullSchemaNutrition,
-      },
-    }),
-  },
+  args: { initial: makeNutritionRecipe(fullCatalogTotal) },
   play: async ({ canvas }) => {
     // Demonstrates the per-serving → per-portion transition.
     await userEvent.click(canvas.getByLabelText("Smaller portion size"));
@@ -66,12 +59,8 @@ export const FullData: Story = {
 
 export const PartialData: Story = {
   args: {
-    initial: makeScalableRecipe({
-      ingredients: [],
-      schema: {
-        recipeYield: "2 servings",
-        nutrition: sparseSchemaNutrition,
-      },
+    initial: makeNutritionRecipe(sparseCatalogTotal, {
+      schema: { recipeYield: "2 servings" },
     }),
   },
 };
@@ -80,21 +69,14 @@ export const PartialData: Story = {
  * The "Full label" view at the default panel width. The label's layout switch
  * is a container query, so at this size it renders the vertical FDA panel — the
  * same fallback cooking mode gets. Where the grid shows a curated six and omits
- * what's missing, the label shows every Schema.org nutrient, so sugars,
- * saturated/unsaturated fat and cholesterol appear here and nowhere else.
+ * what's missing, the label shows every nutrient the catalog tracks, so sugars,
+ * saturated fat and cholesterol appear here and nowhere else. (Unsaturated fat
+ * is absent everywhere: the catalog has no column for it.)
  *
  * `view` is internal panel state, so the click genuinely changes what's shown.
  */
 export const FullLabelView: Story = {
-  args: {
-    initial: makeScalableRecipe({
-      ingredients: [],
-      schema: {
-        recipeYield: "4 servings",
-        nutrition: fullSchemaNutrition,
-      },
-    }),
-  },
+  args: { initial: makeNutritionRecipe(fullCatalogTotal) },
   play: async ({ canvas }) => {
     await userEvent.click(canvas.getByRole("button", { name: "Full label" }));
   },
@@ -106,15 +88,7 @@ export const FullLabelView: Story = {
  * foot. This is what the recipe page shows on a desktop.
  */
 export const FullLabelWide: Story = {
-  args: {
-    initial: makeScalableRecipe({
-      ingredients: [],
-      schema: {
-        recipeYield: "4 servings",
-        nutrition: fullSchemaNutrition,
-      },
-    }),
-  },
+  args: { initial: makeNutritionRecipe(fullCatalogTotal) },
   globals: { viewport: { value: "page" } },
   play: async ({ canvas }) => {
     await userEvent.click(canvas.getByRole("button", { name: "Full label" }));
@@ -122,70 +96,15 @@ export const FullLabelWide: Story = {
 };
 
 /**
- * The label on a recipe that tracks almost nothing: it collapses to the few
- * nutrients present rather than listing empty rows, so the "Full label" view
- * degrades to something shorter than the summary grid rather than a skeleton.
+ * The label on a recipe whose ingredients report almost nothing: it collapses
+ * to the few nutrients present rather than listing empty rows, so the "Full
+ * label" view degrades to something shorter than the summary grid rather than a
+ * skeleton.
  */
 export const FullLabelSparse: Story = {
-  args: {
-    initial: makeScalableRecipe({
-      ingredients: [],
-      schema: {
-        recipeYield: "4 servings",
-        nutrition: sparseSchemaNutrition,
-      },
-    }),
-  },
+  args: { initial: makeNutritionRecipe(sparseCatalogTotal) },
   play: async ({ canvas }) => {
     await userEvent.click(canvas.getByRole("button", { name: "Full label" }));
-  },
-};
-
-/**
- * A fully-covered normalized recipe: the whole panel serves the view computed
- * from the ingredient list, flagged by a single "ingredients" badge in the
- * header. (Totals are whole-recipe for 4 servings, e.g. 2080 kcal → 520 kcal
- * per serving.) The badge is gated to logged-in users via `showSources`.
- */
-export const FromNormalizedIngredients: Story = {
-  args: {
-    showSources: true,
-    initial: new ScalableRecipe(
-      makeSchemaRecipe({
-        recipeYield: "4 servings",
-        nutrition: undefined,
-      }),
-      [],
-      undefined,
-      {
-        fullyCovered: true,
-        total: {
-          calories_kcal: 2080,
-          protein_g: 128,
-          carbs_g: 192,
-          fat_g: 72,
-          fiber_g: 24,
-          sodium_mg: 3280,
-        },
-      },
-    ),
-  },
-};
-
-/**
- * A recipe without trusted ingredient coverage serves its own manually set
- * nutrition fields — the header badge reads "recipe" for logged-in users.
- */
-export const FromRecipeFields: Story = {
-  args: {
-    showSources: true,
-    initial: makeScalableRecipe({
-      ingredients: [],
-      schema: {
-        recipeYield: "4 servings",
-        nutrition: fullSchemaNutrition,
-      },
-    }),
   },
 };
 
@@ -195,12 +114,8 @@ export const FromRecipeFields: Story = {
  */
 export const WithYieldWeight: Story = {
   args: {
-    initial: makeScalableRecipe({
-      ingredients: [],
-      schema: {
-        recipeYield: quantitativeValueYield,
-        nutrition: fullSchemaNutrition,
-      },
+    initial: makeNutritionRecipe(fullCatalogTotal, {
+      schema: { recipeYield: quantitativeValueYield },
     }),
   },
 };
@@ -211,31 +126,30 @@ export const WithYieldWeight: Story = {
  */
 export const WithBreakdownLink: Story = {
   args: {
-    initial: makeScalableRecipe({
-      ingredients: [],
-      schema: {
-        recipeYield: "4 servings",
-        nutrition: fullSchemaNutrition,
-      },
-    }),
+    initial: makeNutritionRecipe(fullCatalogTotal),
     ingredientsHref: "/recipes/story-recipe/ingredients",
   },
 };
 
 /**
- * No schema nutrition but a breakdown link: instead of vanishing (the
- * anonymous behavior), the panel renders a minimal shell so the
- * NutritionDetail screen stays reachable.
+ * A recipe whose ingredient list isn't fully matched, plus a breakdown link.
+ * The panel renders a minimal shell rather than vanishing (which is what the
+ * anonymous view does), and the link is the way out — the unmatched lines get
+ * fixed there.
+ *
+ * This recipe DOES carry hand-entered Schema.org nutrition fields, and the
+ * shell is the point: those are stored but never read back, so partial coverage
+ * shows nothing rather than falling back to them.
  */
 export const NoNutritionShell: Story = {
   args: {
-    initial: makeScalableRecipe({
-      ingredients: [],
-      schema: {
-        recipeYield: "4 servings",
-        nutrition: undefined,
+    initial: makeNutritionRecipe(
+      { calories_kcal: 2080 },
+      {
+        fullyCovered: false,
+        schema: { nutrition: { calories: "520 kcal", proteinContent: "32 g" } },
       },
-    }),
+    ),
     ingredientsHref: "/recipes/story-recipe/ingredients",
   },
 };

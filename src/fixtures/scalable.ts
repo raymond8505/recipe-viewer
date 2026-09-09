@@ -1,8 +1,10 @@
 import {
   ScalableRecipe,
+  type NormalizedNutrition,
   type ScaledIngredient,
   type ScalableRecipeState,
 } from "@/lib/ScalableRecipe";
+import type { IngredientNutrition } from "@/types/ingredient";
 import type {
   QuantitativeValue,
   RecipeIngredientGroup,
@@ -55,12 +57,48 @@ export function makeScalableRecipe(
   overrides: {
     schema?: Partial<SchemaRecipe>;
     ingredients?: RecipeIngredientGroup[];
+    /** The catalog-derived total. Omit for a recipe with no nutrition at all. */
+    normalized?: NormalizedNutrition | null;
   } = {},
   state?: Partial<ScalableRecipeState>,
 ): ScalableRecipe {
   return new ScalableRecipe(
     makeSchemaRecipe(overrides.schema),
     overrides.ingredients ?? scalableBaseIngredients,
+    state,
+    overrides.normalized ?? null,
+  );
+}
+
+/**
+ * A recipe whose nutrition actually resolves: a fully-covered catalog total on
+ * the four-serving base yield. Since `schema.nutrition` stopped being a source,
+ * this is the only way to put numbers in front of the nutrition panel, and
+ * nearly every panel case wants exactly this shape.
+ *
+ * `total` is the WHOLE-RECIPE sum and the panel divides it by the servings, so
+ * pass 1400 kcal to read "350 kcal" per serving. Override `schema.recipeYield`
+ * and the divisor moves with it — including to null, which is how a
+ * no-parseable-yield case is built.
+ *
+ * `fullyCovered: false` is the "some line is unmatched" case: nutrition()
+ * refuses to serve anything, so the panel falls to its empty shell.
+ */
+export function makeNutritionRecipe(
+  total: IngredientNutrition,
+  overrides: {
+    schema?: Partial<SchemaRecipe>;
+    ingredients?: RecipeIngredientGroup[];
+    fullyCovered?: boolean;
+  } = {},
+  state?: Partial<ScalableRecipeState>,
+): ScalableRecipe {
+  return makeScalableRecipe(
+    {
+      ingredients: overrides.ingredients ?? [],
+      schema: { recipeYield: "4 servings", ...overrides.schema },
+      normalized: { total, fullyCovered: overrides.fullyCovered ?? true },
+    },
     state,
   );
 }

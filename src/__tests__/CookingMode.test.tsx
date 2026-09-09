@@ -268,38 +268,38 @@ describe("CookingMode — cooking notes", () => {
   });
 });
 
-describe("CookingMode — nutrition source badge", () => {
-  const nutritious = () =>
-    makeRecipe({
-      nutrition: { calories: "200 kcal" },
-      cookingNotes: "less salt next time",
-    });
-  // The badge's title is the stable hook — its visible text ("recipe") is a
-  // common word that collides elsewhere in the modal.
-  const BADGE_TITLE = /from the recipe's own nutrition data/i;
+describe("CookingMode — nutrition panel", () => {
+  const nutritious = () => makeRecipe({ recipeYield: "4 servings" });
 
-  it("hides the badge from an anonymous viewer", () => {
-    render(<CookingMode recipe={nutritious()} onClose={vi.fn()} />);
-    expect(screen.queryByTitle(BADGE_TITLE)).toBeNull();
-  });
-
-  it("shows the badge when logged in", () => {
-    render(<CookingMode recipe={nutritious()} onClose={vi.fn()} isLoggedIn />);
-    expect(screen.getAllByTitle(BADGE_TITLE).length).toBeGreaterThanOrEqual(1);
-  });
-
-  // The dev-door contract in cook mode: nutrition provenance opens for a
-  // logged-out viewer, cooking notes stay shut.
-  it("shows the badge but not cooking notes when canCurateNutrition without a login", () => {
+  it("shows the catalog nutrition threaded in for the primary recipe", () => {
+    // 1400 kcal over the four servings → 350 per serving.
     render(
       <CookingMode
         recipe={nutritious()}
         onClose={vi.fn()}
-        isLoggedIn={false}
-        canCurateNutrition
+        normalizedNutrition={{
+          total: { calories_kcal: 1400 },
+          fullyCovered: true,
+        }}
       />,
     );
-    expect(screen.getAllByTitle(BADGE_TITLE).length).toBeGreaterThanOrEqual(1);
-    expect(screen.queryByPlaceholderText(/note changes for next time/i)).toBeNull();
+    expect(screen.getByText("350 kcal")).toBeTruthy();
+  });
+
+  it("shows no nutrition when the recipe's own stored fields are all it has", () => {
+    // The stored blob is not a source: without a normalized total there is
+    // nothing to show, and cook mode passes no breakdown link, so the panel
+    // disappears rather than rendering its shell.
+    render(
+      <CookingMode
+        recipe={makeRecipe({
+          recipeYield: "4 servings",
+          nutrition: { calories: "200 kcal" },
+        })}
+        onClose={vi.fn()}
+      />,
+    );
+    expect(screen.queryByText("200 kcal")).toBeNull();
+    expect(screen.queryByText("Nutrition")).toBeNull();
   });
 });

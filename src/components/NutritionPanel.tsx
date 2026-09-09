@@ -4,7 +4,6 @@ import { useState } from "react";
 import Link from "next/link";
 import { PortionStepperButton, SegmentButton } from "@/components/buttons";
 import { Button } from "@/components/ui/button";
-import NutritionSourceBadge from "@/components/ingredients/NutritionSourceBadge";
 import NutritionFactsLabel from "@/components/nutrition/NutritionFactsLabel";
 import { recipeNutritionRows } from "@/components/nutrition/labelRows";
 import { formatNutrientDisplay } from "@/lib/format";
@@ -33,28 +32,21 @@ interface NutritionPanelProps {
    * href — and only passes it for callers that may curate nutrition.
    */
   ingredientsHref?: string;
-  /**
-   * Whether to show the source badge (ingredients vs recipe) in the header.
-   * The provenance distinction is an editor concern, not something to surface
-   * to anonymous visitors in production — so callers pass their
-   * `canCurateNutrition` value here, not `isLoggedIn`.
-   */
-  showSources?: boolean;
 }
 
 export default function NutritionPanel({
   recipe,
   onSplitPortions,
   ingredientsHref,
-  showSources = false,
 }: NutritionPanelProps) {
   // Declared above the early returns below, not next to the render that uses
   // it: hooks must run unconditionally. Don't "tidy" it downwards.
   const [view, setView] = useState<NutritionView>("summary");
 
-  // Without schema nutrition the panel normally disappears entirely — but the
-  // breakdown link must stay reachable, so a minimal shell renders instead
-  // when there is somewhere to link to.
+  // Without a fully-covered ingredient list the panel normally disappears
+  // entirely — but the breakdown link must stay reachable, so a minimal shell
+  // renders instead when there is somewhere to link to. That link is the way
+  // out: it's where the remaining lines get matched.
   if (!recipe.hasNutrition && !ingredientsHref) return null;
 
   const breakdownLink = ingredientsHref ? (
@@ -78,8 +70,7 @@ export default function NutritionPanel({
     );
   }
 
-  const resolved = recipe.nutrition()!;
-  const nutrition = resolved.values;
+  const nutrition = recipe.nutrition()!;
   const portions = recipe.displayPortions;
   const canStep = recipe.baseServings != null;
 
@@ -93,7 +84,6 @@ export default function NutritionPanel({
           <span className="text-sm text-muted-foreground">
             {recipe.nutritionUnitLabel}
           </span>
-          {showSources && <NutritionSourceBadge source={resolved.source} />}
         </div>
         <div className="flex flex-wrap items-center gap-2 sm:gap-3">
           {/* First in the cluster so the stepper stays rightmost, where cooking

@@ -8,6 +8,16 @@ import {
 } from "@/fixtures";
 import { ingredientTexts } from "@/lib/recipeIngredients";
 
+// The catalog-derived total is the only nutrition source, so any case that
+// wants numbers has to supply one. baseSchema yields 4 servings, so this whole-
+// recipe total reads as 500 kcal / 10 g protein per serving. Fat is deliberately
+// absent: baseSchema's own (stored, unread) nutrition block does report it, and
+// several tests below turn on it not showing through.
+const covered = {
+  total: { calories_kcal: 2000, protein_g: 40 },
+  fullyCovered: true,
+};
+
 describe("ScalableRecipe — construction", () => {
   it("parses base servings from recipeYield", () => {
     expect(new ScalableRecipe(baseSchema, baseIngredients).baseServings).toBe(4);
@@ -172,10 +182,11 @@ describe("ScalableRecipe — splitPortions", () => {
   });
 
   it("halves nutrition when split into twice as many portions", () => {
-    const r = new ScalableRecipe(baseSchema, baseIngredients).splitPortions(8);
+    // 2000 kcal / 40 g over 4 servings = 500 / 10 per serving; split to 8 → half.
+    const r = new ScalableRecipe(baseSchema, baseIngredients, undefined, covered).splitPortions(8);
     expect(r.nutritionMultiplier).toBe(0.5);
-    expect(r.nutrition()?.values.calories).toEqual({ value: 100, unit: "kcal" });
-    expect(r.nutrition()?.values.proteinContent).toEqual({ value: 5, unit: "g" });
+    expect(r.nutrition()?.calories).toEqual({ value: 250, unit: "kcal" });
+    expect(r.nutrition()?.proteinContent).toEqual({ value: 5, unit: "g" });
   });
 });
 
@@ -279,25 +290,30 @@ describe("ScalableRecipe — anchorIngredientAmount", () => {
 
 describe("ScalableRecipe — nutrition interaction", () => {
   it("nutrition unchanged when only scaling up servings", () => {
-    const r = new ScalableRecipe(baseSchema, baseIngredients).scalePortionsTo(8);
+    const r = new ScalableRecipe(baseSchema, baseIngredients, undefined, covered).scalePortionsTo(8);
     expect(r.nutritionMultiplier).toBe(1);
-    expect(r.nutrition()?.values.calories).toEqual({ value: 200, unit: "kcal" });
+    expect(r.nutrition()?.calories).toEqual({ value: 500, unit: "kcal" });
   });
 
   it("nutrition multiplier reflects scale × split together", () => {
     // base=4, scale to 8 (cur=8), split to 4 → cur/dp = 8/4 = 2.
-    const r = new ScalableRecipe(baseSchema, baseIngredients).scalePortionsTo(8).splitPortions(4);
+    const r = new ScalableRecipe(baseSchema, baseIngredients, undefined, covered)
+      .scalePortionsTo(8)
+      .splitPortions(4);
     expect(r.nutritionMultiplier).toBe(2);
-    expect(r.nutrition()?.values.calories).toEqual({ value: 400, unit: "kcal" });
+    expect(r.nutrition()?.calories).toEqual({ value: 1000, unit: "kcal" });
   });
 
-  it("hasNutrition reflects schema content", () => {
-    expect(new ScalableRecipe(baseSchema, baseIngredients).hasNutrition).toBe(true);
-    expect(new ScalableRecipe({ ...baseSchema, nutrition: undefined }, baseIngredients).hasNutrition).toBe(false);
+  it("hasNutrition reflects the catalog total, not the stored schema fields", () => {
+    // baseSchema carries a full nutrition block; on its own that buys nothing.
+    expect(new ScalableRecipe(baseSchema, baseIngredients).hasNutrition).toBe(false);
+    expect(
+      new ScalableRecipe(baseSchema, baseIngredients, undefined, covered).hasNutrition,
+    ).toBe(true);
   });
 
-  it("nutrition() is null when schema has no nutrition", () => {
-    expect(new ScalableRecipe({ ...baseSchema, nutrition: undefined }, baseIngredients).nutrition()).toBeNull();
+  it("nutrition() is null when the recipe was never normalized", () => {
+    expect(new ScalableRecipe(baseSchema, baseIngredients).nutrition()).toBeNull();
   });
 
   it("nutritionMultiplier is 1 when baseServings is null", () => {
@@ -372,32 +388,17 @@ describe("ScalableRecipe — serving weight (yield valueReference)", () => {
 });
 
 describe("ScalableRecipe — nutrition views", () => {
-  // baseSchema: 4 servings; schema nutrition calories 200, protein 10, fat 5.
-  // Whole-recipe normalized total for 4 servings → per-serving 500 kcal / 10 g
-  // protein; fat is not reported by the ingredients.
-  const covered = {
-    total: { calories_kcal: 2000, protein_g: 40 },
-    fullyCovered: true,
-  };
-
-  it("serves the ingredients view when fully covered", () => {
+  it("serves the catalog values when fully covered", () => {
     const n = new ScalableRecipe(baseSchema, baseIngredients, undefined, covered).nutrition();
-    expect(n?.source).toBe("ingredients");
-    expect(n?.values.calories).toEqual({ value: 500, unit: "kcal" });
-    expect(n?.values.proteinContent).toEqual({ value: 10, unit: "g" });
+    expect(n?.calories).toEqual({ value: 500, unit: "kcal" });
+    expect(n?.proteinContent).toEqual({ value: 10, unit: "g" });
   });
 
-  it("is all-or-nothing: recipe-only nutrients don't fill ingredients-view gaps", () => {
-    // fat is in the schema fields but not the normalized total — under the
-    // ingredients source it must NOT show through.
+  it("never lets a stored schema nutrient fill a gap in the catalog total", () => {
+    // baseSchema reports fat; the catalog total doesn't. The stored field is
+    // not a source, so the gap stays a gap rather than being quietly filled.
     const n = new ScalableRecipe(baseSchema, baseIngredients, undefined, covered).nutrition();
-    expect(n?.values.fatContent).toBeUndefined();
-  });
-
-  it("recipeNutrition() always serves the schema fields, ignoring normalized", () => {
-    const r = new ScalableRecipe(baseSchema, baseIngredients, undefined, covered);
-    expect(r.recipeNutrition()?.calories).toEqual({ value: 200, unit: "kcal" });
-    expect(r.recipeNutrition()?.fatContent).toEqual({ value: 5, unit: "g" });
+    expect(n?.fatContent).toBeUndefined();
   });
 
   it("ingredientsNutrition() serves the normalized view even when not fully covered", () => {
@@ -420,35 +421,35 @@ describe("ScalableRecipe — nutrition views", () => {
     ).toBeNull();
   });
 
-  it("keeps the scaling/split multiplier working on every view", () => {
+  it("keeps the scaling/split multiplier working", () => {
     const r = new ScalableRecipe(baseSchema, baseIngredients, undefined, covered).splitPortions(8);
     expect(r.nutritionMultiplier).toBe(0.5);
-    expect(r.nutrition()?.values.calories).toEqual({ value: 250, unit: "kcal" });
+    expect(r.nutrition()?.calories).toEqual({ value: 250, unit: "kcal" });
     expect(r.ingredientsNutrition()?.calories).toEqual({ value: 250, unit: "kcal" });
-    expect(r.recipeNutrition()?.calories).toEqual({ value: 100, unit: "kcal" });
   });
 
-  it("serves the recipe view when not fully covered", () => {
+  it("serves nothing when the list isn't fully covered", () => {
+    // A partially-matched list reports no nutrition at all: it can't produce a
+    // number anyone could trace to an ingredient, and the stored schema fields
+    // are not allowed to stand in for one.
     const n = new ScalableRecipe(baseSchema, baseIngredients, undefined, {
       total: { calories_kcal: 2000 },
       fullyCovered: false,
     }).nutrition();
-    expect(n?.source).toBe("recipe");
-    expect(n?.values.calories).toEqual({ value: 200, unit: "kcal" });
+    expect(n).toBeNull();
   });
 
-  it("serves the recipe view when baseServings is unknown", () => {
+  it("serves nothing when baseServings is unknown", () => {
     const n = new ScalableRecipe(
       { ...baseSchema, recipeYield: undefined },
       baseIngredients,
       undefined,
       covered,
     ).nutrition();
-    expect(n?.source).toBe("recipe");
-    expect(n?.values.calories).toEqual({ value: 200, unit: "kcal" });
+    expect(n).toBeNull();
   });
 
-  it("serves the ingredients view even when the recipe has no fields of its own", () => {
+  it("serves the catalog values even when the recipe has no stored fields", () => {
     const r = new ScalableRecipe(
       { ...baseSchema, nutrition: undefined },
       baseIngredients,
@@ -456,21 +457,19 @@ describe("ScalableRecipe — nutrition views", () => {
       covered,
     );
     expect(r.hasNutrition).toBe(true);
-    expect(r.recipeNutrition()).toBeNull();
-    const n = r.nutrition();
-    expect(n?.source).toBe("ingredients");
-    expect(n?.values.calories).toEqual({ value: 500, unit: "kcal" });
+    expect(r.nutrition()?.calories).toEqual({ value: 500, unit: "kcal" });
   });
 
-  it("servingSize rides along from the schema for both sources", () => {
+  it("servingSize still rides along from the schema — it isn't a nutrient", () => {
     const withSize = {
       ...baseSchema,
       nutrition: { ...baseSchema.nutrition, servingSize: "1 slice" },
     };
     expect(
-      new ScalableRecipe(withSize, baseIngredients, undefined, covered).nutrition()?.values.servingSize,
+      new ScalableRecipe(withSize, baseIngredients, undefined, covered).nutrition()?.servingSize,
     ).toBe("1 slice");
-    expect(new ScalableRecipe(withSize, baseIngredients).nutrition()?.values.servingSize).toBe("1 slice");
+    // ...but on its own it resolves nothing: there are no values to label.
+    expect(new ScalableRecipe(withSize, baseIngredients).nutrition()).toBeNull();
   });
 
   it("carries the normalized total through scale/split/reset", () => {
@@ -479,21 +478,15 @@ describe("ScalableRecipe — nutrition views", () => {
       .splitPortions(4)
       .reset();
     expect(r.normalized).toBe(covered);
-    expect(r.nutrition()?.values.calories).toEqual({ value: 500, unit: "kcal" });
+    expect(r.nutrition()?.calories).toEqual({ value: 500, unit: "kcal" });
   });
 
-  it("drops schema fields without a leading number at the parse boundary", () => {
-    const r = new ScalableRecipe(
-      { ...baseSchema, nutrition: { calories: "unknown", fatContent: "5 g" } },
-      baseIngredients,
-    );
-    const n = r.recipeNutrition();
-    expect(n?.calories).toBeUndefined();
-    expect(n?.fatContent).toEqual({ value: 5, unit: "g" });
-    // A schema whose every nutrient is unparseable resolves to no nutrition.
+  it("ignores the stored schema fields no matter how well-formed they are", () => {
+    // These are perfectly parseable values, and they still resolve to nothing:
+    // well-formedness is not what qualifies a number to be shown, provenance is.
     expect(
       new ScalableRecipe(
-        { ...baseSchema, nutrition: { calories: "unknown" } },
+        { ...baseSchema, nutrition: { calories: "200 kcal", fatContent: "5 g" } },
         baseIngredients,
       ).nutrition(),
     ).toBeNull();
