@@ -2,7 +2,7 @@
 
 import { useRouter, useSearchParams } from "next/navigation";
 import { SegmentButton } from "@/components/buttons";
-import type { SortOption } from "@/lib/recipes";
+import type { SortOption } from "@/types/recipe";
 
 const SORT_OPTIONS: { value: SortOption; label: string }[] = [
   { value: "newest",    label: "Newest" },

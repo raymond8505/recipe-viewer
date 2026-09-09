@@ -67,6 +67,14 @@ export interface RecipeIngredientGroupInput {
 }
 
 /**
+ * The order the recipe list can be sorted in. It lives here rather than beside
+ * `getRecipes` because SortBar (a client component) renders the options, and
+ * `@/lib/recipes` reaches `@/env` at runtime — a client module must be able to
+ * name this type without naming a server module to get it.
+ */
+export type SortOption = "newest" | "oldest" | "name-asc" | "name-desc";
+
+/**
  * The `recipes` table, column for column — what `selectColumns<>` is checked
  * against. `RecipeRow` is this with `ingredients` hydrated from the second
  * table, which is why the two are separate types.

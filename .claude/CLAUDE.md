@@ -23,6 +23,8 @@ Unit tests follow the code: helpers moved into `format.ts` are tested in `format
 
 **Never import `@/env` in a client component** — t3-env throws on server-var access in the browser. Server components read it and thread the value down as a prop.
 
+**A type a client module needs lives in `src/types/*` or `src/lib/schemas/*`, never in a repo module** (PR #76 review). `@/lib/recipes` reaches `@/env` through Supabase and the embedding client, so importing a type from it makes the `type` keyword load-bearing punctuation: drop it in a later edit and the service-role client lands in the browser bundle with no compile error. Declare the type somewhere with no server runtime and let the repo module re-export it for its own callers — that is why `RecipeStatus` sits beside its zod enum in `lib/schemas/recipe.ts` and `SortOption` in `types/recipe.ts`. Where a pure `src/types` union hand-mirrors a schema one, pin them with `Assert<Assignable<…>>` from `@/lib/exhaustive`, **in source** — tsconfig excludes `src/__tests__`, so an assertion written there checks nothing.
+
 ## Read the doc when the trigger fires
 
 - **Running `next dev` / Storybook, or setting up a fresh clone** (ports, `.env.yarn`, `MCP_PUBLIC_URL`, what's shared between checkouts) → [docs/parallel-checkouts.md](docs/parallel-checkouts.md)

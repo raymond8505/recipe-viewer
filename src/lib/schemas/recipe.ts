@@ -9,6 +9,8 @@
 import { z } from "zod";
 import { CUSTOM_RECIPE_SOURCE } from "@/lib/format";
 import { METRIC_YIELD_UNITS } from "@/lib/units";
+import type { Assert, Assignable } from "@/lib/exhaustive";
+import type { RecipeRowColumns } from "@/types/recipe";
 
 // A Schema.org `recipeIngredient` entry as it arrives from outside (a scrape,
 // create_recipe): a bare string, or an object carrying this app's `group`
@@ -132,6 +134,25 @@ export const schemaOrgRecipeInputSchema = schemaRecipeSchema.extend({
 // JSON-Schema export for MCP tool descriptors.
 export const recipeStatusSchema = z.enum(["published", "archived", "draft"]);
 export const RECIPE_STATUSES = recipeStatusSchema.options;
+
+// Derived from the zod enum rather than restated, so the column's valid values
+// live in exactly one place. It lives HERE, beside the enum, rather than in the
+// repo module that reads the column: `@/lib/recipes` reaches `@/env` through
+// Supabase and the embedding client, so a client module that wants this type
+// would have to name a server module to get it. This file imports only zod,
+// format and units, so client and server can both just import it.
+export type RecipeStatus = (typeof RECIPE_STATUSES)[number];
+
+// RecipeRowColumns hand-mirrors this union so `@/types` can stay free of any
+// runtime dependency. This pins the two together: drop or add a status on
+// either side and the alias stops compiling. It lives in source, not a test —
+// tsconfig excludes src/__tests__, so an assertion written there checks nothing.
+export type _RecipeStatusMatchesRow = Assert<
+  Assignable<RecipeStatus | null, RecipeRowColumns["status"]>
+>;
+export type _RowStatusMatchesRecipeStatus = Assert<
+  Assignable<RecipeRowColumns["status"], RecipeStatus | null>
+>;
 
 // The two statuses the app applies on its own — named so the repo writes, the
 // JSON-Schema export and the MCP tool prose that documents them all move

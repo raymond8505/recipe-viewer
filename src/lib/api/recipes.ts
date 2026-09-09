@@ -8,9 +8,7 @@ import type {
   RecipeIngredientGroupInput,
   SchemaRecipe,
 } from "@/types/recipe";
-// Type-only: the repo module reaches @/env at runtime, which a client bundle
-// must never do, but its status union is the one the route echoes back.
-import type { RecipeStatus } from "@/lib/recipes";
+import type { RecipeStatus } from "@/lib/schemas/recipe";
 
 export interface SaveRecipeBody {
   schema: SchemaRecipe;

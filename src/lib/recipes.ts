@@ -23,6 +23,7 @@ import {
   DEFAULT_RECIPE_STATUS,
   PUBLISHED_RECIPE_STATUS,
   RECIPE_STATUSES,
+  type RecipeStatus,
 } from "./schemas/recipe";
 import type { IngredientRow, RecipeIngredientRow } from "@/types/ingredient";
 import type {
@@ -31,12 +32,17 @@ import type {
   RecipeRowColumns,
   RecipesResult,
   SchemaRecipe,
+  SortOption,
   StoredIngredientGroup,
 } from "@/types/recipe";
 
-// Derived from the zod enum in ./schemas/recipe rather than restated, so the
-// column's valid values live in exactly one place.
-export type RecipeStatus = (typeof RECIPE_STATUSES)[number];
+// Re-exported for the server-side callers that read these off the repo module.
+// Both are DECLARED somewhere a client bundle can safely reach — RecipeStatus
+// beside its zod enum, SortOption in @/types/recipe — because this module pulls
+// @/env in through Supabase and the embedding client. A client module must
+// import them from those homes, never from here.
+export type { RecipeStatus } from "./schemas/recipe";
+export type { SortOption } from "@/types/recipe";
 
 // Discriminated error type for the write helpers. Lets callers (routes, MCP
 // tools) branch on `kind` instead of inspecting error messages.
@@ -174,8 +180,6 @@ export interface UpdateRecipePatch {
 }
 
 const PAGE_SIZE = 24;
-
-export type SortOption = "newest" | "oldest" | "name-asc" | "name-desc";
 
 export async function getStatusCounts(opts?: {
   query?: string;
