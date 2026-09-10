@@ -28,11 +28,18 @@ interface RecipeGridProps {
  * Status first so it keeps the corner it has always occupied, with the
  * category growing leftwards from it.
  */
-function defaultTopBadges(recipe: RecipeRow, showStatusBadge?: boolean): ReactNode[] {
+function defaultTopBadges(
+  recipe: RecipeRow,
+  showStatusBadge?: boolean,
+): ReactNode[] {
   const category = toArray(recipe.metadata.schema.recipeCategory)[0];
   return [
-    showStatusBadge ? <RecipeStatusBadge key="status" status={recipe.status} /> : null,
-    category ? <RecipeCategoryBadge key="category" category={category} /> : null,
+    category ? (
+      <RecipeCategoryBadge key="category" category={category} />
+    ) : null,
+    showStatusBadge ? (
+      <RecipeStatusBadge key="status" status={recipe.status} />
+    ) : null,
   ].filter(Boolean);
 }
 
@@ -50,7 +57,9 @@ export default function RecipeGrid({
     );
   }
 
-  const top = topBadges ?? ((recipe: RecipeRow) => defaultTopBadges(recipe, showStatusBadge));
+  const top =
+    topBadges ??
+    ((recipe: RecipeRow) => defaultTopBadges(recipe, showStatusBadge));
 
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">

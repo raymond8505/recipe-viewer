@@ -60,10 +60,12 @@ export function RecipeNutritionBadge({
   const label = NUTRIENT_BADGE_LABELS[field];
   return (
     <Badge
-      title="Per serving"
+      title={`${value.value} per serving`}
       className={cn("rounded-full bg-muted text-muted-foreground", className)}
     >
-      {label ? `${formatNutrientDisplay(value)} ${label}` : formatNutrientDisplay(value)}
+      {label
+        ? `${formatNutrientDisplay(value)} ${label}`
+        : formatNutrientDisplay(value)}
     </Badge>
   );
 }

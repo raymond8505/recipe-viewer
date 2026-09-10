@@ -173,7 +173,8 @@ export function parseMS(raw: string): { minutes: number; seconds: number } {
   if (text.includes(":")) {
     const [m, s] = text.split(":");
     const total =
-      Math.max(0, parseInt(m, 10) || 0) * 60 + Math.max(0, parseInt(s, 10) || 0);
+      Math.max(0, parseInt(m, 10) || 0) * 60 +
+      Math.max(0, parseInt(s, 10) || 0);
     return { minutes: Math.floor(total / 60), seconds: total % 60 };
   }
   return { minutes: Math.max(0, parseInt(text, 10) || 0), seconds: 0 };
@@ -197,7 +198,7 @@ export function parseNumeric(raw: string): number | null | undefined {
 export function formatNutrientDisplay(nv: NutrientValue): string {
   const rounded =
     nv.value > 1 ? Math.round(nv.value) : Math.round(nv.value * 100) / 100;
-  return nv.unit ? `${rounded} ${nv.unit}` : String(rounded);
+  return nv.unit ? `${rounded}${nv.unit}` : String(rounded);
 }
 
 /** Pick the singular or plural form of a noun for a count. Returns the word
@@ -380,8 +381,12 @@ const DOCUMENT_TIME_FIELDS = [
 ] as const;
 
 /** The Schema.org time keys a document's columns produce: ISO strings, absent for a null column. */
-function schemaOrgTimes(doc: RecipeDocument): Partial<Pick<SchemaOrgRecipe, "prepTime" | "cookTime" | "totalTime">> {
-  const times: Partial<Pick<SchemaOrgRecipe, "prepTime" | "cookTime" | "totalTime">> = {};
+function schemaOrgTimes(
+  doc: RecipeDocument,
+): Partial<Pick<SchemaOrgRecipe, "prepTime" | "cookTime" | "totalTime">> {
+  const times: Partial<
+    Pick<SchemaOrgRecipe, "prepTime" | "cookTime" | "totalTime">
+  > = {};
   for (const [key, column] of DOCUMENT_TIME_FIELDS) {
     const iso = secondsToIso(doc[column]);
     if (iso !== undefined) times[key] = iso;
@@ -642,7 +647,8 @@ export function msToIsoDuration(
 export function ingredientsToEditable(
   ingredients: readonly RecipeIngredientGroup[],
 ): EditableIngredients {
-  if (ingredients.length === 0) return [{ id: nanoid(), heading: null, items: [] }];
+  if (ingredients.length === 0)
+    return [{ id: nanoid(), heading: null, items: [] }];
   return ingredients.map((group) => ({
     id: nanoid(),
     heading: group.name ?? null,
