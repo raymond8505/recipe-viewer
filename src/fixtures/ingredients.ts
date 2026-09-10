@@ -1,5 +1,6 @@
 import { newRecipeIngredient } from "@/lib/recipeIngredients";
 import type {
+  IngredientNutrition,
   IngredientRow,
   RecipeIngredientRow,
 } from "@/types/ingredient";
@@ -215,8 +216,11 @@ export function makeRecipeIngredient(
   text: string,
   overrides?: Partial<RecipeIngredient>,
 ): RecipeIngredient {
-  const slug = text.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
-  return { ...newRecipeIngredient(text, `ri-${slug}`), ...overrides };
+  return { ...newRecipeIngredient(text, `ri-${slugOf(text)}`), ...overrides };
+}
+
+function slugOf(text: string): string {
+  return text.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
 }
 
 /** A group from a mix of bare texts and ready-made ingredients; `undefined` name = the nameless group. */
@@ -252,6 +256,30 @@ export function makeMatchedIngredient(
     match_status: "matched",
     ...overrides,
   });
+}
+
+/**
+ * One nameless group whose single matched line contributes exactly `total` to
+ * the recipe — the document-level sibling of `makeNutritionRecipe`. RecipeDetail
+ * and CookingMode derive nutrition from the lines they hold, so a `RecipeRow`
+ * only has nutrition through lines like this one.
+ *
+ * `total` is the WHOLE-RECIPE figure: the catalog row carries it per 100 g and
+ * the line weighs a stored 100 g, so 1400 kcal on a four-serving yield reads
+ * "350 kcal". An empty `total` is still a matched, counted line — the
+ * "covered, but nothing to show" case.
+ */
+export function makeNutritionLines(
+  total: IngredientNutrition,
+  text = "1 portion test food",
+): RecipeIngredientGroup[] {
+  return makeIngredientLines([
+    makeMatchedIngredient(
+      text,
+      makeIngredient(`cat-${slugOf(text)}`, text, { nutrition: total }),
+      { estimated_grams: 100 },
+    ),
+  ]);
 }
 
 /**

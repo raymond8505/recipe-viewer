@@ -26,6 +26,22 @@ export function recipeDocument(
 }
 
 /**
+ * The inverse of `recipeDocument`: the row with the document's content laid
+ * over it, for a consumer that takes a `RecipeRow` (cook mode) when the page
+ * has moved on from the row it was served — a saved edit, a re-scrape.
+ */
+export function applyRecipeDocument(row: RecipeRow, doc: RecipeDocument): RecipeRow {
+  return {
+    ...row,
+    metadata: { ...row.metadata, schema: doc.schema },
+    ingredients: doc.ingredients,
+    prep_time: doc.prep_time,
+    cook_time: doc.cook_time,
+    total_time: doc.total_time,
+  };
+}
+
+/**
  * A document for content that is not saved yet — a re-scrape under review.
  * The times come from the schema's ISO strings (a scrape speaks Schema.org),
  * the lines are drafted from text.

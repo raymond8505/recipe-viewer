@@ -17,11 +17,8 @@ import {
 } from "@/lib/format";
 import { useTimers, timerState, editorSeconds } from "@/hooks/useTimers";
 import type { Timer } from "@/hooks/useTimers";
-import {
-  ScalableRecipe,
-  formatScaledIngredient,
-  type NormalizedNutrition,
-} from "@/lib/ScalableRecipe";
+import { ScalableRecipe, formatScaledIngredient } from "@/lib/ScalableRecipe";
+import { recipeNormalizedNutrition } from "@/lib/nutritionMath";
 import { useWakeLock } from "@/hooks/useWakeLock";
 import { recipeDocument } from "@/lib/recipeDocument";
 import {
@@ -54,10 +51,6 @@ interface CookingModeProps {
   recipe: RecipeRow;
   onClose: () => void;
   isLoggedIn?: boolean;
-  // Normalized ingredient nutrition for the PRIMARY recipe only — the only
-  // source the panel has, and scaling is primary-only here too, so a meal's
-  // added recipes show no nutrition of their own.
-  normalizedNutrition?: NormalizedNutrition | null;
 }
 
 const TIMER_PRIORITY = {
@@ -76,7 +69,6 @@ export default function CookingMode({
   recipe,
   onClose,
   isLoggedIn = false,
-  normalizedNutrition,
 }: CookingModeProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const pendingScrollId = useRef<string | null>(null);
@@ -101,8 +93,8 @@ export default function CookingMode({
   } = useTimers(recipe.url);
 
   // The primary recipe as one document (schema + ingredient groups), which the
-  // window API may replace wholesale. `initialDoc` is the server's version,
-  // kept for the normalized-nutrition check below.
+  // window API may replace wholesale. `initialDoc` is the document registered
+  // with the window API on mount.
   const [initialDoc] = useState<RecipeDocument>(() => recipeDocument(recipe));
   const [doc, setDoc] = useState(initialDoc);
   const { schema } = doc;
@@ -125,13 +117,20 @@ export default function CookingMode({
   // Per-recipe ScalableRecipe instances. Primary is seeded immediately; secondaries
   // are seeded inside handleAddToMeal so the lookup never misses. The primary's
   // ingredient scale drives the UI; secondary recipes' scale is intentionally
-  // pinned at 1 by suppressing the controls (see below).
+  // pinned at 1 by suppressing the controls (see below). Nutrition is derived
+  // from the primary's own lines — the only recipe here whose rows carry their
+  // catalog data — so added recipes show none of their own.
   const [scalables, setScalables] = useState<Map<string, ScalableRecipe>>(
     () =>
       new Map([
         [
           recipe.id,
-          new ScalableRecipe(doc.schema, doc.ingredients, undefined, normalizedNutrition),
+          new ScalableRecipe(
+            doc.schema,
+            doc.ingredients,
+            undefined,
+            recipeNormalizedNutrition(doc),
+          ),
         ],
       ]),
   );
@@ -139,19 +138,21 @@ export default function CookingMode({
   // When the primary document is swapped (e.g. window API
   // setRecipeViewerRecipe), rebuild its ScalableRecipe at default state — the
   // previous scale was anchored to a now-stale yield and would silently
-  // produce wrong numbers. The normalized total was derived from the server's
-  // document, so it only applies while that is still the one shown.
+  // produce wrong numbers. Nutrition follows the swapped-in lines the same way.
   useEffect(() => {
     setScalables((prev) => {
       const next = new Map(prev);
-      const normalized = doc === initialDoc ? normalizedNutrition : undefined;
       next.set(
         recipe.id,
-        new ScalableRecipe(doc.schema, doc.ingredients, undefined, normalized),
+        new ScalableRecipe(
+          doc.schema,
+          doc.ingredients,
+          undefined,
+          recipeNormalizedNutrition(doc),
+        ),
       );
       return next;
     });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [doc, recipe.id]);
 
   const primaryScalable = scalables.get(recipe.id)!;

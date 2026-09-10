@@ -2,7 +2,11 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import CookingMode from "@/components/CookingMode";
 import type { RecipeRow, SchemaRecipe } from "@/types/recipe";
-import { makeIngredientLines } from "@/fixtures";
+import {
+  makeIngredientLines,
+  makeNutritionLines,
+  makeRecipe as makeRecipeRow,
+} from "@/fixtures";
 
 // useTimers is irrelevant to instruction completion; stub it out
 vi.mock("@/hooks/useTimers", () => ({
@@ -269,18 +273,15 @@ describe("CookingMode — cooking notes", () => {
 });
 
 describe("CookingMode — nutrition panel", () => {
-  const nutritious = () => makeRecipe({ recipeYield: "4 servings" });
-
-  it("shows the catalog nutrition threaded in for the primary recipe", () => {
+  it("shows the catalog nutrition of the primary recipe's own lines", () => {
     // 1400 kcal over the four servings → 350 per serving.
     render(
       <CookingMode
-        recipe={nutritious()}
+        recipe={makeRecipeRow("1", "Test Recipe", {
+          ingredients: makeNutritionLines({ calories_kcal: 1400 }),
+          metadata: { schema: { name: "Test Recipe", recipeYield: "4 servings" } },
+        })}
         onClose={vi.fn()}
-        normalizedNutrition={{
-          total: { calories_kcal: 1400 },
-          fullyCovered: true,
-        }}
       />,
     );
     expect(screen.getByText("350 kcal")).toBeTruthy();

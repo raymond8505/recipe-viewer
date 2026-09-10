@@ -19,7 +19,12 @@ import {
   rescrapeResponseFixture,
   rescrapeSavedFixture,
 } from "@/fixtures/rescrape";
-import { makeIngredientGroup, makeIngredientLines } from "@/fixtures";
+import {
+  makeIngredientGroup,
+  makeIngredientLines,
+  makeNutritionLines,
+  makeRecipeIngredient,
+} from "@/fixtures";
 import { clickAndConfirm } from "./helpers/confirmBar";
 
 function makeRecipe(
@@ -162,17 +167,18 @@ describe("RecipeDetail", () => {
     expect(screen.getByText("Boil salted water.")).toBeTruthy();
   });
 
-  // The nutrition the page shows comes from the catalog total the server
-  // resolved, never from the recipe's own stored fields. Totals are
-  // whole-recipe and the yield below is four servings, so they read as ÷4.
-  it("shows the nutrition section from the normalized catalog total", () => {
+  // The nutrition the page shows is computed from the catalog rows its
+  // ingredient lines carry, never from the recipe's own stored fields. The
+  // fixture's total is whole-recipe and the yield below is four servings, so
+  // it reads as ÷4.
+  it("shows the nutrition section from the lines' catalog total", () => {
     render(
       <RecipeDetail
-        recipe={makeRecipe({ recipeYield: "4 servings" })}
-        normalizedNutrition={{
-          total: { calories_kcal: 1400 },
-          fullyCovered: true,
-        }}
+        recipe={makeRecipe(
+          { recipeYield: "4 servings" },
+          {},
+          makeNutritionLines({ calories_kcal: 1400 }),
+        )}
       />,
     );
     expect(screen.getByText("Nutrition")).toBeTruthy();
@@ -182,16 +188,16 @@ describe("RecipeDetail", () => {
   it("shows all present nutrition fields", () => {
     render(
       <RecipeDetail
-        recipe={makeRecipe({ recipeYield: "4 servings" })}
-        normalizedNutrition={{
-          total: {
+        recipe={makeRecipe(
+          { recipeYield: "4 servings" },
+          {},
+          makeNutritionLines({
             calories_kcal: 1400,
             protein_g: 80,
             carbs_g: 160,
             fat_g: 40,
-          },
-          fullyCovered: true,
-        }}
+          }),
+        )}
       />,
     );
     expect(screen.getByText("350 kcal")).toBeTruthy();
@@ -204,11 +210,11 @@ describe("RecipeDetail", () => {
   it("hides the nutrition section when the total covers no countable nutrient", () => {
     render(
       <RecipeDetail
-        recipe={makeRecipe({
-          recipeYield: "4 servings",
-          nutrition: { servingSize: "1 cup" },
-        })}
-        normalizedNutrition={{ total: {}, fullyCovered: true }}
+        recipe={makeRecipe(
+          { recipeYield: "4 servings", nutrition: { servingSize: "1 cup" } },
+          {},
+          makeNutritionLines({}),
+        )}
       />,
     );
     expect(screen.queryByText("Nutrition")).toBeNull();
@@ -216,6 +222,22 @@ describe("RecipeDetail", () => {
 
   it("hides the nutrition section when the recipe was never normalized", () => {
     render(<RecipeDetail recipe={makeRecipe()} />);
+    expect(screen.queryByText("Nutrition")).toBeNull();
+  });
+
+  it("hides the nutrition section when any line is unmatched", () => {
+    // All-or-nothing: one line without a catalog row holds the whole recipe
+    // off its total rather than undercounting it.
+    render(
+      <RecipeDetail
+        recipe={makeRecipe({ recipeYield: "4 servings" }, {}, [
+          makeIngredientGroup(undefined, [
+            ...makeNutritionLines({ calories_kcal: 1400 })[0].ingredients,
+            "1 cup sugar",
+          ]),
+        ])}
+      />,
+    );
     expect(screen.queryByText("Nutrition")).toBeNull();
   });
 
@@ -232,6 +254,143 @@ describe("RecipeDetail", () => {
     );
     expect(screen.queryByText("Nutrition")).toBeNull();
     expect(screen.queryByText("350 kcal")).toBeNull();
+  });
+
+  // A save replaces the whole document with what /update echoes. The echo is
+  // hydrated — every kept line still carries its catalog row — so the numbers
+  // must survive an edit that touched no ingredient.
+  it("keeps nutrition after a save that changes no ingredient line", async () => {
+    const recipe = makeRecipe(
+      { recipeYield: "4 servings" },
+      {},
+      makeNutritionLines({ calories_kcal: 1400 }),
+    );
+    const mockFetch = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          schema: recipe.metadata.schema,
+          ingredients: recipe.ingredients,
+          prep_time: null,
+          cook_time: null,
+          total_time: null,
+          status: "draft",
+          url: recipe.url,
+          source: recipe.source,
+        }),
+        { status: 200 },
+      ),
+    );
+    vi.stubGlobal("fetch", mockFetch);
+
+    render(<RecipeDetail recipe={recipe} isLoggedIn={true} />);
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /^edit$/i }));
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /^save$/i }));
+    });
+
+    await waitFor(() => expect(mockFetch).toHaveBeenCalled());
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: /^edit$/i })).toBeTruthy(),
+    );
+    expect(screen.getByText("350 kcal")).toBeTruthy();
+    expect(screen.queryByText(/no nutrition data/i)).toBeNull();
+  });
+
+  it("drops nutrition after a save whose echo carries an unmatched line", async () => {
+    const recipe = makeRecipe(
+      { recipeYield: "4 servings" },
+      {},
+      makeNutritionLines({ calories_kcal: 1400 }),
+    );
+    // A line added in the editor comes back as a row with no catalog match;
+    // nutrition waits on normalization rather than undercounting.
+    const echoedGroups = [
+      makeIngredientGroup(undefined, [
+        ...recipe.ingredients[0].ingredients,
+        makeRecipeIngredient("1 cup sugar"),
+      ]),
+    ];
+    const mockFetch = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          schema: recipe.metadata.schema,
+          ingredients: echoedGroups,
+          prep_time: null,
+          cook_time: null,
+          total_time: null,
+          status: "draft",
+          url: recipe.url,
+          source: recipe.source,
+        }),
+        { status: 200 },
+      ),
+    );
+    vi.stubGlobal("fetch", mockFetch);
+
+    render(
+      <RecipeDetail recipe={recipe} isLoggedIn={true} canCurateNutrition={true} />,
+    );
+    expect(screen.getByText("350 kcal")).toBeTruthy();
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /^edit$/i }));
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /^save$/i }));
+    });
+
+    await waitFor(() =>
+      expect(
+        screen.getByText("No nutrition data on this recipe yet."),
+      ).toBeTruthy(),
+    );
+    expect(screen.queryByText("350 kcal")).toBeNull();
+  });
+
+  // Cook mode takes a row, and the `recipe` prop never changes after the
+  // server render — so the row it opens with has to be built from the live
+  // document, or a saved edit is invisible in cook mode until a reload.
+  it("opens cook mode on the saved document, not the server-render row", async () => {
+    const recipe = makeRecipe({ name: "Server Name" });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            ...rescrapeSavedFixture,
+            schema: { ...rescrapeSavedFixture.schema, name: "Saved Name" },
+            status: "draft",
+            url: recipe.url,
+            source: recipe.source,
+          }),
+          { status: 200 },
+        ),
+      ),
+    );
+
+    render(<RecipeDetail recipe={recipe} isLoggedIn={true} />);
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /^edit$/i }));
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /^save$/i }));
+    });
+    await waitFor(() =>
+      expect(screen.getByRole("heading", { level: 1, name: "Saved Name" })).toBeTruthy(),
+    );
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /^cook$/i }));
+    });
+
+    // The page's own heading plus cook mode's.
+    await waitFor(() =>
+      expect(
+        screen.getAllByRole("heading", { level: 1, name: "Saved Name" }),
+      ).toHaveLength(2),
+    );
+    expect(screen.queryByText("Server Name")).toBeNull();
   });
 
   it("renders ingredients list", () => {
