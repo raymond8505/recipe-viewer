@@ -40,6 +40,21 @@ A line's **position is its index** in those arrays and its **identity is the row
 
 **Nothing outside the app reads the blob.** The RPCs that once handed `metadata->'schema'` to n8n are dropped (0018) — agent search goes through the MCP `search_recipes` tool. Anything that queries the blob directly gets the frozen copy, so don't add such a reader.
 
+## Promoted instructions — `recipes.instructions`
+
+**`recipes.instructions` (jsonb, NOT NULL, default `[]`; column 0016, shape 0021) holds `RecipeInstructionGroup[]` — the app's own shape, stored as is:**
+
+```jsonc
+[ { "steps": [ { "text": "Boil water." } ] },                                          // nameless run: the `name` key is ABSENT
+  { "name": "Sauce", "steps": [ { "text": "Simmer.", "name": "Simmer", "seconds": 330 } ] } ]
+```
+
+A step has no identity and nothing joins to it, so unlike ingredients there is no second table, no id array, no reconcile and no hydrate step: `hydrate` passes the column through, and a write replaces the whole list. `RECIPE_COLUMNS` selects it on the list query too — MealSearch hands a secondary recipe straight to cooking mode, which renders its steps and seeds its timers.
+
+- **Every write stores canonical form** (`canonicalizeInstructions`, `src/lib/recipeInstructions.ts`): text and names trimmed, blank steps and empty groups dropped, `seconds` kept only as a positive whole number beside a `name`, adjacent nameless groups merged. `createRecipeRow` and `updateRecipeRow` both apply it, so an agent's payload and the editor's draft land identically; `/update` echoes the stored list because it can differ from what was sent.
+- **The blob's `recipeInstructions` is a dead key**, frozen at its pre-0021 value in older rows, exactly like `recipeIngredient`. `DEAD_SCHEMA_KEYS` in `src/lib/recipes.ts` names both: `deleteDeadKeys` runs in `hydrate` at every read exit and `stripDeadKeys` on every blob write (the zod schema is `.passthrough()`, so an agent can still send either).
+- `recipeToMarkdown(schema, ingredients, instructions)` renders the steps from the column into `content` — `## Instructions`, then `## <name>` per named group and `- text` per step — on every create and on any update that touches the schema, the ingredients or the instructions.
+
 ## Promoted time columns — the hydrate/extract seam
 
 **`recipes.prep_time` / `cook_time` / `total_time` (integer SECONDS, nullable) are the source of truth for a recipe's times** (0019, re-based to seconds in 0020). The copies still sitting in `metadata.schema.{prepTime,cookTime,totalTime}` are **dead artifacts** — no migration strips them, and nothing may read or write them again.
@@ -58,6 +73,8 @@ Conversions live in `src/lib/format.ts` — never re-derive them. The ISO → co
 
 ## Migrations
 
-**Migration records in `db/migrations/` are applied out-of-band** via Supabase MCP `apply_migration` (project `xonkmdhnjpjkapnsmltu`); 0006+ show up in the project's migrations table, 0002–0005 predate that and don't — check `information_schema` for actual state, not the migrations list. 0016/0017 are applied (as `recipes_ingredients_instructions` / `recipe_ingredients_position_optional`); 0018 drops the dead `match_recipes` / `find_dinner` RPCs. `recipes.instructions` (0016) is populated but unread — instructions stay in the blob.
+**Migration records in `db/migrations/` are applied out-of-band** via Supabase MCP `apply_migration` (project `xonkmdhnjpjkapnsmltu`); 0006+ show up in the project's migrations table, 0002–0005 predate that and don't — check `information_schema` for actual state, not the migrations list. 0016/0017 are applied (as `recipes_ingredients_instructions` / `recipe_ingredients_position_optional`); 0018 drops the dead `match_recipes` / `find_dinner` RPCs; 0021 is a column comment recording `recipes.instructions`' group shape — the data is rewritten by the sync script below, not SQL.
 
-**`yarn sync:ingredient-columns [--dry-run] [--limit=N]`** brings a recipe's column and rows up to its blob's `recipeIngredient` — the one-shot for recipes edited through a blob-writing build after the 0016 backfill, and the last reader of the dead key. Deterministic only: new rows land unmatched; the matcher is never invoked.
+**`yarn sync:ingredient-columns [--dry-run] [--limit=N] [--id=<uuid>]`** brings a recipe's column and rows up to its blob's `recipeIngredient` — the one-shot for recipes edited through a blob-writing build after the 0016 backfill, and the last reader of the dead key. Deterministic only: new rows land unmatched; the matcher is never invoked.
+
+**`yarn sync:instruction-columns [--dry-run] [--limit=N] [--id=<uuid>]`** translates each recipe's blob `recipeInstructions` through `fromSchemaOrgInstructions` and writes `recipes.instructions` when the two differ — the one-shot for the 0021 shape change and for recipes edited through a blob-writing build, and the last reader of that dead key. It compares with `isDeepStrictEqual` because jsonb reorders object keys; a second run does nothing.
