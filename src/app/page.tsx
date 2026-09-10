@@ -9,6 +9,8 @@ import SearchBar from "@/components/SearchBar";
 import SortBar from "@/components/SortBar";
 import StatusFilter from "@/components/StatusFilter";
 import Pagination from "@/components/Pagination";
+import { toSchemaOrgRecipe } from "@/lib/format";
+import { recipeDocument } from "@/lib/recipeDocument";
 
 const PAGE_SIZE = 24;
 const VALID_SORTS = new Set<SortOption>([
@@ -91,7 +93,9 @@ export default async function Home({ searchParams }: HomeProps) {
         )}
       </div>
 
-      <RecipeStateProvider schemas={recipes.map((r) => r.metadata.schema)} />
+      <RecipeStateProvider
+        recipes={recipes.map((r) => toSchemaOrgRecipe(recipeDocument(r)))}
+      />
       <RecipeGrid recipes={recipes} showStatusBadge={isLoggedIn} />
 
       <Suspense>

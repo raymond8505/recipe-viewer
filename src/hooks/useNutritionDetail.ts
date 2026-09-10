@@ -1,15 +1,13 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { getIngredientText, groupIngredientsWithIndex } from "@/lib/format";
 import {
-  indexRowsForLines,
-  lineComputationForSchema,
+  computeLineNutrition,
   perPortionNutrition,
-  resolveLineRow,
   sumNutrition,
   type LineComputation,
 } from "@/lib/nutritionMath";
+import { flattenIngredients, toRecipeIngredient } from "@/lib/recipeIngredients";
 import { parseServings } from "@/lib/units";
 import {
   estimateIngredientGrams,
@@ -19,7 +17,11 @@ import {
 } from "@/lib/api/recipes";
 import { importUsdaIngredient } from "@/lib/api/ingredients";
 import type { UsdaSearchFood } from "@/lib/usda";
-import type { QuantitativeValue, RecipeIngredient } from "@/types/recipe";
+import type {
+  QuantitativeValue,
+  RecipeIngredient,
+  RecipeIngredientGroup,
+} from "@/types/recipe";
 import type {
   IngredientKeywordMatch,
   IngredientNutrition,
@@ -36,11 +38,11 @@ export type CatalogIngredientSummary = Pick<
 >;
 
 export interface NutritionDetailLine {
-  /** Original index into schemaIngredients — also recipe_ingredients.position. */
-  index: number;
-  /** The recipe's display text for this line (the source of truth). */
+  /** The ingredient's id — the row's, and what every action here addresses. */
+  id: string;
+  /** The recipe's text for this line (the source of truth). */
   text: string;
-  row: RecipeIngredientRow | null;
+  row: RecipeIngredient;
   ingredient: CatalogIngredientSummary | null;
   computation: LineComputation;
   /** Counted in the totals. Switched off by the user, not by the data. */
@@ -56,10 +58,20 @@ export interface NutritionDetailGroup {
   enabled: GroupEnabledState;
 }
 
-// State + derived math for the NutritionDetail screen. Rows join to schema
-// lines via `resolveLineRow` (stable line id, position only for legacy lines);
-// a line with no row is "stale" and excluded from totals until normalization
-// gives it one. Association changes are non-optimistic: await the PATCH, then
+/** The catalog rows the groups carry, keyed by id, as the overlay's seed. */
+function catalogFromGroups(
+  groups: readonly RecipeIngredientGroup[],
+): Map<string, CatalogIngredientSummary> {
+  const map = new Map<string, CatalogIngredientSummary>();
+  for (const line of flattenIngredients(groups)) {
+    if (line.ingredient) map.set(line.ingredient.id, line.ingredient);
+  }
+  return map;
+}
+
+// State + derived math for the NutritionDetail screen. The recipe's ingredient
+// groups are the state; every line IS its recipe_ingredients row, so there is
+// no join. Association changes are non-optimistic: await the PATCH, then
 // update local state — totals recompute via useMemo.
 //
 // The per-line enable/disable toggles are a what-if lens ("what are the macros
@@ -68,68 +80,44 @@ export interface NutritionDetailGroup {
 // and MCP get_recipe all keep resolving through ScalableRecipe.nutrition().
 export function useNutritionDetail(
   recipeId: string,
-  schemaIngredients: Array<string | RecipeIngredient>,
+  initialIngredients: RecipeIngredientGroup[],
   recipeYield: string | string[] | QuantitativeValue | undefined,
-  initialRows: RecipeIngredientRow[],
-  initialIngredients: IngredientRow[],
 ) {
-  const [rows, setRows] = useState(initialRows);
-  // Local copy of the schema lines so an inline text edit re-renders without a
-  // server round-trip for the whole page (same init-from-props convention as
-  // `rows`).
-  const [schemaLines, setSchemaLines] = useState(schemaIngredients);
-  const [ingredientsById, setIngredientsById] = useState<
-    Map<string, CatalogIngredientSummary>
-  >(() => new Map(initialIngredients.map((ing) => [ing.id, ing])));
-  const [savingRowId, setSavingRowId] = useState<string | null>(null);
-  // Line-text saves key on the schema index, not a row id — a stale or
-  // never-normalized line has no row.
-  const [savingLineIndex, setSavingLineIndex] = useState<number | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  // Keyed by schema position — the same index the row join falls back to, and
-  // the one `updateLineText` addresses a line by. Stable for the page's
-  // lifetime even though `schemaLines` is now local state: an inline edit
-  // rewrites one line's text in place and never reorders, adds, or removes, so
-  // a switched-off line can't silently change identity under the user mid-edit.
-  const [disabledIndexes, setDisabledIndexes] = useState<Set<number>>(
-    () => new Set(),
+  const [groupsState, setGroups] = useState(initialIngredients);
+  // Catalog rows by id, layered over what the groups carry: an association
+  // change brings its own summary (from the keyword match or the USDA import),
+  // so the line can render its new name without a refetch.
+  const [catalogById, setCatalogById] = useState<Map<string, CatalogIngredientSummary>>(
+    () => catalogFromGroups(initialIngredients),
   );
+  const [savingRowId, setSavingRowId] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  // Keyed by the line's id, which is stable across every edit this screen can
+  // make — a reword keeps the row — so a switched-off line can't silently
+  // change identity under the user mid-edit.
+  const [disabledIds, setDisabledIds] = useState<Set<string>>(() => new Set());
 
-  const groups = useMemo<NutritionDetailGroup[]>(() => {
-    const rowIndex = indexRowsForLines(rows);
-    return groupIngredientsWithIndex(schemaLines).map(
-      ({ heading, items }) => {
-        const lines = items.map(({ ingredient: schemaIngredient, index }) => {
-          const text = getIngredientText(schemaIngredient);
-          const resolved = resolveLineRow(schemaIngredient, index, rowIndex);
-          const row = resolved.row;
-          // Resolve the catalog row purely from ingredient_id, the same join
-          // computeRecipeNutrition does. Staleness deliberately does NOT gate
-          // this: lineComputationForSchema re-derives it and returns the
-          // "stale" exclusion before ever reading `ingredient`, so totals are
-          // unaffected either way — but the association is a fact about the
-          // row regardless of whether its text has moved on.
-          //
-          // Gating it here meant a manual re-match on an edited line rendered
-          // as "(unknown ingredient)" and stayed that way: the association
-          // PATCH only moves ingredient_id, never raw_text, so the line is
-          // still stale when the picked row comes back, and nothing short of
-          // a reload could clear it.
-          const ingredient = row?.ingredient_id
-            ? (ingredientsById.get(row.ingredient_id) ?? null)
+  const groups = useMemo<NutritionDetailGroup[]>(
+    () =>
+      groupsState.map((group) => {
+        const lines = group.ingredients.map((row): NutritionDetailLine => {
+          // The association is a fact about the row, resolved purely from
+          // ingredient_id — the same lookup computeRecipeNutrition makes.
+          const ingredient = row.ingredient_id
+            ? (catalogById.get(row.ingredient_id) ?? null)
             : null;
           return {
-            index,
-            text,
+            id: row.id,
+            text: row.raw_text,
             row,
             ingredient,
-            computation: lineComputationForSchema(text, resolved, ingredient),
-            enabled: !disabledIndexes.has(index),
+            computation: computeLineNutrition(row, ingredient),
+            enabled: !disabledIds.has(row.id),
           };
         });
         const enabledCount = lines.filter((l) => l.enabled).length;
         return {
-          heading,
+          heading: group.name ?? null,
           lines,
           enabled:
             enabledCount === lines.length
@@ -138,9 +126,9 @@ export function useNutritionDetail(
                 ? "none"
                 : "some",
         };
-      },
-    );
-  }, [rows, ingredientsById, schemaLines, disabledIndexes]);
+      }),
+    [groupsState, catalogById, disabledIds],
+  );
 
   const lines = useMemo(() => groups.flatMap((g) => g.lines), [groups]);
   const enabledLines = useMemo(() => lines.filter((l) => l.enabled), [lines]);
@@ -162,39 +150,48 @@ export function useNutritionDetail(
     [totals, servings],
   );
 
-  // Both warnings are scoped to enabled lines: they exist to flag contributions
+  // Scoped to enabled lines: the warning exists to flag contributions
   // *silently* missing from the tally, and a line the user switched off is not
   // silent. Counting those would make the flag count climb on every toggle.
   const excludedCount = enabledLines.filter(
     (l) => l.computation.kind === "excluded",
   ).length;
-  const hasStaleLines = enabledLines.some(
-    (l) => l.computation.kind === "excluded" && l.computation.reason === "stale",
-  );
   const disabledCount = lines.length - enabledLines.length;
 
-  function toggleLine(index: number) {
-    setDisabledIndexes((current) => {
+  function toggleLine(id: string) {
+    setDisabledIds((current) => {
       const next = new Set(current);
-      if (!next.delete(index)) next.add(index);
+      if (!next.delete(id)) next.add(id);
       return next;
     });
   }
 
   /** Batch action behind a group's checkbox. */
-  function setLinesEnabled(indexes: number[], enabled: boolean) {
-    setDisabledIndexes((current) => {
+  function setLinesEnabled(ids: string[], enabled: boolean) {
+    setDisabledIds((current) => {
       const next = new Set(current);
-      for (const index of indexes) {
-        if (enabled) next.delete(index);
-        else next.add(index);
+      for (const id of ids) {
+        if (enabled) next.delete(id);
+        else next.add(id);
       }
       return next;
     });
   }
 
   function enableAll() {
-    setDisabledIndexes(new Set());
+    setDisabledIds(new Set());
+  }
+
+  /** Swap one line for the row the server returned, in place. */
+  function replaceRow(row: RecipeIngredientRow) {
+    setGroups((current) =>
+      current.map((group) => ({
+        ...group,
+        ingredients: group.ingredients.map((line) =>
+          line.id === row.id ? { ...line, ...toRecipeIngredient(row) } : line,
+        ),
+      })),
+    );
   }
 
   async function selectIngredient(
@@ -204,14 +201,11 @@ export function useNutritionDetail(
     setSavingRowId(rowId);
     setError(null);
     try {
-      const updated = await updateRecipeIngredientAssociation(
-        recipeId,
-        rowId,
-        match?.id ?? null,
+      replaceRow(
+        await updateRecipeIngredientAssociation(recipeId, rowId, match?.id ?? null),
       );
-      setRows((current) => current.map((r) => (r.id === rowId ? updated : r)));
       if (match) {
-        setIngredientsById((current) =>
+        setCatalogById((current) =>
           new Map(current).set(match.id, {
             id: match.id,
             name: match.name,
@@ -234,19 +228,14 @@ export function useNutritionDetail(
   // rival — and the association call below is what teaches that row this
   // recipe's wording.
   async function importUsda(rowId: string, food: UsdaSearchFood) {
-    const row = rows.find((r) => r.id === rowId);
+    const row = lines.find((l) => l.id === rowId)?.row;
     if (!row) return;
     setSavingRowId(rowId);
     setError(null);
     try {
       const ingredient = await importUsdaIngredient(food.fdcId, row.name_text);
-      const updated = await updateRecipeIngredientAssociation(
-        recipeId,
-        rowId,
-        ingredient.id,
-      );
-      setRows((current) => current.map((r) => (r.id === rowId ? updated : r)));
-      setIngredientsById((current) =>
+      replaceRow(await updateRecipeIngredientAssociation(recipeId, rowId, ingredient.id));
+      setCatalogById((current) =>
         new Map(current).set(ingredient.id, {
           id: ingredient.id,
           name: ingredient.name,
@@ -263,25 +252,22 @@ export function useNutritionDetail(
     }
   }
 
-  // Save an edited line text into the recipe schema. Non-optimistic like the
-  // other mutations: await the PATCH, then swap in the server's line array AND
-  // its re-parsed rows.
-  //
-  // Both halves, together. A reword doesn't re-match — the line keeps the
-  // ingredient it was curated onto — so the edited line must keep contributing
-  // to the totals right through the edit. Taking the new text without the new
-  // rows is what used to make it look like the match had been thrown away.
-  async function updateLineText(index: number, text: string): Promise<void> {
-    setSavingLineIndex(index);
+  // Save an edited line's text into the recipe. Non-optimistic like the other
+  // mutations: await the PATCH, then swap in the server's groups, whose row
+  // for this line already carries the deterministic re-parse. A reword doesn't
+  // re-match — the line keeps the ingredient it was curated onto — so it keeps
+  // contributing to the totals right through the edit.
+  async function updateLineText(id: string, text: string): Promise<void> {
+    setSavingRowId(id);
     setError(null);
     try {
-      const updated = await updateRecipeIngredientLine(recipeId, index, text);
-      setSchemaLines(updated.recipeIngredient);
-      setRows(updated.rows);
+      const updated = await updateRecipeIngredientLine(recipeId, id, text);
+      setGroups(updated.ingredients);
+      setCatalogById((current) => new Map([...current, ...catalogFromGroups(updated.ingredients)]));
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to update line");
     } finally {
-      setSavingLineIndex(null);
+      setSavingRowId(null);
     }
   }
 
@@ -291,8 +277,7 @@ export function useNutritionDetail(
     setSavingRowId(rowId);
     setError(null);
     try {
-      const updated = await estimateIngredientGrams(recipeId, rowId);
-      setRows((current) => current.map((r) => (r.id === rowId ? updated : r)));
+      replaceRow(await estimateIngredientGrams(recipeId, rowId));
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to estimate grams");
     } finally {
@@ -305,8 +290,7 @@ export function useNutritionDetail(
     setSavingRowId(rowId);
     setError(null);
     try {
-      const updated = await setIngredientGrams(recipeId, rowId, grams);
-      setRows((current) => current.map((r) => (r.id === rowId ? updated : r)));
+      replaceRow(await setIngredientGrams(recipeId, rowId, grams));
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to set grams");
     } finally {
@@ -320,10 +304,8 @@ export function useNutritionDetail(
     perPortion,
     servings,
     excludedCount,
-    hasStaleLines,
     disabledCount,
     savingRowId,
-    savingLineIndex,
     error,
     selectIngredient,
     importUsda,

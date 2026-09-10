@@ -1,4 +1,5 @@
 import { schemaNutritionToValues } from "@/lib/nutritionMath";
+import type { IngredientNutrition } from "@/types/ingredient";
 import type { SchemaRecipe } from "@/types/recipe";
 
 type SchemaNutrition = NonNullable<SchemaRecipe["nutrition"]>;
@@ -35,6 +36,34 @@ export const fullSchemaNutrition: SchemaNutrition = {
 export const sparseSchemaNutrition: SchemaNutrition = {
   calories: "350 kcal",
   proteinContent: "22 g",
+};
+
+/**
+ * `fullSchemaNutrition`'s numbers as a WHOLE-RECIPE catalog total — the same
+ * per-serving figures × 4 servings. Since the catalog became the only source of
+ * nutrition, this is the shape a panel story or test needs to render the values
+ * the Schema.org fixture above merely describes.
+ *
+ * One nutrient can't cross over: the catalog has no unsaturated-fat column (see
+ * SCHEMA_NUTRITION_MAP), so `unsaturatedFatContent` has no counterpart here and
+ * that label row is unreachable by design.
+ */
+export const fullCatalogTotal: IngredientNutrition = {
+  calories_kcal: 2080,
+  protein_g: 128,
+  carbs_g: 192,
+  fat_g: 72,
+  fiber_g: 24,
+  sodium_mg: 3280,
+  sugars_g: 40,
+  saturated_fat_g: 20,
+  cholesterol_mg: 200,
+};
+
+/** `sparseSchemaNutrition` as a whole-recipe catalog total (× 4 servings). */
+export const sparseCatalogTotal: IngredientNutrition = {
+  calories_kcal: 1400,
+  protein_g: 88,
 };
 
 /** `fullSchemaNutrition` in the parsed form the label adapters consume. */

@@ -2,22 +2,34 @@ export { recipeFixtures, makeRecipe } from "./recipes";
 export {
   ingredientFixtures,
   makeIngredient,
+  makeRecipeIngredientRow,
   makeRecipeIngredient,
+  makeMatchedIngredient,
+  makeIngredientGroup,
+  makeIngredientLines,
   matchedLinesScenario,
 } from "./ingredients";
-export { rescrapeFixture } from "./rescrape";
+export {
+  rescrapeFixture,
+  rescrapeResponseFixture,
+  rescrapeSavedFixture,
+} from "./rescrape";
 export {
   fullSchemaNutrition,
   sparseSchemaNutrition,
+  fullCatalogTotal,
+  sparseCatalogTotal,
   fullNutrientValues,
   sparseNutrientValues,
 } from "./nutrition";
 export { makeTimer } from "./timers";
 export {
   scalableBaseSchema,
+  scalableBaseIngredients,
   quantitativeValueYield,
   makeSchemaRecipe,
   makeScalableRecipe,
+  makeNutritionRecipe,
   makeScaledIngredient,
 } from "./scalable";
 

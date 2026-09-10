@@ -229,11 +229,15 @@ export function formatDate(iso: string | undefined | null): string | null {
 
 import { nanoid } from "nanoid";
 import type { NutrientValue } from "./nutritionMath";
+import { ingredientTexts } from "./recipeIngredients";
 import type {
   HowToSection,
   HowToStep,
   QuantitativeValue,
-  RecipeIngredient,
+  RecipeDocument,
+  RecipeIngredientGroup,
+  RecipeIngredientGroupInput,
+  SchemaOrgRecipe,
   SchemaRecipe,
 } from "@/types/recipe";
 import type {
@@ -287,66 +291,6 @@ export function isBrowsableUrl(value: string | null | undefined): boolean {
   } catch {
     return false;
   }
-}
-
-/**
- * Get the ingredient text from a string or RecipeIngredient object.
- */
-export function getIngredientText(
-  ingredient: string | RecipeIngredient,
-): string {
-  return typeof ingredient === "string" ? ingredient : ingredient.name;
-}
-
-export interface IndexedIngredient {
-  ingredient: string | RecipeIngredient;
-  /**
-   * Position in the original recipeIngredient array. Grouping reorders
-   * interleaved groups, so this is the only stable join key back to derived
-   * per-line data (recipe_ingredients.position uses the same index).
-   */
-  index: number;
-}
-
-/**
- * Group an ingredient list by group, carrying each item's original array
- * index through the grouping. Returns a single group with a null heading
- * when no ingredient defines group.
- */
-export function groupIngredientsWithIndex(
-  ingredients: Array<string | RecipeIngredient>,
-): Array<{ heading: string | null; items: IndexedIngredient[] }> {
-  const indexed = ingredients.map((ingredient, index) => ({ ingredient, index }));
-  const hasGroups = ingredients.some(
-    (i) => typeof i !== "string" && i.group != null,
-  );
-  if (!hasGroups) return [{ heading: null, items: indexed }];
-
-  const order: Array<string | null> = [];
-  const map = new Map<string | null, IndexedIngredient[]>();
-  for (const item of indexed) {
-    const ing = item.ingredient;
-    const group = typeof ing === "string" ? null : (ing.group ?? null);
-    if (!map.has(group)) {
-      order.push(group);
-      map.set(group, []);
-    }
-    map.get(group)!.push(item);
-  }
-  return order.map((heading) => ({ heading, items: map.get(heading)! }));
-}
-
-/**
- * Group an ingredient list by group. Returns a single group with
- * a null heading when no ingredient defines group.
- */
-export function groupIngredients(
-  ingredients: Array<string | RecipeIngredient>,
-): Array<{ heading: string | null; items: Array<string | RecipeIngredient> }> {
-  return groupIngredientsWithIndex(ingredients).map(({ heading, items }) => ({
-    heading,
-    items: items.map((item) => item.ingredient),
-  }));
 }
 
 /**
@@ -416,33 +360,83 @@ export function getYieldUnit(
   return null;
 }
 
+// ---------------------------------------------------------------------------
+// The outbound Schema.org edge.
+//
+// Internally a recipe is a RecipeDocument: the stored schema, the ingredient
+// groups, and the column-backed times. Anything that leaves the app as a
+// Schema.org Recipe — the JSON-LD script, the image-generation webhook, the
+// window API — is assembled here and nowhere else. Every column-backed field
+// is read from its column (times in seconds → ISO 8601; lines → their text,
+// groups in order), never from the copy the blob may still carry, so this is
+// the translation layer that grows as more of `metadata.schema` moves out.
+// The inbound half is `documentFromSchemaOrg` in ./recipeDocument.
+// ---------------------------------------------------------------------------
+
+const DOCUMENT_TIME_FIELDS = [
+  ["prepTime", "prep_time"],
+  ["cookTime", "cook_time"],
+  ["totalTime", "total_time"],
+] as const;
+
+/** The Schema.org time keys a document's columns produce: ISO strings, absent for a null column. */
+function schemaOrgTimes(doc: RecipeDocument): Partial<Pick<SchemaOrgRecipe, "prepTime" | "cookTime" | "totalTime">> {
+  const times: Partial<Pick<SchemaOrgRecipe, "prepTime" | "cookTime" | "totalTime">> = {};
+  for (const [key, column] of DOCUMENT_TIME_FIELDS) {
+    const iso = secondsToIso(doc[column]);
+    if (iso !== undefined) times[key] = iso;
+  }
+  return times;
+}
+
 /**
- * Return a Schema.org-compliant JSON-LD object for a recipe.
- * Strips custom extensions (notes, cookingNotes, ingredient group objects) so
- * external tools that validate against the spec can parse the output cleanly.
+ * The whole recipe as a Schema.org Recipe, custom fields included: the stored
+ * schema, its three time keys replaced from the columns, and
+ * `recipeIngredient` flattened to the lines' text. For consumers that want the
+ * full document (the image webhook reads `notes`; the window API hands agents
+ * everything). JSON-LD, which must be spec-clean, goes through
+ * `toSchemaOrgJsonLd` instead.
+ */
+export function toSchemaOrgRecipe(doc: RecipeDocument): SchemaOrgRecipe {
+  const { prepTime: _p, cookTime: _c, totalTime: _t, ...rest } = doc.schema;
+  void _p;
+  void _c;
+  void _t;
+  const texts = ingredientTexts(doc.ingredients);
+  return {
+    ...rest,
+    ...schemaOrgTimes(doc),
+    ...(texts.length > 0 ? { recipeIngredient: texts } : {}),
+  };
+}
+
+/**
+ * Return a Schema.org-compliant JSON-LD object for a recipe. An explicit
+ * allowlist of standard fields, so custom extensions (notes, cookingNotes) can
+ * never leak; times from the columns; `recipeIngredient` as plain strings —
+ * group names and row ids are ours, not Schema.org's.
  *
- * `nutritionOverride` replaces the schema's own `nutrition` in the output when
- * provided — used to emit the normalized-ingredient nutrition (already
- * per-serving, Schema.org-shaped) in place of the hand-entered fields. It still
- * flows through the same allowlist, so no custom fields leak.
+ * `nutritionOverride` is the ONLY source of the output's `nutrition` — the
+ * normalized-ingredient nutrition, already per-serving and Schema.org-shaped.
+ * Omit it and the key is omitted: the stored `schema.nutrition` is deliberately
+ * not a fallback here, for the same reason `ScalableRecipe.nutrition()` won't
+ * serve it, so what we publish always traces back to the ingredient catalog.
  */
 export function toSchemaOrgJsonLd(
-  schema: SchemaRecipe,
+  doc: RecipeDocument,
   options?: { nutritionOverride?: SchemaRecipe["nutrition"] },
 ): object {
+  const { schema } = doc;
   const result: Record<string, unknown> = {
     "@context": schema["@context"] ?? "https://schema.org",
     "@type": schema["@type"] ?? "Recipe",
     name: schema.name,
   };
-  const nutrition = options?.nutritionOverride ?? schema.nutrition;
+  const nutrition = options?.nutritionOverride;
   const optionalFields = [
     "description",
     "image",
     "author",
-    "cookTime",
-    "prepTime",
-    "totalTime",
     "recipeYield",
     "recipeCuisine",
     "recipeCategory",
@@ -453,10 +447,10 @@ export function toSchemaOrgJsonLd(
   for (const key of optionalFields) {
     if (schema[key] != null) result[key] = schema[key];
   }
+  Object.assign(result, schemaOrgTimes(doc));
   if (nutrition != null) result.nutrition = nutrition;
-  if (schema.recipeIngredient?.length) {
-    result.recipeIngredient = schema.recipeIngredient.map(getIngredientText);
-  }
+  const texts = ingredientTexts(doc.ingredients);
+  if (texts.length > 0) result.recipeIngredient = texts;
   return result;
 }
 
@@ -546,7 +540,7 @@ export function instructionsToMarkdown(
 }
 
 /**
- * Render a recipe schema to a plain markdown document.
+ * Render a recipe to a plain markdown document.
  *
  * This is the value stored in the `content` column AND the text embedded for
  * semantic search, so it should capture the full substance of the recipe
@@ -554,7 +548,10 @@ export function instructionsToMarkdown(
  * deterministic form. Custom/internal fields (notes, cookingNotes) are
  * intentionally excluded — they aren't part of the recipe's searchable body.
  */
-export function schemaToMarkdown(schema: SchemaRecipe): string {
+export function recipeToMarkdown(
+  schema: SchemaRecipe,
+  ingredients: readonly RecipeIngredientGroup[],
+): string {
   const blocks: string[] = [`# ${schema.name}`];
 
   if (schema.description) blocks.push(schema.description);
@@ -573,11 +570,12 @@ export function schemaToMarkdown(schema: SchemaRecipe): string {
   if (category) meta.push(`Category: ${category}`);
   if (meta.length) blocks.push(meta.join(" · "));
 
-  if (schema.recipeIngredient?.length) {
+  if (ingredients.some((group) => group.ingredients.length > 0)) {
     const lines = ["## Ingredients"];
-    for (const { heading, items } of groupIngredients(schema.recipeIngredient)) {
-      if (heading) lines.push(`### ${heading}`);
-      for (const item of items) lines.push(`- ${getIngredientText(item)}`);
+    for (const group of ingredients) {
+      if (group.ingredients.length === 0) continue;
+      if (group.name) lines.push(`### ${group.name}`);
+      for (const item of group.ingredients) lines.push(`- ${item.raw_text}`);
     }
     blocks.push(lines.join("\n"));
   }
@@ -601,11 +599,11 @@ export function toArray(val: string | string[] | undefined | null): string[] {
 }
 
 // ---------------------------------------------------------------------------
-// Structured-editor converters (UI tree ⇄ stored schema)
+// Structured-editor converters (UI tree ⇄ recipe)
 //
-// Groups exist ONLY in the editor's draft. The stored schema is flat:
-// ingredients carry a `group` string, instructions are HowToStep/HowToSection.
-// These four functions are the single translation boundary — see
+// Ingredient groups map one to one onto RecipeIngredientGroup[]; instruction
+// groups are a UI construct over the flat HowToStep/HowToSection array. These
+// four functions are the single translation boundary — see
 // `src/types/editor.ts`. They preserve group order so a load → save round-trip
 // is lossless; they never inject empty groups.
 // ---------------------------------------------------------------------------
@@ -634,30 +632,47 @@ export function msToIsoDuration(
   return out;
 }
 
-/** Stored ingredient list → editor groups (insertion order preserved). */
-export function schemaToEditableIngredients(
-  ingredients: Array<string | RecipeIngredient>,
+/**
+ * Ingredient groups → editor groups. Each row's id rides along as
+ * `recipeIngredientId`, which is what lets a save keep the row (and the catalog
+ * association curated on it) rather than minting a new one for every line. A
+ * recipe with no ingredients seeds one empty nameless group so the editor has
+ * somewhere to type.
+ */
+export function ingredientsToEditable(
+  ingredients: readonly RecipeIngredientGroup[],
 ): EditableIngredients {
-  return groupIngredients(ingredients).map(({ heading, items }) => ({
+  if (ingredients.length === 0) return [{ id: nanoid(), heading: null, items: [] }];
+  return ingredients.map((group) => ({
     id: nanoid(),
-    heading,
-    items: items.map((ing) => ({ id: nanoid(), name: getIngredientText(ing) })),
+    heading: group.name ?? null,
+    items: group.ingredients.map((ing) => ({
+      id: nanoid(),
+      recipeIngredientId: ing.id,
+      name: ing.raw_text,
+    })),
   }));
 }
 
-/** Editor groups → stored ingredient list. Blank-name rows are dropped; a
- *  group with a blank heading is treated as ungrouped (plain strings). */
-export function editableIngredientsToSchema(
+/** Editor groups → write input. Blank-name rows are dropped, as are groups
+ *  left with no rows; a blank heading is a nameless group. */
+export function editableToIngredientInput(
   groups: EditableIngredients,
-): Array<string | RecipeIngredient> {
-  const result: Array<string | RecipeIngredient> = [];
+): RecipeIngredientGroupInput[] {
+  const result: RecipeIngredientGroupInput[] = [];
   for (const group of groups) {
-    const heading = group.heading?.trim() || null;
-    for (const item of group.items) {
-      const name = item.name.trim();
-      if (!name) continue;
-      result.push(heading ? { name, group: heading } : name);
-    }
+    const name = group.heading?.trim() || undefined;
+    const ingredients = group.items.flatMap((item) => {
+      const raw_text = item.name.trim();
+      if (!raw_text) return [];
+      return [
+        item.recipeIngredientId != null
+          ? { id: item.recipeIngredientId, raw_text }
+          : { raw_text },
+      ];
+    });
+    if (ingredients.length === 0) continue;
+    result.push(name ? { name, ingredients } : { ingredients });
   }
   return result;
 }

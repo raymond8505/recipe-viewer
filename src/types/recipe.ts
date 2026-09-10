@@ -1,21 +1,85 @@
-export interface RecipeIngredient {
+import type { IngredientRow, RecipeIngredientRow } from "./ingredient";
+
+/**
+ * The object form of a Schema.org `recipeIngredient` entry as it arrives from
+ * outside — a scrape, `create_recipe`, the window API — carrying this app's
+ * `group` extension. Inbound only: `fromSchemaOrgIngredients` turns a list of
+ * these (or bare strings) into write input, and nothing internal reads them.
+ */
+export interface SchemaOrgIngredientLine {
   name: string;
   group?: string;
-  /**
-   * Stable identity of this line, independent of its text and its position.
-   * `recipe_ingredients.line_id` points at it, so the derived row — and any
-   * association a user curated on it — survives rewording, reordering, and
-   * insertions above it.
-   *
-   * Optional only because legacy rows predate it and plain-string lines can't
-   * carry one; the write path (`withLineIds`) mints one for every line it
-   * persists, so anything saved since is guaranteed to have it. Custom field:
-   * deliberately absent from `toSchemaOrgJsonLd` output.
-   */
-  id?: string;
 }
 
-export interface RecipeRow {
+/**
+ * One ingredient of a recipe, as the app thinks about it: the
+ * `recipe_ingredients` row IS the ingredient. `id` is its identity (what
+ * `recipes.ingredients` points at), `raw_text` is what the recipe says, the
+ * parse fields and the catalog association ride along.
+ *
+ * `recipe_id` is deliberately absent: inside a recipe it is redundant, and an
+ * ingredient drafted client-side (a re-scrape under review, a recipe handed in
+ * through the window API) has no recipe row yet.
+ */
+export interface RecipeIngredient extends Omit<RecipeIngredientRow, "recipe_id"> {
+  /**
+   * The catalog ingredient this line resolves to. `undefined` means the
+   * catalog was not loaded (list queries hydrate rows only); `null` means it
+   * was loaded and the line is unmatched. Nutrition math treats both as "no
+   * catalog data", so a list-page row never computes a total by accident.
+   */
+  ingredient?: IngredientRow | null;
+}
+
+/**
+ * The unit of a recipe's ingredient list. An ungrouped recipe is exactly one
+ * group with no `name`; a grouped one is several, each named. Position is the
+ * array index at both levels — nothing tracks it separately.
+ */
+export interface RecipeIngredientGroup {
+  name?: string;
+  ingredients: RecipeIngredient[];
+}
+
+/**
+ * `recipes.ingredients` as stored (db/migrations/0016): the same groups, but
+ * each line is just the row id. The repo layer is the only reader and writer;
+ * everything above it sees `RecipeIngredientGroup`.
+ */
+export interface StoredIngredientGroup {
+  name?: string;
+  ingredients: string[];
+}
+
+/**
+ * What a writer sends for one ingredient. `id` names the row the line already
+ * is — send it back to keep the row (and the catalog association curated on
+ * it); leave it off for a genuinely new line and the write path mints one.
+ */
+export interface RecipeIngredientLineInput {
+  id?: string;
+  raw_text: string;
+}
+
+export interface RecipeIngredientGroupInput {
+  name?: string;
+  ingredients: RecipeIngredientLineInput[];
+}
+
+/**
+ * The order the recipe list can be sorted in. It lives here rather than beside
+ * `getRecipes` because SortBar (a client component) renders the options, and
+ * `@/lib/recipes` reaches `@/env` at runtime — a client module must be able to
+ * name this type without naming a server module to get it.
+ */
+export type SortOption = "newest" | "oldest" | "name-asc" | "name-desc";
+
+/**
+ * The `recipes` table, column for column — what `selectColumns<>` is checked
+ * against. `RecipeRow` is this with `ingredients` hydrated from the second
+ * table, which is why the two are separate types.
+ */
+export interface RecipeRowColumns {
   id: string;
   url: string;
   source: string;
@@ -34,7 +98,44 @@ export interface RecipeRow {
   prep_time: number | null;
   cook_time: number | null;
   total_time: number | null;
+  ingredients: StoredIngredientGroup[];
   metadata: { schema: SchemaRecipe };
+}
+
+/**
+ * A recipe's content as the app carries it, independent of the row it came
+ * from: the stored schema, the ingredient groups, and the three column-backed
+ * times in seconds. Held together so an operation that replaces the whole
+ * recipe (a re-scrape, an undo) does so atomically, and so the outbound
+ * Schema.org edges (`toSchemaOrgRecipe` / `toSchemaOrgJsonLd`) read every
+ * column-backed field from its column rather than from the blob's copy.
+ * Built by `recipeDocument(row)` / `draftRecipeDocument(...)` in
+ * src/lib/recipeDocument.ts.
+ */
+export interface RecipeDocument {
+  schema: SchemaRecipe;
+  ingredients: RecipeIngredientGroup[];
+  prep_time: number | null;
+  cook_time: number | null;
+  total_time: number | null;
+}
+
+/**
+ * A Schema.org/Recipe as served to the outside world: the stored fields plus
+ * `recipeIngredient` flattened to plain strings. Produced only at the edges
+ * (JSON-LD, webhooks, the window API); nothing internal reads it.
+ */
+export type SchemaOrgRecipe = SchemaRecipe & { recipeIngredient?: string[] };
+
+/**
+ * A recipe as the app passes it around: the row with its `ingredients` column
+ * hydrated into groups of `RecipeIngredient` from the `recipe_ingredients`
+ * rows the column names. Only the repo layer (`src/lib/recipes.ts`) builds one;
+ * a reader that queries `recipes` directly gets `RecipeRowColumns` — ids, not
+ * ingredients — and stale times.
+ */
+export interface RecipeRow extends Omit<RecipeRowColumns, "ingredients"> {
+  ingredients: RecipeIngredientGroup[];
 }
 
 export interface HowToStep {
@@ -82,7 +183,11 @@ export interface SchemaRecipe {
   recipeYield?: string | string[] | QuantitativeValue;
   recipeCuisine?: string;
   recipeCategory?: string | string[];
-  recipeIngredient?: Array<string | RecipeIngredient>;
+  // No `recipeIngredient`: a recipe's ingredients are `RecipeRow.ingredients`
+  // (RecipeIngredientGroup[]), and the Schema.org list exists only on
+  // SchemaOrgRecipe, at the edges. The key still sits in the stored blob of
+  // every pre-0016 row, frozen at backfill time; the repo layer deletes it on
+  // read and strips it on write so nothing above it can see it.
   recipeInstructions?: Array<HowToStep | HowToSection>;
   keywords?: string;
   nutrition?: {

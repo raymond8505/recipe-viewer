@@ -15,8 +15,6 @@ const CookingMode = dynamic(() => import("./CookingMode"), { ssr: false });
 interface CookingModeButtonProps {
   recipe: RecipeRow;
   isLoggedIn?: boolean;
-  // Transport only — see the prop of the same name on RecipeDetail/CookingMode.
-  canCurateNutrition?: boolean;
   // Primary recipe's normalized ingredient nutrition, threaded through to the
   // cook-mode nutrition panel (primary recipe only).
   normalizedNutrition?: NormalizedNutrition | null;
@@ -25,7 +23,6 @@ interface CookingModeButtonProps {
 export default function CookingModeButton({
   recipe,
   isLoggedIn = false,
-  canCurateNutrition = isLoggedIn,
   normalizedNutrition,
 }: CookingModeButtonProps) {
   const [isOpen, setIsOpen] = useState(false);
@@ -37,7 +34,6 @@ export default function CookingModeButton({
         <CookingMode
           recipe={recipe}
           isLoggedIn={isLoggedIn}
-          canCurateNutrition={canCurateNutrition}
           normalizedNutrition={normalizedNutrition}
           onClose={() => setIsOpen(false)}
         />

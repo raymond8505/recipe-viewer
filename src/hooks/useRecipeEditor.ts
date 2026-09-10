@@ -1,16 +1,20 @@
 import { useCallback, useMemo, useState } from "react";
-import type { SchemaRecipe } from "@/types/recipe";
+import type {
+  RecipeDocument,
+  RecipeIngredientGroupInput,
+  SchemaRecipe,
+} from "@/types/recipe";
 import type {
   EditableIngredients,
   EditableInstructions,
 } from "@/types/editor";
 import {
-  editableIngredientsToSchema,
   editableInstructionsToSchema,
+  editableToIngredientInput,
   formatTimeInput,
+  ingredientsToEditable,
   parseDurationToSeconds,
   parseTimeInput,
-  schemaToEditableIngredients,
   schemaToEditableInstructions,
   secondsToIso,
 } from "@/lib/format";
@@ -76,17 +80,22 @@ export interface UseRecipeEditor {
   canSave: boolean;
   /** Shallow-merge a partial draft (drives every controlled input's onChange). */
   patch: (partial: Partial<EditDraft>) => void;
-  /** Seed the whole draft from a schema and enter edit mode. The single
-   *  source of truth for "what does opening the editor populate" — every
-   *  entry path (Edit, re-scrape, regen image, upload) funnels through here,
-   *  so a new field can never be forgotten on one path. */
-  begin: (schema: SchemaRecipe, row: EditRowFields) => void;
-  /** Leave edit mode (does not touch the canonical schema). */
+  /** Seed the whole draft from a recipe document and enter edit mode. The
+   *  single source of truth for "what does opening the editor populate" —
+   *  every entry path (Edit, re-scrape, regen image, upload) funnels through
+   *  here, so a new field can never be forgotten on one path. */
+  begin: (doc: RecipeDocument, row: EditRowFields) => void;
+  /** Leave edit mode (does not touch the canonical document). */
   cancel: () => void;
-  /** Merge the current draft onto a base schema to produce the schema to
-   *  persist. `name` is required on SchemaRecipe, so a blank title falls back
-   *  to the base name rather than wiping it. */
-  buildSchema: (base: SchemaRecipe) => SchemaRecipe;
+  /** Merge the current draft onto a base document to produce what to
+   *  persist: the schema to merge, and the ingredient groups to replace the
+   *  list with (each line naming its row). `name` is required on
+   *  SchemaRecipe, so a blank title falls back to the base name rather than
+   *  wiping it. */
+  buildPatch: (base: RecipeDocument) => {
+    schema: SchemaRecipe;
+    ingredients: RecipeIngredientGroupInput[];
+  };
   /** Run an async persist, owning the saving → idle/error transition. A throw
    *  leaves the editor in "error" with the draft intact so the user can retry. */
   runSave: (persist: () => Promise<void>) => Promise<void>;
@@ -96,15 +105,15 @@ export interface UseRecipeEditor {
  * One recipe time's contribution to the saved schema. `parseTimeInput`'s
  * three-way result maps straight onto the patch semantics `updateRecipeRow`
  * expects: a number sets the time, `null` clears it, and an unparseable entry
- * falls back to the stored value — a bad time degrades to "no change" rather
- * than blocking the save, exactly as an invalid servings input does.
+ * falls back to the stored column value — a bad time degrades to "no change"
+ * rather than blocking the save, exactly as an invalid servings input does.
  */
 function buildTime(
   raw: string,
-  base: string | null | undefined,
+  baseSeconds: number | null,
 ): string | null | undefined {
   const seconds = parseTimeInput(raw);
-  if (seconds === undefined) return base;
+  if (seconds === undefined) return secondsToIso(baseSeconds);
   if (seconds === null) return null;
   return secondsToIso(seconds) ?? null;
 }
@@ -141,12 +150,13 @@ export function useRecipeEditor(): UseRecipeEditor {
   );
 
   const begin = useCallback(
-    (schema: SchemaRecipe, { status, url, source }: EditRowFields) => {
+    (doc: RecipeDocument, { status, url, source }: EditRowFields) => {
+      const { schema, ingredients } = doc;
       setDraft({
         name: schema.name,
         url,
         description: schema.description ?? "",
-        ingredients: schemaToEditableIngredients(schema.recipeIngredient ?? []),
+        ingredients: ingredientsToEditable(ingredients),
         instructions: schemaToEditableInstructions(
           schema.recipeInstructions ?? [],
         ),
@@ -154,9 +164,10 @@ export function useRecipeEditor(): UseRecipeEditor {
         status,
         source,
         servings: parseServings(schema.recipeYield)?.toString() ?? "",
-        prepTime: formatTimeInput(parseDurationToSeconds(schema.prepTime)),
-        cookTime: formatTimeInput(parseDurationToSeconds(schema.cookTime)),
-        totalTime: formatTimeInput(parseDurationToSeconds(schema.totalTime)),
+        // The columns are the times; the schema's copies are not read.
+        prepTime: formatTimeInput(doc.prep_time),
+        cookTime: formatTimeInput(doc.cook_time),
+        totalTime: formatTimeInput(doc.total_time),
       });
       setEditState("editing");
     },
@@ -165,8 +176,9 @@ export function useRecipeEditor(): UseRecipeEditor {
 
   const cancel = useCallback(() => setEditState("idle"), []);
 
-  const buildSchema = useCallback(
-    (base: SchemaRecipe): SchemaRecipe => {
+  const buildPatch = useCallback(
+    (doc: RecipeDocument) => {
+      const { schema: base } = doc;
       // Only rewrite the yield when the parsed input is a valid count that
       // differs from the base. The changed-check is load-bearing: a range
       // like "6-8 servings" seeds the input with its midpoint ("7"), so an
@@ -175,18 +187,20 @@ export function useRecipeEditor(): UseRecipeEditor {
       const servingsChanged =
         Number.isInteger(n) && n >= 1 && n !== parseServings(base.recipeYield);
       return {
-        ...base,
-        name: draft.name.trim() || base.name,
-        description: draft.description || undefined,
-        recipeIngredient: editableIngredientsToSchema(draft.ingredients),
-        recipeInstructions: editableInstructionsToSchema(draft.instructions),
-        notes: draft.notes || undefined,
-        recipeYield: servingsChanged
-          ? applyServings(base.recipeYield, n)
-          : base.recipeYield,
-        prepTime: buildTime(draft.prepTime, base.prepTime),
-        cookTime: buildTime(draft.cookTime, base.cookTime),
-        totalTime: buildTime(draft.totalTime, base.totalTime),
+        schema: {
+          ...base,
+          name: draft.name.trim() || base.name,
+          description: draft.description || undefined,
+          recipeInstructions: editableInstructionsToSchema(draft.instructions),
+          notes: draft.notes || undefined,
+          recipeYield: servingsChanged
+            ? applyServings(base.recipeYield, n)
+            : base.recipeYield,
+          prepTime: buildTime(draft.prepTime, doc.prep_time),
+          cookTime: buildTime(draft.cookTime, doc.cook_time),
+          totalTime: buildTime(draft.totalTime, doc.total_time),
+        },
+        ingredients: editableToIngredientInput(draft.ingredients),
       };
     },
     [draft],
@@ -217,7 +231,7 @@ export function useRecipeEditor(): UseRecipeEditor {
     patch,
     begin,
     cancel,
-    buildSchema,
+    buildPatch,
     runSave,
   };
 }

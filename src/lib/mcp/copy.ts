@@ -13,6 +13,16 @@ import { IMAGE_CONTENT_TYPES } from "@/lib/imageTypes";
 import { NUTRITION_FIELDS } from "@/lib/nutritionFields";
 import { convert, formatAmount, METRIC_YIELD_UNITS } from "@/lib/units";
 import type { IngredientMatch, IngredientRow } from "@/types/ingredient";
+import { TOOL } from "./toolNames";
+
+/**
+ * What `update_recipe` does with ingredients, said once. This is BOTH the
+ * update_recipe description's account of the rule and the message the tool
+ * throws when an agent breaks it, so an agent that reads the docs and an agent
+ * that learns by failing are told the same thing in the same words — and an
+ * agent that reads first never has to spend the failing call at all.
+ */
+export const RECIPE_INGREDIENT_ON_UPDATE_ERROR = `schema.recipeIngredient is not accepted on update — the call FAILS if you send one, it is not ignored. Ingredients go through \`ingredients\`, which REPLACES the whole list: send every line back as groups of { id?, raw_text }, keeping the id ${TOOL.get_recipe} returned for each line so it keeps its catalog match (rewording the text is fine), and leave id off only for a genuinely new line.`;
 
 /**
  * "a, b, or c". Hand-rolled rather than Intl.ListFormat, whose output varies

@@ -19,11 +19,15 @@ import { METRIC_YIELD_UNITS } from "@/lib/units";
 import {
   METRIC_UNIT_OR_LIST,
   METRIC_UNIT_SLASHES,
+  RECIPE_INGREDIENT_ON_UPDATE_ERROR,
   TBSP_ML_EXAMPLE,
 } from "./copy";
 import { TOOL, type ToolName } from "./toolNames";
 
-const schemaRecipeJsonSchema = {
+// The stored recipe: everything but the ingredients, which live on the row as
+// `ingredients` (see recipeIngredientsJsonSchema). create_recipe takes the
+// Schema.org form below, with `recipeIngredient` added back for scrapes.
+const storedRecipeJsonSchema = {
   type: "object",
   required: ["name"],
   properties: {
@@ -74,19 +78,6 @@ const schemaRecipeJsonSchema = {
     },
     recipeCuisine: { type: "string" },
     recipeCategory: { oneOf: [{ type: "string" }, { type: "array", items: { type: "string" } }] },
-    recipeIngredient: {
-      type: "array",
-      items: {
-        oneOf: [
-          { type: "string" },
-          {
-            type: "object",
-            required: ["name"],
-            properties: { name: { type: "string" }, group: { type: "string" } },
-          },
-        ],
-      },
-    },
     recipeInstructions: { type: "array", description: "HowToStep[] or mixed with HowToSection[]" },
     keywords: { type: "string" },
     nutrition: { type: "object" },
@@ -98,6 +89,61 @@ const schemaRecipeJsonSchema = {
     },
   },
   additionalProperties: true,
+} as const;
+
+// A Schema.org Recipe as a scraper produces it: the stored fields plus
+// `recipeIngredient`, whose `group` objects are this app's extension. Only
+// create_recipe takes it; the list becomes ingredient groups server-side.
+const schemaOrgRecipeJsonSchema = {
+  ...storedRecipeJsonSchema,
+  properties: {
+    ...storedRecipeJsonSchema.properties,
+    recipeIngredient: {
+      type: "array",
+      description:
+        "The ingredient lines as a scraper produces them: plain strings, or { name, group } to put a line under a named group. The server turns these into ingredient groups; read them back as `ingredients`.",
+      items: {
+        oneOf: [
+          { type: "string" },
+          {
+            type: "object",
+            required: ["name"],
+            properties: { name: { type: "string" }, group: { type: "string" } },
+          },
+        ],
+      },
+    },
+  },
+} as const;
+
+// The recipe's ingredients as the app stores and serves them: ordered groups
+// of lines. This is what get_recipe returns (each line is the recipe_ingredients
+// row plus its catalog `ingredient`) and, reduced to { id?, raw_text }, what
+// update_recipe takes.
+const recipeIngredientsJsonSchema = {
+  type: "array",
+  description: `The whole ingredient list, replacing what is stored: ordered groups, each holding ordered lines. Omit a group's name for the ungrouped list (one nameless group). Every line you got from ${TOOL.get_recipe} carries an id — pass it back UNCHANGED, even when you reword the line, so the row and the catalog match curated on it survive; leave id off only for a genuinely new line.`,
+  items: {
+    type: "object",
+    required: ["ingredients"],
+    properties: {
+      name: { type: "string", description: "Group heading; absent for the nameless group." },
+      ingredients: {
+        type: "array",
+        items: {
+          type: "object",
+          required: ["raw_text"],
+          properties: {
+            id: {
+              type: "string",
+              description: `The recipe_ingredients row this line IS, as returned by ${TOOL.get_recipe}. Keep it to keep the line's catalog match; omit it for a new line.`,
+            },
+            raw_text: { type: "string", description: 'The line as the recipe says it, e.g. "2 tsp cumin seed".' },
+          },
+        },
+      },
+    },
+  },
 } as const;
 
 const statusEnum = { type: "string", enum: RECIPE_STATUSES } as const;
@@ -279,7 +325,7 @@ export const TOOL_SCHEMAS = {
         description: `Where the recipe came from — the origin domain (e.g. "seriouseats.com"). Required whenever url is given. Omit both to create a recipe that lives on this instance: source then defaults to "${CUSTOM_RECIPE_SOURCE}", marking it as the user's own recipe (no upstream page to re-scrape).`,
       },
       status: statusEnum,
-      schema: schemaRecipeJsonSchema,
+      schema: schemaOrgRecipeJsonSchema,
     },
   },
   update_recipe: {
@@ -291,10 +337,11 @@ export const TOOL_SCHEMAS = {
       source: { type: "string" },
       status: statusEnum,
       schema: {
-        ...schemaRecipeJsonSchema,
+        ...storedRecipeJsonSchema,
         required: [],
-        description: "Partial SchemaRecipe; merged into existing metadata.schema",
+        description: `Partial recipe fields, merged into what is stored — only the keys you pass change. ${RECIPE_INGREDIENT_ON_UPDATE_ERROR}`,
       },
+      ingredients: recipeIngredientsJsonSchema,
     },
   },
   clear_cooking_notes: {

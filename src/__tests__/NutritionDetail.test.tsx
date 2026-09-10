@@ -10,15 +10,17 @@ import {
   updateRecipeIngredientLine,
 } from "@/lib/api/recipes";
 import { importUsdaIngredient } from "@/lib/api/ingredients";
-import { makeIngredient, makeRecipeIngredient } from "@/fixtures";
+import {
+  makeIngredient,
+  makeIngredientGroup,
+  makeMatchedIngredient,
+  makeRecipeIngredient,
+  makeRecipeIngredientRow,
+} from "@/fixtures";
 import { clickAndConfirm } from "./helpers/confirmBar";
-import type {
-  IngredientKeywordMatch,
-  IngredientRow,
-  RecipeIngredientRow,
-} from "@/types/ingredient";
+import type { IngredientKeywordMatch } from "@/types/ingredient";
 import type { UsdaSearchFood } from "@/lib/usda";
-import type { RecipeIngredient } from "@/types/recipe";
+import type { RecipeIngredientGroup } from "@/types/recipe";
 
 vi.mock("@/lib/api/recipes", () => ({
   normalizeRecipe: vi.fn(),
@@ -37,17 +39,6 @@ vi.mock("@/lib/api/ingredients", () => ({
 const search = vi.fn<(q: string) => Promise<IngredientKeywordMatch[]>>();
 const usdaSearch = vi.fn<(q: string) => Promise<UsdaSearchFood[]>>();
 
-// Interleaved groups: Cake (indices 0 + 2), Frosting (1), ungrouped (3).
-// Grouping reorders these, so passing tests prove index alignment. Every line
-// carries a stable id — the shape every persisted recipe has had since
-// db/migrations/0013; the legacy fixtures below opt out on purpose.
-const schemaIngredients: Array<string | RecipeIngredient> = [
-  { name: "100 g butter", group: "Cake", id: "L0" },
-  { name: "2 eggs", group: "Frosting", id: "L1" },
-  { name: "1 tsp cumin", group: "Cake", id: "L2" },
-  { name: "5 g magic dust", id: "L3" },
-];
-
 const butter = makeIngredient("ing-butter", "butter", {
   nutrition: { calories_kcal: 717, fat_g: 81 },
 });
@@ -59,65 +50,37 @@ const cumin = makeIngredient("ing-cumin", "cumin seed", {
   density_g_per_ml: 0.42,
 });
 
-function makeRows(): RecipeIngredientRow[] {
+// Two named groups and an ungrouped tail, in the recipe's own order. Every
+// line IS its row (ids ri-0..ri-3), carrying the catalog row it is matched
+// to — the shape a hydrated detail read produces.
+function makeGroups(): RecipeIngredientGroup[] {
   return [
-    makeRecipeIngredient("r-1", 0, {
-      id: "ri-0",
-      line_id: "L0",
-      raw_text: "100 g butter",
-      quantity: 100,
-      unit: "g",
-      ingredient_id: "ing-butter",
-      match_status: "matched",
-    }),
-    makeRecipeIngredient("r-1", 1, {
-      id: "ri-1",
-      line_id: "L1",
-      raw_text: "2 eggs",
-      quantity: 2,
-      unit: null,
-      ingredient_id: "ing-eggs",
-      match_status: "matched",
-    }),
-    makeRecipeIngredient("r-1", 2, {
-      id: "ri-2",
-      line_id: "L2",
-      raw_text: "1 tsp cumin",
-      quantity: 1,
-      unit: "tsp",
-      ingredient_id: "ing-cumin",
-      match_status: "matched",
-    }),
-    makeRecipeIngredient("r-1", 3, {
-      id: "ri-3",
-      line_id: "L3",
-      raw_text: "5 g magic dust",
-      quantity: 5,
-      unit: "g",
-      name_text: "magic dust",
-      ingredient_id: null,
-      match_status: "unmatched",
-    }),
+    makeIngredientGroup("Cake", [
+      makeMatchedIngredient("100 g butter", butter, { id: "ri-0" }),
+      makeMatchedIngredient("1 tsp cumin", cumin, { id: "ri-2" }),
+    ]),
+    makeIngredientGroup("Frosting", [
+      makeMatchedIngredient("2 eggs", eggs, { id: "ri-1" }),
+    ]),
+    makeIngredientGroup(undefined, [
+      makeRecipeIngredient("5 g magic dust", { id: "ri-3" }),
+    ]),
   ];
 }
 
 function renderDetail(overrides?: {
-  rows?: RecipeIngredientRow[];
-  schemaIngredients?: Array<string | RecipeIngredient>;
+  ingredients?: RecipeIngredientGroup[];
   recipeYield?: string | undefined;
-  initialIngredients?: IngredientRow[];
 }) {
   return render(
     <NutritionDetail
       recipeId="r-1"
-      schemaIngredients={overrides?.schemaIngredients ?? schemaIngredients}
+      ingredients={overrides?.ingredients ?? makeGroups()}
       recipeYield={
         overrides && "recipeYield" in overrides
           ? overrides.recipeYield
           : "4 servings"
       }
-      initialRows={overrides?.rows ?? makeRows()}
-      initialIngredients={overrides?.initialIngredients ?? [butter, eggs, cumin]}
       search={search}
       usdaSearch={usdaSearch}
     />,
@@ -138,7 +101,7 @@ beforeEach(() => {
 });
 
 describe("NutritionDetail", () => {
-  it("groups lines under recipe headings despite interleaving", () => {
+  it("renders the groups in the recipe's order under their headings", () => {
     renderDetail();
 
     const rows = screen.getAllByRole("row").map((r) => r.textContent ?? "");
@@ -147,13 +110,16 @@ describe("NutritionDetail", () => {
     const butterIdx = rows.findIndex((t) => t.includes("100 g butter"));
     const cuminIdx = rows.findIndex((t) => t.includes("1 tsp cumin"));
     const eggsIdx = rows.findIndex((t) => t.includes("2 eggs"));
+    const dustIdx = rows.findIndex((t) => t.includes("5 g magic dust"));
 
-    // Both Cake lines sit between the Cake and Frosting headings.
     expect(cakeIdx).toBeGreaterThan(-1);
     expect(butterIdx).toBeGreaterThan(cakeIdx);
-    expect(cuminIdx).toBeGreaterThan(cakeIdx);
+    expect(cuminIdx).toBeGreaterThan(butterIdx);
     expect(frostingIdx).toBeGreaterThan(cuminIdx);
     expect(eggsIdx).toBeGreaterThan(frostingIdx);
+    // The nameless group has no heading row of its own.
+    expect(dustIdx).toBeGreaterThan(eggsIdx);
+    expect(rows.filter((t) => t === "" || t === "Cake" || t === "Frosting")).toHaveLength(2);
   });
 
   it("computes line contributions from grams conversion (weight and volume)", () => {
@@ -236,11 +202,10 @@ describe("NutritionDetail", () => {
   });
 
   it("always offers a Normalize button, flipping to a refresh affordance once queued", async () => {
-    const user = userEvent.setup();
     vi.mocked(normalizeRecipe).mockResolvedValue(undefined);
     renderDetail();
 
-    // Present even with nothing stale — it exists to fill in unmatched lines.
+    // Present even with nothing unmatched — it exists to fill in associations.
     await clickAndConfirm("Normalize");
     expect(normalizeRecipe).toHaveBeenCalledWith("r-1");
     // A 200 means queued, not done — the button flips to a refresh affordance.
@@ -299,85 +264,11 @@ describe("NutritionDetail", () => {
     expect(normalizeRecipe).toHaveBeenCalledTimes(1);
   });
 
-  // The line text is display copy; the line id is the identity. Someone
-  // dropping a brand name from "100 g Acme brand butter" has said nothing
-  // about which food the line is, so the association it was curated onto —
-  // and its share of the totals — must survive untouched.
-  it("keeps a reworded line matched and counted", () => {
-    const rows = makeRows();
-    rows[0] = { ...rows[0], raw_text: "100 g Acme brand butter" };
-    renderDetail({ rows });
-
-    const butterRow = rowFor("100 g butter");
-    expect(
-      within(butterRow).queryByTitle(
-        "No normalized row for this line — run normalization",
-      ),
-    ).not.toBeInTheDocument();
-    expect(butterRow).toHaveTextContent("717");
-    expect(rowFor("Recipe total")).toHaveTextContent("724.76");
-    expect(
-      screen.queryByText(/have never been normalized/),
-    ).not.toBeInTheDocument();
-  });
-
-  it("flags a line with no normalized row and excludes it from totals", () => {
-    // Every row but butter's — the state a line lands in before its first
-    // normalization run.
-    renderDetail({ rows: makeRows().slice(1) });
-
-    expect(
-      within(rowFor("100 g butter")).getByTitle(
-        "No normalized row for this line — run normalization",
-      ),
-    ).toBeInTheDocument();
-    expect(rowFor("Recipe total")).toHaveTextContent("7.76");
-    expect(rowFor("Recipe total")).not.toHaveTextContent("724.76");
-    expect(
-      screen.getByText(/have never been normalized/),
-    ).toBeInTheDocument();
-  });
-
-  // Legacy: rows written before line ids can only be found by position, so
-  // there the text IS the only evidence the row belongs to this line.
-  it("still flags a position-joined legacy row whose text has moved on", () => {
-    const rows = makeRows().map((row) => ({ ...row, line_id: null }));
-    rows[0] = { ...rows[0], raw_text: "200 g butter, softened" };
-    renderDetail({
-      rows,
-      schemaIngredients: schemaIngredients.map((line) =>
-        typeof line === "string" ? line : { name: line.name, group: line.group },
-      ),
-    });
-
-    expect(
-      within(rowFor("100 g butter")).getByTitle(
-        "No normalized row for this line — run normalization",
-      ),
-    ).toBeInTheDocument();
-    expect(rowFor("Recipe total")).not.toHaveTextContent("724.76");
-  });
-
-  // Regression: the association PATCH only moves ingredient_id, never
-  // raw_text, so on a stale line the picked ingredient stayed "(unknown
-  // ingredient)" — the hook was nulling the catalog lookup for stale lines and
-  // nothing short of a reload could clear it. Staleness governs TOTALS
-  // (lineComputationForSchema decides that itself), never whether we know
-  // which row is associated. Legacy-shaped, since that is where a line can
-  // still be both stale and have a row.
-  it("shows the picked ingredient's name on a stale line, not '(unknown ingredient)'", async () => {
+  // The association PATCH only moves ingredient_id, never raw_text, and the
+  // picked row's summary arrives with the match — so the line must show the
+  // new name at once, without a refetch of the catalog.
+  it("shows the picked ingredient's name on a line that had no catalog row", async () => {
     const user = userEvent.setup();
-    const legacyLines = schemaIngredients.map((line) =>
-      typeof line === "string" ? line : { name: line.name, group: line.group },
-    );
-    const rows = makeRows().map((row) => ({ ...row, line_id: null }));
-    // Edited since normalization, and unmatched — the state the repro lands in.
-    rows[0] = {
-      ...rows[0],
-      raw_text: "200 g butter, softened",
-      ingredient_id: null,
-      match_status: "unmatched",
-    };
     // USDA-style canonical name: distinct from the typed query, so the option
     // regex can't also match the pinned `Search USDA for "butter"` action.
     const butterMatch: IngredientKeywordMatch = {
@@ -389,14 +280,19 @@ describe("NutritionDetail", () => {
       similarity: 0.98,
     };
     search.mockResolvedValue([butterMatch]);
-    // The PATCH returns the row with the new association — raw_text unchanged,
-    // so the line is still stale afterwards.
-    vi.mocked(updateRecipeIngredientAssociation).mockResolvedValue({
-      ...rows[0],
-      ingredient_id: "ing-butter",
-      match_status: "manual",
-    });
-    renderDetail({ rows, schemaIngredients: legacyLines });
+    vi.mocked(updateRecipeIngredientAssociation).mockResolvedValue(
+      makeRecipeIngredientRow("r-1", 0, {
+        id: "ri-0",
+        raw_text: "100 g butter",
+        quantity: 100,
+        unit: "g",
+        ingredient_id: "ing-butter",
+        match_status: "manual",
+      }),
+    );
+    const groups = makeGroups();
+    groups[0].ingredients[0] = makeRecipeIngredient("100 g butter", { id: "ri-0" });
+    renderDetail({ ingredients: groups });
 
     await user.click(screen.getByLabelText("Change match for 100 g butter"));
     await user.type(screen.getByRole("combobox"), "butter");
@@ -417,32 +313,18 @@ describe("NutritionDetail", () => {
       ).toBeInTheDocument(),
     );
     expect(screen.queryByText("(unknown ingredient)")).not.toBeInTheDocument();
-
-    // The line is still stale, so it must stay out of the totals — the fix is
-    // about what we display, not about what counts.
-    expect(
-      within(rowFor("100 g butter")).getByTitle(
-        "No normalized row for this line — run normalization",
-      ),
-    ).toBeInTheDocument();
-    expect(rowFor("Recipe total")).not.toHaveTextContent("724.76");
+    // …and it counts: 717 (butter) + 7.76 (cumin).
+    expect(rowFor("Recipe total")).toHaveTextContent("724.76");
   });
 
-  // Rewording is not a re-match request. The server re-parses the derived rows
-  // in-band and hands them back, so the edited line keeps its ingredient and
-  // its contribution — and nothing here may imply a matcher run was queued.
+  // Rewording is not a re-match request. The server re-parses the row in-band
+  // and hands the groups back, so the edited line keeps its ingredient and its
+  // contribution — and nothing here may imply a matcher run was queued.
   it("saves an edited line text and keeps it matched and counted", async () => {
     const user = userEvent.setup();
-    const syncedRows = makeRows();
-    syncedRows[2] = { ...syncedRows[2], raw_text: "1 tsp cumin, toasted" };
-    vi.mocked(updateRecipeIngredientLine).mockResolvedValue({
-      recipeIngredient: [
-        ...schemaIngredients.slice(0, 2),
-        { name: "1 tsp cumin, toasted", id: "L2" },
-        schemaIngredients[3],
-      ],
-      rows: syncedRows,
-    });
+    const synced = makeGroups();
+    synced[0].ingredients[1] = { ...synced[0].ingredients[1], raw_text: "1 tsp cumin, toasted" };
+    vi.mocked(updateRecipeIngredientLine).mockResolvedValue({ ingredients: synced });
     renderDetail();
 
     await user.click(screen.getByLabelText("Edit 1 tsp cumin"));
@@ -450,20 +332,14 @@ describe("NutritionDetail", () => {
     await user.clear(field);
     await user.type(field, "1 tsp cumin, toasted{Enter}");
 
-    // Index 2 is the line's schema position, not a row id — a line with no row
-    // yet still has to be addressable.
+    // Addressed by the row's id — the line's identity, not its position.
     expect(updateRecipeIngredientLine).toHaveBeenCalledWith(
       "r-1",
-      2,
+      "ri-2",
       "1 tsp cumin, toasted",
     );
     await screen.findByText("1 tsp cumin, toasted");
     const editedRow = rowFor("1 tsp cumin, toasted");
-    expect(
-      within(editedRow).queryByTitle(
-        "No normalized row for this line — run normalization",
-      ),
-    ).not.toBeInTheDocument();
     expect(editedRow).toHaveTextContent("7.76");
     expect(rowFor("Recipe total")).toHaveTextContent("724.76");
     // No run was queued, so the button must not claim one was.
@@ -557,10 +433,18 @@ describe("NutritionDetail", () => {
     ).not.toBeInTheDocument();
   });
 
-  // An id we can't resolve to a catalog row leaves us with no name to search
-  // the manager with, so a link would land on an empty list.
+  // An id we can't resolve to a catalog row (the row was deleted under the
+  // line) leaves us with no name to search the manager with, so a link would
+  // land on an empty list.
   it("offers no manager link when the matched id resolves to nothing", () => {
-    renderDetail({ initialIngredients: [eggs, cumin] });
+    const groups = makeGroups();
+    groups[0].ingredients[0] = makeRecipeIngredient("100 g butter", {
+      id: "ri-0",
+      ingredient_id: "ing-gone",
+      match_status: "matched",
+      ingredient: null,
+    });
+    renderDetail({ ingredients: groups });
 
     const row = rowFor("100 g butter");
     expect(within(row).getByText("(unknown ingredient)")).toBeInTheDocument();
@@ -579,9 +463,8 @@ describe("NutritionDetail", () => {
     };
     search.mockResolvedValue([magicMatch]);
     vi.mocked(updateRecipeIngredientAssociation).mockResolvedValue(
-      makeRecipeIngredient("r-1", 3, {
+      makeRecipeIngredientRow("r-1", 3, {
         id: "ri-3",
-        line_id: "L3",
         raw_text: "5 g magic dust",
         quantity: 5,
         unit: "g",
@@ -626,9 +509,8 @@ describe("NutritionDetail", () => {
       }),
     );
     vi.mocked(updateRecipeIngredientAssociation).mockResolvedValue(
-      makeRecipeIngredient("r-1", 3, {
+      makeRecipeIngredientRow("r-1", 3, {
         id: "ri-3",
-        line_id: "L3",
         raw_text: "5 g magic dust",
         quantity: 5,
         unit: "g",
@@ -667,9 +549,8 @@ describe("NutritionDetail", () => {
     // "2 eggs" is matched but count-based (no unit, no density) → excluded until
     // it gets an estimate.
     vi.mocked(estimateIngredientGrams).mockResolvedValue(
-      makeRecipeIngredient("r-1", 1, {
+      makeRecipeIngredientRow("r-1", 1, {
         id: "ri-1",
-        line_id: "L1",
         raw_text: "2 eggs",
         quantity: 2,
         unit: null,
@@ -815,9 +696,8 @@ describe("NutritionDetail", () => {
   it("persists a user-typed gram value on blur", async () => {
     const user = userEvent.setup();
     vi.mocked(setIngredientGrams).mockResolvedValue(
-      makeRecipeIngredient("r-1", 1, {
+      makeRecipeIngredientRow("r-1", 1, {
         id: "ri-1",
-        line_id: "L1",
         raw_text: "2 eggs",
         quantity: 2,
         unit: null,
@@ -845,9 +725,8 @@ describe("NutritionDetail", () => {
   it("accepts a typed 0 and stops flagging the line without changing totals", async () => {
     const user = userEvent.setup();
     vi.mocked(setIngredientGrams).mockResolvedValue(
-      makeRecipeIngredient("r-1", 1, {
+      makeRecipeIngredientRow("r-1", 1, {
         id: "ri-1",
-        line_id: "L1",
         raw_text: "2 eggs",
         quantity: 2,
         unit: null,

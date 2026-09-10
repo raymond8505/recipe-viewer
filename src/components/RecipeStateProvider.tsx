@@ -2,16 +2,17 @@
 
 import { useEffect } from "react";
 import { notifyRecipeUpdate } from "@/lib/windowApi";
-import type { SchemaRecipe } from "@/types/recipe";
+import type { SchemaOrgRecipe } from "@/types/recipe";
 
 interface RecipeStateProviderProps {
-  schemas: SchemaRecipe[];
+  /** The page's recipes in their outbound Schema.org form — the window API is an external edge. */
+  recipes: SchemaOrgRecipe[];
 }
 
-export default function RecipeStateProvider({ schemas }: RecipeStateProviderProps) {
+export default function RecipeStateProvider({ recipes }: RecipeStateProviderProps) {
   useEffect(() => {
-    notifyRecipeUpdate(schemas);
-  }, [schemas]);
+    notifyRecipeUpdate(recipes);
+  }, [recipes]);
 
   return null;
 }

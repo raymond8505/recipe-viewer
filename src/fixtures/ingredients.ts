@@ -1,8 +1,9 @@
+import { newRecipeIngredient } from "@/lib/recipeIngredients";
 import type {
   IngredientRow,
   RecipeIngredientRow,
 } from "@/types/ingredient";
-import type { RecipeIngredient } from "@/types/recipe";
+import type { RecipeIngredient, RecipeIngredientGroup } from "@/types/recipe";
 
 // Realistic catalog rows. Nutrition values are real USDA per-100g figures
 // (cumin: SR Legacy fdcId 170923 — the same payload the usda.ts tests fixture);
@@ -180,18 +181,15 @@ export function makeIngredient(
   };
 }
 
-export function makeRecipeIngredient(
+/** A `recipe_ingredients` row for repo-layer tests; `n` only distinguishes ids. */
+export function makeRecipeIngredientRow(
   recipeId: string,
-  position: number,
+  n: number,
   overrides?: Partial<RecipeIngredientRow>,
 ): RecipeIngredientRow {
   return {
-    id: `ri-${recipeId}-${position}`,
+    id: `ri-${recipeId}-${n}`,
     recipe_id: recipeId,
-    // Null by default so fixtures exercise the legacy path (rows predating
-    // db/migrations/0013, joined by position). Tests covering the line-id
-    // join set it explicitly.
-    line_id: null,
     ingredient_id: null,
     raw_text: "1 tsp cumin seed",
     quantity: 1,
@@ -200,11 +198,60 @@ export function makeRecipeIngredient(
     note: null,
     match_status: "unmatched",
     confidence: null,
-    position,
     estimated_grams: null,
     grams_source: null,
     ...overrides,
   };
+}
+
+/**
+ * One ingredient as the app carries it. The id is derived from the text
+ * (`ri-2-tsp-cumin-seed`) so an assertion can name a line without a lookup;
+ * pass `id` in `overrides` when two lines share their text. Parse fields come
+ * from the deterministic parser, so "2 tsp cumin seed" arrives with quantity 2
+ * and unit "tsp" without the fixture restating them.
+ */
+export function makeRecipeIngredient(
+  text: string,
+  overrides?: Partial<RecipeIngredient>,
+): RecipeIngredient {
+  const slug = text.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+  return { ...newRecipeIngredient(text, `ri-${slug}`), ...overrides };
+}
+
+/** A group from a mix of bare texts and ready-made ingredients; `undefined` name = the nameless group. */
+export function makeIngredientGroup(
+  name: string | undefined,
+  items: Array<string | RecipeIngredient>,
+): RecipeIngredientGroup {
+  return {
+    ...(name != null ? { name } : {}),
+    ingredients: items.map((item) =>
+      typeof item === "string" ? makeRecipeIngredient(item) : item,
+    ),
+  };
+}
+
+/** The common case: an ungrouped list, as one nameless group. */
+export function makeIngredientLines(
+  texts: Array<string | RecipeIngredient>,
+): RecipeIngredientGroup[] {
+  return [makeIngredientGroup(undefined, texts)];
+}
+
+/** An ingredient matched to a catalog row, with the row attached — the shape a
+ *  hydrated detail read produces. */
+export function makeMatchedIngredient(
+  text: string,
+  ingredient: IngredientRow,
+  overrides?: Partial<RecipeIngredient>,
+): RecipeIngredient {
+  return makeRecipeIngredient(text, {
+    ingredient_id: ingredient.id,
+    ingredient,
+    match_status: "matched",
+    ...overrides,
+  });
 }
 
 /**
@@ -215,37 +262,17 @@ export function makeRecipeIngredient(
  * instead of restating an identical pair of rows each time.
  *
  * Reach for this whenever the recipe data is incidental to what a story shows.
- * Scenarios where the data IS the point (interleaved groups, a stale legacy
- * line, a missing yield) stay with their story, where the reader can see what
- * makes them special.
- *
- * `recipe_id` matches the `recipeId` arg on the NutritionDetail stories' meta.
+ * Scenarios where the data IS the point (interleaved groups, an exclusion, a
+ * missing yield) stay with their story, where the reader can see what makes
+ * them special.
  */
 export const matchedLinesScenario: {
-  schemaIngredients: Array<string | RecipeIngredient>;
+  ingredients: RecipeIngredientGroup[];
   recipeYield: string;
-  initialRows: RecipeIngredientRow[];
-  initialIngredients: IngredientRow[];
 } = {
-  schemaIngredients: ["2 tsp cumin seed", "1 tbsp olive oil"],
+  ingredients: makeIngredientLines([
+    makeMatchedIngredient("2 tsp cumin seed", ingredientFixtures[0]),
+    makeMatchedIngredient("1 tbsp olive oil", ingredientFixtures[2]),
+  ]),
   recipeYield: "2 servings",
-  initialRows: [
-    makeRecipeIngredient("story-recipe", 0, {
-      raw_text: "2 tsp cumin seed",
-      quantity: 2,
-      unit: "tsp",
-      name_text: "cumin seed",
-      ingredient_id: ingredientFixtures[0].id,
-      match_status: "matched",
-    }),
-    makeRecipeIngredient("story-recipe", 1, {
-      raw_text: "1 tbsp olive oil",
-      quantity: 1,
-      unit: "tbsp",
-      name_text: "olive oil",
-      ingredient_id: ingredientFixtures[2].id,
-      match_status: "matched",
-    }),
-  ],
-  initialIngredients: [ingredientFixtures[0], ingredientFixtures[2]],
 };

@@ -16,7 +16,7 @@ Cook mode supports grouping multiple recipes into a "meal" session. State lives 
 
 **Key invariants:**
 - `mealRecipes[0]` is always the primary recipe and cannot be removed
-- `activeSchema = activeIndex === 0 ? schema : mealRecipes[activeIndex].metadata.schema` — the `schema` variable is the primary recipe's schema, which can be overridden by the window API; `activeSchema` is what drives ingredients/instructions/notes rendering
+- The primary recipe is held as one `doc: RecipeDocument` (`recipeDocument(recipe)` — schema, groups, time columns), which the window API can replace wholesale via `registerCookingModeRecipe(initialDoc, setDoc)`; `activeScalable = scalables.get(mealRecipes[activeIndex].id)` is what drives ingredients rendering (`groupedIngredients`) and `activeScalable.schema` drives instructions/notes. Server-computed `normalizedNutrition` applies only while `doc === initialDoc`
 - `useScaling` is called once on the primary recipe's `recipeYield`; non-primary recipes get `scale={1}` with no `onScaleChange` — scaling is intentionally primary-only for now
 - All timers (primary + added recipes) land in a single localStorage bucket keyed by the primary recipe's URL hash. Timers from added recipes are seeded imperatively in `handleAddToMeal` and are **not** deduplicated — if a recipe is added a second time its timers are re-seeded
 
@@ -31,8 +31,8 @@ Cook mode supports grouping multiple recipes into a "meal" session. State lives 
 Ingredients in both `CookingMode` and `RecipeDetail` are tappable checkboxes that build a shopping list, copied to clipboard as newline-separated text.
 
 **State:**
-- `CookingMode`: `Set<string>` keyed as `"${recipeId}::${ingredientText}"` — shared across all meal recipes in a session
-- `RecipeDetail`: `Set<string>` keyed by bare ingredient text — separate, no cross-mode sharing
+- `CookingMode`: `Set<string>` keyed as `"${recipeId}::${ingredientId}"` — shared across all meal recipes in a session
+- `RecipeDetail`: `Set<string>` keyed by the ingredient's id — separate, no cross-mode sharing
 
 **Copy output reflects the current ingredient scale.** Both handlers iterate `ScalableRecipe.ingredients` and render each line through `formatScaledIngredient` (`src/lib/ScalableRecipe.ts`) — scaling a recipe is a deliberate act, and the shopper needs the amount to actually buy. (This reverses the earlier rule that copy was always raw text.)
 
@@ -40,6 +40,6 @@ Ingredients in both `CookingMode` and `RecipeDetail` are tappable checkboxes tha
 
 The unit in a copied line is the recipe's own wording, preserved as `ParsedIngredient.unitText` (the canonical `unit` key's `display` is singular, so rebuilding from it would yield "4 cup flour"). Copy deliberately does **not** reproduce `IngredientItem`'s volume-threshold promotion (8 tsp → "2.67 tbsp") or its per-item unit dropdown — both live in that component's local `selectedUnit` state.
 
-**Selection keys stay raw `ing.original` text**, unscaled — a scale-stable identity, so a selection survives the user changing the scale afterwards. Only the copy output scales.
+**Selection keys are the line's `ing.id`** (`ScaledIngredient.id`, the `recipe_ingredients` row id) — an identity stable across scaling, so a selection survives the user changing the scale afterwards, and across a reword. Only the copy output scales.
 
-**Primary recipe copy must reflect live `schema`, not `mealRecipes[0].metadata.schema`** — preserves window API overrides. Now satisfied structurally rather than by branching on `r.id`: the effect that rebuilds `scalables` keys the primary off `schema`, so iterating `scalables` is already correct. Don't reintroduce a `metadata.schema` read here.
+**Primary recipe copy must reflect the live `doc`, not `mealRecipes[0]`** — preserves window API overrides. Satisfied structurally rather than by branching on `r.id`: the effect that rebuilds `scalables` keys the primary off `doc`, so iterating `scalables` is already correct. Don't reintroduce a `recipe.metadata.schema` / `recipe.ingredients` read here.

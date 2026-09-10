@@ -10,7 +10,6 @@ import {
   createIngredientRow,
   deleteIngredientRow,
   getIngredientById,
-  getRecipeNormalizedNutrition,
   IngredientRepoError,
   matchIngredients,
   updateIngredientRow,
@@ -19,12 +18,15 @@ import {
 import { ScalableRecipe } from "@/lib/ScalableRecipe";
 import {
   nutrientValuesToSchema,
+  recipeNormalizedNutrition,
   scalePortionNutritionToPer100g,
 } from "@/lib/nutritionMath";
+import { fromSchemaOrgIngredients } from "@/lib/recipeIngredients";
 import { generateEmbedding } from "@/lib/embedding";
 import { exhaustiveKeys } from "@/lib/exhaustive";
 import { ingredientEmbeddingText, ingredientQueryText } from "@/lib/ingredientAliases";
 import { CUSTOM_RECIPE_SOURCE } from "@/lib/format";
+import { RECIPE_INGREDIENT_ON_UPDATE_ERROR } from "./copy";
 import { ARCHIVED_RECIPE_STATUS } from "@/lib/schemas/recipe";
 import { RECIPE_TOKEN_TTL_SECONDS, signRecipeToken } from "./recipeToken";
 import { env } from "@/env";
@@ -238,17 +240,21 @@ export async function getRecipe(args: RecipeIdInput): Promise<RecipeRow> {
   const row = await getRecipeById(args.id);
   if (!row) throw new ToolError("not_found", `Recipe ${args.id} not found`);
 
-  // Serve the recipe's single resolved nutrition view — the same
-  // ScalableRecipe.nutrition() decision as the UI panel and JSON-LD. Only an
-  // ingredients-sourced result overrides; otherwise the row's own nutrition is
-  // already what nutrition() would serve.
+  // Overlay the catalog-derived nutrition — the same ScalableRecipe.nutrition()
+  // decision as the UI panel and JSON-LD, so all three agree. When it resolves
+  // to nothing (the list isn't fully covered) the row passes through untouched,
+  // which means any hand-entered schema.nutrition still on the document is what
+  // the agent sees. That is deliberate: get_recipe reports what is STORED, and
+  // we kept storing those fields even though nothing reads them back as
+  // nutrition any more.
   const schema = row.metadata.schema;
-  const normalized = await getRecipeNormalizedNutrition(
-    args.id,
-    schema.recipeIngredient ?? [],
-  );
-  const resolved = new ScalableRecipe(schema, undefined, normalized).nutrition();
-  if (resolved?.source !== "ingredients") return row;
+  const resolved = new ScalableRecipe(
+    schema,
+    row.ingredients,
+    undefined,
+    recipeNormalizedNutrition(row),
+  ).nutrition();
+  if (!resolved) return row;
 
   return {
     ...row,
@@ -258,7 +264,7 @@ export async function getRecipe(args: RecipeIdInput): Promise<RecipeRow> {
         ...schema,
         nutrition: {
           "@type": "NutritionInformation",
-          ...nutrientValuesToSchema(resolved.values),
+          ...nutrientValuesToSchema(resolved),
         },
       },
     },
@@ -288,7 +294,9 @@ export type RecipeRowWithWarnings = RecipeRow & { warnings?: string[] };
 export async function createRecipe(
   args: RecipeCreateInput,
 ): Promise<RecipeRowWithWarnings> {
-  const { cookingNotes, ...schema } = args.schema;
+  // The inbound Schema.org edge: scrapes arrive with `recipeIngredient`, which
+  // becomes ingredient groups here and never reaches the stored schema.
+  const { cookingNotes, recipeIngredient, ...schema } = args.schema;
   const id = crypto.randomUUID();
   // Default to the recipe's own canonical page on this instance.
   // MCP_PUBLIC_URL is the app's base-URL source of truth (also the OAuth /
@@ -307,6 +315,7 @@ export async function createRecipe(
       source,
       status: args.status,
       schema,
+      ingredients: fromSchemaOrgIngredients(recipeIngredient ?? []),
     });
     return cookingNotes !== undefined
       ? { ...row, warnings: [COOKING_NOTES_IGNORED_WARNING] }
@@ -320,12 +329,19 @@ export async function updateRecipe(
   args: RecipeUpdateInput,
 ): Promise<RecipeRowWithWarnings> {
   const { cookingNotes, ...schema } = args.schema ?? {};
+  // The zod schema is passthrough, so without this check the dead key sails
+  // into the merge and is silently stripped — a loud failure teaches the agent
+  // the shape to use.
+  if ("recipeIngredient" in schema) {
+    throw new ToolError("invalid_input", RECIPE_INGREDIENT_ON_UPDATE_ERROR);
+  }
   try {
     const row = await updateRecipeRow(args.id, {
       url: args.url,
       source: args.source,
       status: args.status,
       schema: args.schema !== undefined ? schema : undefined,
+      ingredients: args.ingredients,
     });
     return cookingNotes !== undefined
       ? { ...row, warnings: [COOKING_NOTES_IGNORED_WARNING] }

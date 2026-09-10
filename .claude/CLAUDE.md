@@ -17,23 +17,27 @@ Unit tests follow the code: helpers moved into `format.ts` are tested in `format
 
 **`invisible` not conditional render** — the copy button is always in the DOM (using Tailwind `invisible` when disabled) so it never shifts the heading layout. Apply this pattern to any button that appears next to a heading.
 
-**UI fetches to `/api/recipes/*` go through `src/lib/api/recipes.ts`** (pattern: `src/lib/api/auth.ts`). No naked fetch in components. Known follow-up: RecipeDetail's `/update`, `/rescrape`, `/regenerate-image` fetches are pre-existing naked fetches not yet wrapped.
+**UI fetches to `/api/recipes/*` go through `src/lib/api/recipes.ts`** (pattern: `src/lib/api/auth.ts`). No naked fetch in components. Known follow-up: RecipeDetail's `/rescrape` and `/regenerate-image` fetches are still naked, not yet wrapped.
+
+**A recipe's ingredients are `RecipeIngredientGroup[]` of `RecipeIngredient` entities, never a Schema.org `recipeIngredient` array** — that array exists only at the four external edges (JSON-LD, the image webhook, the window API, scraped input). `SchemaRecipe` has no ingredient field; read them off `RecipeRow.ingredients` / `RecipeDocument.ingredients`.
 
 **Never import `@/env` in a client component** — t3-env throws on server-var access in the browser. Server components read it and thread the value down as a prop.
+
+**A type a client module needs lives in `src/types/*` or `src/lib/schemas/*`, never in a repo module** (PR #76 review). `@/lib/recipes` reaches `@/env` through Supabase and the embedding client, so importing a type from it makes the `type` keyword load-bearing punctuation: drop it in a later edit and the service-role client lands in the browser bundle with no compile error. Declare the type somewhere with no server runtime and let the repo module re-export it for its own callers — that is why `RecipeStatus` sits beside its zod enum in `lib/schemas/recipe.ts` and `SortOption` in `types/recipe.ts`. Where a pure `src/types` union hand-mirrors a schema one, pin them with `Assert<Assignable<…>>` from `@/lib/exhaustive`, **in source** — tsconfig excludes `src/__tests__`, so an assertion written there checks nothing.
 
 ## Read the doc when the trigger fires
 
 - **Running `next dev` / Storybook, or setting up a fresh clone** (ports, `.env.yarn`, `MCP_PUBLIC_URL`, what's shared between checkouts) → [docs/parallel-checkouts.md](docs/parallel-checkouts.md)
 - **Touching cooking mode** — touch-first tap-target rules, meal sessions, the shopping list → [docs/cooking-mode.md](docs/cooking-mode.md)
 - **Touching the cooking-mode timer UI** (`TimerCard`, `DraggableRibbon`, `TimerColumn`) → [docs/timers.md](docs/timers.md)
-- **Reading or writing `SchemaRecipe`** — ingredient `group` objects, `recipeYield`/servings, JSON-LD serialization → [docs/recipe-schema.md](docs/recipe-schema.md)
+- **Reading or writing `SchemaRecipe` or a recipe's ingredients** — `RecipeIngredientGroup`/`RecipeIngredient`, the Schema.org edges (`toSchemaOrgJsonLd`/`fromSchemaOrgIngredients`), `recipeYield`/servings → [docs/recipe-schema.md](docs/recipe-schema.md)
 - **Adding or changing anything under `src/app/api/**`, or calling one from the UI** — the auth gate, the dev-only nutrition door, response validation, image upload → [docs/api-routes.md](docs/api-routes.md)
-- **Querying Supabase, adding a column, or writing a migration** — `selectColumns<Row>()`, the `src/lib/recipes.ts` repo layer, derived `content`/`embedding` → [docs/supabase-data-layer.md](docs/supabase-data-layer.md)
-- **Working on nutrition** — the ingredient catalog, line identity, normalization, USDA, `ScalableRecipe.nutrition()` → [docs/nutrition.md](docs/nutrition.md)
+- **Querying Supabase, adding a column, or writing a migration** — `selectColumns<Row>()`, the `src/lib/recipes.ts` repo layer, `recipes.ingredients` + `recipe_ingredients` (hydrate/reconcile, the write order), derived `content`/`embedding` → [docs/supabase-data-layer.md](docs/supabase-data-layer.md)
+- **Working on nutrition** — the ingredient catalog, row identity, normalization, USDA, `ScalableRecipe.nutrition()`, NutritionDetail → [docs/nutrition.md](docs/nutrition.md)
 - **Working on the Nutrition Facts label** (`NutritionFactsLabel`, `labelRows.ts`, `NutrientRowTr`) → [docs/nutrition-label.md](docs/nutrition-label.md)
 - **Any visual/CSS work** — theme tokens, fonts, badges, shadcn primitives, the radius doctrine → [docs/styling.md](docs/styling.md)
 - **Writing or editing a story** — story-vs-test discipline, nav structure, `main.ts` config → [docs/storybook.md](docs/storybook.md)
-- **Needing sample data in a story or a test** — a `RecipeRow`/`SchemaRecipe`, a `makeX` factory, a Supabase or fetch mock → [docs/fixtures.md](docs/fixtures.md)
+- **Writing, rewriting, or migrating any story or test file** — every shaped or repeated object in it (a `RecipeRow`/`SchemaRecipe`, a `makeX` factory, a Supabase or fetch mock) → [docs/fixtures.md](docs/fixtures.md)
 - **Touching `deploy.yml`, `staging.yml`, a compose file, or adding an env var** → [docs/deployment.md](docs/deployment.md)
 - **A test times out at 5000ms, or you're loading modules inside a test body** → [docs/testing.md](docs/testing.md)
 - **A test fails to *collect* with `Failed to resolve import "../../../c:/…"`** (relative path with an embedded drive letter, usually from the husky pre-push hook, passing when run directly) — known-flaky, usually clears on re-push → [troubleshooting/vite-glob-drive-letter.md](troubleshooting/vite-glob-drive-letter.md)

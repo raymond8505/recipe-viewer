@@ -2,7 +2,12 @@
 
 import { useRef, useState, useEffect, useMemo } from "react";
 import Image from "next/image";
-import type { RecipeRow, HowToStep, HowToSection } from "@/types/recipe";
+import type {
+  RecipeRow,
+  RecipeDocument,
+  HowToStep,
+  HowToSection,
+} from "@/types/recipe";
 import {
   formatDuration,
   formatDate,
@@ -18,6 +23,7 @@ import {
   type NormalizedNutrition,
 } from "@/lib/ScalableRecipe";
 import { useWakeLock } from "@/hooks/useWakeLock";
+import { recipeDocument } from "@/lib/recipeDocument";
 import {
   registerCookingModeRecipe,
   unregisterCookingModeRecipe,
@@ -48,12 +54,9 @@ interface CookingModeProps {
   recipe: RecipeRow;
   onClose: () => void;
   isLoggedIn?: boolean;
-  // Whether the viewer may see the nutrition source badge: logged in, or running
-  // locally in dev. Separate from `isLoggedIn`, which still gates cooking notes.
-  // Resolved server-side — see src/lib/devAccess.ts.
-  canCurateNutrition?: boolean;
-  // Normalized ingredient nutrition for the PRIMARY recipe only. Meal (added)
-  // recipes keep their schema nutrition — scaling is primary-only here too.
+  // Normalized ingredient nutrition for the PRIMARY recipe only — the only
+  // source the panel has, and scaling is primary-only here too, so a meal's
+  // added recipes show no nutrition of their own.
   normalizedNutrition?: NormalizedNutrition | null;
 }
 
@@ -73,7 +76,6 @@ export default function CookingMode({
   recipe,
   onClose,
   isLoggedIn = false,
-  canCurateNutrition = isLoggedIn,
   normalizedNutrition,
 }: CookingModeProps) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -98,7 +100,12 @@ export default function CookingMode({
     resetAll,
   } = useTimers(recipe.url);
 
-  const [schema, setSchema] = useState(recipe.metadata.schema);
+  // The primary recipe as one document (schema + ingredient groups), which the
+  // window API may replace wholesale. `initialDoc` is the server's version,
+  // kept for the normalized-nutrition check below.
+  const [initialDoc] = useState<RecipeDocument>(() => recipeDocument(recipe));
+  const [doc, setDoc] = useState(initialDoc);
+  const { schema } = doc;
   const [cookingNotes, setCookingNotes] = useState(
     () => recipe.metadata.schema.cookingNotes ?? "",
   );
@@ -122,25 +129,30 @@ export default function CookingMode({
   const [scalables, setScalables] = useState<Map<string, ScalableRecipe>>(
     () =>
       new Map([
-        [recipe.id, new ScalableRecipe(recipe.metadata.schema, undefined, normalizedNutrition)],
+        [
+          recipe.id,
+          new ScalableRecipe(doc.schema, doc.ingredients, undefined, normalizedNutrition),
+        ],
       ]),
   );
 
-  // When the primary schema is swapped (e.g. window API setRecipeViewerRecipe),
-  // rebuild its ScalableRecipe at default state — the previous scale was anchored
-  // to a now-stale yield and would silently produce wrong numbers. The normalized
-  // total was derived from the original schema, so it only applies while the
-  // schema is unchanged.
+  // When the primary document is swapped (e.g. window API
+  // setRecipeViewerRecipe), rebuild its ScalableRecipe at default state — the
+  // previous scale was anchored to a now-stale yield and would silently
+  // produce wrong numbers. The normalized total was derived from the server's
+  // document, so it only applies while that is still the one shown.
   useEffect(() => {
     setScalables((prev) => {
       const next = new Map(prev);
-      const normalized =
-        schema === recipe.metadata.schema ? normalizedNutrition : undefined;
-      next.set(recipe.id, new ScalableRecipe(schema, undefined, normalized));
+      const normalized = doc === initialDoc ? normalizedNutrition : undefined;
+      next.set(
+        recipe.id,
+        new ScalableRecipe(doc.schema, doc.ingredients, undefined, normalized),
+      );
       return next;
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [schema, recipe.id]);
+  }, [doc, recipe.id]);
 
   const primaryScalable = scalables.get(recipe.id)!;
   const activeScalable = scalables.get(mealRecipes[activeIndex].id)!;
@@ -204,7 +216,7 @@ export default function CookingMode({
   }, [cookingNotes]);
 
   useEffect(() => {
-    registerCookingModeRecipe(recipe.metadata.schema, setSchema);
+    registerCookingModeRecipe(initialDoc, setDoc);
     return () => unregisterCookingModeRecipe();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -226,14 +238,14 @@ export default function CookingMode({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Shopping list — single Set across all meal recipes; key = "${recipeId}::${ingredientText}"
+  // Shopping list — single Set across all meal recipes; key = "${recipeId}::${ingredientId}"
   const [selectedIngredients, setSelectedIngredients] = useState<Set<string>>(
     new Set(),
   );
   const [copyFeedback, setCopyFeedback] = useState(false);
 
-  const toggleIngredient = (recipeId: string, text: string) => {
-    const key = `${recipeId}::${text}`;
+  const toggleIngredient = (recipeId: string, ingredientId: string) => {
+    const key = `${recipeId}::${ingredientId}`;
     setSelectedIngredients((prev) => {
       const next = new Set(prev);
       if (next.has(key)) next.delete(key);
@@ -244,13 +256,13 @@ export default function CookingMode({
 
   const copyShoppingList = async () => {
     const lines: string[] = [];
-    // Read through `scalables`, not the schemas: the copied line reflects the
+    // Read through `scalables`, not the rows: the copied line reflects the
     // current scale (see formatScaledIngredient), and the primary's instance is
-    // rebuilt from the live `schema` above — so window-API overrides still win
+    // rebuilt from the live `doc` above — so window-API overrides still win
     // without branching on r.id here. Secondaries stay at 1× and copy verbatim.
     for (const r of mealRecipes) {
       for (const ing of scalables.get(r.id)?.ingredients ?? []) {
-        if (selectedIngredients.has(`${r.id}::${ing.original}`)) {
+        if (selectedIngredients.has(`${r.id}::${ing.id}`)) {
           lines.push(formatScaledIngredient(ing));
         }
       }
@@ -289,7 +301,7 @@ export default function CookingMode({
     setScalables((prev) =>
       new Map(prev).set(
         newRecipe.id,
-        new ScalableRecipe(newRecipe.metadata.schema),
+        new ScalableRecipe(newRecipe.metadata.schema, newRecipe.ingredients),
       ),
     );
     // Seed this recipe's timers unconditionally (bypass the "skip if timers > 0" guard on mount)
@@ -580,8 +592,7 @@ export default function CookingMode({
               className="grid grid-cols-1 sm:grid-cols-3 gap-8"
             >
               {/* Ingredients */}
-              {activeSchema.recipeIngredient &&
-                activeSchema.recipeIngredient.length > 0 && (
+              {activeScalable.ingredients.length > 0 && (
                   <div className="sm:col-span-1">
                     <div className="flex items-center justify-between mb-4">
                       <h2 className="text-2xl sm:text-xl text-gray-900">
@@ -602,19 +613,19 @@ export default function CookingMode({
                             </h3>
                           )}
                           <ul className="space-y-2">
-                            {items.map((ing, i) => {
+                            {items.map((ing) => {
                               const text = ing.original;
                               const selected = selectedIngredients.has(
-                                `${mealRecipes[activeIndex].id}::${text}`,
+                                `${mealRecipes[activeIndex].id}::${ing.id}`,
                               );
                               return (
                                 <li
-                                  key={i}
+                                  key={ing.id}
                                   className={`flex items-start gap-2 text-lg sm:text-sm rounded-lg px-2 py-1 -mx-2 cursor-pointer select-none transition-colors active:opacity-60 ${selected ? "bg-green-50 text-gray-700" : "text-gray-700"}`}
                                   onClick={() =>
                                     toggleIngredient(
                                       mealRecipes[activeIndex].id,
-                                      text,
+                                      ing.id,
                                     )
                                   }
                                   role="checkbox"
@@ -748,7 +759,6 @@ export default function CookingMode({
               onSplitPortions={(n) =>
                 updateScalable(recipe.id, (r) => r.splitPortions(n))
               }
-              showSources={canCurateNutrition}
             />
           </div>
         </div>

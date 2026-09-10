@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getRecipeById, updateRecipeRow, RecipeRepoError } from "@/lib/recipes";
-import type { SchemaRecipe } from "@/types/recipe";
+import type { RecipeIngredientGroupInput, SchemaRecipe } from "@/types/recipe";
 import type { RecipeStatus } from "@/lib/recipes";
 import { requireSessionOrRecipeToken } from "@/lib/api/guard";
 import { canonicalizeRecipeSource } from "@/lib/format";
@@ -19,6 +19,8 @@ export const POST = requireSessionOrRecipeToken(
 
     const body = (await req.json()) as {
       schema: SchemaRecipe;
+      // The whole list; absent = leave the ingredients alone.
+      ingredients?: RecipeIngredientGroupInput[];
       status: RecipeStatus;
       url?: string;
       source?: string;
@@ -38,13 +40,14 @@ export const POST = requireSessionOrRecipeToken(
     );
 
     // recomputes the markdown `content` column and the search embedding from
-    // the saved schema.
+    // the saved recipe.
     let saved;
     try {
       saved = await updateRecipeRow(id, {
         url: effectiveUrl,
         source: effectiveSource,
         schema: body.schema,
+        ingredients: body.ingredients,
         status: body.status,
       });
     } catch (err) {
@@ -56,12 +59,17 @@ export const POST = requireSessionOrRecipeToken(
       throw err;
     }
 
-    // Every row-level field the editor seeds from is echoed back, so the client
-    // can re-seed its state from what was actually persisted rather than from
-    // its own draft — the two differ whenever a value degrades (blank source) or
-    // is canonicalized server-side.
+    // Every field the client's document holds is echoed back, so it can
+    // re-seed from what was actually persisted rather than from its own draft
+    // — the two differ whenever a value degrades (blank source), is
+    // canonicalized server-side, gained a row id (a new ingredient), or was
+    // parsed into a column (a time).
     return NextResponse.json({
       schema: saved.metadata.schema,
+      ingredients: saved.ingredients,
+      prep_time: saved.prep_time,
+      cook_time: saved.cook_time,
+      total_time: saved.total_time,
       status: saved.status,
       url: saved.url,
       source: saved.source,

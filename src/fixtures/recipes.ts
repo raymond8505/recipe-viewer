@@ -1,4 +1,5 @@
 import type { RecipeRow } from "@/types/recipe";
+import { makeIngredientGroup } from "./ingredients";
 
 // Time columns are SECONDS (see RecipeRow). These are HYDRATED rows — what
 // every consumer above src/lib/recipes.ts sees.
@@ -15,6 +16,7 @@ export const recipeFixtures: RecipeRow[] = [
     prep_time: 300,
     cook_time: null,
     total_time: 300,
+    ingredients: [],
     metadata: {
       schema: {
         name: "Chorizo Tofu Marinade",
@@ -45,6 +47,7 @@ export const recipeFixtures: RecipeRow[] = [
     prep_time: 1200,
     cook_time: 2100,
     total_time: 3300,
+    ingredients: [],
     metadata: {
       schema: {
         name: "Black Bean & Mushroom Enchiladas with Charred Tomatillo Sauce",
@@ -79,6 +82,26 @@ export const recipeFixtures: RecipeRow[] = [
     prep_time: 1200,
     cook_time: 1800,
     total_time: 3000,
+    ingredients: [
+      makeIngredientGroup("Meatballs", [
+        "1 lb ground chicken",
+        "3 cloves garlic, minced",
+        "1 tbsp fish sauce",
+        "1/4 cup panko breadcrumbs",
+        "1 egg",
+      ]),
+      makeIngredientGroup("Curry sauce", [
+        "300 ml full-fat coconut milk",
+        "2 tbsp red curry paste",
+        "1 tbsp brown sugar",
+        "1 tbsp lime juice",
+        "3-5 thai basil leaves, torn",
+      ]),
+      makeIngredientGroup("Garnish", [
+        "1/4 cup crushed peanuts, for garnish",
+        "cilantro, to taste",
+      ]),
+    ],
     metadata: {
       schema: {
         name: "Thai Curry Chicken Meatballs",
@@ -93,20 +116,6 @@ export const recipeFixtures: RecipeRow[] = [
         recipeCuisine: "Thai",
         recipeCategory: "Main Course",
         datePublished: "2026-01-09",
-        recipeIngredient: [
-          { name: "1 lb ground chicken", group: "Meatballs" },
-          { name: "3 cloves garlic, minced", group: "Meatballs" },
-          { name: "1 tbsp fish sauce", group: "Meatballs" },
-          { name: "1/4 cup panko breadcrumbs", group: "Meatballs" },
-          { name: "1 egg", group: "Meatballs" },
-          { name: "300 ml full-fat coconut milk", group: "Curry sauce" },
-          { name: "2 tbsp red curry paste", group: "Curry sauce" },
-          { name: "1 tbsp brown sugar", group: "Curry sauce" },
-          { name: "1 tbsp lime juice", group: "Curry sauce" },
-          { name: "3-5 thai basil leaves, torn", group: "Curry sauce" },
-          { name: "1/4 cup crushed peanuts, for garnish", group: "Garnish" },
-          { name: "cilantro, to taste", group: "Garnish" },
-        ],
         recipeInstructions: [
           {
             "@type": "HowToSection",
@@ -149,6 +158,7 @@ export const recipeFixtures: RecipeRow[] = [
     prep_time: 2400,
     cook_time: 2100,
     total_time: 14400,
+    ingredients: [],
     metadata: {
       schema: {
         name: "Strawberry Oat Bars",
@@ -183,6 +193,7 @@ export const recipeFixtures: RecipeRow[] = [
     prep_time: 300,
     cook_time: null,
     total_time: 300,
+    ingredients: [],
     metadata: {
       schema: {
         name: "Quick Yakisoba Sauce",
@@ -222,6 +233,7 @@ export function makeRecipe(
     prep_time: null,
     cook_time: null,
     total_time: null,
+    ingredients: [],
     metadata: { schema: { name } },
     ...overrides,
   };

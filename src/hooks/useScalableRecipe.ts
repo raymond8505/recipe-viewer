@@ -4,7 +4,7 @@ import {
   type IngredientRef,
   type NormalizedNutrition,
 } from "@/lib/ScalableRecipe";
-import type { SchemaRecipe } from "@/types/recipe";
+import type { RecipeDocument } from "@/types/recipe";
 
 export interface UseScalableRecipe {
   recipe: ScalableRecipe;
@@ -15,32 +15,38 @@ export interface UseScalableRecipe {
 }
 
 /**
- * React binding for ScalableRecipe. Owns one instance per schema reference and
- * exposes the three scaling operations as stable callbacks. When the caller
- * passes a different schema (e.g. CookingMode swaps recipes mid-session) the
- * instance is rebuilt at default state — current scale/split is discarded
- * because the new schema may have a different recipeYield, which would make
- * the carried-over numbers meaningless.
+ * React binding for ScalableRecipe. Owns one instance per document (schema +
+ * ingredient groups, compared by reference) and exposes the three scaling
+ * operations as stable callbacks. When the caller passes a different document
+ * (a save, a re-scrape, CookingMode swapping recipes mid-session) the instance
+ * is rebuilt at default state — current scale/split is discarded because the
+ * new document may have a different recipeYield, which would make the
+ * carried-over numbers meaningless.
  *
  * `normalized` (the recipe's normalized ingredient nutrition) is baked into the
  * instance, whose `nutrition()` decides whether to serve it or the schema
- * fields. Callers pass it only for the original, unedited schema — see
+ * fields. Callers pass it only for the original, unedited document — see
  * RecipeDetail.
  */
 export function useScalableRecipe(
-  schema: SchemaRecipe,
+  doc: RecipeDocument,
   normalized?: NormalizedNutrition | null,
 ): UseScalableRecipe {
-  const [recipe, setRecipe] = useState(() => new ScalableRecipe(schema, undefined, normalized));
+  const [recipe, setRecipe] = useState(
+    () => new ScalableRecipe(doc.schema, doc.ingredients, undefined, normalized),
+  );
 
   useEffect(() => {
     setRecipe((prev) =>
-      prev.schema === schema ? prev : new ScalableRecipe(schema, undefined, normalized),
+      prev.schema === doc.schema && prev.ingredientGroups === doc.ingredients
+        ? prev
+        : new ScalableRecipe(doc.schema, doc.ingredients, undefined, normalized),
     );
-    // `normalized` is derived from `schema` server-side; rebuilding on schema
-    // identity is sufficient (and avoids churn from a fresh object each render).
+    // `normalized` is derived from the document server-side; rebuilding on the
+    // document's identity is sufficient (and avoids churn from a fresh object
+    // each render).
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [schema]);
+  }, [doc]);
 
   const scalePortionsTo = useCallback(
     (n: number) => setRecipe((r) => r.scalePortionsTo(n)),

@@ -1,4 +1,12 @@
-import type { SchemaRecipe } from "@/types/recipe";
+import { toSchemaOrgRecipe } from "./format";
+import { documentFromSchemaOrg } from "./recipeDocument";
+import type { RecipeDocument, SchemaOrgRecipe } from "@/types/recipe";
+
+// The window.recipeTools API is an EXTERNAL edge: whatever drives it (a
+// browser extension, an agent) speaks Schema.org. Recipes go out as
+// SchemaOrgRecipe (the stored schema with the lines flattened to strings) and
+// come in the same way, converted to the app's own document at the boundary —
+// nothing past this module sees a `recipeIngredient` array.
 
 export interface McpInputSchema {
   type: "object";
@@ -19,9 +27,9 @@ export interface ManifestResponse {
 export interface RecipeToolsApi {
   ping: () => "success";
   listTools: () => ManifestResponse;
-  searchRecipes: (q: string) => Promise<SchemaRecipe[]>;
-  getRecipeViewerRecipe: () => SchemaRecipe | null;
-  setRecipeViewerRecipe: (recipe: SchemaRecipe) => void;
+  searchRecipes: (q: string) => Promise<SchemaOrgRecipe[]>;
+  getRecipeViewerRecipe: () => SchemaOrgRecipe | null;
+  setRecipeViewerRecipe: (recipe: SchemaOrgRecipe) => void;
 }
 
 export const API_TOOLS: McpTool[] = [
@@ -45,7 +53,7 @@ export const API_TOOLS: McpTool[] = [
   {
     name: "getRecipeViewerRecipe",
     description:
-      "getRecipeViewerRecipe(): SchemaRecipe | null — Returns the current recipe schema displayed in cooking mode, or null if cooking mode is not active.",
+      "getRecipeViewerRecipe(): Recipe | null — Returns the current recipe displayed in cooking mode as a Schema.org Recipe (recipeIngredient as plain strings), or null if cooking mode is not active.",
     inputSchema: {
       type: "object",
       properties: {},
@@ -54,13 +62,13 @@ export const API_TOOLS: McpTool[] = [
   {
     name: "setRecipeViewerRecipe",
     description:
-      "setRecipeViewerRecipe(recipe: SchemaRecipe): void — Replaces the recipe schema displayed in cooking mode. Only takes effect while cooking mode is active.",
+      "setRecipeViewerRecipe(recipe: Recipe): void — Replaces the recipe displayed in cooking mode with a Schema.org Recipe (recipeIngredient as strings, or { name, group } objects). Only takes effect while cooking mode is active.",
     inputSchema: {
       type: "object",
       properties: {
         recipe: {
           type: "object",
-          description: "A SchemaRecipe object to display in cooking mode.",
+          description: "A Schema.org Recipe object to display in cooking mode.",
         },
       },
       required: ["recipe"],
@@ -69,7 +77,7 @@ export const API_TOOLS: McpTool[] = [
   {
     name: "searchRecipes",
     description:
-      "searchRecipes(q: string): Promise<SchemaRecipe[]> — Sets the search bar to the given query, navigates the page to show matching recipes, and returns a JSON array of matching recipe schemas.",
+      "searchRecipes(q: string): Promise<Recipe[]> — Sets the search bar to the given query, navigates the page to show matching recipes, and returns a JSON array of matching recipes as Schema.org Recipe objects.",
     inputSchema: {
       type: "object",
       properties: {
@@ -83,16 +91,16 @@ export const API_TOOLS: McpTool[] = [
   },
 ];
 
-let recipeUpdateResolver: ((schemas: SchemaRecipe[]) => void) | null = null;
+let recipeUpdateResolver: ((recipes: SchemaOrgRecipe[]) => void) | null = null;
 
-let currentCookingRecipe: SchemaRecipe | null = null;
-let cookingRecipeSetCallback: ((recipe: SchemaRecipe) => void) | null = null;
+let currentCookingRecipe: RecipeDocument | null = null;
+let cookingRecipeSetCallback: ((doc: RecipeDocument) => void) | null = null;
 
 export function registerCookingModeRecipe(
-  recipe: SchemaRecipe,
-  setter: (recipe: SchemaRecipe) => void
+  doc: RecipeDocument,
+  setter: (doc: RecipeDocument) => void
 ): void {
-  currentCookingRecipe = recipe;
+  currentCookingRecipe = doc;
   cookingRecipeSetCallback = setter;
 }
 
@@ -101,8 +109,8 @@ export function unregisterCookingModeRecipe(): void {
   cookingRecipeSetCallback = null;
 }
 
-export function notifyRecipeUpdate(schemas: SchemaRecipe[]): void {
-  recipeUpdateResolver?.(schemas);
+export function notifyRecipeUpdate(recipes: SchemaOrgRecipe[]): void {
+  recipeUpdateResolver?.(recipes);
   recipeUpdateResolver = null;
 }
 
@@ -113,14 +121,14 @@ export function createRecipeToolsApi(
     ping: () => "success",
     listTools: () => ({ tools: API_TOOLS }),
     searchRecipes: (q: string) => {
-      const promise = new Promise<SchemaRecipe[]>((resolve, reject) => {
+      const promise = new Promise<SchemaOrgRecipe[]>((resolve, reject) => {
         const timeout = setTimeout(
           () => reject(new Error("searchRecipes timed out waiting for page update")),
           10_000
         );
-        recipeUpdateResolver = (schemas) => {
+        recipeUpdateResolver = (recipes) => {
           clearTimeout(timeout);
-          resolve(schemas);
+          resolve(recipes);
         };
       });
 
@@ -128,10 +136,12 @@ export function createRecipeToolsApi(
 
       return promise;
     },
-    getRecipeViewerRecipe: () => currentCookingRecipe,
-    setRecipeViewerRecipe: (recipe: SchemaRecipe) => {
-      currentCookingRecipe = recipe;
-      cookingRecipeSetCallback?.(recipe);
+    getRecipeViewerRecipe: () =>
+      currentCookingRecipe ? toSchemaOrgRecipe(currentCookingRecipe) : null,
+    setRecipeViewerRecipe: (recipe: SchemaOrgRecipe) => {
+      const doc = documentFromSchemaOrg(recipe);
+      currentCookingRecipe = doc;
+      cookingRecipeSetCallback?.(doc);
     },
   };
 }

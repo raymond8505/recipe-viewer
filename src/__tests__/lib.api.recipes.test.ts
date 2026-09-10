@@ -2,9 +2,11 @@
 import { afterEach, describe, it, expect, vi } from "vitest";
 import {
   normalizeRecipe,
+  saveRecipe,
   updateRecipeIngredientLine,
   uploadRecipeImageFile,
 } from "@/lib/api/recipes";
+import { makeIngredientLines } from "@/fixtures";
 
 function mockFetchOnce(status: number, body: object) {
   const mock = vi.fn().mockResolvedValue(
@@ -67,40 +69,82 @@ describe("uploadRecipeImageFile", () => {
   });
 });
 
+describe("saveRecipe", () => {
+  const body = {
+    schema: { name: "Cake" },
+    ingredients: [{ ingredients: [{ id: "ri-1", raw_text: "2 cups flour" }] }],
+    status: "draft",
+    url: "https://example.com",
+    source: "example.com",
+  };
+
+  it("POSTs the document to /update and returns what was persisted", async () => {
+    const saved = {
+      schema: { name: "Cake" },
+      ingredients: makeIngredientLines(["2 cups flour"]),
+      prep_time: 600,
+      cook_time: null,
+      total_time: 600,
+      status: "draft",
+      url: "https://example.com",
+      source: "example.com",
+    };
+    const mock = mockFetchOnce(200, saved);
+
+    const out = await saveRecipe("recipe-1", body);
+
+    expect(out).toEqual(saved);
+    const [requestUrl, init] = mock.mock.calls[0];
+    expect(requestUrl).toBe("/api/recipes/recipe-1/update");
+    expect(init.method).toBe("POST");
+    expect(JSON.parse(init.body)).toEqual(body);
+  });
+
+  // The client re-seeds its whole document from the echo, so a response
+  // missing either half would wipe state — fail at the boundary instead.
+  it("throws when a 200 response omits the ingredients", async () => {
+    mockFetchOnce(200, { schema: { name: "Cake" }, status: "draft" });
+
+    await expect(saveRecipe("recipe-1", body)).rejects.toThrow(/no recipe/);
+  });
+
+  it("throws when the response is not ok", async () => {
+    mockFetchOnce(500, { error: "boom" });
+
+    await expect(saveRecipe("recipe-1", body)).rejects.toThrow(/500/);
+  });
+});
+
 describe("updateRecipeIngredientLine", () => {
-  it("PATCHes the line and returns both the lines and the re-parsed rows", async () => {
-    const rows = [{ id: "ri-1", line_id: "L1", raw_text: "6 g magic dust" }];
-    const mock = mockFetchOnce(200, {
-      recipeIngredient: [{ name: "6 g magic dust", id: "L1" }],
-      rows,
-    });
+  it("PATCHes the line by id and returns the recipe's groups", async () => {
+    const ingredients = makeIngredientLines(["6 g magic dust"]);
+    const mock = mockFetchOnce(200, { ingredients });
 
-    const out = await updateRecipeIngredientLine("recipe-1", 1, "6 g magic dust");
+    const out = await updateRecipeIngredientLine("recipe-1", "ri-1", "6 g magic dust");
 
-    expect(out.recipeIngredient).toEqual([{ name: "6 g magic dust", id: "L1" }]);
-    expect(out.rows).toEqual(rows);
+    expect(out.ingredients).toEqual(ingredients);
     const [requestUrl, init] = mock.mock.calls[0];
     expect(requestUrl).toBe("/api/recipes/recipe-1/ingredients");
     expect(init.method).toBe("PATCH");
-    expect(JSON.parse(init.body)).toEqual({ index: 1, text: "6 g magic dust" });
+    expect(JSON.parse(init.body)).toEqual({ id: "ri-1", text: "6 g magic dust" });
   });
 
-  // A 200 without the rows would leave the caller holding its pre-edit copy —
-  // the edited line would render as though its match had been dropped. Fail at
-  // the boundary rather than let that reach state.
-  it("throws when a 200 response omits the rows", async () => {
-    mockFetchOnce(200, { recipeIngredient: ["6 g magic dust"] });
+  // A 200 without the groups leaves the caller holding its pre-edit copy, and
+  // the edited line renders as if it has lost its match. Fail at the boundary
+  // rather than let that reach state.
+  it("throws when a 200 response omits the ingredients", async () => {
+    mockFetchOnce(200, { ok: true });
 
     await expect(
-      updateRecipeIngredientLine("recipe-1", 1, "6 g magic dust"),
-    ).rejects.toThrow(/no lines/);
+      updateRecipeIngredientLine("recipe-1", "ri-1", "6 g magic dust"),
+    ).rejects.toThrow(/no ingredients/);
   });
 
   it("throws when the response is not ok", async () => {
     mockFetchOnce(500, { error: "boom" });
 
     await expect(
-      updateRecipeIngredientLine("recipe-1", 1, "6 g magic dust"),
+      updateRecipeIngredientLine("recipe-1", "ri-1", "6 g magic dust"),
     ).rejects.toThrow(/500/);
   });
 });

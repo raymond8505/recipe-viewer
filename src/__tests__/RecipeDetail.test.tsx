@@ -9,22 +9,33 @@ import {
 import RecipeDetail from "@/components/RecipeDetail";
 import type {
   RecipeRow,
+  RecipeIngredientGroup,
   HowToStep,
   HowToSection,
   SchemaRecipe,
 } from "@/types/recipe";
-import { rescrapeFixture } from "@/fixtures/rescrape";
+import {
+  rescrapeFixture,
+  rescrapeResponseFixture,
+  rescrapeSavedFixture,
+} from "@/fixtures/rescrape";
+import { makeIngredientGroup, makeIngredientLines } from "@/fixtures";
 import { clickAndConfirm } from "./helpers/confirmBar";
 
 function makeRecipe(
   schema: Partial<SchemaRecipe> = {},
   row: Partial<Omit<RecipeRow, "metadata">> = {},
+  ingredients: string[] | RecipeIngredientGroup[] = [],
 ): RecipeRow {
   return {
     id: "1",
     url: "https://example.com",
     source: "example.com",
     status: "draft",
+    ingredients:
+      typeof ingredients[0] === "string"
+        ? makeIngredientLines(ingredients as string[])
+        : (ingredients as RecipeIngredientGroup[]),
     ...row,
     metadata: {
       schema: {
@@ -151,10 +162,17 @@ describe("RecipeDetail", () => {
     expect(screen.getByText("Boil salted water.")).toBeTruthy();
   });
 
-  it("shows nutrition section when at least one nutrient field is present", () => {
+  // The nutrition the page shows comes from the catalog total the server
+  // resolved, never from the recipe's own stored fields. Totals are
+  // whole-recipe and the yield below is four servings, so they read as ÷4.
+  it("shows the nutrition section from the normalized catalog total", () => {
     render(
       <RecipeDetail
-        recipe={makeRecipe({ nutrition: { calories: "350 kcal" } })}
+        recipe={makeRecipe({ recipeYield: "4 servings" })}
+        normalizedNutrition={{
+          total: { calories_kcal: 1400 },
+          fullyCovered: true,
+        }}
       />,
     );
     expect(screen.getByText("Nutrition")).toBeTruthy();
@@ -164,44 +182,62 @@ describe("RecipeDetail", () => {
   it("shows all present nutrition fields", () => {
     render(
       <RecipeDetail
-        recipe={makeRecipe({
-          nutrition: {
-            calories: "350 kcal",
-            proteinContent: "20g",
-            carbohydrateContent: "40g",
-            fatContent: "10g",
+        recipe={makeRecipe({ recipeYield: "4 servings" })}
+        normalizedNutrition={{
+          total: {
+            calories_kcal: 1400,
+            protein_g: 80,
+            carbs_g: 160,
+            fat_g: 40,
           },
-        })}
+          fullyCovered: true,
+        }}
       />,
     );
     expect(screen.getByText("350 kcal")).toBeTruthy();
-    // Attached units ("20g") normalize to spaced display — values are
-    // re-rendered from parsed NutrientValues, not echoed from the raw string.
+    // Units are re-attached from the parsed NutrientValue, so they render spaced.
     expect(screen.getByText("20 g")).toBeTruthy();
     expect(screen.getByText("40 g")).toBeTruthy();
     expect(screen.getByText("10 g")).toBeTruthy();
   });
 
-  it("hides nutrition section when only non-counted fields are present (e.g. servingSize)", () => {
+  it("hides the nutrition section when the total covers no countable nutrient", () => {
     render(
       <RecipeDetail
-        recipe={makeRecipe({ nutrition: { servingSize: "1 cup" } })}
+        recipe={makeRecipe({
+          recipeYield: "4 servings",
+          nutrition: { servingSize: "1 cup" },
+        })}
+        normalizedNutrition={{ total: {}, fullyCovered: true }}
       />,
     );
     expect(screen.queryByText("Nutrition")).toBeNull();
   });
 
-  it("hides nutrition section when nutrition is absent", () => {
+  it("hides the nutrition section when the recipe was never normalized", () => {
     render(<RecipeDetail recipe={makeRecipe()} />);
     expect(screen.queryByText("Nutrition")).toBeNull();
+  });
+
+  it("hides the nutrition section even when the recipe has its own stored fields", () => {
+    // The catalog is the only source, so a recipe nobody has normalized shows
+    // nothing regardless of how complete its stored fields are.
+    render(
+      <RecipeDetail
+        recipe={makeRecipe({
+          recipeYield: "4 servings",
+          nutrition: { calories: "350 kcal", proteinContent: "20 g" },
+        })}
+      />,
+    );
+    expect(screen.queryByText("Nutrition")).toBeNull();
+    expect(screen.queryByText("350 kcal")).toBeNull();
   });
 
   it("renders ingredients list", () => {
     const { container } = render(
       <RecipeDetail
-        recipe={makeRecipe({
-          recipeIngredient: ["2 cups flour", "1 cup sugar"],
-        })}
+        recipe={makeRecipe({}, {}, ["2 cups flour", "1 cup sugar"])}
       />,
     );
     // Convertable ingredients are split into amount + unit select + rest
@@ -212,13 +248,10 @@ describe("RecipeDetail", () => {
   it("renders ingredients grouped by group with headings", () => {
     render(
       <RecipeDetail
-        recipe={makeRecipe({
-          recipeIngredient: [
-            { name: "2 cups flour", group: "Cake" },
-            { name: "1 cup milk", group: "Cake" },
-            { name: "1 tsp vanilla", group: "Frosting" },
-          ],
-        })}
+        recipe={makeRecipe({}, {}, [
+          makeIngredientGroup("Cake", ["2 cups flour", "1 cup milk"]),
+          makeIngredientGroup("Frosting", ["1 tsp vanilla"]),
+        ])}
       />,
     );
     expect(screen.getByText("Cake")).toBeTruthy();
@@ -228,9 +261,7 @@ describe("RecipeDetail", () => {
   it("renders ungrouped ingredients without section headings", () => {
     render(
       <RecipeDetail
-        recipe={makeRecipe({
-          recipeIngredient: ["2 cups flour", "1 cup sugar"],
-        })}
+        recipe={makeRecipe({}, {}, ["2 cups flour", "1 cup sugar"])}
       />,
     );
     expect(screen.queryByRole("heading", { level: 3 })).toBeNull();
@@ -247,9 +278,7 @@ describe("RecipeDetail — shopping list", () => {
   it("ingredient rows render as unchecked checkboxes", () => {
     render(
       <RecipeDetail
-        recipe={makeRecipe({
-          recipeIngredient: ["2 cups flour", "1 tsp salt"],
-        })}
+        recipe={makeRecipe({}, {}, ["2 cups flour", "1 tsp salt"])}
       />,
     );
     const boxes = screen.getAllByRole("checkbox");
@@ -260,7 +289,7 @@ describe("RecipeDetail — shopping list", () => {
   it("clicking an ingredient checks it", () => {
     render(
       <RecipeDetail
-        recipe={makeRecipe({ recipeIngredient: ["2 cups flour"] })}
+        recipe={makeRecipe({}, {}, ["2 cups flour"])}
       />,
     );
     const box = screen.getByRole("checkbox", { name: "2 cups flour" });
@@ -271,7 +300,7 @@ describe("RecipeDetail — shopping list", () => {
   it("clicking a checked ingredient unchecks it", () => {
     render(
       <RecipeDetail
-        recipe={makeRecipe({ recipeIngredient: ["2 cups flour"] })}
+        recipe={makeRecipe({}, {}, ["2 cups flour"])}
       />,
     );
     const box = screen.getByRole("checkbox", { name: "2 cups flour" });
@@ -283,7 +312,7 @@ describe("RecipeDetail — shopping list", () => {
   it("copy button is disabled when nothing is selected", () => {
     render(
       <RecipeDetail
-        recipe={makeRecipe({ recipeIngredient: ["2 cups flour"] })}
+        recipe={makeRecipe({}, {}, ["2 cups flour"])}
       />,
     );
     expect(
@@ -294,7 +323,7 @@ describe("RecipeDetail — shopping list", () => {
   it("copy button becomes enabled when an ingredient is selected", () => {
     render(
       <RecipeDetail
-        recipe={makeRecipe({ recipeIngredient: ["2 cups flour"] })}
+        recipe={makeRecipe({}, {}, ["2 cups flour"])}
       />,
     );
     fireEvent.click(screen.getByRole("checkbox", { name: "2 cups flour" }));
@@ -306,9 +335,7 @@ describe("RecipeDetail — shopping list", () => {
   it("clicking copy writes selected ingredients to clipboard", async () => {
     render(
       <RecipeDetail
-        recipe={makeRecipe({
-          recipeIngredient: ["2 cups flour", "1 tsp salt"],
-        })}
+        recipe={makeRecipe({}, {}, ["2 cups flour", "1 tsp salt"])}
       />,
     );
     fireEvent.click(screen.getByRole("checkbox", { name: "2 cups flour" }));
@@ -324,13 +351,10 @@ describe("RecipeDetail — shopping list", () => {
   it("copies scaled amounts after the recipe is scaled", async () => {
     render(
       <RecipeDetail
-        recipe={makeRecipe({
-          recipeYield: "1 serving",
-          recipeIngredient: ["2 cups flour", "1 tsp salt"],
-        })}
+        recipe={makeRecipe({ recipeYield: "1 serving" }, {}, ["2 cups flour", "1 tsp salt"])}
       />,
     );
-    // Selection is keyed by the raw text, so it survives the scale change.
+    // Selection is keyed by the line's id, so it survives the scale change.
     fireEvent.click(screen.getByRole("checkbox", { name: "2 cups flour" }));
     fireEvent.click(screen.getByRole("checkbox", { name: "1 tsp salt" }));
     fireEvent.click(screen.getByRole("button", { name: "Increase servings" }));
@@ -345,7 +369,7 @@ describe("RecipeDetail — shopping list", () => {
     const clearSpy = vi.spyOn(globalThis, "clearTimeout");
     const { unmount } = render(
       <RecipeDetail
-        recipe={makeRecipe({ recipeIngredient: ["2 cups flour"] })}
+        recipe={makeRecipe({}, {}, ["2 cups flour"])}
       />,
     );
     fireEvent.click(screen.getByRole("checkbox", { name: "2 cups flour" }));
@@ -557,7 +581,7 @@ describe("RecipeDetail — controls section", () => {
     // Flush the response continuation (json parse + state updates) inside act
     // so the post-resolve setState doesn't fire after the test as a warning.
     await act(async () => {
-      resolve!(new Response(JSON.stringify({ schema: rescrapeFixture }), { status: 200 }));
+      resolve!(new Response(JSON.stringify(rescrapeResponseFixture), { status: 200 }));
     });
   });
 
@@ -565,7 +589,7 @@ describe("RecipeDetail — controls section", () => {
     vi.stubGlobal(
       "fetch",
       vi.fn().mockResolvedValue(
-        new Response(JSON.stringify({ schema: rescrapeFixture }), {
+        new Response(JSON.stringify(rescrapeResponseFixture), {
           status: 200,
         }),
       ),
@@ -599,7 +623,7 @@ describe("RecipeDetail — controls section", () => {
     vi.stubGlobal(
       "fetch",
       vi.fn().mockResolvedValue(
-        new Response(JSON.stringify({ schema: rescrapeFixture }), {
+        new Response(JSON.stringify(rescrapeResponseFixture), {
           status: 200,
         }),
       ),
@@ -629,13 +653,13 @@ describe("RecipeDetail — controls section", () => {
     const mockFetch = vi
       .fn()
       .mockResolvedValueOnce(
-        new Response(JSON.stringify({ schema: rescrapeFixture }), {
+        new Response(JSON.stringify(rescrapeResponseFixture), {
           status: 200,
         }),
       )
       .mockResolvedValueOnce(
         new Response(
-          JSON.stringify({ schema: rescrapeFixture, status: "draft" }),
+          JSON.stringify({ ...rescrapeSavedFixture, status: "draft" }),
           { status: 200 },
         ),
       );
@@ -809,7 +833,7 @@ describe("RecipeDetail — controls section", () => {
 
   it("updates recipe state after a successful save", async () => {
     const updatedSchema = {
-      ...rescrapeFixture,
+      ...rescrapeResponseFixture.schema,
       description: "Updated description.",
     };
     vi.stubGlobal(
@@ -818,7 +842,7 @@ describe("RecipeDetail — controls section", () => {
         .fn()
         .mockResolvedValue(
           new Response(
-            JSON.stringify({ schema: updatedSchema, status: "published" }),
+            JSON.stringify({ schema: updatedSchema, ingredients: [], status: "published" }),
             { status: 200 },
           ),
         ),
@@ -897,7 +921,7 @@ describe("RecipeDetail — controls section", () => {
       .mockResolvedValue(
         new Response(
           JSON.stringify({
-            schema: rescrapeFixture,
+            ...rescrapeSavedFixture,
             status: "draft",
             source: "custom",
           }),
@@ -935,7 +959,7 @@ describe("RecipeDetail — controls section", () => {
       .mockResolvedValue(
         new Response(
           JSON.stringify({
-            schema: rescrapeFixture,
+            ...rescrapeSavedFixture,
             status: "draft",
             source: "custom",
           }),
@@ -977,7 +1001,7 @@ describe("RecipeDetail — controls section", () => {
     const mockFetch = vi.fn().mockResolvedValue(
       new Response(
         JSON.stringify({
-          schema: rescrapeFixture,
+          ...rescrapeSavedFixture,
           status: "draft",
           url: "https://corrected.com/recipe",
           source: "example.com",
@@ -1021,7 +1045,7 @@ describe("RecipeDetail — controls section", () => {
     const mockFetch = vi.fn().mockResolvedValue(
       new Response(
         JSON.stringify({
-          schema: rescrapeFixture,
+          ...rescrapeSavedFixture,
           status: "draft",
           url: "https://seriouseats.com/kebab",
           source: "custom",
@@ -1144,7 +1168,7 @@ describe("RecipeDetail — controls section", () => {
       .fn()
       .mockResolvedValue(
         new Response(
-          JSON.stringify({ schema: rescrapeFixture, status: "draft" }),
+          JSON.stringify({ ...rescrapeSavedFixture, status: "draft" }),
           { status: 200 },
         ),
       );
@@ -1184,7 +1208,7 @@ describe("RecipeDetail — controls section", () => {
       .fn()
       .mockResolvedValue(
         new Response(
-          JSON.stringify({ schema: rescrapeFixture, status: "draft" }),
+          JSON.stringify({ ...rescrapeSavedFixture, status: "draft" }),
           { status: 200 },
         ),
       );
@@ -1234,7 +1258,7 @@ describe("RecipeDetail — controls section", () => {
       .fn()
       .mockResolvedValue(
         new Response(
-          JSON.stringify({ schema: rescrapeFixture, status: "draft" }),
+          JSON.stringify({ ...rescrapeSavedFixture, status: "draft" }),
           { status: 200 },
         ),
       );

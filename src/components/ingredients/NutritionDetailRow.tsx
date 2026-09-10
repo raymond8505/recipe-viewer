@@ -28,9 +28,8 @@ import { STICKY_ALIASES_CELL, STICKY_NAME_CELL } from "./tableStyles";
 // The three grams-less reasons all share one set of fixes, so they share one
 // tail — and it names entering 0 explicitly, because that is the only way out
 // for a line nobody can weigh ("salt to taste") and an empty numeric field is
-// not a discoverable place to learn it. `unmatched`, `no_nutrition` and `stale`
-// are fixed elsewhere (the autocomplete, the catalog, normalization), so they
-// must NOT offer it.
+// not a discoverable place to learn it. `unmatched` and `no_nutrition` are
+// fixed elsewhere (the autocomplete, the catalog), so they must NOT offer it.
 const GRAMS_FIXES =
   "Type a weight, use Estimate, or enter 0 to count this line as nothing.";
 
@@ -40,7 +39,6 @@ const EXCLUSION_TITLES: Record<ExclusionReason, string> = {
   no_quantity: `No parsed amount — can't convert to grams. ${GRAMS_FIXES}`,
   no_unit: `No unit (count line) — can't convert to grams. ${GRAMS_FIXES}`,
   no_density: `Volume unit but the ingredient has no density. ${GRAMS_FIXES}`,
-  stale: "No normalized row for this line — run normalization",
 };
 
 // A line the user switched off. Deliberately applied to cell *contents* rather
@@ -50,9 +48,9 @@ const EXCLUSION_TITLES: Record<ExclusionReason, string> = {
 const OFF_CLASS = "opacity-60 line-through";
 
 /**
- * One recipe line in the NutritionDetail table: an include toggle plus the
- * frozen recipe text (editable in place — this edits the recipe schema itself,
- * with an exclusion flag when the line can't contribute to totals), the frozen
+ * One ingredient in the NutritionDetail table: an include toggle plus the
+ * frozen recipe text (editable in place — this edits the recipe itself, with
+ * an exclusion flag when the line can't contribute to totals), the frozen
  * normalized-ingredient autocomplete, then read-only nutrition cells.
  *
  * Switching the toggle off drops the line from the totals but keeps its numbers
@@ -81,20 +79,16 @@ export default function NutritionDetailRow({
   usdaSearch?: UsdaFoodSearch;
   onSelect: (rowId: string, match: IngredientKeywordMatch | null) => void;
   onImportUsda: (rowId: string, food: UsdaSearchFood) => void;
-  onEditText: (index: number, text: string) => void;
+  onEditText: (id: string, text: string) => void;
   onEstimateGrams: (rowId: string) => void;
   onSetGrams: (rowId: string, grams: number | null) => void;
-  onToggle: (index: number) => void;
+  onToggle: (id: string) => void;
 }) {
   const { row, ingredient, computation, enabled } = line;
   const excluded = computation.kind === "excluded";
-  // Grams only matter for a matched line. "stale" now means the line has no row
-  // of its own — either none at all, or a legacy positional one about to be
-  // rebuilt — so there is nothing to edit a weight on either way. A reworded
-  // line is NOT stale: its row followed the edit and keeps its grams.
-  const isStale =
-    computation.kind === "excluded" && computation.reason === "stale";
-  const showGrams = row != null && row.ingredient_id != null && !isStale;
+  // Grams only matter for a matched line: there is nothing to weigh an
+  // unmatched line against.
+  const showGrams = row.ingredient_id != null;
   // The sticky cell is its own stacking context (z-10), so the dropdown's
   // internal z-index can't beat sibling rows' sticky cells — the whole cell
   // is raised above them (but below the z-30 header corners) while open.
@@ -108,7 +102,7 @@ export default function NutritionDetailRow({
     const trimmed = draft.trim();
     setDraft(null);
     // An empty or unchanged commit is a cancel, not a save.
-    if (trimmed !== "" && trimmed !== line.text) onEditText(line.index, trimmed);
+    if (trimmed !== "" && trimmed !== line.text) onEditText(line.id, trimmed);
   }
 
   return (
@@ -124,7 +118,7 @@ export default function NutritionDetailRow({
               for the same reason the match cell does on a switched-off line. */}
           <Checkbox
             checked={enabled}
-            onCheckedChange={() => onToggle(line.index)}
+            onCheckedChange={() => onToggle(line.id)}
             aria-label={`Include ${line.text}`}
             className="mt-0.5 self-start"
           />
@@ -183,68 +177,64 @@ export default function NutritionDetailRow({
       <TableCell
         className={cn(STICKY_ALIASES_CELL, autocompleteOpen && "z-20")}
       >
-        {row ? (
-          // Recedes with the rest of the row, but no strikethrough — the match
-          // and grams stay editable while the line is switched off.
-          <span
-            className={cn(
-              "flex w-full min-w-0 flex-col gap-1",
-              !enabled && "opacity-60",
-            )}
-          >
-            <span className="flex w-full min-w-0 items-center gap-1.5">
-              <span className="min-w-0 flex-1 text-wrap">
-                <IngredientAutocomplete
-                  value={
-                    row.ingredient_id
-                      ? {
-                          id: row.ingredient_id,
-                          name: ingredient?.name ?? "(unknown ingredient)",
-                        }
-                      : null
-                  }
-                  onSelect={(match) => onSelect(row.id, match)}
-                  onImportUsda={(food) => onImportUsda(row.id, food)}
-                  ariaLabel={`Change match for ${line.text}`}
-                  disabled={saving}
-                  search={search}
-                  usdaSearch={usdaSearch}
-                  onOpenChange={setAutocompleteOpen}
-                />
-              </span>
-              {/* Gated on the resolved catalog row, not on row.ingredient_id:
-                  when the id doesn't resolve the label above reads "(unknown
-                  ingredient)" and there is no name to search the manager with.
-                  New tab on purpose — this page's include-toggle lens and any
-                  in-flight edits are session state worth keeping. */}
-              {ingredient && (
-                <Link
-                  href={`/ingredients?q=${encodeURIComponent(ingredient.name)}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  aria-label={`Edit ${ingredient.name} in the ingredient manager`}
-                  title="Edit this ingredient in the ingredient manager"
-                  className="shrink-0 text-muted-foreground hover:text-brand [&_svg]:size-3.5"
-                >
-                  <ExternalLinkIcon />
-                </Link>
-              )}
-              {saving && <SpinnerIcon />}
-            </span>
-            {showGrams && (
-              <NutritionGramsCell
-                row={row}
-                computation={computation}
-                saving={saving}
-                label={line.text}
-                onEstimate={onEstimateGrams}
-                onSetGrams={onSetGrams}
+        {/* Recedes with the rest of the row, but no strikethrough — the match
+            and grams stay editable while the line is switched off. */}
+        <span
+          className={cn(
+            "flex w-full min-w-0 flex-col gap-1",
+            !enabled && "opacity-60",
+          )}
+        >
+          <span className="flex w-full min-w-0 items-center gap-1.5">
+            <span className="min-w-0 flex-1 text-wrap">
+              <IngredientAutocomplete
+                value={
+                  row.ingredient_id
+                    ? {
+                        id: row.ingredient_id,
+                        name: ingredient?.name ?? "(unknown ingredient)",
+                      }
+                    : null
+                }
+                onSelect={(match) => onSelect(row.id, match)}
+                onImportUsda={(food) => onImportUsda(row.id, food)}
+                ariaLabel={`Change match for ${line.text}`}
+                disabled={saving}
+                search={search}
+                usdaSearch={usdaSearch}
+                onOpenChange={setAutocompleteOpen}
               />
+            </span>
+            {/* Gated on the resolved catalog row, not on row.ingredient_id:
+                when the id doesn't resolve the label above reads "(unknown
+                ingredient)" and there is no name to search the manager with.
+                New tab on purpose — this page's include-toggle lens and any
+                in-flight edits are session state worth keeping. */}
+            {ingredient && (
+              <Link
+                href={`/ingredients?q=${encodeURIComponent(ingredient.name)}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-label={`Edit ${ingredient.name} in the ingredient manager`}
+                title="Edit this ingredient in the ingredient manager"
+                className="shrink-0 text-muted-foreground hover:text-brand [&_svg]:size-3.5"
+              >
+                <ExternalLinkIcon />
+              </Link>
             )}
+            {saving && <SpinnerIcon />}
           </span>
-        ) : (
-          <span className="text-muted-foreground">—</span>
-        )}
+          {showGrams && (
+            <NutritionGramsCell
+              row={row}
+              computation={computation}
+              saving={saving}
+              label={line.text}
+              onEstimate={onEstimateGrams}
+              onSetGrams={onSetGrams}
+            />
+          )}
+        </span>
       </TableCell>
       {NUTRITION_DETAIL_COLUMNS.map((col) => {
         const value =

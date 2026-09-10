@@ -4,14 +4,17 @@ import {
   IngredientRepoError,
   createIngredientRow,
   deleteIngredientRow,
+  deleteRecipeIngredientRows,
+  getCatalogForRows,
   getIngredientByFdcId,
   getIngredientById,
   getIngredients,
   getIngredientsByIds,
   getRecipeIngredientById,
   getRecipeIngredients,
+  getRecipeIngredientsByRecipeIds,
+  insertRecipeIngredientRows,
   matchIngredients,
-  replaceRecipeIngredients,
   searchIngredientsKeyword,
   setRecipeIngredientGrams,
   updateRecipeIngredientAssociation,
@@ -20,7 +23,7 @@ import {
 } from "@/lib/ingredients";
 import { getSupabaseAdminClient, getSupabaseClient } from "@/lib/supabase";
 import { makeSupabaseQueue } from "@/fixtures/supabase";
-import { makeIngredient, makeRecipeIngredient } from "@/fixtures";
+import { makeIngredient, makeRecipeIngredientRow } from "@/fixtures";
 
 // Mock only the client getters; toVectorLiteral stays real so the bracketed
 // pgvector literal assertions exercise the actual formatting.
@@ -396,8 +399,10 @@ describe("searchIngredientsKeyword", () => {
 });
 
 describe("getRecipeIngredients", () => {
-  it("filters by recipe and orders by position", async () => {
-    const rows = [makeRecipeIngredient("r-1", 0), makeRecipeIngredient("r-1", 1)];
+  // No ordering: `recipes.ingredients` says where each row goes, and `position`
+  // is a dead column since db/migrations/0016.
+  it("filters by recipe and leaves order to the recipe's group array", async () => {
+    const rows = [makeRecipeIngredientRow("r-1", 0), makeRecipeIngredientRow("r-1", 1)];
     useQueue([{ data: rows }]);
 
     const result = await getRecipeIngredients("r-1");
@@ -405,7 +410,7 @@ describe("getRecipeIngredients", () => {
     expect(result).toEqual(rows);
     const builder = builderAt(0);
     expect(builder.eq).toHaveBeenCalledWith("recipe_id", "r-1");
-    expect(builder.order).toHaveBeenCalledWith("position", { ascending: true });
+    expect(builder.order).not.toHaveBeenCalled();
   });
 
   it("returns an empty array on supabase error", async () => {
@@ -418,6 +423,72 @@ describe("getRecipeIngredients", () => {
       expect.anything(),
     );
     errorSpy.mockRestore();
+  });
+});
+
+describe("getRecipeIngredientsByRecipeIds", () => {
+  it("buckets one batched query's rows by recipe", async () => {
+    const a = makeRecipeIngredientRow("r-a", 0, { id: "ri-a" });
+    const b = makeRecipeIngredientRow("r-b", 0, { id: "ri-b" });
+    const a2 = makeRecipeIngredientRow("r-a", 1, { id: "ri-a2" });
+    useQueue([{ data: [a, b, a2] }]);
+
+    const result = await getRecipeIngredientsByRecipeIds(["r-a", "r-b", "r-none"]);
+
+    expect(builderAt(0).in).toHaveBeenCalledWith("recipe_id", ["r-a", "r-b", "r-none"]);
+    expect(result.get("r-a")).toEqual([a, a2]);
+    expect(result.get("r-b")).toEqual([b]);
+    expect(result.has("r-none")).toBe(false);
+  });
+
+  // The ids travel in the URL, which the gateway caps; one request per 100 keeps
+  // a full recipe listing clear of the limit.
+  it("splits a long id list into requests of 100", async () => {
+    const ids = Array.from({ length: 250 }, (_, i) => `r-${i}`);
+    useQueue([{ data: [] }, { data: [] }, { data: [] }]);
+
+    await getRecipeIngredientsByRecipeIds(ids);
+
+    expect(client.from).toHaveBeenCalledTimes(3);
+    expect(builderAt(0).in).toHaveBeenCalledWith("recipe_id", ids.slice(0, 100));
+    expect(builderAt(2).in).toHaveBeenCalledWith("recipe_id", ids.slice(200));
+  });
+
+  it("issues no query for no ids", async () => {
+    useQueue([]);
+    expect(await getRecipeIngredientsByRecipeIds([])).toEqual(new Map());
+    expect(client.from).not.toHaveBeenCalled();
+  });
+
+  it("returns what it has on supabase error", async () => {
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    useQueue([{ data: null, error: { message: "DB error" } }]);
+
+    expect(await getRecipeIngredientsByRecipeIds(["r-a"])).toEqual(new Map());
+    expect(errorSpy).toHaveBeenCalled();
+    errorSpy.mockRestore();
+  });
+});
+
+describe("getCatalogForRows", () => {
+  it("fetches each distinct ingredient_id once and keys the result by id", async () => {
+    const cumin = makeIngredient("ing-1", "cumin seed");
+    useQueue([{ data: [cumin] }]);
+
+    const result = await getCatalogForRows([
+      makeRecipeIngredientRow("r-1", 0, { ingredient_id: "ing-1" }),
+      makeRecipeIngredientRow("r-1", 1, { ingredient_id: "ing-1" }),
+      makeRecipeIngredientRow("r-1", 2, { ingredient_id: null }),
+    ]);
+
+    expect(builderAt(0).in).toHaveBeenCalledWith("id", ["ing-1"]);
+    expect(result.get("ing-1")).toBe(cumin);
+  });
+
+  it("skips the query when no row is matched", async () => {
+    useQueue([]);
+    expect(await getCatalogForRows([makeRecipeIngredientRow("r-1", 0)])).toEqual(new Map());
+    expect(client.from).not.toHaveBeenCalled();
   });
 });
 
@@ -456,7 +527,7 @@ describe("getIngredientsByIds", () => {
 describe("updateRecipeIngredientAssociation", () => {
   it("sets ingredient_id + manual status, nulls confidence, scoped to the recipe", async () => {
     const updated = {
-      ...makeRecipeIngredient("r-1", 0),
+      ...makeRecipeIngredientRow("r-1", 0),
       ingredient_id: "ing-2",
       match_status: "manual",
       confidence: null,
@@ -478,7 +549,7 @@ describe("updateRecipeIngredientAssociation", () => {
   });
 
   it("clearing the association marks the line unmatched", async () => {
-    useQueue([{ data: makeRecipeIngredient("r-1", 0) }]);
+    useQueue([{ data: makeRecipeIngredientRow("r-1", 0) }]);
 
     await updateRecipeIngredientAssociation("r-1", "ri-1", null);
 
@@ -526,7 +597,7 @@ describe("updateRecipeIngredientAssociation", () => {
 
 describe("getRecipeIngredientById", () => {
   it("fetches one row scoped to the recipe", async () => {
-    const row = makeRecipeIngredient("r-1", 0);
+    const row = makeRecipeIngredientRow("r-1", 0);
     useQueue([{ data: row }]);
 
     const result = await getRecipeIngredientById("r-1", "ri-1");
@@ -546,7 +617,7 @@ describe("getRecipeIngredientById", () => {
 
 describe("setRecipeIngredientGrams", () => {
   it("stores grams + source, scoped to the recipe", async () => {
-    const updated = makeRecipeIngredient("r-1", 0, {
+    const updated = makeRecipeIngredientRow("r-1", 0, {
       estimated_grams: 26,
       grams_source: "llm",
     });
@@ -565,7 +636,7 @@ describe("setRecipeIngredientGrams", () => {
   });
 
   it("clearing with null forces grams_source null regardless of the arg", async () => {
-    useQueue([{ data: makeRecipeIngredient("r-1", 0) }]);
+    useQueue([{ data: makeRecipeIngredientRow("r-1", 0) }]);
 
     await setRecipeIngredientGrams("r-1", "ri-1", null, "manual");
 
@@ -598,104 +669,59 @@ describe("setRecipeIngredientGrams", () => {
   });
 });
 
-describe("replaceRecipeIngredients", () => {
-  const insertRow = {
-    ingredient_id: null,
-    raw_text: "1 tsp cumin",
-    quantity: 1,
-    unit: "tsp",
-    name_text: "cumin",
-    note: null,
-    match_status: "unmatched" as const,
-    confidence: null,
-    position: 0,
-    estimated_grams: null,
-    grams_source: null,
-  };
-
-  it("deletes the recipe's rows before inserting the new set", async () => {
-    useQueue([{ error: null }, { error: null }]);
-
-    await replaceRecipeIngredients("r-1", [insertRow]);
-
-    expect(client.from).toHaveBeenCalledTimes(2);
-    const deleter = builderAt(0);
-    expect(deleter.delete).toHaveBeenCalled();
-    expect(deleter.eq).toHaveBeenCalledWith("recipe_id", "r-1");
-    expect(builderAt(1).insert).toHaveBeenCalledWith([
-      { ...insertRow, recipe_id: "r-1" },
-    ]);
-  });
-
-  it("skips the insert entirely for an empty row set", async () => {
+describe("insertRecipeIngredientRows", () => {
+  it("inserts the rows as given — ids included, since the recipe already names them", async () => {
+    const rows = [makeRecipeIngredientRow("r-1", 0), makeRecipeIngredientRow("r-1", 1)];
     useQueue([{ error: null }]);
 
-    await replaceRecipeIngredients("r-1", []);
+    await insertRecipeIngredientRows(rows);
 
-    expect(client.from).toHaveBeenCalledTimes(1);
+    expect(builderAt(0).insert).toHaveBeenCalledWith(rows);
   });
 
-  describe("when every row carries a line_id", () => {
-    const keyed = { ...insertRow, line_id: "L1" };
-
-    it("upserts on (recipe_id, line_id) instead of re-inserting", async () => {
-      useQueue([{ error: null }, { error: null }]);
-
-      await replaceRecipeIngredients("r-1", [keyed]);
-
-      // Upsert, not delete-then-insert: a surviving line keeps its row id, and
-      // the UI PATCHes associations by row id.
-      expect(builderAt(1).upsert).toHaveBeenCalledWith(
-        [{ ...keyed, recipe_id: "r-1" }],
-        { onConflict: "recipe_id,line_id" },
-      );
-    });
-
-    it("prunes rows for removed lines AND legacy null-line_id rows", async () => {
-      useQueue([{ error: null }, { error: null }]);
-
-      await replaceRecipeIngredients("r-1", [keyed]);
-
-      // `not.in` alone would spare every legacy row, because SQL NOT IN is
-      // NULL — not true — for a NULL left operand. Those rows are stale: their
-      // line now has a properly keyed row, so leaving them behind means two
-      // rows per line and a collision on unique (recipe_id, position).
-      expect(builderAt(0).or).toHaveBeenCalledWith(
-        'line_id.is.null,line_id.not.in.("L1")',
-      );
-      expect(builderAt(0).eq).toHaveBeenCalledWith("recipe_id", "r-1");
-    });
-
-    it("falls back to delete-then-insert when any row lacks a line_id", async () => {
-      useQueue([{ error: null }, { error: null }]);
-
-      await replaceRecipeIngredients("r-1", [keyed, insertRow]);
-
-      expect(builderAt(0).or).not.toHaveBeenCalled();
-      expect(builderAt(1).insert).toHaveBeenCalled();
-    });
-  });
-
-  it("throws delete_failed when the delete fails", async () => {
-    useQueue([{ error: { message: "boom" } }]);
-
-    const err = await replaceRecipeIngredients("r-1", [insertRow]).catch(
-      (e: unknown) => e,
-    );
-
-    expect(err).toBeInstanceOf(IngredientRepoError);
-    expect((err as IngredientRepoError).kind).toBe("delete_failed");
+  it("issues no query for no rows", async () => {
+    useQueue([]);
+    await insertRecipeIngredientRows([]);
+    expect(client.from).not.toHaveBeenCalled();
   });
 
   it("throws insert_failed when the insert fails", async () => {
-    useQueue([{ error: null }, { error: { message: "boom" } }]);
+    useQueue([{ error: { message: "boom" } }]);
 
-    const err = await replaceRecipeIngredients("r-1", [insertRow]).catch(
+    const err = await insertRecipeIngredientRows([makeRecipeIngredientRow("r-1", 0)]).catch(
       (e: unknown) => e,
     );
 
     expect(err).toBeInstanceOf(IngredientRepoError);
     expect((err as IngredientRepoError).kind).toBe("insert_failed");
+  });
+});
+
+describe("deleteRecipeIngredientRows", () => {
+  it("deletes the named rows, scoped to the recipe", async () => {
+    useQueue([{ error: null }]);
+
+    await deleteRecipeIngredientRows("r-1", ["ri-a", "ri-b"]);
+
+    const builder = builderAt(0);
+    expect(builder.delete).toHaveBeenCalled();
+    expect(builder.eq).toHaveBeenCalledWith("recipe_id", "r-1");
+    expect(builder.in).toHaveBeenCalledWith("id", ["ri-a", "ri-b"]);
+  });
+
+  it("issues no query for no ids", async () => {
+    useQueue([]);
+    await deleteRecipeIngredientRows("r-1", []);
+    expect(client.from).not.toHaveBeenCalled();
+  });
+
+  it("throws delete_failed when the delete fails", async () => {
+    useQueue([{ error: { message: "boom" } }]);
+
+    const err = await deleteRecipeIngredientRows("r-1", ["ri-a"]).catch((e: unknown) => e);
+
+    expect(err).toBeInstanceOf(IngredientRepoError);
+    expect((err as IngredientRepoError).kind).toBe("delete_failed");
   });
 });
 

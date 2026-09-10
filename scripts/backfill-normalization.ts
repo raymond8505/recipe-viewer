@@ -3,28 +3,32 @@
 //   yarn backfill:normalization              # process everything pending
 //   yarn backfill:normalization --limit=10   # cap a pass (smoke-testing)
 //
-// Selects recipes whose stored normalized_fingerprint doesn't match their
-// current ingredient text (covers never-normalized, failed, and stale rows —
-// runNormalization only writes the fingerprint on a completed run, so
-// re-running this script naturally resumes where the last pass left off).
+// A recipe is pending when its stored normalized_fingerprint doesn't match the
+// fingerprint of its CURRENT lines — `recipes.ingredients` joined to its
+// `recipe_ingredients` rows, never the blob (covers never-normalized, failed,
+// and stale rows; runNormalization only writes the fingerprint on a completed
+// run, so re-running this script naturally resumes where the last pass left
+// off).
 //
-// Sequential with a fixed delay: the only USDA spend is novel-ingredient
-// lookups (~2 requests each, 1,000/hr budget), and early passes are
-// novel-heavy by definition. Runs outside a request scope on purpose — it
-// calls runNormalization directly, not the trigger.
+// Normalization is human-in-the-loop: this exists for recovery passes, not for
+// bulk-guessing the whole catalog. Sequential with a fixed delay: the only USDA
+// spend is novel-ingredient lookups (~2 requests each, 1,000/hr budget), and
+// early passes are novel-heavy by definition. Runs outside a request scope on
+// purpose — it calls runNormalization directly, not the trigger.
 
+import { getRecipeIngredientsByRecipeIds } from "@/lib/ingredients";
 import { ingredientFingerprint } from "@/lib/normalization/fingerprint";
 import { runNormalization } from "@/lib/normalization/graph";
+import { hydrateIngredientGroups, ingredientTexts } from "@/lib/recipeIngredients";
 import { getSupabaseAdminClient } from "@/lib/supabase";
-import type { SchemaRecipe } from "@/types/recipe";
+import type { StoredIngredientGroup } from "@/types/recipe";
 
 const DELAY_MS = 3_000;
 
 interface BackfillRow {
   id: string;
   normalized_fingerprint: string | null;
-  // schema is absent on legacy/malformed rows — guarded before use.
-  metadata: { schema?: SchemaRecipe } | null;
+  ingredients: StoredIngredientGroup[];
 }
 
 function parseLimit(): number {
@@ -44,7 +48,7 @@ async function main() {
 
   const { data, error } = await supabase
     .from("recipes")
-    .select("id, normalized_fingerprint, metadata")
+    .select("id, normalized_fingerprint, ingredients")
     .order("created_at", { ascending: true });
 
   if (error) {
@@ -53,23 +57,13 @@ async function main() {
   }
 
   const rows = (data as unknown as BackfillRow[]) ?? [];
-
-  // Legacy/malformed rows carry no metadata.schema — they can't be
-  // fingerprinted or normalized, so skip them loudly instead of crashing the
-  // whole pass on one bad row.
-  const skipped = rows.filter((row) => !row.metadata?.schema);
-  if (skipped.length > 0) {
-    console.warn(
-      `Skipping ${skipped.length} recipe(s) with no metadata.schema: ${skipped
-        .map((row) => row.id)
-        .join(", ")}`,
-    );
-  }
+  const rowsByRecipe = await getRecipeIngredientsByRecipeIds(rows.map((r) => r.id));
 
   const pending = rows.filter((row) => {
-    const schema = row.metadata?.schema;
-    if (!schema) return false;
-    return row.normalized_fingerprint !== ingredientFingerprint(schema);
+    const texts = ingredientTexts(
+      hydrateIngredientGroups(row.ingredients, rowsByRecipe.get(row.id) ?? []),
+    );
+    return row.normalized_fingerprint !== ingredientFingerprint(texts);
   });
   const target = Math.min(pending.length, limit);
 

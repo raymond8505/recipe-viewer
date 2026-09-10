@@ -1,24 +1,27 @@
 import { describe, it, expect, vi } from "vitest";
 import { renderHook, act } from "@testing-library/react";
-import { useUndoableSchemaOp } from "@/hooks/useUndoableSchemaOp";
-import type { SchemaRecipe } from "@/types/recipe";
+import { useUndoableOp } from "@/hooks/useUndoableOp";
+import type { RecipeDocument } from "@/types/recipe";
 
-const current: SchemaRecipe = { name: "Before" };
-const produced: SchemaRecipe = { name: "After" };
+// The value is a whole document, not just a schema: a re-scrape replaces the
+// ingredients too, and undo has to bring both halves back together.
+const times = { prep_time: null, cook_time: null, total_time: null };
+const current: RecipeDocument = { schema: { name: "Before" }, ingredients: [], ...times };
+const produced: RecipeDocument = { schema: { name: "After" }, ingredients: [], ...times };
 
-describe("useUndoableSchemaOp", () => {
+describe("useUndoableOp", () => {
   it("starts idle with no review buffer", () => {
     const { result } = renderHook(() =>
-      useUndoableSchemaOp(async () => produced),
+      useUndoableOp<RecipeDocument>(async () => produced),
     );
     expect(result.current.state).toBe("idle");
     expect(result.current.isReview).toBe(false);
   });
 
-  it("run applies the produced schema and captures the previous one", async () => {
+  it("run applies the produced value and captures the previous one", async () => {
     const onApply = vi.fn();
     const { result } = renderHook(() =>
-      useUndoableSchemaOp(async () => produced),
+      useUndoableOp<RecipeDocument>(async () => produced),
     );
     await act(async () => {
       await result.current.run(current, onApply);
@@ -26,13 +29,13 @@ describe("useUndoableSchemaOp", () => {
     expect(onApply).toHaveBeenCalledWith(produced);
     expect(result.current.state).toBe("success");
     expect(result.current.isReview).toBe(true);
-    expect(result.current.preSchema).toBe(current);
+    expect(result.current.previous).toBe(current);
   });
 
   it("run transitions to error and applies nothing on failure", async () => {
     const onApply = vi.fn();
     const { result } = renderHook(() =>
-      useUndoableSchemaOp(async () => {
+      useUndoableOp<RecipeDocument>(async () => {
         throw new Error("network");
       }),
     );
@@ -44,10 +47,10 @@ describe("useUndoableSchemaOp", () => {
     expect(result.current.isReview).toBe(false);
   });
 
-  it("undo reverts to the captured schema and clears the buffer", async () => {
+  it("undo reverts to the captured value and clears the buffer", async () => {
     const onRevert = vi.fn();
     const { result } = renderHook(() =>
-      useUndoableSchemaOp(async () => produced),
+      useUndoableOp<RecipeDocument>(async () => produced),
     );
     await act(async () => {
       await result.current.run(current, vi.fn());
@@ -60,7 +63,7 @@ describe("useUndoableSchemaOp", () => {
 
   it("clear drops the buffer without reverting", async () => {
     const { result } = renderHook(() =>
-      useUndoableSchemaOp(async () => produced),
+      useUndoableOp<RecipeDocument>(async () => produced),
     );
     await act(async () => {
       await result.current.run(current, vi.fn());

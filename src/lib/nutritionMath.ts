@@ -5,15 +5,14 @@
 // Client-safe and pure — no supabase, no env.
 
 import { convert, isVolumeUnit, roundDecimal, unitKeyForAlias } from "./units";
-import { getIngredientText } from "./format";
-import { lineId } from "./ingredientLines";
+import { flattenIngredients } from "./recipeIngredients";
 import { NUTRITION_FIELDS as NUTRITION_KEYS } from "./nutritionFields";
 import type {
   IngredientNutrition,
   IngredientRow,
   RecipeIngredientRow,
 } from "@/types/ingredient";
-import type { RecipeIngredient, SchemaRecipe } from "@/types/recipe";
+import type { RecipeIngredient, RecipeRow, SchemaRecipe } from "@/types/recipe";
 
 /** The Schema.org NutritionInformation shape carried on SchemaRecipe. */
 export type SchemaNutrition = NonNullable<SchemaRecipe["nutrition"]>;
@@ -24,16 +23,15 @@ export type CatalogNutritionSource = Pick<
   "nutrition" | "density_g_per_ml"
 >;
 
-// Why a line is excluded from nutrition totals. "stale" is assigned by the
-// join (no normalized row for this line, or a legacy position-joined row whose
-// text has moved on) — the math here can only detect the other reasons.
+// Why a line is excluded from nutrition totals. Every line is a row (its id IS
+// the row), so there is no "never normalized" state to name: a line the
+// matcher has not seen yet is simply unmatched.
 export type ExclusionReason =
   | "unmatched"
   | "no_quantity"
   | "no_unit"
   | "no_density"
-  | "no_nutrition"
-  | "stale";
+  | "no_nutrition";
 
 // Where a line's grams came from. "estimated" = a stored per-line estimate
 // (LLM or user-typed), "measured" = parsed quantity+unit conversion (weight
@@ -233,86 +231,11 @@ export function perPortionNutrition(
 
 // ─── Recipe-wide aggregation + recipe-nutrition source resolution ──────────
 
-/** Rows keyed both ways, so a batch of lines resolves without rescanning. */
-export interface LineRowIndex {
-  byLineId: Map<string, RecipeIngredientRow>;
-  byPosition: Map<number, RecipeIngredientRow>;
-}
-
-/** The row a schema line joins to, and which key found it. */
-export interface ResolvedLineRow {
-  row: RecipeIngredientRow | null;
-  /** True when the row was found by the line's stable id. */
-  joinedById: boolean;
-}
-
-export function indexRowsForLines(
-  rows: readonly RecipeIngredientRow[],
-): LineRowIndex {
-  return {
-    byLineId: new Map(
-      rows
-        .filter((row) => row.line_id != null)
-        .map((row) => [row.line_id!, row]),
-    ),
-    byPosition: new Map(rows.map((row) => [row.position, row])),
-  };
-}
-
-/**
- * Join a schema line to its normalized row.
- *
- * By the line's stable id when it has one, and DON'T fall back to position in
- * that case: once ids are in play, an id with no row means a genuinely new
- * line, whereas position would hand it a neighbour's row after any reorder.
- * Position is only for legacy lines that predate ids (db/migrations/0013).
- */
-export function resolveLineRow(
-  line: string | RecipeIngredient,
-  index: number,
-  rowIndex: LineRowIndex,
-): ResolvedLineRow {
-  const id = lineId(line);
-  if (id != null) {
-    return { row: rowIndex.byLineId.get(id) ?? null, joinedById: true };
-  }
-  return { row: rowIndex.byPosition.get(index) ?? null, joinedById: false };
-}
-
-/**
- * The line computation for a schema line joined to its normalized row.
- *
- * A line with no row at all is "stale" — it has never been normalized, so
- * there is nothing to compute and normalization is what fixes it.
- *
- * A row found BY ID is the right row no matter what its text says. Line text
- * is display copy; the id is the identity. Rewording is exactly the edit that
- * must not disturb a line's association or its contribution to the totals, and
- * `syncRecipeIngredientText` has already carried the new words onto the row.
- * The text comparison survives only for a row joined by POSITION, where text
- * is the only evidence the row belongs to this line at all.
- *
- * Otherwise defers to `computeLineNutrition`. Shared by the NutritionDetail
- * hook and the recipe-wide total so the two paths can never disagree.
- */
-export function lineComputationForSchema(
-  schemaText: string,
-  resolved: ResolvedLineRow,
-  ingredient: CatalogNutritionSource | null,
-): LineComputation {
-  const { row, joinedById } = resolved;
-  if (!row || (!joinedById && row.raw_text !== schemaText)) {
-    return { kind: "excluded", reason: "stale" };
-  }
-  return computeLineNutrition(row, ingredient);
-}
-
 export interface RecipeNutritionResult {
   /** Whole-recipe total (sum of every `ok` line), snake_case per-nutrient. */
   total: IngredientNutrition;
   lineCount: number;
   excludedCount: number;
-  hasStaleLines: boolean;
   /**
    * True only when there is at least one line and every line contributed
    * (no exclusions). The nutrition panel prefers the normalized total only in
@@ -322,26 +245,17 @@ export interface RecipeNutritionResult {
 }
 
 /**
- * Aggregate a recipe's normalized ingredient nutrition. Schema lines join to
- * `recipe_ingredients` rows via `resolveLineRow`, each line is computed via
- * `lineComputationForSchema`, and the `ok` lines are summed into a whole-recipe
- * total. `ingredientsById` maps `ingredient_id` → catalog nutrition/density.
+ * Aggregate a recipe's ingredient nutrition: every line is computed against
+ * the catalog ingredient it carries (`ingredient` — absent or null both mean
+ * "no catalog data", so a list-page row never computes by accident) and the
+ * `ok` lines are summed into a whole-recipe total.
  */
 export function computeRecipeNutrition(
-  schemaIngredients: Array<string | RecipeIngredient>,
-  rows: RecipeIngredientRow[],
-  ingredientsById: Map<string, CatalogNutritionSource>,
+  ingredients: readonly RecipeIngredient[],
 ): RecipeNutritionResult {
-  const rowIndex = indexRowsForLines(rows);
-  const computations = schemaIngredients.map((ingredient, index) => {
-    const text = getIngredientText(ingredient);
-    const resolved = resolveLineRow(ingredient, index, rowIndex);
-    const catalog =
-      resolved.row?.ingredient_id != null
-        ? (ingredientsById.get(resolved.row.ingredient_id) ?? null)
-        : null;
-    return lineComputationForSchema(text, resolved, catalog);
-  });
+  const computations = ingredients.map((line) =>
+    computeLineNutrition(line, line.ingredient ?? null),
+  );
 
   const total = sumNutrition(
     computations
@@ -349,17 +263,28 @@ export function computeRecipeNutrition(
       .map((c) => c.nutrition),
   );
   const excludedCount = computations.filter((c) => c.kind === "excluded").length;
-  const hasStaleLines = computations.some(
-    (c) => c.kind === "excluded" && c.reason === "stale",
-  );
 
   return {
     total,
     lineCount: computations.length,
     excludedCount,
-    hasStaleLines,
     fullyCovered: computations.length > 0 && excludedCount === 0,
   };
+}
+
+/**
+ * A recipe's ingredient-derived nutrition, or null when it has no ingredients.
+ * The single entry point for the recipe page, cooking mode and MCP get_recipe:
+ * all three hand the result to `ScalableRecipe`, whose `nutrition()` decides
+ * whether `fullyCovered` lets it beat the recipe's own fields. Pure — the
+ * catalog data is already on the hydrated row.
+ */
+export function recipeNormalizedNutrition(
+  recipe: Pick<RecipeRow, "ingredients">,
+): RecipeNutritionResult | null {
+  const lines = flattenIngredients(recipe.ingredients);
+  if (lines.length === 0) return null;
+  return computeRecipeNutrition(lines);
 }
 
 /**

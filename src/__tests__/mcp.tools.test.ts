@@ -1,6 +1,11 @@
 // @vitest-environment node
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { makeIngredient, recipeFixtures } from "@/fixtures";
+import {
+  makeIngredient,
+  makeIngredientLines,
+  makeMatchedIngredient,
+  recipeFixtures,
+} from "@/fixtures";
 
 vi.mock("@/env", () => ({
   env: {
@@ -37,7 +42,6 @@ vi.mock("@/lib/storage", () => ({
 
 vi.mock("@/lib/ingredients", () => ({
   matchIngredients: vi.fn(),
-  getRecipeNormalizedNutrition: vi.fn(),
   getIngredientById: vi.fn(),
   createIngredientRow: vi.fn(),
   updateIngredientRow: vi.fn(),
@@ -75,7 +79,6 @@ import {
   createIngredientRow,
   deleteIngredientRow,
   getIngredientById,
-  getRecipeNormalizedNutrition,
   IngredientRepoError,
   matchIngredients,
   updateIngredientRow,
@@ -524,33 +527,47 @@ describe("getRecipe", () => {
     await expect(getRecipe({ id: "missing" })).rejects.toBeInstanceOf(ToolError);
   });
 
-  it("replaces nutrition with the normalized per-serving values when fully covered", async () => {
+  it("hands back the hydrated ingredient groups, catalog rows attached", async () => {
+    const { getRecipeById } = await import("@/lib/recipes");
+    vi.mocked(getRecipeById).mockResolvedValueOnce(recipeFixtures[2]);
+
+    const out = await getRecipe({ id: recipeFixtures[2].id });
+
+    expect(out.ingredients.map((g) => g.name)).toEqual(["Meatballs", "Curry sauce", "Garnish"]);
+    expect(out.ingredients[0].ingredients[0]).toMatchObject({
+      id: "ri-1-lb-ground-chicken",
+      raw_text: "1 lb ground chicken",
+      quantity: 1,
+      unit: "lb",
+    });
+    expect(out.metadata.schema).not.toHaveProperty("recipeIngredient");
+  });
+
+  it("replaces nutrition with the ingredient-derived per-serving values when fully covered", async () => {
     const { getRecipeById } = await import("@/lib/recipes");
     const base = recipeFixtures[0];
+    // 100 g of a 2000 kcal / 40 g-protein per-100g catalog row, over 4
+    // servings → 500 kcal / 10 g per serving.
+    const flour = makeIngredient("ing-flour", "flour", {
+      nutrition: { calories_kcal: 2000, protein_g: 40 },
+    });
     const recipe = {
       ...base,
+      ingredients: makeIngredientLines([makeMatchedIngredient("100 g flour", flour)]),
       metadata: {
         ...base.metadata,
         schema: {
           ...base.metadata.schema,
           recipeYield: "4 servings",
-          recipeIngredient: ["2 cups flour"],
           nutrition: { sodiumContent: "800 mg" },
         },
       },
     };
     vi.mocked(getRecipeById).mockResolvedValueOnce(recipe);
-    vi.mocked(getRecipeNormalizedNutrition).mockResolvedValueOnce({
-      total: { calories_kcal: 2000, protein_g: 40 },
-      fullyCovered: true,
-      lineCount: 1,
-      excludedCount: 0,
-      hasStaleLines: false,
-    });
 
     const out = await getRecipe({ id: recipe.id });
-    // 2000 kcal / 4 servings = 500; 40 g / 4 = 10. All-or-nothing: sodium
-    // (recipe-only) does NOT fill the gap in the ingredients view.
+    // All-or-nothing: sodium (recipe-only) does NOT fill the gap in the
+    // ingredients view.
     expect(out.metadata.schema.nutrition).toEqual({
       "@type": "NutritionInformation",
       calories: "500 kcal",
@@ -563,24 +580,17 @@ describe("getRecipe", () => {
     const base = recipeFixtures[0];
     const recipe = {
       ...base,
+      ingredients: makeIngredientLines(["2 cups flour"]),
       metadata: {
         ...base.metadata,
         schema: {
           ...base.metadata.schema,
           recipeYield: "4 servings",
-          recipeIngredient: ["2 cups flour"],
           nutrition: { calories: "123 kcal" },
         },
       },
     };
     vi.mocked(getRecipeById).mockResolvedValueOnce(recipe);
-    vi.mocked(getRecipeNormalizedNutrition).mockResolvedValueOnce({
-      total: { calories_kcal: 2000 },
-      fullyCovered: false,
-      lineCount: 1,
-      excludedCount: 1,
-      hasStaleLines: false,
-    });
 
     const out = await getRecipe({ id: recipe.id });
     expect(out.metadata.schema.nutrition).toEqual({ calories: "123 kcal" });
@@ -675,6 +685,35 @@ describe("createRecipe", () => {
     expect(arg.url).toBe(`http://localhost:3000/recipes/${arg.id}`);
   });
 
+  // The inbound Schema.org edge: a scrape's recipeIngredient becomes ingredient
+  // groups at the tool boundary and never reaches the stored schema.
+  it("turns schema.recipeIngredient into ingredient groups", async () => {
+    const { createRecipeRow } = await import("@/lib/recipes");
+    vi.mocked(createRecipeRow).mockResolvedValueOnce({
+      id: "x",
+      url: "u",
+      source: "s",
+      status: "draft",
+      ingredients: [],
+      metadata: { schema: { name: "New" } },
+    } as never);
+
+    await createRecipe({
+      source: "example.com",
+      schema: {
+        name: "New",
+        recipeIngredient: ["1 tsp salt", { name: "1 egg", group: "Batter" }],
+      },
+    });
+
+    const arg = vi.mocked(createRecipeRow).mock.calls[0][0];
+    expect(arg.schema).not.toHaveProperty("recipeIngredient");
+    expect(arg.ingredients).toEqual([
+      { ingredients: [{ raw_text: "1 tsp salt" }] },
+      { name: "Batter", ingredients: [{ raw_text: "1 egg" }] },
+    ]);
+  });
+
   it("keeps an explicit source rather than defaulting it", async () => {
     const { createRecipeRow } = await import("@/lib/recipes");
     vi.mocked(createRecipeRow).mockResolvedValueOnce({
@@ -754,6 +793,40 @@ describe("updateRecipe", () => {
       expect.objectContaining({ schema: { description: "patched" } }),
     );
     expect(out.warnings?.[0]).toMatch(/cookingNotes is read-only/);
+  });
+
+  it("passes ingredient groups through to the repo layer", async () => {
+    const { updateRecipeRow } = await import("@/lib/recipes");
+    const existing = recipeFixtures[2];
+    vi.mocked(updateRecipeRow).mockResolvedValueOnce(existing);
+    const ingredients = [
+      { name: "Meatballs", ingredients: [{ id: "ri-1-lb-ground-chicken", raw_text: "1 lb ground chicken" }] },
+    ];
+
+    await updateRecipe({ id: existing.id, ingredients });
+
+    expect(updateRecipeRow).toHaveBeenCalledWith(
+      existing.id,
+      expect.objectContaining({ ingredients, schema: undefined }),
+    );
+  });
+
+  // The stored schema has no recipeIngredient; silently stripping one an agent
+  // sent would lose its edit, so the tool fails loudly and says what to send.
+  it("rejects schema.recipeIngredient with a ToolError naming the ingredients field", async () => {
+    const { updateRecipeRow } = await import("@/lib/recipes");
+
+    await expect(
+      updateRecipe({
+        id: "r1",
+        schema: { recipeIngredient: ["1 egg"] } as never,
+      }),
+    ).rejects.toMatchObject({
+      name: "ToolError",
+      code: "invalid_input",
+      message: expect.stringContaining("ingredients"),
+    });
+    expect(updateRecipeRow).not.toHaveBeenCalled();
   });
 
   it("translates RecipeRepoError(not_found) to ToolError(not_found)", async () => {

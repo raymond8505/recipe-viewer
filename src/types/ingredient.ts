@@ -45,22 +45,19 @@ export interface IngredientRow {
   updated_at: string;
 }
 
-// One parsed line of a recipe's ingredient list — the structured layer derived
-// from SchemaRecipe.recipeIngredient. The schema text stays the display source
-// of truth; these rows never feed back into it.
+// One ingredient of a recipe, as the `recipe_ingredients` table holds it
+// (db/migrations/0016): `raw_text` IS the recipe's line text, `recipes.
+// ingredients` orders these rows by id, and normalization fills in the catalog
+// association without ever rewriting the text. The app carries it as
+// `RecipeIngredient` (@/types/recipe) — this row minus `recipe_id`.
+//
+// `line_id` and `position` are ABSENT on purpose. Both columns still exist,
+// dead: nothing reads or writes them (`position` takes its default, `line_id`
+// stays null), and `selectColumns` is exhaustive over this type, so leaving
+// them off is what keeps them unreachable.
 export interface RecipeIngredientRow {
   id: string;
   recipe_id: string;
-  /**
-   * The schema line this row derives from (SchemaRecipe.recipeIngredient[].id).
-   * THE join key — `position` and `raw_text` are display data that move freely
-   * as people reorder and reword, and keying on either is what used to throw
-   * away curated associations (db/migrations/0013).
-   *
-   * Null only on rows written before 0013 / for recipes whose lines predate
-   * ids; `yarn backfill:line-ids` fills them.
-   */
-  line_id: string | null;
   ingredient_id: string | null;
   raw_text: string;
   quantity: number | null;
@@ -70,7 +67,6 @@ export interface RecipeIngredientRow {
   note: string | null;
   match_status: MatchStatus;
   confidence: number | null;
-  position: number;
   // A resolved gram weight (db/migrations/0009) that rescues lines the density
   // path can't convert — volume-with-no-density, or count/can lines. Internal
   // to NutritionDetail; never feeds recipe text or JSON-LD. Presence overrides

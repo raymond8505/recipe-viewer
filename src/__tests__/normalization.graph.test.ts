@@ -11,16 +11,17 @@ import {
   getIngredientsByIds,
   getRecipeIngredients,
   matchIngredients,
-  replaceRecipeIngredients,
   setRecipeNormalization,
+  updateRecipeIngredientRows,
 } from "@/lib/ingredients";
 import { accreteAliasesFromLines } from "@/lib/ingredientAliases";
+import { flattenIngredients } from "@/lib/recipeIngredients";
 import { getRecipeById } from "@/lib/recipes";
 import { UsdaError, getFoodDetail, searchFoods } from "@/lib/usda";
-import { makeIngredient, makeRecipe, makeRecipeIngredient } from "@/fixtures";
+import { makeIngredient, makeIngredientLines, makeRecipe } from "@/fixtures";
 import { cuminDetailResponse, cuminExpectedNutrition } from "@/fixtures/usda";
-import type { IngredientMatch } from "@/types/ingredient";
-import type { RecipeRow, SchemaRecipe } from "@/types/recipe";
+import type { IngredientMatch, RecipeIngredientRow } from "@/types/ingredient";
+import type { RecipeIngredientGroup, RecipeRow } from "@/types/recipe";
 
 // LLM + external clients are mocked; the pure helpers stay REAL:
 // parseIngredient (deterministic fallback), extractNutrition/deriveDensity
@@ -40,8 +41,8 @@ vi.mock("@/lib/ingredients", async (importOriginal) => {
     getIngredientsByIds: vi.fn(),
     getRecipeIngredients: vi.fn(),
     matchIngredients: vi.fn(),
-    replaceRecipeIngredients: vi.fn(),
     setRecipeNormalization: vi.fn(),
+    updateRecipeIngredientRows: vi.fn(),
   };
 });
 // Only the MUTATION is stubbed — ingredientQueryText stays real so these tests
@@ -56,13 +57,21 @@ vi.mock("@/lib/recipes", async (importOriginal) => {
   return { ...actual, getRecipeById: vi.fn() };
 });
 
-function makeTestRecipe(
-  ingredients: SchemaRecipe["recipeIngredient"],
-): RecipeRow {
-  return makeRecipe("r-1", "Test Recipe", {
-    metadata: {
-      schema: { name: "Test Recipe", recipeIngredient: ingredients } as SchemaRecipe,
-    },
+function makeTestRecipe(ingredients: RecipeIngredientGroup[]): RecipeRow {
+  return makeRecipe("r-1", "Test Recipe", { ingredients });
+}
+
+// The recipe_ingredients rows a hydrated recipe's lines came from. Every line
+// IS a row (the reconcile made it on save), so persist finds one per line —
+// a test that wants a row to carry prior curation overrides it by id.
+function rowsFor(
+  recipe: RecipeRow,
+  overridesById: Record<string, Partial<RecipeIngredientRow>> = {},
+): RecipeIngredientRow[] {
+  return flattenIngredients(recipe.ingredients).map((line) => {
+    const { ingredient: _catalog, ...row } = line;
+    void _catalog;
+    return { ...row, recipe_id: recipe.id, ...overridesById[line.id] };
   });
 }
 
@@ -84,14 +93,15 @@ function candidate(id: string, name: string, similarity: number): IngredientMatc
 }
 
 function persistedRows() {
-  return vi.mocked(replaceRecipeIngredients).mock.calls[0]?.[1];
+  return vi.mocked(updateRecipeIngredientRows).mock.calls[0]?.[1];
 }
 
 function statusWrites() {
   return vi.mocked(setRecipeNormalization).mock.calls.map((c) => c[1]);
 }
 
-const recipe = makeTestRecipe(["1 tsp cumin seed"]);
+const recipe = makeTestRecipe(makeIngredientLines(["1 tsp cumin seed"]));
+const CUMIN_ROW_ID = "ri-1-tsp-cumin-seed";
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -101,9 +111,9 @@ beforeEach(() => {
   vi.mocked(matchIngredients).mockResolvedValue([]);
   vi.mocked(getIngredientByFdcId).mockResolvedValue(null);
   vi.mocked(getIngredientsByIds).mockResolvedValue([]);
-  vi.mocked(getRecipeIngredients).mockResolvedValue([]);
+  vi.mocked(getRecipeIngredients).mockResolvedValue(rowsFor(recipe));
   vi.mocked(accreteAliasesFromLines).mockResolvedValue(undefined);
-  vi.mocked(replaceRecipeIngredients).mockResolvedValue(undefined);
+  vi.mocked(updateRecipeIngredientRows).mockResolvedValue(undefined);
   vi.mocked(setRecipeNormalization).mockResolvedValue(undefined);
 });
 
@@ -117,9 +127,9 @@ describe("runNormalization — matching", () => {
 
     expect(persistedRows()).toEqual([
       {
-        // The base fixture's lines are plain strings with no id, so this row
-        // carries none either — the legacy shape, still supported.
-        line_id: null,
+        // The line's own row, written back by id.
+        id: CUMIN_ROW_ID,
+        recipe_id: "r-1",
         ingredient_id: "ing-1",
         raw_text: "1 tsp cumin seed",
         quantity: 1,
@@ -128,32 +138,30 @@ describe("runNormalization — matching", () => {
         note: null,
         match_status: "matched",
         confidence: 0.9,
-        position: 0,
         // A weight-unit line (tsp × direct convert) needs no estimate.
         estimated_grams: null,
         grams_source: null,
       },
     ]);
+    expect(updateRecipeIngredientRows).toHaveBeenCalledWith("r-1", expect.any(Array));
     expect(statusWrites()).toEqual([
       { status: "running", error: null },
       {
         status: "completed",
         error: null,
         normalizedAt: expect.any(String),
-        fingerprint: ingredientFingerprint(recipe.metadata.schema),
+        fingerprint: ingredientFingerprint(["1 tsp cumin seed"]),
       },
     ]);
   });
 
-  it("carries forward manual associations by raw_text over the automated match", async () => {
+  it("carries forward a manual association over the automated match", async () => {
     // The user curated this line; a re-run's own matcher would pick ing-auto.
-    vi.mocked(getRecipeIngredients).mockResolvedValue([
-      makeRecipeIngredient("r-1", 0, {
-        raw_text: "1 tsp cumin seed",
-        ingredient_id: "ing-manual",
-        match_status: "manual",
+    vi.mocked(getRecipeIngredients).mockResolvedValue(
+      rowsFor(recipe, {
+        [CUMIN_ROW_ID]: { ingredient_id: "ing-manual", match_status: "manual" },
       }),
-    ]);
+    );
     vi.mocked(matchIngredients).mockResolvedValue([
       candidate("ing-auto", "cumin seed", 0.9),
     ]);
@@ -171,17 +179,18 @@ describe("runNormalization — matching", () => {
   });
 
   // The association is a claim about which FOOD a line means. Rewording the
-  // line doesn't change that claim, so a run must not overrule it — this used
-  // to be keyed on raw_text, which meant fixing a typo silently discarded the
-  // user's pick and re-guessed.
+  // line doesn't change that claim, so a run must not overrule it: the row is
+  // found by its id, and the text on it is whatever the recipe says now.
   it("keeps an existing association when the line's text changed", async () => {
-    vi.mocked(getRecipeIngredients).mockResolvedValue([
-      makeRecipeIngredient("r-1", 0, {
-        raw_text: "1 tsp ground cumin", // recipe now says "1 tsp cumin seed"
-        ingredient_id: "ing-manual",
-        match_status: "manual",
+    vi.mocked(getRecipeIngredients).mockResolvedValue(
+      rowsFor(recipe, {
+        [CUMIN_ROW_ID]: {
+          raw_text: "1 tsp ground cumin", // recipe now says "1 tsp cumin seed"
+          ingredient_id: "ing-manual",
+          match_status: "manual",
+        },
       }),
-    ]);
+    );
     vi.mocked(matchIngredients).mockResolvedValue([
       candidate("ing-auto", "cumin seed", 0.9),
     ]);
@@ -199,31 +208,17 @@ describe("runNormalization — matching", () => {
     ]);
   });
 
-  it("inherits by line_id, not position, when a line moves", async () => {
-    // Two lines, reordered in the schema. Position would hand each line the
-    // other's association; line_id follows the line.
-    vi.mocked(getRecipeById).mockResolvedValue(
-      makeTestRecipe([
-        { name: "2 cups rice", id: "L2" },
-        { name: "1 tsp cumin seed", id: "L1" },
-      ]),
+  it("inherits by row id, not position, when a line moves", async () => {
+    // Two lines whose rows were curated in the other order. Position would
+    // hand each line the other's association; the id follows the line.
+    const reordered = makeTestRecipe(makeIngredientLines(["2 cups rice", "1 tsp cumin seed"]));
+    vi.mocked(getRecipeById).mockResolvedValue(reordered);
+    vi.mocked(getRecipeIngredients).mockResolvedValue(
+      rowsFor(reordered, {
+        [CUMIN_ROW_ID]: { ingredient_id: "ing-cumin", match_status: "manual" },
+        "ri-2-cups-rice": { ingredient_id: "ing-rice", match_status: "manual" },
+      }).reverse(),
     );
-    vi.mocked(getRecipeIngredients).mockResolvedValue([
-      makeRecipeIngredient("r-1", 0, {
-        id: "ri-cumin",
-        line_id: "L1",
-        raw_text: "1 tsp cumin seed",
-        ingredient_id: "ing-cumin",
-        match_status: "manual",
-      }),
-      makeRecipeIngredient("r-1", 1, {
-        id: "ri-rice",
-        line_id: "L2",
-        raw_text: "2 cups rice",
-        ingredient_id: "ing-rice",
-        match_status: "manual",
-      }),
-    ]);
     vi.mocked(matchIngredients).mockResolvedValue([
       candidate("ing-auto", "something else", 0.9),
     ]);
@@ -232,16 +227,21 @@ describe("runNormalization — matching", () => {
 
     const rows = persistedRows() ?? [];
     expect(rows).toHaveLength(2);
-    expect(rows[0]).toMatchObject({
-      line_id: "L2",
-      position: 0,
-      ingredient_id: "ing-rice",
-    });
-    expect(rows[1]).toMatchObject({
-      line_id: "L1",
-      position: 1,
-      ingredient_id: "ing-cumin",
-    });
+    expect(rows[0]).toMatchObject({ id: "ri-2-cups-rice", ingredient_id: "ing-rice" });
+    expect(rows[1]).toMatchObject({ id: CUMIN_ROW_ID, ingredient_id: "ing-cumin" });
+  });
+
+  // A save that dropped a line between this run's start and its persist has
+  // already deleted the row; writing it back would resurrect it.
+  it("skips a line whose row is gone", async () => {
+    vi.mocked(getRecipeIngredients).mockResolvedValue([]);
+    vi.mocked(matchIngredients).mockResolvedValue([
+      candidate("ing-1", "cumin seed", 0.9),
+    ]);
+
+    await runNormalization("r-1");
+
+    expect(persistedRows()).toEqual([]);
   });
 
   it("falls back to the deterministic parser when the LLM parse is unavailable", async () => {
@@ -307,7 +307,7 @@ describe("runNormalization — matching", () => {
 
     await runNormalization("r-1");
 
-    expect(replaceRecipeIngredients).not.toHaveBeenCalled();
+    expect(updateRecipeIngredientRows).not.toHaveBeenCalled();
     expect(statusWrites().at(-1)).toMatchObject({ status: "failed" });
     expect(errorSpy).toHaveBeenCalledWith(
       "Normalization failed for r-1:",
@@ -467,9 +467,11 @@ describe("runNormalization — alias accretion", () => {
   it("teaches the catalog every persisted line's parsed name, in one batch", async () => {
     // Two lines resolving to one ingredient must produce a single accretion
     // call carrying both rows — the helper dedupes and batches per ingredient.
-    vi.mocked(getRecipeById).mockResolvedValue(
-      makeTestRecipe(["1 tsp cumin seed", "2 tsp ground cumin"]),
+    const twoLines = makeTestRecipe(
+      makeIngredientLines(["1 tsp cumin seed", "2 tsp ground cumin"]),
     );
+    vi.mocked(getRecipeById).mockResolvedValue(twoLines);
+    vi.mocked(getRecipeIngredients).mockResolvedValue(rowsFor(twoLines));
     vi.mocked(generateStructured).mockResolvedValue([
       { quantity: 1, unit: "tsp", name: "cumin seed", note: null },
       { quantity: 2, unit: "tsp", name: "ground cumin", note: null },
@@ -494,8 +496,8 @@ describe("runNormalization — alias accretion", () => {
       candidate("ing-1", "Spices, cumin seed", 0.9),
     ]);
     const order: string[] = [];
-    vi.mocked(replaceRecipeIngredients).mockImplementation(async () => {
-      order.push("replace");
+    vi.mocked(updateRecipeIngredientRows).mockImplementation(async () => {
+      order.push("update");
     });
     vi.mocked(accreteAliasesFromLines).mockImplementation(async () => {
       order.push("accrete");
@@ -506,7 +508,7 @@ describe("runNormalization — alias accretion", () => {
 
     await runNormalization("r-1");
 
-    expect(order).toEqual(["status", "replace", "accrete", "status"]);
+    expect(order).toEqual(["status", "update", "accrete", "status"]);
   });
 
   it("does NOT accrete when a newer save superseded the run", async () => {
@@ -518,11 +520,11 @@ describe("runNormalization — alias accretion", () => {
     ]);
     vi.mocked(getRecipeById)
       .mockResolvedValueOnce(recipe)
-      .mockResolvedValueOnce(makeTestRecipe(["1 tsp coriander"]));
+      .mockResolvedValueOnce(makeTestRecipe(makeIngredientLines(["1 tsp coriander"])));
 
     await runNormalization("r-1");
 
-    expect(replaceRecipeIngredients).not.toHaveBeenCalled();
+    expect(updateRecipeIngredientRows).not.toHaveBeenCalled();
     expect(accreteAliasesFromLines).not.toHaveBeenCalled();
     expect(warnSpy).toHaveBeenCalledWith(
       expect.stringContaining("superseded mid-run — skipping persist"),
@@ -573,20 +575,18 @@ describe("runNormalization — grams estimation", () => {
     expect(generateStructured).toHaveBeenCalledTimes(1);
   });
 
-  it("carries a prior estimate forward by raw_text without re-calling the model", async () => {
+  it("carries a prior estimate forward by row id without re-calling the model", async () => {
     vi.mocked(matchIngredients).mockResolvedValue([
       candidate("ing-1", "cumin seed", 0.9),
     ]);
     vi.mocked(getIngredientsByIds).mockResolvedValue([
       makeIngredient("ing-1", "cumin seed", { density_g_per_ml: null }),
     ]);
-    vi.mocked(getRecipeIngredients).mockResolvedValue([
-      makeRecipeIngredient("r-1", 0, {
-        raw_text: "1 tsp cumin seed",
-        estimated_grams: 40,
-        grams_source: "manual",
+    vi.mocked(getRecipeIngredients).mockResolvedValue(
+      rowsFor(recipe, {
+        [CUMIN_ROW_ID]: { estimated_grams: 40, grams_source: "manual" },
       }),
-    ]);
+    );
 
     await runNormalization("r-1");
 
@@ -608,7 +608,6 @@ describe("runNormalization — grams estimation", () => {
     vi.mocked(getIngredientsByIds).mockResolvedValue([
       makeIngredient("ing-1", "cumin seed", { density_g_per_ml: null }),
     ]);
-    vi.mocked(getRecipeIngredients).mockResolvedValue([]);
     vi.mocked(generateStructured)
       .mockResolvedValueOnce(CUMIN_PARSE)
       .mockResolvedValueOnce({ grams: 26 });
@@ -625,7 +624,7 @@ describe("runNormalization — grams estimation", () => {
 describe("runNormalization — lifecycle", () => {
   it("aborts persist when a newer save changed the ingredients mid-run", async () => {
     const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
-    const newerRecipe = makeTestRecipe(["3 cups rice"]);
+    const newerRecipe = makeTestRecipe(makeIngredientLines(["3 cups rice"]));
     vi.mocked(getRecipeById)
       .mockResolvedValueOnce(recipe) // run start
       .mockResolvedValueOnce(newerRecipe); // persist re-fetch
@@ -635,7 +634,7 @@ describe("runNormalization — lifecycle", () => {
 
     await runNormalization("r-1");
 
-    expect(replaceRecipeIngredients).not.toHaveBeenCalled();
+    expect(updateRecipeIngredientRows).not.toHaveBeenCalled();
     // Only "running" was written — the newer save's own run owns the outcome.
     expect(statusWrites()).toEqual([{ status: "running", error: null }]);
     expect(warnSpy).toHaveBeenCalledWith(
@@ -644,12 +643,13 @@ describe("runNormalization — lifecycle", () => {
     warnSpy.mockRestore();
   });
 
-  it("clears rows and completes immediately for an ingredient-less recipe", async () => {
-    vi.mocked(getRecipeById).mockResolvedValue(makeTestRecipe(undefined));
+  it("completes immediately, writing no rows, for an ingredient-less recipe", async () => {
+    vi.mocked(getRecipeById).mockResolvedValue(makeTestRecipe([]));
 
     await runNormalization("r-1");
 
-    expect(replaceRecipeIngredients).toHaveBeenCalledWith("r-1", []);
+    // The save that emptied the list already deleted its rows.
+    expect(updateRecipeIngredientRows).not.toHaveBeenCalled();
     expect(generateStructured).not.toHaveBeenCalled();
     expect(statusWrites().at(-1)).toMatchObject({ status: "completed" });
   });
@@ -660,6 +660,6 @@ describe("runNormalization — lifecycle", () => {
     await runNormalization("r-1");
 
     expect(setRecipeNormalization).not.toHaveBeenCalled();
-    expect(replaceRecipeIngredients).not.toHaveBeenCalled();
+    expect(updateRecipeIngredientRows).not.toHaveBeenCalled();
   });
 });
