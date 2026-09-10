@@ -15,7 +15,6 @@ import {
   canonicalizeRecipeSource,
   CUSTOM_RECIPE_SOURCE,
   markdownToInstructions,
-  normalizeRecipeInstructions,
   fromSchemaOrgInstructions,
   toSchemaOrgInstructions,
   toSchemaOrgJsonLd,
@@ -28,9 +27,9 @@ import {
   canonicalizeTimeInput,
   ingredientsToEditable,
   editableToIngredientInput,
-  schemaToEditableInstructions,
+  instructionsToEditable,
   toSchemaOrgRecipe,
-  editableInstructionsToSchema,
+  editableToInstructions,
   getYieldLabel,
   getYieldValueReference,
   getYieldUnit,
@@ -573,31 +572,19 @@ describe("ingredientsToEditable / editableToIngredientInput", () => {
   });
 });
 
-describe("schemaToEditableInstructions / editableInstructionsToSchema", () => {
-  it("round-trips top-level steps and a section with a timer", () => {
+describe("instructionsToEditable / editableToInstructions", () => {
+  it("round-trips a nameless run and a section with a timer, splitting seconds into minutes:seconds", () => {
     const original = [
-      { "@type": "HowToStep" as const, text: "Preheat oven." },
-      {
-        "@type": "HowToSection" as const,
-        name: "Sauce",
-        itemListElement: [
-          {
-            "@type": "HowToStep" as const,
-            text: "Simmer.",
-            name: "Simmer",
-            timeRequired: "PT5M30S",
-          },
-        ],
-      },
+      makeInstructionGroup(undefined, ["Preheat oven."]),
+      makeInstructionGroup("Sauce", [makeStep("Simmer.", { name: "Simmer", seconds: 330 })]),
     ];
-    const editable = schemaToEditableInstructions(original);
+    const editable = instructionsToEditable(original);
     expect(editable.map((g) => g.heading)).toEqual([null, "Sauce"]);
-    const step = editable[1].items[0];
-    expect(step).toMatchObject({ name: "Simmer", minutes: 5, seconds: 30 });
-    expect(editableInstructionsToSchema(editable)).toEqual(original);
+    expect(editable[1].items[0]).toMatchObject({ name: "Simmer", minutes: 5, seconds: 30 });
+    expect(editableToInstructions(editable)).toEqual(original);
   });
 
-  it("emits name when set; timeRequired only when name and time are both set", () => {
+  it("keeps a name on its own, and a time only beside a name", () => {
     const editable: EditableInstructions = [
       {
         id: "g",
@@ -609,33 +596,35 @@ describe("schemaToEditableInstructions / editableInstructionsToSchema", () => {
         ],
       },
     ];
-    const result = editableInstructionsToSchema(editable);
-    expect(result).toEqual([
-      { "@type": "HowToStep", text: "Name only", name: "Boil" },
-      { "@type": "HowToStep", text: "Time only" },
-      {
-        "@type": "HowToStep",
-        text: "Both",
-        name: "Rest",
-        timeRequired: "PT10M",
-      },
-    ]);
+    expect(editableToInstructions(editable)).toEqual(
+      makeSteps([
+        makeStep("Name only", { name: "Boil" }),
+        "Time only",
+        makeStep("Both", { name: "Rest", seconds: 600 }),
+      ]),
+    );
   });
 
-  it("drops blank-text steps and empty groups", () => {
+  it("drops blank-text steps and empty groups, and treats a blank heading as nameless", () => {
     const editable: EditableInstructions = [
-      { id: "g0", heading: null, items: [{ id: "s0", text: "  ", name: "", minutes: 0, seconds: 0 }] },
-      { id: "g1", heading: "Empty", items: [] },
+      { id: "g0", heading: "  ", items: [{ id: "s0", text: "Keep.", name: "", minutes: 0, seconds: 0 }] },
+      { id: "g1", heading: null, items: [{ id: "s1", text: "  ", name: "", minutes: 0, seconds: 0 }] },
+      { id: "g2", heading: "Empty", items: [] },
     ];
-    expect(editableInstructionsToSchema(editable)).toEqual([]);
+    expect(editableToInstructions(editable)).toEqual(makeSteps(["Keep."]));
+  });
+
+  it("seeds nothing from no groups", () => {
+    expect(instructionsToEditable([])).toEqual([]);
   });
 });
 
-/** A document with no lines and no times, for cases about the schema half. */
+/** A document with no lines, no steps and no times, for cases about the schema half. */
 function doc(schema: SchemaRecipe, overrides: Partial<RecipeDocument> = {}): RecipeDocument {
   return {
     schema,
     ingredients: [],
+    instructions: [],
     prep_time: null,
     cook_time: null,
     total_time: null,
@@ -669,6 +658,27 @@ describe("toSchemaOrgJsonLd", () => {
     expect(result.prepTime).toBe("PT15M");
     expect(result.cookTime).toBe("PT1H30M");
     expect(result.totalTime).toBe("PT1H45M");
+  });
+
+  it("emits recipeInstructions from the document's groups, never from a copy in the blob", () => {
+    const stale = { recipeInstructions: [{ "@type": "HowToStep", text: "STALE" }] };
+    const result = toSchemaOrgJsonLd(
+      doc({ name: "Pasta", ...stale } as SchemaRecipe, {
+        instructions: [makeInstructionGroup("Sauce", [makeStep("Simmer.", { name: "Simmer", seconds: 330 })])],
+      }),
+    ) as Record<string, unknown>;
+    expect(result.recipeInstructions).toEqual([
+      {
+        "@type": "HowToSection",
+        name: "Sauce",
+        itemListElement: [
+          { "@type": "HowToStep", text: "Simmer.", name: "Simmer", timeRequired: "PT5M30S" },
+        ],
+      },
+    ]);
+    expect(toSchemaOrgJsonLd(doc({ name: "Pasta", ...stale } as SchemaRecipe))).not.toHaveProperty(
+      "recipeInstructions",
+    );
   });
 
   it("reads a time from its column, not from a copy the blob still carries", () => {
@@ -776,43 +786,20 @@ describe("toSchemaOrgRecipe", () => {
     expect(out).toEqual({ name: "Pasta", prepTime: "PT10M", totalTime: "PT10M" });
   });
 
+  it("emits recipeInstructions from the document's groups", () => {
+    const out = toSchemaOrgRecipe(
+      doc({ name: "Pasta" }, { instructions: makeSteps(["Boil.", "Drain."]) }),
+    );
+    expect(out.recipeInstructions).toEqual([
+      { "@type": "HowToStep", text: "Boil." },
+      { "@type": "HowToStep", text: "Drain." },
+    ]);
+  });
+
   it("does not mutate the document's schema", () => {
     const input = doc({ name: "Pasta", cookTime: "PT1H" }, { cook_time: null });
     toSchemaOrgRecipe(input);
     expect(input.schema).toEqual({ name: "Pasta", cookTime: "PT1H" });
-  });
-});
-
-describe("normalizeRecipeInstructions", () => {
-  it("returns undefined for null", () => {
-    expect(normalizeRecipeInstructions(null)).toBeUndefined();
-  });
-
-  it("returns undefined for undefined", () => {
-    expect(normalizeRecipeInstructions(undefined)).toBeUndefined();
-  });
-
-  it("converts a plain string to HowToStep array", () => {
-    const result = normalizeRecipeInstructions("Mix the ingredients.");
-    expect(result).toEqual([{ "@type": "HowToStep", text: "Mix the ingredients." }]);
-  });
-
-  it("converts a multi-step string to HowToStep array", () => {
-    const result = normalizeRecipeInstructions("- Step one\n- Step two");
-    expect(result).toEqual([
-      { "@type": "HowToStep", text: "Step one" },
-      { "@type": "HowToStep", text: "Step two" },
-    ]);
-  });
-
-  it("returns an array as-is", () => {
-    const steps = [{ "@type": "HowToStep", text: "Bake" }];
-    expect(normalizeRecipeInstructions(steps)).toBe(steps);
-  });
-
-  it("wraps a single non-array object in an array", () => {
-    const step = { "@type": "HowToStep", text: "Stir" };
-    expect(normalizeRecipeInstructions(step)).toEqual([step]);
   });
 });
 

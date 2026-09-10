@@ -11,6 +11,7 @@ const doc: RecipeDocument = {
     nutrition: { calories: "200 kcal" },
   },
   ingredients: makeIngredientLines(["2 cups flour", "3-5 cloves garlic"]),
+  instructions: [],
   prep_time: null,
   cook_time: null,
   total_time: null,

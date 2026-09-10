@@ -13,8 +13,6 @@ const mockRecipe: RecipeRow = {
       description: "A rich, moist chocolate cake perfect for any occasion.",
       totalTime: "PT1H",
       recipeCategory: ["Dessert"],
-      recipeIngredient: ["2 cups flour", "1 cup sugar"],
-      recipeInstructions: [{ text: "Mix ingredients." }, { text: "Bake at 350°F." }],
     },
   },
 };

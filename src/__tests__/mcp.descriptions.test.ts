@@ -40,6 +40,7 @@ import {
   METRIC_UNIT_SLASHES,
   orList,
   RECIPE_INGREDIENT_ON_UPDATE_ERROR,
+  RECIPE_INSTRUCTIONS_ON_UPDATE_ERROR,
   TBSP_ML_EXAMPLE,
 } from "@/lib/mcp/copy";
 import { NUTRITION_FIELDS } from "@/lib/nutritionFields";
@@ -200,5 +201,34 @@ describe("update_recipe's ingredient contract", () => {
     await expect(
       updateRecipe({ id: "r1", schema: { recipeIngredient: ["1 egg"] } as never }),
     ).rejects.toMatchObject({ message: RECIPE_INGREDIENT_ON_UPDATE_ERROR });
+  });
+});
+
+describe("update_recipe's instruction contract", () => {
+  // The instructions twin of the block above: one constant, three surfaces.
+  it("states the rule in the tool description", () => {
+    expect(descriptionOf("update_recipe")).toContain(
+      RECIPE_INSTRUCTIONS_ON_UPDATE_ERROR,
+    );
+  });
+
+  it("states the rule on the schema field it constrains", () => {
+    expect(TOOL_SCHEMAS.update_recipe.properties.schema.description).toContain(
+      RECIPE_INSTRUCTIONS_ON_UPDATE_ERROR,
+    );
+  });
+
+  it("offers the instructions field the rule points at", () => {
+    expect(TOOL_SCHEMAS.update_recipe.properties).toHaveProperty("instructions");
+    expect(TOOL_SCHEMAS.update_recipe.properties.schema.properties).not.toHaveProperty(
+      "recipeInstructions",
+    );
+  });
+
+  it("is the message the tool actually throws", async () => {
+    const { updateRecipe } = await import("@/lib/mcp/tools");
+    await expect(
+      updateRecipe({ id: "r1", schema: { recipeInstructions: [{ text: "Mix." }] } as never }),
+    ).rejects.toMatchObject({ message: RECIPE_INSTRUCTIONS_ON_UPDATE_ERROR });
   });
 });

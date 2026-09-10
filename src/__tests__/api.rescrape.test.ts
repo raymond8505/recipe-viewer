@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { POST } from "@/app/api/recipes/[id]/rescrape/route";
-import { makeRecipe, rescrapeFixture } from "@/fixtures";
+import { makeRecipe, makeSteps, rescrapeFixture } from "@/fixtures";
 
 vi.mock("@/lib/recipes", async (orig) => {
   const actual = await orig<typeof import("@/lib/recipes")>();
@@ -85,14 +85,39 @@ describe("POST /api/recipes/[id]/rescrape", () => {
     expect(res.status).toBe(502);
   });
 
-  it("returns 200 with updated schema on success", async () => {
+  it("returns 200 with the recipe split into schema, ingredients and instructions", async () => {
     const { getRecipeById } = await import("@/lib/recipes");
     vi.mocked(getRecipeById).mockResolvedValueOnce(storedRecipe);
     vi.stubGlobal("fetch", vi.fn(() => makeWebhookResponse(true)));
 
     const res = await POST(postReq(), makeParams());
     expect(res.status).toBe(200);
-    expect((await res.json()).schema.name).toBe(rescrapeFixture.name);
+    const body = await res.json();
+    expect(body.schema.name).toBe(rescrapeFixture.name);
+    expect(body.schema).not.toHaveProperty("recipeIngredient");
+    expect(body.schema).not.toHaveProperty("recipeInstructions");
+    expect(body.instructions).toEqual(
+      makeSteps(["Preheat oven to 350°F.", "Mix dry ingredients.", "Bake for 30 minutes."]),
+    );
+  });
+
+  // Some scrapers hand back the steps as one markdown string; that must read
+  // as a recipe, not as a malformed response.
+  it("accepts a markdown-string recipeInstructions from the webhook", async () => {
+    const { getRecipeById } = await import("@/lib/recipes");
+    vi.mocked(getRecipeById).mockResolvedValueOnce(storedRecipe);
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(() =>
+        makeWebhookResponse(true, {
+          schema: { ...rescrapeFixture, recipeInstructions: "- Mix.\n- Bake." },
+        }),
+      ),
+    );
+
+    const res = await POST(postReq(), makeParams());
+    expect(res.status).toBe(200);
+    expect((await res.json()).instructions).toEqual(makeSteps(["Mix.", "Bake."]));
   });
 
   it("posts the recipe URL to the webhook", async () => {

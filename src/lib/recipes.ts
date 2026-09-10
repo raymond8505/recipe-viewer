@@ -1,11 +1,6 @@
 import { getSupabaseClient, selectColumns, toVectorLiteral } from "./supabase";
 import { getFeatures } from "./features";
-import {
-  normalizeRecipeInstructions,
-  parseDurationToSeconds,
-  recipeToMarkdown,
-  secondsToIso,
-} from "./format";
+import { parseDurationToSeconds, recipeToMarkdown, secondsToIso } from "./format";
 import { generateEmbedding } from "./embedding";
 import {
   deleteRecipeIngredientRows,
@@ -18,6 +13,7 @@ import {
 import { scheduleNormalization } from "./normalization/trigger";
 import { reconcileRecipeIngredients } from "./recipeIngredientReconcile";
 import { hydrateIngredientGroups } from "./recipeIngredients";
+import { canonicalizeInstructions } from "./recipeInstructions";
 import {
   ARCHIVED_RECIPE_STATUS,
   DEFAULT_RECIPE_STATUS,
@@ -28,6 +24,7 @@ import {
 import type { IngredientRow, RecipeIngredientRow } from "@/types/ingredient";
 import type {
   RecipeIngredientGroupInput,
+  RecipeInstructionGroup,
   RecipeRow,
   RecipeRowColumns,
   RecipesResult,
@@ -60,6 +57,9 @@ export class RecipeRepoError extends Error {
 // are not on RecipeRowColumns — selectColumns rejects them here at compile
 // time. Checked against RecipeRowColumns rather than RecipeRow because the
 // latter's `ingredients` is hydrated from a second table, not selected.
+// `instructions` is selected on the list query too: MealSearch feeds a
+// secondary recipe straight into cooking mode, which renders its steps and
+// seeds its timers.
 const RECIPE_COLUMNS = selectColumns<RecipeRowColumns>()([
   "id",
   "url",
@@ -69,25 +69,28 @@ const RECIPE_COLUMNS = selectColumns<RecipeRowColumns>()([
   "cook_time",
   "total_time",
   "ingredients",
+  "instructions",
   "metadata",
 ]);
 
 // ---------------------------------------------------------------------------
-// The blob's two dead regions, and the seams that keep them dead.
+// The blob's three dead regions, and the seams that keep them dead.
 //
 // 0019 made `prep_time`/`cook_time`/`total_time` the source of truth for a
-// recipe's times, and 0016 made `recipes.ingredients` + `recipe_ingredients`
-// the source of truth for its ingredient list. The copies still sitting in
-// `metadata.schema` — three time keys, and a `recipeIngredient` array frozen
-// at backfill time — are artifacts of the blob-only shape. This module is the ONLY
-// code that knows that: `hydrate` runs at every read exit below and the strip
-// functions at every write, so everything above (JSON-LD, the markdown, the
-// MCP tools, RecipeCard, RecipeDetail, CookingMode) never observes a stale
-// value or the dead key.
+// recipe's times, 0016 made `recipes.ingredients` + `recipe_ingredients` the
+// source of truth for its ingredient list, and 0021 made
+// `recipes.instructions` the source of truth for its steps. The copies still
+// sitting in `metadata.schema` — three time keys, a `recipeIngredient` array
+// and a `recipeInstructions` array, both frozen at backfill time — are
+// artifacts of the blob-only shape. This module is the ONLY code that knows
+// that: `hydrate` runs at every read exit below and the strip functions at
+// every write, so everything above (JSON-LD, the markdown, the MCP tools,
+// RecipeCard, RecipeDetail, CookingMode) never observes a stale value or a
+// dead key.
 //
 // The corollary is the thing to protect: a reader that queries `recipes`
-// without coming through here gets a pre-0019 answer and no ingredients,
-// silently.
+// without coming through here gets a pre-0019 answer, no ingredients and the
+// frozen steps, silently.
 // ---------------------------------------------------------------------------
 
 const TIME_FIELDS = [
@@ -121,36 +124,39 @@ function stripTimes(schema: SchemaRecipe): SchemaRecipe {
   return next;
 }
 
-// `recipeIngredient` is not on SchemaRecipe any more, but it is still in every
-// pre-0016 row's blob, and the zod schema is `.passthrough()` — an agent or a
-// stale client can still send it. Neither may reach a consumer or a write.
-const DEAD_INGREDIENT_KEY = "recipeIngredient";
+// Neither key is on SchemaRecipe any more, but both are still in older rows'
+// blobs, and the zod schema is `.passthrough()` — an agent or a stale client
+// can still send them. Neither may reach a consumer or a write.
+const DEAD_SCHEMA_KEYS = ["recipeIngredient", "recipeInstructions"] as const;
 
-function deleteIngredientKey(schema: SchemaRecipe): void {
-  delete (schema as unknown as Record<string, unknown>)[DEAD_INGREDIENT_KEY];
+function deleteDeadKeys(schema: SchemaRecipe): void {
+  for (const key of DEAD_SCHEMA_KEYS) {
+    delete (schema as unknown as Record<string, unknown>)[key];
+  }
 }
 
-function stripIngredientKey<T extends object>(schema: T): T {
+function stripDeadKeys<T extends object>(schema: T): T {
   const next = { ...schema };
-  delete (next as Record<string, unknown>)[DEAD_INGREDIENT_KEY];
+  for (const key of DEAD_SCHEMA_KEYS) delete (next as Record<string, unknown>)[key];
   return next;
 }
 
 /**
  * The one read exit. Times come from their columns; `ingredients` comes from
  * the column's id groups joined to the `recipe_ingredients` rows the caller
- * fetched; the blob's dead `recipeIngredient` key is deleted so it can't leak
- * through a spread (the MCP server JSON-stringifies whole rows). With a
- * `catalog` map every line carries its catalog ingredient (`null` when
- * unmatched); without one the key is left off — list pages skip that round
- * trip, and nutrition math treats "not loaded" as "no data".
+ * fetched; `instructions` is the column as stored (already the app's shape);
+ * the blob's dead keys are deleted so they can't leak through a spread (the
+ * MCP server JSON-stringifies whole rows). With a `catalog` map every line
+ * carries its catalog ingredient (`null` when unmatched); without one the key
+ * is left off — list pages skip that round trip, and nutrition math treats
+ * "not loaded" as "no data".
  */
 function hydrate(
   row: RecipeRowColumns,
   rows: readonly RecipeIngredientRow[],
   catalog?: ReadonlyMap<string, IngredientRow>,
 ): RecipeRow {
-  if (row.metadata?.schema) deleteIngredientKey(row.metadata.schema);
+  if (row.metadata?.schema) deleteDeadKeys(row.metadata.schema);
   return {
     ...hydrateTimes(row),
     ingredients: hydrateIngredientGroups(row.ingredients, rows, catalog),
@@ -167,6 +173,7 @@ export interface CreateRecipeInput {
   status?: RecipeStatus;
   schema: SchemaRecipe;
   ingredients?: RecipeIngredientGroupInput[];
+  instructions?: RecipeInstructionGroup[];
 }
 
 export interface UpdateRecipePatch {
@@ -177,6 +184,8 @@ export interface UpdateRecipePatch {
   schema?: Partial<SchemaRecipe>;
   /** Replaces the whole ingredient list; a line keeps its row by naming its id. */
   ingredients?: RecipeIngredientGroupInput[];
+  /** Replaces the whole step list; stored in canonical form. */
+  instructions?: RecipeInstructionGroup[];
 }
 
 const PAGE_SIZE = 24;
@@ -298,16 +307,11 @@ export async function getRecipeById(id: string): Promise<RecipeRow | null> {
   if (error || !data) return null;
 
   const ingredientRows = await getRecipeIngredients(id);
-  const row = hydrate(
+  return hydrate(
     data as RecipeRowColumns,
     ingredientRows,
     await getCatalogForRows(ingredientRows),
   );
-  const raw = row.metadata?.schema?.recipeInstructions;
-  if (raw !== undefined && !Array.isArray(raw)) {
-    row.metadata.schema.recipeInstructions = normalizeRecipeInstructions(raw as unknown);
-  }
-  return row;
 }
 
 /**
@@ -324,18 +328,19 @@ export async function getRecipeById(id: string): Promise<RecipeRow | null> {
  */
 export async function createRecipeRow(input: CreateRecipeInput): Promise<RecipeRow> {
   const supabase = getSupabaseClient();
-  const schema = stripIngredientKey(input.schema);
+  const schema = stripDeadKeys(input.schema);
   // Every line becomes a row, and the row's id is its identity from the moment
   // it exists. The recipe id is minted here when the caller didn't, because
   // the rows have to carry it and the column default would decide it too late.
   const recipeId = input.id ?? crypto.randomUUID();
   const reconcile = reconcileRecipeIngredients(recipeId, input.ingredients ?? [], []);
   const ingredients = hydrateIngredientGroups(reconcile.stored, reconcile.rows);
+  const instructions = canonicalizeInstructions(input.instructions ?? []);
 
   // Markdown (and therefore the embedding) is built from the times-bearing
-  // schema and the lines — the columns are where those LAND, not a reason for
-  // the searchable text to stop mentioning them.
-  const content = recipeToMarkdown(schema, ingredients);
+  // schema, the lines and the steps — the columns are where those LAND, not a
+  // reason for the searchable text to stop mentioning them.
+  const content = recipeToMarkdown(schema, ingredients, instructions);
   const embedding = await generateEmbedding(content);
   const { data, error } = await supabase
     .from("recipes")
@@ -351,6 +356,7 @@ export async function createRecipeRow(input: CreateRecipeInput): Promise<RecipeR
       cook_time: parseDurationToSeconds(schema.cookTime),
       total_time: parseDurationToSeconds(schema.totalTime),
       ingredients: reconcile.stored,
+      instructions,
       metadata: { schema: stripTimes(schema) },
     })
     .select(RECIPE_COLUMNS)
@@ -375,9 +381,9 @@ export async function createRecipeRow(input: CreateRecipeInput): Promise<RecipeR
  * Patch fields on an existing recipe. `schema` is merged into the stored
  * schema (not replaced); `ingredients` replaces the whole list, and a line
  * keeps its row — with the catalog association curated on it — by naming the
- * row's id (see reconcileRecipeIngredients). Throws RecipeRepoError
- * ("not_found") if the row doesn't exist, or ("update_failed") on Supabase
- * failure.
+ * row's id (see reconcileRecipeIngredients); `instructions` replaces the whole
+ * step list. Throws RecipeRepoError ("not_found") if the row doesn't exist,
+ * or ("update_failed") on Supabase failure.
  *
  * When `patch` has no defined fields, the existing row is returned unchanged
  * without writing to Supabase.
@@ -432,12 +438,16 @@ export async function updateRecipeRow(
     cook_time: number | null;
     total_time: number | null;
     ingredients: StoredIngredientGroup[];
+    instructions: RecipeInstructionGroup[];
     metadata: { schema: SchemaRecipe };
   }> = {};
 
   if (patch.url !== undefined) writePatch.url = patch.url;
   if (patch.source !== undefined) writePatch.source = patch.source;
   if (patch.status !== undefined) writePatch.status = patch.status;
+  if (patch.instructions !== undefined) {
+    writePatch.instructions = canonicalizeInstructions(patch.instructions);
+  }
 
   // Normalization exists to GUESS an association for a line that has none, so
   // it only has work when the SET of lines changes — one was added or removed.
@@ -453,8 +463,8 @@ export async function updateRecipeRow(
   const finalRows = reconcile ? reconcile.rows : existingRows;
   if (reconcile) writePatch.ingredients = reconcile.stored;
 
-  if (patch.schema !== undefined || reconcile) {
-    const mergedSchema = stripIngredientKey({
+  if (patch.schema !== undefined || reconcile || writePatch.instructions) {
+    const mergedSchema = stripDeadKeys({
       ...current.metadata.schema,
       ...(patch.schema ?? {}),
     }) as SchemaRecipe;
@@ -468,12 +478,13 @@ export async function updateRecipeRow(
     // otherwise list/search views keep showing the old value.
     if (patch.schema?.name !== undefined) writePatch.name = patch.schema.name;
     // `content` (markdown) and `embedding` are always recomputed from the
-    // merged schema on any schema or ingredient change. Embedding is
-    // best-effort: on failure we leave the existing embedding untouched rather
-    // than nulling it.
+    // merged schema on any schema, ingredient or instruction change. Embedding
+    // is best-effort: on failure we leave the existing embedding untouched
+    // rather than nulling it.
     const content = recipeToMarkdown(
       mergedSchema,
       hydrateIngredientGroups(reconcile?.stored ?? existingStored, finalRows),
+      writePatch.instructions ?? current.instructions,
     );
     writePatch.content = content;
     const embedding = await generateEmbedding(content);

@@ -20,13 +20,16 @@ import {
   METRIC_UNIT_OR_LIST,
   METRIC_UNIT_SLASHES,
   RECIPE_INGREDIENT_ON_UPDATE_ERROR,
+  RECIPE_INSTRUCTIONS_ON_UPDATE_ERROR,
   TBSP_ML_EXAMPLE,
 } from "./copy";
 import { TOOL, type ToolName } from "./toolNames";
 
-// The stored recipe: everything but the ingredients, which live on the row as
-// `ingredients` (see recipeIngredientsJsonSchema). create_recipe takes the
-// Schema.org form below, with `recipeIngredient` added back for scrapes.
+// The stored recipe: everything but the ingredients and instructions, which
+// live on the row as `ingredients` / `instructions` (see
+// recipeIngredientsJsonSchema / recipeInstructionsJsonSchema). create_recipe
+// takes the Schema.org form below, with `recipeIngredient` and
+// `recipeInstructions` added back for scrapes.
 const storedRecipeJsonSchema = {
   type: "object",
   required: ["name"],
@@ -78,7 +81,6 @@ const storedRecipeJsonSchema = {
     },
     recipeCuisine: { type: "string" },
     recipeCategory: { oneOf: [{ type: "string" }, { type: "array", items: { type: "string" } }] },
-    recipeInstructions: { type: "array", description: "HowToStep[] or mixed with HowToSection[]" },
     keywords: { type: "string" },
     nutrition: { type: "object" },
     datePublished: { type: "string" },
@@ -92,8 +94,9 @@ const storedRecipeJsonSchema = {
 } as const;
 
 // A Schema.org Recipe as a scraper produces it: the stored fields plus
-// `recipeIngredient`, whose `group` objects are this app's extension. Only
-// create_recipe takes it; the list becomes ingredient groups server-side.
+// `recipeIngredient`, whose `group` objects are this app's extension, and
+// `recipeInstructions`. Only create_recipe takes it; both become groups
+// server-side.
 const schemaOrgRecipeJsonSchema = {
   ...storedRecipeJsonSchema,
   properties: {
@@ -112,6 +115,15 @@ const schemaOrgRecipeJsonSchema = {
           },
         ],
       },
+    },
+    recipeInstructions: {
+      description:
+        "The steps as a scraper produces them: an array of HowToStep ({ text, name?, timeRequired? }) and HowToSection ({ name, itemListElement }) objects, a single such object, or a markdown string. The server turns these into instruction groups; read them back as `instructions`.",
+      oneOf: [
+        { type: "array", items: { oneOf: [{ type: "string" }, { type: "object" }] } },
+        { type: "object" },
+        { type: "string" },
+      ],
     },
   },
 } as const;
@@ -139,6 +151,38 @@ const recipeIngredientsJsonSchema = {
               description: `The recipe_ingredients row this line IS, as returned by ${TOOL.get_recipe}. Keep it to keep the line's catalog match; omit it for a new line.`,
             },
             raw_text: { type: "string", description: 'The line as the recipe says it, e.g. "2 tsp cumin seed".' },
+          },
+        },
+      },
+    },
+  },
+} as const;
+
+// The recipe's instructions as the app stores and serves them: ordered groups
+// of steps. This is what get_recipe returns and, unchanged, what update_recipe
+// takes — a step has no identity to preserve.
+const recipeInstructionsJsonSchema = {
+  type: "array",
+  description:
+    "The whole step list, replacing what is stored: ordered groups, each holding ordered steps. Omit a group's name for an unsectioned run of steps. A step's name is its cook-mode timer label; seconds (whole seconds) is that timer's duration and is only accepted alongside a name.",
+  items: {
+    type: "object",
+    required: ["steps"],
+    properties: {
+      name: { type: "string", description: "Section heading; absent for an unsectioned run." },
+      steps: {
+        type: "array",
+        items: {
+          type: "object",
+          required: ["text"],
+          properties: {
+            text: { type: "string", description: "The step as the recipe says it." },
+            name: { type: "string", description: 'Timer label, e.g. "Simmer". May stand alone.' },
+            seconds: {
+              type: "integer",
+              minimum: 1,
+              description: "Timer duration in whole seconds; requires name.",
+            },
           },
         },
       },
@@ -339,9 +383,10 @@ export const TOOL_SCHEMAS = {
       schema: {
         ...storedRecipeJsonSchema,
         required: [],
-        description: `Partial recipe fields, merged into what is stored — only the keys you pass change. ${RECIPE_INGREDIENT_ON_UPDATE_ERROR}`,
+        description: `Partial recipe fields, merged into what is stored — only the keys you pass change. ${RECIPE_INGREDIENT_ON_UPDATE_ERROR} ${RECIPE_INSTRUCTIONS_ON_UPDATE_ERROR}`,
       },
       ingredients: recipeIngredientsJsonSchema,
+      instructions: recipeInstructionsJsonSchema,
     },
   },
   clear_cooking_notes: {

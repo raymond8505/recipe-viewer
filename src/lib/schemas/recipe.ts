@@ -147,7 +147,6 @@ export const schemaRecipeSchema = z
       .optional(),
     recipeCuisine: z.string().optional(),
     recipeCategory: z.union([z.string(), z.array(z.string())]).optional(),
-    recipeInstructions: z.array(z.union([howToStepSchema, howToSectionSchema])).optional(),
     keywords: z.string().optional(),
     nutrition: z
       .object({
@@ -171,13 +170,14 @@ export const schemaRecipeSchema = z
   })
   .passthrough();
 
-// The inbound Schema.org edge: the stored recipe plus `recipeIngredient`, for
-// writers that speak Schema.org because their source does (a scrape landing
-// through create_recipe or the re-scrape webhook). `fromSchemaOrgIngredients`
-// turns the list into ingredient groups at the boundary; the stored schema
-// never carries it.
+// The inbound Schema.org edge: the stored recipe plus `recipeIngredient` and
+// `recipeInstructions`, for writers that speak Schema.org because their source
+// does (a scrape landing through create_recipe or the re-scrape webhook).
+// `fromSchemaOrgIngredients` / `fromSchemaOrgInstructions` turn them into
+// groups at the boundary; the stored schema never carries either.
 export const schemaOrgRecipeInputSchema = schemaRecipeSchema.extend({
   recipeIngredient: z.array(schemaOrgIngredientLineSchema).optional(),
+  recipeInstructions: schemaOrgInstructionsInputSchema.optional(),
 });
 
 // Recipe row `status` column — used as a zod enum at boundaries (MCP tool
@@ -256,8 +256,9 @@ export const recipeCreateInputSchema = z
   .refine(sourceRequiredWithUrl, SOURCE_REQUIRED_WITH_URL_ISSUE);
 
 // Update speaks the app's own shape: `ingredients` replaces the whole list
-// (lines keep their rows by id), and `schema` is the stored recipe — it has no
-// recipeIngredient key, and the tool rejects one rather than silently
+// (lines keep their rows by id), `instructions` replaces the whole step list,
+// and `schema` is the stored recipe — it has neither recipeIngredient nor
+// recipeInstructions, and the tool rejects either rather than silently
 // ignoring it.
 export const recipeUpdateInputSchema = z.object({
   id: z.string().min(1),
@@ -266,6 +267,7 @@ export const recipeUpdateInputSchema = z.object({
   status: recipeStatusSchema.optional(),
   schema: schemaRecipeSchema.partial().optional(),
   ingredients: recipeIngredientsInputSchema.optional(),
+  instructions: recipeInstructionsInputSchema.optional(),
 });
 
 // The MCP tool only fetches images from a URL. Local files go through the

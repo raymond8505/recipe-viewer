@@ -6,6 +6,7 @@ import type { RecipeIngredientRow } from "@/types/ingredient";
 import type {
   RecipeIngredientGroup,
   RecipeIngredientGroupInput,
+  RecipeInstructionGroup,
   SchemaRecipe,
 } from "@/types/recipe";
 import type { RecipeStatus } from "@/lib/schemas/recipe";
@@ -14,6 +15,8 @@ export interface SaveRecipeBody {
   schema: SchemaRecipe;
   /** The whole list; the editor always sends it. Lines keep their rows by id. */
   ingredients: RecipeIngredientGroupInput[];
+  /** The whole step list; the editor always sends it. */
+  instructions: RecipeInstructionGroup[];
   status: string;
   url: string;
   source: string;
@@ -22,6 +25,8 @@ export interface SaveRecipeBody {
 export interface SavedRecipe {
   schema: SchemaRecipe;
   ingredients: RecipeIngredientGroup[];
+  /** The steps as stored — canonical form, which may differ from what was sent. */
+  instructions: RecipeInstructionGroup[];
   /** The column-backed times, in seconds — the document's, not the blob's. */
   prep_time: number | null;
   cook_time: number | null;
@@ -51,7 +56,11 @@ export async function saveRecipe(
     throw new Error(`Recipe save failed with status ${res.status}`);
   }
   const saved = await res.json();
-  if (!saved.schema || !Array.isArray(saved.ingredients)) {
+  if (
+    !saved.schema ||
+    !Array.isArray(saved.ingredients) ||
+    !Array.isArray(saved.instructions)
+  ) {
     throw new Error("Recipe save returned no recipe");
   }
   return saved;

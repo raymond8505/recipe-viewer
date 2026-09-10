@@ -8,6 +8,7 @@ import {
   METRIC_UNIT_SLASHES,
   NUTRITION_FIELD_LIST,
   RECIPE_INGREDIENT_ON_UPDATE_ERROR,
+  RECIPE_INSTRUCTIONS_ON_UPDATE_ERROR,
   TBSP_ML_EXAMPLE,
 } from "./copy";
 import {
@@ -104,7 +105,7 @@ const TOOL_IMPLS: {
     call: (args) => deleteIngredient(ingredientIdInputSchema.parse(args)),
   },
   get_recipe: {
-    description: `Fetch the full recipe row for a given recipe UUID. \`ingredients\` is the ingredient list: ordered groups ({ name?, ingredients }) of lines, each line being the recipe_ingredients row — id, raw_text, the parsed quantity/unit/name_text, match_status — plus \`ingredient\`, the catalog row it is matched to (per-100g nutrition, density) or null. \`metadata.schema\` carries everything else (name, yield, times, instructions, nutrition, notes) and has no recipeIngredient. Keep each line's id when you send the list back through ${TOOL.update_recipe}.`,
+    description: `Fetch the full recipe row for a given recipe UUID. \`ingredients\` is the ingredient list: ordered groups ({ name?, ingredients }) of lines, each line being the recipe_ingredients row — id, raw_text, the parsed quantity/unit/name_text, match_status — plus \`ingredient\`, the catalog row it is matched to (per-100g nutrition, density) or null. \`instructions\` is the step list: ordered groups ({ name?, steps }) of { text, name?, seconds? }, where a step's name is its cook-mode timer label and seconds its duration. \`metadata.schema\` carries everything else (name, yield, times, nutrition, notes) and has neither recipeIngredient nor recipeInstructions. Keep each line's id when you send the list back through ${TOOL.update_recipe}.`,
     call: (args) => getRecipe(recipeIdInputSchema.parse(args)),
   },
   get_token: {
@@ -112,11 +113,11 @@ const TOOL_IMPLS: {
     call: (args) => getToken(recipeIdInputSchema.parse(args)),
   },
   create_recipe: {
-    description: `Insert a new recipe row. Requires source and a Schema.org Recipe object (schema.recipeIngredient as plain strings, or { name, group } objects to place lines under named groups — the server turns them into ingredient groups; read them back as \`ingredients\` via ${TOOL.get_recipe}); defaults status to '${DEFAULT_RECIPE_STATUS}'. url is OPTIONAL — when omitted it defaults to the recipe's own canonical page on this instance (<base-url>/recipes/<new-uuid>). Set recipeYield as a structured QuantitativeValue — value = serving count, unitText = its label, and valueReference = the recipe's raw weight/volume in metric units (value + unitText; unitText must be one of ${METRIC_UNIT_SLASHES}) when known, since it drives the per-serving nutrition; a plain-string yield is accepted but deprecated. cookingNotes is read-only for agents: if present it is ignored (the call still succeeds) and the response carries a 'warnings' note explaining why.`,
+    description: `Insert a new recipe row. Requires source and a Schema.org Recipe object (schema.recipeIngredient as plain strings, or { name, group } objects to place lines under named groups; schema.recipeInstructions as HowToStep / HowToSection objects, a single object, or a markdown string — the server turns them into ingredient and instruction groups; read them back as \`ingredients\` and \`instructions\` via ${TOOL.get_recipe}); defaults status to '${DEFAULT_RECIPE_STATUS}'. url is OPTIONAL — when omitted it defaults to the recipe's own canonical page on this instance (<base-url>/recipes/<new-uuid>). Set recipeYield as a structured QuantitativeValue — value = serving count, unitText = its label, and valueReference = the recipe's raw weight/volume in metric units (value + unitText; unitText must be one of ${METRIC_UNIT_SLASHES}) when known, since it drives the per-serving nutrition; a plain-string yield is accepted but deprecated. cookingNotes is read-only for agents: if present it is ignored (the call still succeeds) and the response carries a 'warnings' note explaining why.`,
     call: (args) => createRecipe(recipeCreateInputSchema.parse(args)),
   },
   update_recipe: {
-    description: `Patch fields on an existing recipe — only the fields you pass change. \`schema\` is merged into what is stored (not replaced). ${RECIPE_INGREDIENT_ON_UPDATE_ERROR} Prefer a structured QuantitativeValue for recipeYield (value = serving count, unitText = its label, valueReference = raw weight/volume in metric units ${METRIC_UNIT_SLASHES} for per-serving nutrition); plain-string yields are accepted but deprecated. cookingNotes is read-only for agents: if present it is ignored (the call still succeeds) and the response carries a 'warnings' note. Use ${TOOL.clear_cooking_notes} to clear it.`,
+    description: `Patch fields on an existing recipe — only the fields you pass change. \`schema\` is merged into what is stored (not replaced). ${RECIPE_INGREDIENT_ON_UPDATE_ERROR} ${RECIPE_INSTRUCTIONS_ON_UPDATE_ERROR} Prefer a structured QuantitativeValue for recipeYield (value = serving count, unitText = its label, valueReference = raw weight/volume in metric units ${METRIC_UNIT_SLASHES} for per-serving nutrition); plain-string yields are accepted but deprecated. cookingNotes is read-only for agents: if present it is ignored (the call still succeeds) and the response carries a 'warnings' note. Use ${TOOL.clear_cooking_notes} to clear it.`,
     call: (args) => updateRecipe(recipeUpdateInputSchema.parse(args)),
   },
   clear_cooking_notes: {

@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { POST } from "@/app/api/recipes/[id]/update/route";
 import { RecipeRepoError } from "@/lib/recipes";
-import { makeRecipe } from "@/fixtures";
+import { makeRecipe, makeSteps } from "@/fixtures";
 import { makeJsonRequest } from "@/fixtures/request";
 import type { SchemaRecipe } from "@/types/recipe";
 
@@ -181,6 +181,25 @@ describe("POST /api/recipes/[id]/update", () => {
       cook_time: null,
       total_time: 900,
     });
+  });
+
+  // The steps travel beside the schema, not inside it, and the echo carries
+  // what was stored — canonical form, which can differ from the draft.
+  it("passes instructions to the repo and echoes the persisted steps", async () => {
+    const { updateRecipeRow } = await import("@/lib/recipes");
+    const instructions = makeSteps(["Mix.", "Bake."]);
+    vi.mocked(updateRecipeRow).mockResolvedValueOnce({ ...storedRecipe, instructions });
+
+    const res = await POST(
+      makeJsonRequest({ schema: { name: "Test" }, instructions, status: "draft" }),
+      makeParams(),
+    );
+
+    expect(updateRecipeRow).toHaveBeenCalledWith(
+      "recipe-1",
+      expect.objectContaining({ instructions }),
+    );
+    expect(await res.json()).toMatchObject({ instructions });
   });
 
   // isOwnRecipe reads casing leniently, but the column also feeds the ?source=

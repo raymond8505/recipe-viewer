@@ -6,7 +6,7 @@ import {
   updateRecipeIngredientLine,
   uploadRecipeImageFile,
 } from "@/lib/api/recipes";
-import { makeIngredientLines } from "@/fixtures";
+import { makeIngredientLines, makeSteps } from "@/fixtures";
 
 function mockFetchOnce(status: number, body: object) {
   const mock = vi.fn().mockResolvedValue(
@@ -73,6 +73,7 @@ describe("saveRecipe", () => {
   const body = {
     schema: { name: "Cake" },
     ingredients: [{ ingredients: [{ id: "ri-1", raw_text: "2 cups flour" }] }],
+    instructions: makeSteps(["Mix."]),
     status: "draft",
     url: "https://example.com",
     source: "example.com",
@@ -82,6 +83,7 @@ describe("saveRecipe", () => {
     const saved = {
       schema: { name: "Cake" },
       ingredients: makeIngredientLines(["2 cups flour"]),
+      instructions: makeSteps(["Mix."]),
       prep_time: 600,
       cook_time: null,
       total_time: 600,
@@ -101,9 +103,15 @@ describe("saveRecipe", () => {
   });
 
   // The client re-seeds its whole document from the echo, so a response
-  // missing either half would wipe state — fail at the boundary instead.
+  // missing any part would wipe state — fail at the boundary instead.
   it("throws when a 200 response omits the ingredients", async () => {
-    mockFetchOnce(200, { schema: { name: "Cake" }, status: "draft" });
+    mockFetchOnce(200, { schema: { name: "Cake" }, instructions: [], status: "draft" });
+
+    await expect(saveRecipe("recipe-1", body)).rejects.toThrow(/no recipe/);
+  });
+
+  it("throws when a 200 response omits the instructions", async () => {
+    mockFetchOnce(200, { schema: { name: "Cake" }, ingredients: [], status: "draft" });
 
     await expect(saveRecipe("recipe-1", body)).rejects.toThrow(/no recipe/);
   });

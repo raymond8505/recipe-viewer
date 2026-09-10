@@ -370,12 +370,13 @@ export function getYieldUnit(
 // The outbound Schema.org edge.
 //
 // Internally a recipe is a RecipeDocument: the stored schema, the ingredient
-// groups, and the column-backed times. Anything that leaves the app as a
-// Schema.org Recipe — the JSON-LD script, the image-generation webhook, the
-// window API — is assembled here and nowhere else. Every column-backed field
-// is read from its column (times in seconds → ISO 8601; lines → their text,
-// groups in order), never from the copy the blob may still carry, so this is
-// the translation layer that grows as more of `metadata.schema` moves out.
+// groups, the instruction groups, and the column-backed times. Anything that
+// leaves the app as a Schema.org Recipe — the JSON-LD script, the
+// image-generation webhook, the window API — is assembled here and nowhere
+// else. Every column-backed field is read from its column (times in seconds →
+// ISO 8601; lines → their text, groups in order; instruction groups → HowTo
+// steps and sections), never from the copy the blob may still carry, so this
+// is the translation layer that grows as more of `metadata.schema` moves out.
 // The inbound half is `documentFromSchemaOrg` in ./recipeDocument.
 // ---------------------------------------------------------------------------
 
@@ -397,11 +398,11 @@ function schemaOrgTimes(doc: RecipeDocument): Partial<Pick<SchemaOrgRecipe, "pre
 
 /**
  * The whole recipe as a Schema.org Recipe, custom fields included: the stored
- * schema, its three time keys replaced from the columns, and
- * `recipeIngredient` flattened to the lines' text. For consumers that want the
- * full document (the image webhook reads `notes`; the window API hands agents
- * everything). JSON-LD, which must be spec-clean, goes through
- * `toSchemaOrgJsonLd` instead.
+ * schema, its three time keys replaced from the columns, `recipeIngredient`
+ * flattened to the lines' text, and `recipeInstructions` as HowTo steps and
+ * sections. For consumers that want the full document (the image webhook
+ * reads `notes`; the window API hands agents everything). JSON-LD, which must
+ * be spec-clean, goes through `toSchemaOrgJsonLd` instead.
  */
 export function toSchemaOrgRecipe(doc: RecipeDocument): SchemaOrgRecipe {
   const { prepTime: _p, cookTime: _c, totalTime: _t, ...rest } = doc.schema;
@@ -409,10 +410,12 @@ export function toSchemaOrgRecipe(doc: RecipeDocument): SchemaOrgRecipe {
   void _c;
   void _t;
   const texts = ingredientTexts(doc.ingredients);
+  const steps = toSchemaOrgInstructions(doc.instructions);
   return {
     ...rest,
     ...schemaOrgTimes(doc),
     ...(texts.length > 0 ? { recipeIngredient: texts } : {}),
+    ...(steps.length > 0 ? { recipeInstructions: steps } : {}),
   };
 }
 
@@ -420,7 +423,8 @@ export function toSchemaOrgRecipe(doc: RecipeDocument): SchemaOrgRecipe {
  * Return a Schema.org-compliant JSON-LD object for a recipe. An explicit
  * allowlist of standard fields, so custom extensions (notes, cookingNotes) can
  * never leak; times from the columns; `recipeIngredient` as plain strings —
- * group names and row ids are ours, not Schema.org's.
+ * group names and row ids are ours, not Schema.org's; `recipeInstructions`
+ * from the document's groups.
  *
  * `nutritionOverride` is the ONLY source of the output's `nutrition` — the
  * normalized-ingredient nutrition, already per-serving and Schema.org-shaped.
@@ -448,7 +452,6 @@ export function toSchemaOrgJsonLd(
     "recipeCategory",
     "keywords",
     "datePublished",
-    "recipeInstructions",
   ] as const;
   for (const key of optionalFields) {
     if (schema[key] != null) result[key] = schema[key];
@@ -457,6 +460,8 @@ export function toSchemaOrgJsonLd(
   if (nutrition != null) result.nutrition = nutrition;
   const texts = ingredientTexts(doc.ingredients);
   if (texts.length > 0) result.recipeIngredient = texts;
+  const steps = toSchemaOrgInstructions(doc.instructions);
+  if (steps.length > 0) result.recipeInstructions = steps;
   return result;
 }
 
@@ -593,38 +598,22 @@ export function toSchemaOrgInstructions(
   return result;
 }
 
-export function normalizeRecipeInstructions(
-  raw: unknown,
-): Array<HowToStep | HowToSection> | undefined {
-  if (raw == null) return undefined;
-  if (typeof raw === "string") return toSchemaOrgInstructions(markdownToInstructions(raw));
-  if (Array.isArray(raw)) return raw as Array<HowToStep | HowToSection>;
-  return [raw as HowToStep | HowToSection];
-}
-
 /**
- * Render structured recipe instructions to a markdown fragment.
- *
- * HowToSection → "## Section Name" header followed by its steps as "- text";
- * a top-level HowToStep → "- text"; sections are separated by a blank line.
- * Consumed by `schemaToMarkdown` to build the searchable `content`/embedding
- * text — it is NOT part of the editor (which uses the structured converters).
+ * Render instruction groups to a markdown fragment: a named group is a
+ * "## Name" header followed by its steps as "- text", a nameless group is its
+ * steps alone, and groups are separated by a blank line. Consumed by
+ * `recipeToMarkdown` for the searchable `content`/embedding text — it is NOT
+ * part of the editor (which uses the structured converters).
  */
 export function instructionsToMarkdown(
-  instructions: Array<HowToStep | HowToSection>,
+  instructions: readonly RecipeInstructionGroup[],
 ): string {
   const blocks: string[] = [];
-  for (const item of instructions) {
-    if (item["@type"] === "HowToSection") {
-      const section = item as HowToSection;
-      const lines = [`## ${section.name}`];
-      for (const step of section.itemListElement) {
-        lines.push(`- ${step.text}`);
-      }
-      blocks.push(lines.join("\n"));
-    } else {
-      blocks.push(`- ${(item as HowToStep).text}`);
-    }
+  for (const group of instructions) {
+    if (group.steps.length === 0) continue;
+    const lines = group.name ? [`## ${group.name}`] : [];
+    for (const step of group.steps) lines.push(`- ${step.text}`);
+    blocks.push(lines.join("\n"));
   }
   return blocks.join("\n\n");
 }
@@ -641,6 +630,7 @@ export function instructionsToMarkdown(
 export function recipeToMarkdown(
   schema: SchemaRecipe,
   ingredients: readonly RecipeIngredientGroup[],
+  instructions: readonly RecipeInstructionGroup[],
 ): string {
   const blocks: string[] = [`# ${schema.name}`];
 
@@ -670,10 +660,8 @@ export function recipeToMarkdown(
     blocks.push(lines.join("\n"));
   }
 
-  if (schema.recipeInstructions?.length) {
-    blocks.push(
-      `## Instructions\n${instructionsToMarkdown(schema.recipeInstructions)}`,
-    );
+  if (instructions.some((group) => group.steps.length > 0)) {
+    blocks.push(`## Instructions\n${instructionsToMarkdown(instructions)}`);
   }
 
   return blocks.join("\n\n");
@@ -691,11 +679,11 @@ export function toArray(val: string | string[] | undefined | null): string[] {
 // ---------------------------------------------------------------------------
 // Structured-editor converters (UI tree ⇄ recipe)
 //
-// Ingredient groups map one to one onto RecipeIngredientGroup[]; instruction
-// groups are a UI construct over the flat HowToStep/HowToSection array. These
-// four functions are the single translation boundary — see
-// `src/types/editor.ts`. They preserve group order so a load → save round-trip
-// is lossless; they never inject empty groups.
+// Both editor trees map one to one onto the recipe's own groups —
+// RecipeIngredientGroup[] and RecipeInstructionGroup[]. These four functions
+// are the single translation boundary — see `src/types/editor.ts`. They
+// preserve group order so a load → save round-trip is lossless; they never
+// inject empty groups.
 // ---------------------------------------------------------------------------
 
 /**
@@ -767,8 +755,8 @@ export function editableToIngredientInput(
   return result;
 }
 
-function stepToEditable(step: HowToStep): EditableStep {
-  const secs = parseDurationToSeconds(step.timeRequired) ?? 0;
+function stepToEditable(step: RecipeStep): EditableStep {
+  const secs = step.seconds ?? 0;
   return {
     id: nanoid(),
     text: step.text,
@@ -778,64 +766,34 @@ function stepToEditable(step: HowToStep): EditableStep {
   };
 }
 
-/** Stored instructions → editor groups. Top-level steps collect into a
- *  null-heading group; HowToSections become headed groups (order preserved). */
-export function schemaToEditableInstructions(
-  instructions: Array<HowToStep | HowToSection>,
+/** Instruction groups → editor groups: heading is the group's name (null when nameless), a timer's seconds split into minutes:seconds. */
+export function instructionsToEditable(
+  instructions: readonly RecipeInstructionGroup[],
 ): EditableInstructions {
-  const groups: EditableInstructions = [];
-  let looseGroup: EditableInstructions[number] | null = null;
-  for (const item of instructions) {
-    if (item["@type"] === "HowToSection") {
-      looseGroup = null;
-      const section = item as HowToSection;
-      groups.push({
-        id: nanoid(),
-        heading: section.name,
-        items: section.itemListElement.map(stepToEditable),
-      });
-    } else {
-      if (!looseGroup) {
-        looseGroup = { id: nanoid(), heading: null, items: [] };
-        groups.push(looseGroup);
-      }
-      looseGroup.items.push(stepToEditable(item as HowToStep));
-    }
-  }
-  return groups;
+  return instructions.map((group) => ({
+    id: nanoid(),
+    heading: group.name ?? null,
+    items: group.steps.map(stepToEditable),
+  }));
 }
 
-/** Editor groups → stored instructions. Blank-text steps are dropped; `name`
- *  and `timeRequired` are emitted only when BOTH are set (co-dependency).
- *  A headed group becomes a HowToSection; the null group emits top-level
- *  steps. Groups that yield no steps are dropped. */
-export function editableInstructionsToSchema(
+/** Editor groups → instruction groups, in canonical form: blank steps and
+ *  empty groups dropped, a blank heading is a nameless group, and a timer's
+ *  minutes:seconds survive only beside a label (the editor enforces the same
+ *  rule before Save). */
+export function editableToInstructions(
   groups: EditableInstructions,
-): Array<HowToStep | HowToSection> {
-  const result: Array<HowToStep | HowToSection> = [];
-  for (const group of groups) {
-    const steps: HowToStep[] = [];
-    for (const item of group.items) {
-      const text = item.text.trim();
-      if (!text) continue;
-      const step: HowToStep = { "@type": "HowToStep", text };
-      const name = item.name.trim();
-      const duration = msToIsoDuration(item.minutes, item.seconds);
-      if (name) step.name = name;
-      if (name && duration) step.timeRequired = duration;
-      steps.push(step);
-    }
-    if (steps.length === 0) continue;
-    const heading = group.heading?.trim() || null;
-    if (heading) {
-      result.push({
-        "@type": "HowToSection",
-        name: heading,
-        itemListElement: steps,
-      });
-    } else {
-      result.push(...steps);
-    }
-  }
-  return result;
+): RecipeInstructionGroup[] {
+  return canonicalizeInstructions(
+    groups.map((group) => ({
+      ...(group.heading != null ? { name: group.heading } : {}),
+      steps: group.items.map((item) => ({
+        text: item.text,
+        name: item.name,
+        seconds:
+          Math.max(0, Math.floor(item.minutes || 0)) * 60 +
+          Math.max(0, Math.floor(item.seconds || 0)),
+      })),
+    })),
+  );
 }

@@ -25,8 +25,11 @@ import { fromSchemaOrgIngredients } from "@/lib/recipeIngredients";
 import { generateEmbedding } from "@/lib/embedding";
 import { exhaustiveKeys } from "@/lib/exhaustive";
 import { ingredientEmbeddingText, ingredientQueryText } from "@/lib/ingredientAliases";
-import { CUSTOM_RECIPE_SOURCE } from "@/lib/format";
-import { RECIPE_INGREDIENT_ON_UPDATE_ERROR } from "./copy";
+import { CUSTOM_RECIPE_SOURCE, fromSchemaOrgInstructions } from "@/lib/format";
+import {
+  RECIPE_INGREDIENT_ON_UPDATE_ERROR,
+  RECIPE_INSTRUCTIONS_ON_UPDATE_ERROR,
+} from "./copy";
 import { ARCHIVED_RECIPE_STATUS } from "@/lib/schemas/recipe";
 import { RECIPE_TOKEN_TTL_SECONDS, signRecipeToken } from "./recipeToken";
 import { env } from "@/env";
@@ -294,9 +297,10 @@ export type RecipeRowWithWarnings = RecipeRow & { warnings?: string[] };
 export async function createRecipe(
   args: RecipeCreateInput,
 ): Promise<RecipeRowWithWarnings> {
-  // The inbound Schema.org edge: scrapes arrive with `recipeIngredient`, which
-  // becomes ingredient groups here and never reaches the stored schema.
-  const { cookingNotes, recipeIngredient, ...schema } = args.schema;
+  // The inbound Schema.org edge: scrapes arrive with `recipeIngredient` and
+  // `recipeInstructions`, which become groups here and never reach the stored
+  // schema.
+  const { cookingNotes, recipeIngredient, recipeInstructions, ...schema } = args.schema;
   const id = crypto.randomUUID();
   // Default to the recipe's own canonical page on this instance.
   // MCP_PUBLIC_URL is the app's base-URL source of truth (also the OAuth /
@@ -316,6 +320,7 @@ export async function createRecipe(
       status: args.status,
       schema,
       ingredients: fromSchemaOrgIngredients(recipeIngredient ?? []),
+      instructions: fromSchemaOrgInstructions(recipeInstructions),
     });
     return cookingNotes !== undefined
       ? { ...row, warnings: [COOKING_NOTES_IGNORED_WARNING] }
@@ -329,11 +334,14 @@ export async function updateRecipe(
   args: RecipeUpdateInput,
 ): Promise<RecipeRowWithWarnings> {
   const { cookingNotes, ...schema } = args.schema ?? {};
-  // The zod schema is passthrough, so without this check the dead key sails
+  // The zod schema is passthrough, so without these checks a dead key sails
   // into the merge and is silently stripped — a loud failure teaches the agent
   // the shape to use.
   if ("recipeIngredient" in schema) {
     throw new ToolError("invalid_input", RECIPE_INGREDIENT_ON_UPDATE_ERROR);
+  }
+  if ("recipeInstructions" in schema) {
+    throw new ToolError("invalid_input", RECIPE_INSTRUCTIONS_ON_UPDATE_ERROR);
   }
   try {
     const row = await updateRecipeRow(args.id, {
@@ -342,6 +350,7 @@ export async function updateRecipe(
       status: args.status,
       schema: args.schema !== undefined ? schema : undefined,
       ingredients: args.ingredients,
+      instructions: args.instructions,
     });
     return cookingNotes !== undefined
       ? { ...row, warnings: [COOKING_NOTES_IGNORED_WARNING] }
