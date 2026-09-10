@@ -37,11 +37,6 @@ describe("RecipeCard", () => {
     expect(screen.getByText("1 hr")).toBeTruthy();
   });
 
-  it("renders the category tag", () => {
-    render(<RecipeCard recipe={mockRecipe} />);
-    expect(screen.getByText("Dessert")).toBeTruthy();
-  });
-
   it("links to the recipe detail page", () => {
     render(<RecipeCard recipe={mockRecipe} />);
     const link = screen.getByRole("link");
@@ -66,8 +61,8 @@ describe("RecipeCard", () => {
   });
 
   // The card places badges; it does not choose or build them. Anything the
-  // caller hands it lands in the footer, after the category.
-  it("renders the badges it is given", () => {
+  // caller hands it lands in the footer, after the time.
+  it("renders the footer badges it is given", () => {
     render(
       <RecipeCard
         recipe={mockRecipe}
@@ -86,10 +81,26 @@ describe("RecipeCard", () => {
     expect(screen.getByText("anything at all")).toBeTruthy();
   });
 
-  it("renders the footer without badges when given none", () => {
-    render(<RecipeCard recipe={mockRecipe} badges={[]} />);
+  it("overlays the top badges it is given", () => {
+    render(
+      <RecipeCard
+        recipe={mockRecipe}
+        topBadges={[<span key="status">draft</span>, <span key="cat">Dessert</span>]}
+      />,
+    );
+
+    expect(screen.getByText("draft")).toBeTruthy();
+    expect(screen.getByText("Dessert")).toBeTruthy();
+  });
+
+  // A card is a card with no badges at all — the time still renders, and the
+  // image carries no empty overlay box.
+  it("renders without badges when given none", () => {
+    const { container } = render(
+      <RecipeCard recipe={mockRecipe} topBadges={[]} badges={[]} />,
+    );
 
     expect(screen.getByText("1 hr")).toBeTruthy();
-    expect(screen.getByText("Dessert")).toBeTruthy();
+    expect(container.querySelector(".absolute")).toBeNull();
   });
 });

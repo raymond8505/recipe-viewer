@@ -4,7 +4,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { useState, type ReactNode } from "react";
 import type { RecipeRow } from "@/types/recipe";
-import { formatDuration, getFirstImage, toArray } from "@/lib/format";
+import { formatDuration, getFirstImage } from "@/lib/format";
 import {
   Card,
   CardContent,
@@ -12,25 +12,24 @@ import {
   CardFooter,
   CardTitle,
 } from "@/components/ui/card";
-import { RecipeStatusBadge } from "@/components/RecipeStatusBadge";
-import { RecipeCategoryBadge } from "@/components/RecipeCategoryBadge";
 import { ImagePlaceholder } from "@/components/ImagePlaceholder";
 import { ClockIcon } from "@/components/icons";
 
 interface RecipeCardProps {
   recipe: RecipeRow;
-  showStatusBadge?: boolean;
   /**
-   * Extra footer badges, rendered in order after the category. Which badges a
-   * card carries — and what each of them says — is the caller's decision; the
-   * card only finds them a place to sit.
+   * Badges overlaid on the image, top right. Which badges a card carries —
+   * and what each of them says — is the caller's decision; the card only
+   * finds them a place to sit.
    */
+  topBadges?: ReactNode[];
+  /** Badges in the footer, after the time. Same contract as `topBadges`. */
   badges?: ReactNode[];
 }
 
 export default function RecipeCard({
   recipe,
-  showStatusBadge,
+  topBadges,
   badges,
 }: RecipeCardProps) {
   const {
@@ -39,7 +38,6 @@ export default function RecipeCard({
   } = recipe;
   const image = getFirstImage(schema.image);
   const totalTime = formatDuration(schema.totalTime ?? schema.cookTime);
-  const categories = toArray(schema.recipeCategory);
   const [imgError, setImgError] = useState(false);
 
   return (
@@ -60,12 +58,14 @@ export default function RecipeCard({
           ) : (
             <ImagePlaceholder />
           )}
-          {showStatusBadge && (
-            <RecipeStatusBadge
-              status={recipe.status}
-              className="absolute top-2 right-2"
-            />
-          )}
+          {/* After the image in DOM order, which is what paints it on top —
+              the overlay needs no z-index of its own. Right-aligned so a
+              second badge grows leftwards, away from the corner. */}
+          {topBadges?.length ? (
+            <div className="absolute top-2 right-2 flex flex-wrap justify-end gap-1">
+              {topBadges}
+            </div>
+          ) : null}
         </div>
 
         <CardContent className="flex flex-col flex-1 p-4 gap-2">
@@ -79,8 +79,8 @@ export default function RecipeCard({
             </CardDescription>
           )}
 
-          {/* Wraps: time, category and the caller's badges are four or more
-              items at the ~320px width a card column renders at. */}
+          {/* Wraps: time plus the caller's badges is three or more items at
+              the ~320px width a card column renders at. */}
           <CardFooter className="mt-auto flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground p-0 pt-2 border-t-0 bg-transparent">
             {totalTime && (
               <span className="flex items-center gap-1">
@@ -88,7 +88,6 @@ export default function RecipeCard({
                 {totalTime}
               </span>
             )}
-            {categories[0] && <RecipeCategoryBadge category={categories[0]} />}
             {badges}
           </CardFooter>
         </CardContent>

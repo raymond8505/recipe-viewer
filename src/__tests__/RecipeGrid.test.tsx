@@ -1,7 +1,16 @@
 import { describe, it, expect } from "vitest";
 import { render, screen } from "@testing-library/react";
 import RecipeGrid from "@/components/RecipeGrid";
+import type { RecipeRow } from "@/types/recipe";
 import { makeRecipe, makeNutritionRecipeRow, makeIngredientLines } from "@/fixtures";
+
+/** A recipe with a category, so the default top badges have something to show. */
+function categorized(id: string, name: string, overrides: Partial<RecipeRow> = {}) {
+  return makeRecipe(id, name, {
+    ...overrides,
+    metadata: { schema: { name, recipeCategory: "Dinner" } },
+  });
+}
 
 describe("RecipeGrid", () => {
   it("shows 'No recipes found.' when given an empty array", () => {
@@ -83,5 +92,38 @@ describe("RecipeGrid", () => {
 
     expect(screen.getByText(/from new.raymonds.recipes/)).toBeTruthy();
     expect(screen.queryByText("350 kcal")).toBeNull();
+  });
+
+  it("overlays each card's category by default", () => {
+    render(<RecipeGrid recipes={[categorized("1", "Pasta")]} />);
+
+    expect(screen.getByText("Dinner")).toBeTruthy();
+  });
+
+  // Whether a card shows its status is decided by what goes into the top-badge
+  // array, not by anything the card asks.
+  it("adds the status badge to the overlay only when asked", () => {
+    const recipes = [categorized("1", "Pasta", { status: "draft" })];
+
+    const { unmount } = render(<RecipeGrid recipes={recipes} />);
+    expect(screen.queryByText("draft")).toBeNull();
+    unmount();
+
+    render(<RecipeGrid recipes={recipes} showStatusBadge />);
+    expect(screen.getByText("draft")).toBeTruthy();
+  });
+
+  it("lets a caller's top badges take over the status flag as well", () => {
+    render(
+      <RecipeGrid
+        recipes={[categorized("1", "Pasta", { status: "draft" })]}
+        showStatusBadge
+        topBadges={() => [<span key="mine">mine only</span>]}
+      />,
+    );
+
+    expect(screen.getByText("mine only")).toBeTruthy();
+    expect(screen.queryByText("draft")).toBeNull();
+    expect(screen.queryByText("Dinner")).toBeNull();
   });
 });
