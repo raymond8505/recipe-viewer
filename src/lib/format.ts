@@ -230,6 +230,7 @@ export function formatDate(iso: string | undefined | null): string | null {
 import { nanoid } from "nanoid";
 import type { NutrientValue } from "./nutritionMath";
 import { ingredientTexts } from "./recipeIngredients";
+import { canonicalizeInstructions } from "./recipeInstructions";
 import type {
   HowToSection,
   HowToStep,
@@ -237,6 +238,11 @@ import type {
   RecipeDocument,
   RecipeIngredientGroup,
   RecipeIngredientGroupInput,
+  RecipeInstructionGroup,
+  RecipeStep,
+  SchemaOrgHowToSection,
+  SchemaOrgInstructionItem,
+  SchemaOrgInstructions,
   SchemaOrgRecipe,
   SchemaRecipe,
 } from "@/types/recipe";
@@ -454,31 +460,33 @@ export function toSchemaOrgJsonLd(
   return result;
 }
 
+// ---------------------------------------------------------------------------
+// Instructions ↔ Schema.org recipeInstructions.
+//
+// Internally a recipe's instructions are RecipeInstructionGroup[]. The
+// Schema.org form — a flat array of HowToStep and HowToSection — exists at the
+// edges only, and this pair is the whole translation. Grouping is BY RUN, not
+// by first appearance as ingredients are: steps are sequential, so top-level
+// steps on either side of a section stay on either side.
+// ---------------------------------------------------------------------------
+
 /**
- * Parse a markdown string into structured recipe instructions.
- *
- * "## Section Name" → opens a new HowToSection
- * "- text", "* text", "1. text" → HowToStep added to current section (or top-level)
- * Bare non-empty lines → treated as a step
- * Empty lines → ignored
+ * Parse markdown into instruction groups: "## Name" opens a named group,
+ * "- text" / "* text" / "1. text" and bare lines are steps in the current
+ * group (nameless before any heading), blank lines are ignored. The string
+ * form some scrapers deliver `recipeInstructions` in.
  */
-export function markdownToInstructions(
-  markdown: string,
-): Array<HowToStep | HowToSection> {
-  const result: Array<HowToStep | HowToSection> = [];
-  let currentSection: HowToSection | null = null;
+export function markdownToInstructions(markdown: string): RecipeInstructionGroup[] {
+  const groups: RecipeInstructionGroup[] = [];
+  let current: RecipeInstructionGroup | null = null;
 
   for (const rawLine of markdown.split("\n")) {
     const line = rawLine.trim();
     if (!line) continue;
 
     if (line.startsWith("## ")) {
-      currentSection = {
-        "@type": "HowToSection",
-        name: line.slice(3).trim(),
-        itemListElement: [],
-      };
-      result.push(currentSection);
+      current = { name: line.slice(3).trim(), steps: [] };
+      groups.push(current);
       continue;
     }
 
@@ -492,14 +500,96 @@ export function markdownToInstructions(
     }
 
     if (!text) continue;
-    const step: HowToStep = { "@type": "HowToStep", text };
-    if (currentSection) {
-      currentSection.itemListElement.push(step);
-    } else {
-      result.push(step);
+    if (!current) {
+      current = { steps: [] };
+      groups.push(current);
     }
+    current.steps.push({ text });
   }
 
+  return canonicalizeInstructions(groups);
+}
+
+function isSchemaOrgSection(item: SchemaOrgInstructionItem): item is SchemaOrgHowToSection {
+  return typeof item === "object" && item !== null && item["@type"] === "HowToSection";
+}
+
+/** One inbound item that is not a section → at most one step; an object with no text is nothing. */
+function stepFromSchemaOrg(item: string | HowToStep): RecipeStep[] {
+  if (typeof item === "string") return [{ text: item }];
+  if (typeof item?.text !== "string") return [];
+  const step: RecipeStep = { text: item.text };
+  if (typeof item.name === "string" && item.name.trim()) step.name = item.name;
+  const seconds = parseDurationToSeconds(item.timeRequired);
+  if (step.name && seconds) step.seconds = seconds;
+  return [step];
+}
+
+/**
+ * The inbound edge: `recipeInstructions` as a scrape, create_recipe, the
+ * re-scrape webhook or the window API delivers it → canonical groups. Accepts
+ * every shape the wild produces — a markdown string, one bare item, or an
+ * array mixing strings, `{ text }` objects with or without `@type`, and
+ * sections whose `itemListElement` is an array, a single step or missing.
+ *
+ * A duration survives only beside a name (the rule `stepTimers` reads);
+ * "PT0M" and durations the parser can't read are dropped with it.
+ */
+export function fromSchemaOrgInstructions(
+  raw: SchemaOrgInstructions | null | undefined,
+): RecipeInstructionGroup[] {
+  if (raw == null) return [];
+  if (typeof raw === "string") return markdownToInstructions(raw);
+
+  const groups: RecipeInstructionGroup[] = [];
+  let run: RecipeInstructionGroup | null = null;
+  for (const item of Array.isArray(raw) ? raw : [raw]) {
+    if (isSchemaOrgSection(item)) {
+      run = null;
+      const list = item.itemListElement;
+      const items = Array.isArray(list) ? list : list == null ? [] : [list];
+      groups.push({
+        name: typeof item.name === "string" ? item.name : "",
+        steps: items.flatMap(stepFromSchemaOrg),
+      });
+      continue;
+    }
+    if (!run) {
+      run = { steps: [] };
+      groups.push(run);
+    }
+    run.steps.push(...stepFromSchemaOrg(item));
+  }
+  return canonicalizeInstructions(groups);
+}
+
+function stepToSchemaOrg(step: RecipeStep): HowToStep {
+  const out: HowToStep = { "@type": "HowToStep", text: step.text };
+  if (step.name) out.name = step.name;
+  const iso = step.name ? secondsToIso(step.seconds) : undefined;
+  if (iso) out.timeRequired = iso;
+  return out;
+}
+
+/**
+ * The outbound edge: groups → the flat HowTo array. A nameless group emits its
+ * steps at the top level, a named one becomes a HowToSection; `timeRequired`
+ * is set only on a step with both a label and a duration. Callers omit the
+ * `recipeInstructions` key when this is empty.
+ */
+export function toSchemaOrgInstructions(
+  groups: readonly RecipeInstructionGroup[],
+): Array<HowToStep | HowToSection> {
+  const result: Array<HowToStep | HowToSection> = [];
+  for (const group of groups) {
+    if (group.steps.length === 0) continue;
+    const steps = group.steps.map(stepToSchemaOrg);
+    if (group.name) {
+      result.push({ "@type": "HowToSection", name: group.name, itemListElement: steps });
+    } else {
+      result.push(...steps);
+    }
+  }
   return result;
 }
 
@@ -507,7 +597,7 @@ export function normalizeRecipeInstructions(
   raw: unknown,
 ): Array<HowToStep | HowToSection> | undefined {
   if (raw == null) return undefined;
-  if (typeof raw === "string") return markdownToInstructions(raw);
+  if (typeof raw === "string") return toSchemaOrgInstructions(markdownToInstructions(raw));
   if (Array.isArray(raw)) return raw as Array<HowToStep | HowToSection>;
   return [raw as HowToStep | HowToSection];
 }

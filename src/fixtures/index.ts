@@ -9,6 +9,7 @@ export {
   makeIngredientLines,
   matchedLinesScenario,
 } from "./ingredients";
+export { makeStep, makeInstructionGroup, makeSteps } from "./instructions";
 export {
   rescrapeFixture,
   rescrapeResponseFixture,

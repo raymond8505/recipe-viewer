@@ -10,7 +10,7 @@ import { z } from "zod";
 import { CUSTOM_RECIPE_SOURCE } from "@/lib/format";
 import { METRIC_YIELD_UNITS } from "@/lib/units";
 import type { Assert, Assignable } from "@/lib/exhaustive";
-import type { RecipeRowColumns } from "@/types/recipe";
+import type { RecipeInstructionGroup, RecipeRowColumns } from "@/types/recipe";
 
 // A Schema.org `recipeIngredient` entry as it arrives from outside (a scrape,
 // create_recipe): a bare string, or an object carrying this app's `group`
@@ -72,6 +72,57 @@ export const howToSectionSchema = z.object({
   name: z.string(),
   itemListElement: z.array(howToStepSchema),
 });
+
+// A section as scrapers send it: `itemListElement` is usually an array,
+// sometimes a lone step, occasionally missing. See SchemaOrgHowToSection.
+const schemaOrgHowToSectionSchema = howToSectionSchema.extend({
+  itemListElement: z.union([z.array(howToStepSchema), howToStepSchema]).optional(),
+});
+
+const schemaOrgInstructionItemSchema = z.union([
+  z.string(),
+  howToStepSchema,
+  schemaOrgHowToSectionSchema,
+]);
+
+// The inbound Schema.org edge for instructions: the array, one item, or the
+// markdown string some scrapers produce. See SchemaOrgInstructions.
+export const schemaOrgInstructionsInputSchema = z.union([
+  z.string(),
+  howToStepSchema,
+  schemaOrgHowToSectionSchema,
+  z.array(schemaOrgInstructionItemSchema),
+]);
+
+// What a writer sends for a recipe's instructions: the stored shape itself,
+// since a step has no identity to preserve. `seconds` is a timer's whole-second
+// duration and needs the timer's label — the same rule the editor enforces.
+export const recipeStepInputSchema = z
+  .object({
+    text: z.string().trim().min(1),
+    name: z.string().trim().min(1).optional(),
+    seconds: z.number().int().min(1).optional(),
+  })
+  .refine((step) => step.seconds === undefined || step.name !== undefined, {
+    message: "seconds needs a name — the timer's label",
+    path: ["seconds"],
+  });
+
+export const recipeInstructionGroupInputSchema = z.object({
+  name: z.string().trim().min(1).optional(),
+  steps: z.array(recipeStepInputSchema),
+});
+
+export const recipeInstructionsInputSchema = z.array(recipeInstructionGroupInputSchema);
+
+// The input IS the stored type; pinned both ways so neither can grow a field
+// the other lacks. In source, not a test — tsconfig excludes src/__tests__.
+export type _InstructionsInputMatchesGroups = Assert<
+  Assignable<z.infer<typeof recipeInstructionsInputSchema>, RecipeInstructionGroup[]>
+>;
+export type _InstructionGroupsMatchInput = Assert<
+  Assignable<RecipeInstructionGroup[], z.infer<typeof recipeInstructionsInputSchema>>
+>;
 
 export const schemaRecipeSchema = z
   .object({

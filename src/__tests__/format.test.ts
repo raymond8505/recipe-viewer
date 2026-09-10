@@ -16,6 +16,8 @@ import {
   CUSTOM_RECIPE_SOURCE,
   markdownToInstructions,
   normalizeRecipeInstructions,
+  fromSchemaOrgInstructions,
+  toSchemaOrgInstructions,
   toSchemaOrgJsonLd,
   msToIsoDuration,
   isIsoDuration,
@@ -37,10 +39,13 @@ import type {
   EditableIngredients,
   EditableInstructions,
 } from "@/types/editor";
-import type { RecipeDocument, SchemaRecipe } from "@/types/recipe";
+import type { HowToStep, RecipeDocument, SchemaRecipe } from "@/types/recipe";
 import {
   makeIngredientGroup,
   makeIngredientLines,
+  makeInstructionGroup,
+  makeStep,
+  makeSteps,
   quantitativeValueYield,
 } from "@/fixtures";
 
@@ -334,44 +339,160 @@ describe("isBrowsableUrl", () => {
 });
 
 describe("markdownToInstructions", () => {
-  it("parses bullet lines as flat HowToStep list", () => {
-    const result = markdownToInstructions("- Boil water.\n- Add pasta.");
-    expect(result).toHaveLength(2);
-    expect(result[0]).toMatchObject({ "@type": "HowToStep", text: "Boil water." });
-    expect(result[1]).toMatchObject({ "@type": "HowToStep", text: "Add pasta." });
+  it("parses bullet lines into one nameless group", () => {
+    expect(markdownToInstructions("- Boil water.\n- Add pasta.")).toEqual(
+      makeSteps(["Boil water.", "Add pasta."]),
+    );
   });
 
-  it("parses numbered lines as HowToStep", () => {
-    const result = markdownToInstructions("1. First step\n2. Second step");
-    expect(result).toHaveLength(2);
-    expect(result[0]).toMatchObject({ text: "First step" });
-    expect(result[1]).toMatchObject({ text: "Second step" });
+  it("parses numbered and bare lines as steps", () => {
+    expect(markdownToInstructions("1. First step\n2. Second step\nThird")).toEqual(
+      makeSteps(["First step", "Second step", "Third"]),
+    );
   });
 
-  it("parses ## headers as HowToSection with nested steps", () => {
-    const result = markdownToInstructions("## Sauce\n- Simmer.\n- Season.");
-    expect(result).toHaveLength(1);
-    const section = result[0] as import("@/types/recipe").HowToSection;
-    expect(section["@type"]).toBe("HowToSection");
-    expect(section.name).toBe("Sauce");
-    expect(section.itemListElement).toHaveLength(2);
+  it("opens a named group at each ## header", () => {
+    expect(
+      markdownToInstructions("- Chop.\n## Sauce\n- Simmer.\n- Season.\n## Serve\n- Plate."),
+    ).toEqual([
+      makeInstructionGroup(undefined, ["Chop."]),
+      makeInstructionGroup("Sauce", ["Simmer.", "Season."]),
+      makeInstructionGroup("Serve", ["Plate."]),
+    ]);
   });
 
-  it("ignores empty lines", () => {
-    const result = markdownToInstructions("- Step one\n\n- Step two");
-    expect(result).toHaveLength(2);
+  it("ignores empty lines and an empty string", () => {
+    expect(markdownToInstructions("- Step one\n\n- Step two")).toEqual(
+      makeSteps(["Step one", "Step two"]),
+    );
+    expect(markdownToInstructions("")).toEqual([]);
+  });
+});
+
+describe("fromSchemaOrgInstructions", () => {
+  it("returns nothing for nothing", () => {
+    expect(fromSchemaOrgInstructions(null)).toEqual([]);
+    expect(fromSchemaOrgInstructions(undefined)).toEqual([]);
+    expect(fromSchemaOrgInstructions([])).toEqual([]);
   });
 
-  it("returns empty array for empty string", () => {
-    expect(markdownToInstructions("")).toHaveLength(0);
+  it("reads a markdown string, a single item, and bare strings inside the array", () => {
+    expect(fromSchemaOrgInstructions("- Mix.\n- Bake.")).toEqual(makeSteps(["Mix.", "Bake."]));
+    expect(fromSchemaOrgInstructions({ "@type": "HowToStep", text: "Stir." })).toEqual(
+      makeSteps(["Stir."]),
+    );
+    expect(fromSchemaOrgInstructions(["Chop.", { text: "Fry." }])).toEqual(
+      makeSteps(["Chop.", "Fry."]),
+    );
   });
 
-  it("parses a multi-section markdown block", () => {
-    const parsed = markdownToInstructions("## Prep\n- Chop onions.");
-    expect(parsed).toHaveLength(1);
-    const section = parsed[0] as import("@/types/recipe").HowToSection;
-    expect(section.name).toBe("Prep");
-    expect(section.itemListElement[0].text).toBe("Chop onions.");
+  it("groups top-level steps by run around a section, in order", () => {
+    expect(
+      fromSchemaOrgInstructions([
+        { "@type": "HowToStep", text: "One." },
+        { "@type": "HowToStep", text: "Two." },
+        {
+          "@type": "HowToSection",
+          name: "Sauce",
+          itemListElement: [{ "@type": "HowToStep", text: "Three." }],
+        },
+        { "@type": "HowToStep", text: "Four." },
+      ]),
+    ).toEqual([
+      makeInstructionGroup(undefined, ["One.", "Two."]),
+      makeInstructionGroup("Sauce", ["Three."]),
+      makeInstructionGroup(undefined, ["Four."]),
+    ]);
+  });
+
+  it("reads a section whose itemListElement is a single step or missing", () => {
+    expect(
+      fromSchemaOrgInstructions([
+        { "@type": "HowToSection", name: "Lone", itemListElement: { text: "Only." } },
+        { "@type": "HowToSection", name: "Bare" },
+        { "@type": "HowToStep", text: "After." },
+      ]),
+    ).toEqual([
+      makeInstructionGroup("Lone", ["Only."]),
+      makeInstructionGroup(undefined, ["After."]),
+    ]);
+  });
+
+  it("keeps a timer only beside a label and only when the duration reads as time", () => {
+    expect(
+      fromSchemaOrgInstructions([
+        { "@type": "HowToStep", text: "Both", name: "Simmer", timeRequired: "PT5M30S" },
+        { "@type": "HowToStep", text: "Unlabelled", timeRequired: "PT5M" },
+        { "@type": "HowToStep", text: "Zero", name: "Zero", timeRequired: "PT0M" },
+        { "@type": "HowToStep", text: "Unreadable", name: "Days", timeRequired: "P4D" },
+        { "@type": "HowToStep", text: "Label only", name: "Rest" },
+      ]),
+    ).toEqual(
+      makeSteps([
+        makeStep("Both", { name: "Simmer", seconds: 330 }),
+        "Unlabelled",
+        makeStep("Zero", { name: "Zero" }),
+        makeStep("Unreadable", { name: "Days" }),
+        makeStep("Label only", { name: "Rest" }),
+      ]),
+    );
+  });
+
+  it("drops objects with no text and steps whose text is blank", () => {
+    expect(
+      fromSchemaOrgInstructions([
+        { "@type": "HowToStep", text: "  " },
+        { "@type": "HowToStep" } as unknown as HowToStep,
+        "Keep.",
+      ]),
+    ).toEqual(makeSteps(["Keep."]));
+  });
+});
+
+describe("toSchemaOrgInstructions", () => {
+  it("emits a nameless group's steps at the top level and a named group as a section", () => {
+    expect(
+      toSchemaOrgInstructions([
+        makeInstructionGroup(undefined, ["One."]),
+        makeInstructionGroup("Sauce", [makeStep("Simmer.", { name: "Simmer", seconds: 330 })]),
+        makeInstructionGroup("Empty", []),
+      ]),
+    ).toEqual([
+      { "@type": "HowToStep", text: "One." },
+      {
+        "@type": "HowToSection",
+        name: "Sauce",
+        itemListElement: [
+          { "@type": "HowToStep", text: "Simmer.", name: "Simmer", timeRequired: "PT5M30S" },
+        ],
+      },
+    ]);
+  });
+
+  it("sets timeRequired only on a step with both a label and a duration", () => {
+    expect(
+      toSchemaOrgInstructions(
+        makeSteps([makeStep("Label only", { name: "Rest" }), makeStep("Orphan", { seconds: 60 })]),
+      ),
+    ).toEqual([
+      { "@type": "HowToStep", text: "Label only", name: "Rest" },
+      { "@type": "HowToStep", text: "Orphan" },
+    ]);
+  });
+
+  it("round-trips a canonical list through the edge and back", () => {
+    const groups = [
+      makeInstructionGroup(undefined, ["One.", "Two."]),
+      makeInstructionGroup("Sauce", [
+        makeStep("Simmer.", { name: "Simmer", seconds: 330 }),
+        makeStep("Rest.", { name: "Rest" }),
+      ]),
+      makeInstructionGroup(undefined, ["Serve."]),
+    ];
+    expect(fromSchemaOrgInstructions(toSchemaOrgInstructions(groups))).toEqual(groups);
+
+    const wire = toSchemaOrgInstructions(groups);
+    expect(toSchemaOrgInstructions(fromSchemaOrgInstructions(wire))).toEqual(wire);
   });
 });
 
