@@ -21,7 +21,11 @@ import {
   nutrientValuesToSchema,
   recipeNormalizedNutrition,
 } from "@/lib/nutritionMath";
-import { draftRecipeDocument, recipeDocument } from "@/lib/recipeDocument";
+import {
+  applyRecipeDocument,
+  draftRecipeDocument,
+  recipeDocument,
+} from "@/lib/recipeDocument";
 import { useScalableRecipe } from "@/hooks/useScalableRecipe";
 import { useRecipeEditor } from "@/hooks/useRecipeEditor";
 import { useUndoableOp, type OpState } from "@/hooks/useUndoableOp";
@@ -77,6 +81,12 @@ export default function RecipeDetail({
   // it to the current location. Reading recipe.url instead made a saved URL edit
   // invisible until a refresh — the editor reopened on the pre-edit value.
   const [url, setUrl] = useState(recipe.url ?? "");
+  // Cook mode takes a row, and the `recipe` prop is a server-render snapshot:
+  // the row it opens with is the live document over the live row fields.
+  const cookingRecipe = useMemo(
+    () => ({ ...applyRecipeDocument(recipe, doc), status, url, source }),
+    [recipe, doc, status, url, source],
+  );
   const image = getFirstImage(schema.image);
   const prepTime = formatDuration(schema.prepTime);
   const cookTime = formatDuration(schema.cookTime);
@@ -329,7 +339,10 @@ export default function RecipeDetail({
                 <h1 className="text-3xl sm:text-4xl text-gray-900 leading-tight">
                   {schema.name}
                 </h1>
-                <CookingModeButton recipe={recipe} isLoggedIn={isLoggedIn} />
+                <CookingModeButton
+                  recipe={cookingRecipe}
+                  isLoggedIn={isLoggedIn}
+                />
               </>
             )}
           </div>

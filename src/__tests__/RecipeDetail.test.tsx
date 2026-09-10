@@ -348,6 +348,51 @@ describe("RecipeDetail", () => {
     expect(screen.queryByText("350 kcal")).toBeNull();
   });
 
+  // Cook mode takes a row, and the `recipe` prop never changes after the
+  // server render — so the row it opens with has to be built from the live
+  // document, or a saved edit is invisible in cook mode until a reload.
+  it("opens cook mode on the saved document, not the server-render row", async () => {
+    const recipe = makeRecipe({ name: "Server Name" });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            ...rescrapeSavedFixture,
+            schema: { ...rescrapeSavedFixture.schema, name: "Saved Name" },
+            status: "draft",
+            url: recipe.url,
+            source: recipe.source,
+          }),
+          { status: 200 },
+        ),
+      ),
+    );
+
+    render(<RecipeDetail recipe={recipe} isLoggedIn={true} />);
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /^edit$/i }));
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /^save$/i }));
+    });
+    await waitFor(() =>
+      expect(screen.getByRole("heading", { level: 1, name: "Saved Name" })).toBeTruthy(),
+    );
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /^cook$/i }));
+    });
+
+    // The page's own heading plus cook mode's.
+    await waitFor(() =>
+      expect(
+        screen.getAllByRole("heading", { level: 1, name: "Saved Name" }),
+      ).toHaveLength(2),
+    );
+    expect(screen.queryByText("Server Name")).toBeNull();
+  });
+
   it("renders ingredients list", () => {
     const { container } = render(
       <RecipeDetail
