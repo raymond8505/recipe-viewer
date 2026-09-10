@@ -1067,6 +1067,32 @@ describe("recipe ingredients hydration", () => {
     expect(data[0].ingredients[0].ingredients[0]).not.toHaveProperty("ingredient");
   });
 
+  // Card nutrition badges need each line's catalog row. One fetch covers the
+  // page: a per-recipe one would be 24 round trips on a full listing.
+  it("fetches the catalog once for the whole page when asked for it", async () => {
+    const otherRow = { ...structuredClone(storedRow), id: "r2" };
+    const r2Rows = [makeRecipeIngredientRow("r2", 0, { id: "ri-d" })];
+    makeSupabaseMock({
+      data: [structuredClone(storedRow), otherRow],
+      count: 2,
+    });
+    mockGetRecipeIngredientsByRecipeIds.mockResolvedValue(
+      new Map([
+        ["r1", rows],
+        ["r2", r2Rows],
+      ]),
+    );
+    mockGetCatalogForRows.mockResolvedValue(new Map([[cumin.id, cumin]]));
+
+    const { data } = await getRecipes({ catalog: true });
+
+    expect(mockGetCatalogForRows).toHaveBeenCalledTimes(1);
+    expect(mockGetCatalogForRows).toHaveBeenCalledWith([...rows, ...r2Rows]);
+    expect(data[0].ingredients[0].ingredients[0].ingredient).toBe(cumin);
+    // A line the catalog can't answer for is unmatched, not "not loaded".
+    expect(data[0].ingredients[0].ingredients[1].ingredient).toBeNull();
+  });
+
   it("deletes the blob's dead recipeIngredient key at the read exit", async () => {
     makeSupabaseMock({
       singleData: {

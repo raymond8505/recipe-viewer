@@ -75,6 +75,11 @@ const RECIPE_INGREDIENT_COLUMNS = selectColumns<RecipeIngredientRow>()([
 
 const PAGE_SIZE = 50;
 
+// An `.in()` list travels in the URL, and the gateway drops the connection
+// above ~16 KB without a status code (see the supabase skill). 100 uuids is
+// ~4 KB, well clear of it. Both id-batch readers below chunk on this.
+const ID_CHUNK = 100;
+
 // All access uses the service-role client: ingredients, recipe_ingredients,
 // and match_ingredients() are RLS-locked with no policies (db/migrations/0002+),
 // so the anon client cannot see them at all.
@@ -147,20 +152,30 @@ export async function getIngredients(opts?: {
 // Two queries instead of a PostgREST embed on purpose: selectColumns returns
 // a flat literal-typed column list, and an embedded-resource select string
 // would break its compile-time checking.
+//
+// A whole list page's lines resolve here at once, which is hundreds of ids —
+// hence the chunking. A failed chunk abandons the whole call rather than
+// returning what the other chunks found: every caller joins these rows onto
+// lines by id, and a half-catalog would silently render as "some of these
+// ingredients aren't in the catalog".
 export async function getIngredientsByIds(ids: string[]): Promise<IngredientRow[]> {
   if (ids.length === 0) return [];
   const supabase = getSupabaseAdminClient();
+  const rows: IngredientRow[] = [];
 
-  const { data, error } = await supabase
-    .from("ingredients")
-    .select(INGREDIENT_COLUMNS)
-    .in("id", ids);
+  for (let i = 0; i < ids.length; i += ID_CHUNK) {
+    const { data, error } = await supabase
+      .from("ingredients")
+      .select(INGREDIENT_COLUMNS)
+      .in("id", ids.slice(i, i + ID_CHUNK));
 
-  if (error) {
-    console.error("Supabase error fetching ingredients by ids:", error);
-    return [];
+    if (error) {
+      console.error("Supabase error fetching ingredients by ids:", error);
+      return [];
+    }
+    rows.push(...((data as unknown as IngredientRow[]) ?? []));
   }
-  return (data as unknown as IngredientRow[]) ?? [];
+  return rows;
 }
 
 export async function getIngredientById(id: string): Promise<IngredientRow | null> {
@@ -415,11 +430,6 @@ export async function getRecipeIngredients(
   return (data as unknown as RecipeIngredientRow[]) ?? [];
 }
 
-// A `.in()` list travels in the URL, and the gateway drops the connection
-// above ~16 KB without a status code (see the supabase skill). 100 uuids is
-// ~4 KB, well clear of it.
-const RECIPE_ID_CHUNK = 100;
-
 /**
  * Rows for several recipes in one round trip per chunk, keyed by recipe id —
  * for list pages, so a page of recipes costs one query rather than one per
@@ -433,11 +443,11 @@ export async function getRecipeIngredientsByRecipeIds(
   if (recipeIds.length === 0) return byRecipe;
   const supabase = getSupabaseAdminClient();
 
-  for (let i = 0; i < recipeIds.length; i += RECIPE_ID_CHUNK) {
+  for (let i = 0; i < recipeIds.length; i += ID_CHUNK) {
     const { data, error } = await supabase
       .from("recipe_ingredients")
       .select(RECIPE_INGREDIENT_COLUMNS)
-      .in("recipe_id", recipeIds.slice(i, i + RECIPE_ID_CHUNK));
+      .in("recipe_id", recipeIds.slice(i, i + ID_CHUNK));
 
     if (error) {
       console.error("Supabase error fetching recipe ingredients:", error);

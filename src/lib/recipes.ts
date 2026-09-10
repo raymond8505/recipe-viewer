@@ -142,8 +142,9 @@ function stripIngredientKey<T extends object>(schema: T): T {
  * fetched; the blob's dead `recipeIngredient` key is deleted so it can't leak
  * through a spread (the MCP server JSON-stringifies whole rows). With a
  * `catalog` map every line carries its catalog ingredient (`null` when
- * unmatched); without one the key is left off — list pages skip that round
- * trip, and nutrition math treats "not loaded" as "no data".
+ * unmatched); without one the key is left off, and nutrition math treats
+ * "not loaded" as "no data" — so a caller that skips that round trip gets
+ * rows that report no nutrition rather than an undercounted total.
  */
 function hydrate(
   row: RecipeRowColumns,
@@ -223,6 +224,13 @@ export async function getRecipes(opts?: {
   source?: string;
   status?: string;
   isLoggedIn?: boolean;
+  /**
+   * Join every line to its catalog ingredient, so the rows can compute
+   * nutrition. Costs one more query for the whole page. Off by default: a
+   * caller that only renders recipe text pays nothing, and a row without it
+   * reports no nutrition rather than a wrong one.
+   */
+  catalog?: boolean;
 }): Promise<RecipesResult> {
   const supabase = getSupabaseClient();
   const features = getFeatures(opts?.isLoggedIn ?? false);
@@ -277,11 +285,15 @@ export async function getRecipes(opts?: {
   // One round trip for the page rather than one per recipe, and not optional:
   // /api/recipes feeds MealSearch, whose rows go straight into a
   // ScalableRecipe when a recipe joins a meal, and that needs the line text.
-  // The catalog is skipped — nothing on a list page computes nutrition.
   const rowsByRecipe = await getRecipeIngredientsByRecipeIds(rows.map((r) => r.id));
+  // Likewise one round trip for the page, not one per recipe: the whole page's
+  // lines resolve against a single catalog fetch, deduped by ingredient id.
+  const catalog = opts?.catalog
+    ? await getCatalogForRows([...rowsByRecipe.values()].flat())
+    : undefined;
 
   return {
-    data: rows.map((row) => hydrate(row, rowsByRecipe.get(row.id) ?? [])),
+    data: rows.map((row) => hydrate(row, rowsByRecipe.get(row.id) ?? [], catalog)),
     count: count ?? 0,
   };
 }

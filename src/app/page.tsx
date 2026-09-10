@@ -60,6 +60,9 @@ export default async function Home({ searchParams }: HomeProps) {
       source: sourceParam,
       status: statusParam,
       isLoggedIn,
+      // The cards carry nutrition badges, which resolve off each line's
+      // catalog ingredient.
+      catalog: true,
     }),
     features.showStatusFilter
       ? getStatusCounts({ query, source: sourceParam, isLoggedIn })

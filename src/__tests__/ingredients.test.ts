@@ -511,6 +511,20 @@ describe("getIngredientsByIds", () => {
     expect(client.from).not.toHaveBeenCalled();
   });
 
+  // A whole list page's lines resolve here at once, so this list is as long as
+  // the recipe-id one and travels in the same capped URL.
+  it("splits a long id list into requests of 100 and concatenates them", async () => {
+    const ids = Array.from({ length: 250 }, (_, i) => `ing-${i}`);
+    const first = makeIngredient("ing-0", "cumin seed");
+    const last = makeIngredient("ing-200", "coriander seed");
+    useQueue([{ data: [first] }, { data: [] }, { data: [last] }]);
+
+    expect(await getIngredientsByIds(ids)).toEqual([first, last]);
+    expect(client.from).toHaveBeenCalledTimes(3);
+    expect(builderAt(0).in).toHaveBeenCalledWith("id", ids.slice(0, 100));
+    expect(builderAt(2).in).toHaveBeenCalledWith("id", ids.slice(200));
+  });
+
   it("returns an empty array on supabase error", async () => {
     const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
     useQueue([{ data: null, error: { message: "DB error" } }]);
@@ -520,6 +534,20 @@ describe("getIngredientsByIds", () => {
       "Supabase error fetching ingredients by ids:",
       expect.anything(),
     );
+    errorSpy.mockRestore();
+  });
+
+  // Callers join these rows onto lines by id, so half a catalog would read as
+  // "some of these ingredients aren't in the catalog" rather than as an error.
+  it("abandons the whole call when a later chunk errors", async () => {
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const ids = Array.from({ length: 150 }, (_, i) => `ing-${i}`);
+    useQueue([
+      { data: [makeIngredient("ing-0", "cumin seed")] },
+      { data: null, error: { message: "DB error" } },
+    ]);
+
+    expect(await getIngredientsByIds(ids)).toEqual([]);
     errorSpy.mockRestore();
   });
 });
