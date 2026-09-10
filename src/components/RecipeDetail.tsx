@@ -11,13 +11,16 @@ import {
   isOwnRecipe,
   toSchemaOrgJsonLd,
 } from "@/lib/format";
+import { ScalableRecipe, formatScaledIngredient } from "@/lib/ScalableRecipe";
 import {
-  ScalableRecipe,
-  formatScaledIngredient,
-  type NormalizedNutrition,
-} from "@/lib/ScalableRecipe";
-import { nutrientValuesToSchema } from "@/lib/nutritionMath";
-import { draftRecipeDocument, recipeDocument } from "@/lib/recipeDocument";
+  nutrientValuesToSchema,
+  recipeNormalizedNutrition,
+} from "@/lib/nutritionMath";
+import {
+  applyRecipeDocument,
+  draftRecipeDocument,
+  recipeDocument,
+} from "@/lib/recipeDocument";
 import { useScalableRecipe } from "@/hooks/useScalableRecipe";
 import { useRecipeEditor } from "@/hooks/useRecipeEditor";
 import { useUndoableOp, type OpState } from "@/hooks/useUndoableOp";
@@ -48,9 +51,6 @@ interface RecipeDetailProps {
   // Client components can't import @/env — t3-env throws on server-var
   // access in the browser — so the prop is the only wiring.
   maxImageBytes?: number;
-  // The recipe's normalized ingredient nutrition, computed server-side. When
-  // fully covered it's preferred over the schema's own nutrition fields.
-  normalizedNutrition?: NormalizedNutrition | null;
 }
 
 export default function RecipeDetail({
@@ -60,15 +60,12 @@ export default function RecipeDetail({
   // "curation ⊇ login" invariant holds even for callers unaware of the prop.
   canCurateNutrition = isLoggedIn,
   maxImageBytes = DEFAULT_MAX_IMAGE_BYTES,
-  normalizedNutrition,
 }: RecipeDetailProps) {
   // The recipe as one document — the stored schema, the ingredient groups and
   // the time columns — so a re-scrape, an undo and a save each replace the
-  // whole thing atomically. `initialDoc` is the server's version, kept for
-  // one comparison below.
-  const [initialDoc] = useState<RecipeDocument>(() => recipeDocument(recipe));
-  const [doc, setDoc] = useState(initialDoc);
-  const { schema } = doc;
+  // whole thing atomically.
+  const [doc, setDoc] = useState<RecipeDocument>(() => recipeDocument(recipe));
+  const { schema, ingredients } = doc;
   const [status, setStatus] = useState(recipe.status ?? "draft");
   // Tracked in state alongside `status` rather than read off the prop: editing
   // it must flip the Re-scrape button immediately (isOwnRecipe reads it), and
@@ -79,21 +76,31 @@ export default function RecipeDetail({
   // it to the current location. Reading recipe.url instead made a saved URL edit
   // invisible until a refresh — the editor reopened on the pre-edit value.
   const [url, setUrl] = useState(recipe.url ?? "");
+  // Cook mode takes a row, and the `recipe` prop is a server-render snapshot:
+  // the row it opens with is the live document over the live row fields.
+  const cookingRecipe = useMemo(
+    () => ({ ...applyRecipeDocument(recipe, doc), status, url, source }),
+    [recipe, doc, status, url, source],
+  );
   const image = getFirstImage(schema.image);
   const prepTime = formatDuration(schema.prepTime);
   const cookTime = formatDuration(schema.cookTime);
   const totalTime = formatDuration(schema.totalTime);
   const categories = toArray(schema.recipeCategory);
-  // The normalized total was computed against the server's document; a
-  // client-side edit/re-scrape swaps `doc`, invalidating it — so only apply it
-  // while the document is still the one it was derived from.
-  const normalizedForDoc = doc === initialDoc ? normalizedNutrition : undefined;
+  // Nutrition is a function of the lines the page holds right now, each with
+  // its catalog row: the /update echo is hydrated, so a save keeps the numbers,
+  // while a drafted or newly added line has no row and drops them until
+  // normalization lands.
+  const normalized = useMemo(
+    () => recipeNormalizedNutrition({ ingredients }),
+    [ingredients],
+  );
   const {
     recipe: scalable,
     scalePortionsTo,
     splitPortions,
     anchorIngredientAmount,
-  } = useScalableRecipe(doc, normalizedForDoc);
+  } = useScalableRecipe(doc, normalized);
   // JSON-LD serializes the base per-serving nutrition. A default-state
   // instance keeps it independent of the user's live scale/split (which
   // `scalable` tracks).
@@ -103,9 +110,9 @@ export default function RecipeDetail({
         doc.schema,
         doc.ingredients,
         undefined,
-        normalizedForDoc ?? null,
+        normalized,
       ).nutrition(),
-    [doc, normalizedForDoc],
+    [doc, normalized],
   );
 
   // Edit buffer + the two undoable schema operations (re-scrape / regen image)
@@ -332,9 +339,8 @@ export default function RecipeDetail({
                   {schema.name}
                 </h1>
                 <CookingModeButton
-                  recipe={recipe}
+                  recipe={cookingRecipe}
                   isLoggedIn={isLoggedIn}
-                  normalizedNutrition={normalizedNutrition}
                 />
               </>
             )}

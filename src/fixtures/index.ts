@@ -7,6 +7,7 @@ export {
   makeMatchedIngredient,
   makeIngredientGroup,
   makeIngredientLines,
+  makeNutritionLines,
   matchedLinesScenario,
 } from "./ingredients";
 export { makeStep, makeInstructionGroup, makeSteps } from "./instructions";

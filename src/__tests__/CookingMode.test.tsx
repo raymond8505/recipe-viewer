@@ -2,7 +2,14 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import CookingMode from "@/components/CookingMode";
 import type { RecipeInstructionGroup, RecipeRow, SchemaRecipe } from "@/types/recipe";
-import { makeIngredientLines, makeInstructionGroup, makeStep, makeSteps } from "@/fixtures";
+import {
+  makeIngredientLines,
+  makeInstructionGroup,
+  makeNutritionLines,
+  makeRecipe as makeRecipeRow,
+  makeStep,
+  makeSteps,
+} from "@/fixtures";
 
 // The timer store is stubbed; `addTimer` is observable so the seeding rule
 // (a step with both a label and a duration) can be asserted.
@@ -267,18 +274,15 @@ describe("CookingMode — cooking notes", () => {
 });
 
 describe("CookingMode — nutrition panel", () => {
-  const nutritious = () => makeRecipe({ recipeYield: "4 servings" });
-
-  it("shows the catalog nutrition threaded in for the primary recipe", () => {
+  it("shows the catalog nutrition of the primary recipe's own lines", () => {
     // 1400 kcal over the four servings → 350 per serving.
     render(
       <CookingMode
-        recipe={nutritious()}
+        recipe={makeRecipeRow("1", "Test Recipe", {
+          ingredients: makeNutritionLines({ calories_kcal: 1400 }),
+          metadata: { schema: { name: "Test Recipe", recipeYield: "4 servings" } },
+        })}
         onClose={vi.fn()}
-        normalizedNutrition={{
-          total: { calories_kcal: 1400 },
-          fullyCovered: true,
-        }}
       />,
     );
     expect(screen.getByText("350 kcal")).toBeTruthy();

@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import {
+  applyRecipeDocument,
   documentFromSchemaOrg,
   draftRecipeDocument,
   recipeDocument,
@@ -43,6 +44,49 @@ describe("recipeDocument", () => {
     expect(doc.schema).toBe(row.metadata.schema);
     expect(doc.ingredients).toBe(row.ingredients);
     expect(doc.instructions).toBe(row.instructions);
+  });
+});
+
+describe("applyRecipeDocument", () => {
+  it("lays the document's content over the row and keeps the row's other fields", () => {
+    const row = makeRecipe("recipe-1", "Cake", {
+      status: "published",
+      ingredients: makeIngredientLines(["1 egg"]),
+      instructions: makeSteps(["Whisk."]),
+      prep_time: 600,
+    });
+    const doc = draftRecipeDocument(
+      { name: "Saved Cake", cookTime: "PT20M" },
+      [{ ingredients: [{ raw_text: "2 eggs" }] }],
+      makeSteps(["Bake."]),
+    );
+
+    const applied = applyRecipeDocument(row, doc);
+
+    expect(applied).toMatchObject({
+      id: "recipe-1",
+      status: "published",
+      url: row.url,
+      prep_time: null,
+      cook_time: 1200,
+      total_time: null,
+    });
+    expect(applied.metadata.schema).toBe(doc.schema);
+    expect(applied.ingredients).toBe(doc.ingredients);
+    // Every column-backed field comes from the document, instructions included
+    // — the row's own steps are the pre-edit ones and must not survive.
+    expect(applied.instructions).toBe(doc.instructions);
+  });
+
+  it("round-trips with recipeDocument", () => {
+    const row = makeRecipe("recipe-1", "Cake", {
+      ingredients: makeIngredientLines(["1 egg"]),
+      instructions: makeSteps(["Beat."]),
+      cook_time: 1800,
+    });
+    expect(recipeDocument(applyRecipeDocument(row, recipeDocument(row)))).toEqual(
+      recipeDocument(row),
+    );
   });
 });
 
