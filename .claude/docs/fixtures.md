@@ -9,7 +9,7 @@ or shaped goes here. Files are named `src/fixtures/<topic>.ts` with a barrel at 
 
 | Module | Exports |
 | --- | --- |
-| `recipes` | `recipeFixtures` (5 real production recipes with Supabase image URLs; `[2]` carries three ingredient groups), `makeRecipe(id, name, overrides?)` (`ingredients: []` by default) |
+| `recipes` | `recipeFixtures` (5 real production recipes with Supabase image URLs; `[2]` carries three ingredient groups), `makeRecipe(id, name, overrides?)` (`ingredients: []` by default), `makeNutritionRecipeRow(id, name, total, overrides?)` (a row that resolves nutrition) |
 | `ingredients` | `ingredientFixtures` (real USDA per-100g figures), `makeIngredient` (catalog row), `makeRecipeIngredient(text, overrides?)` (an entity — id `ri-<slug of text>`, parse fields from the deterministic parser), `makeMatchedIngredient(text, catalogRow, overrides?)`, `makeIngredientGroup(name \| undefined, items)`, `makeIngredientLines(texts)` (one nameless group), `makeNutritionLines(total, text?)` (one matched line contributing exactly the whole-recipe `total`), `makeRecipeIngredientRow(recipeId, n, overrides?)` (a table row, for repo tests), `matchedLinesScenario` |
 | `rescrape` | `rescrapeFixture: SchemaOrgRecipe` (what the webhook returns), `rescrapeResponseFixture` (what `/rescrape` hands the client: `schema` + input groups), `rescrapeSavedFixture` (what `/update` echoes: `schema` + hydrated groups) |
 | `nutrition` | `fullSchemaNutrition` (all ten Schema.org nutrients), `sparseSchemaNutrition`, their parsed forms `fullNutrientValues` / `sparseNutrientValues`, and the whole-recipe catalog totals `fullCatalogTotal` / `sparseCatalogTotal` (the same figures × 4 servings) |

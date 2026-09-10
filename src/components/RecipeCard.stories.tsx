@@ -1,6 +1,7 @@
 import type { Meta, StoryObj } from "@storybook/nextjs-vite";
 import RecipeCard from "./RecipeCard";
-import { recipeFixtures, makeRecipe } from "@/fixtures";
+import { recipeNutritionBadges } from "./RecipeNutritionBadge";
+import { recipeFixtures, makeRecipe, makeNutritionRecipeRow } from "@/fixtures";
 
 const baseRecipe = recipeFixtures[2]; // Thai Curry Chicken Meatballs
 
@@ -55,4 +56,21 @@ export const NoTimeOrCategory: Story = {
 
 export const WithStatusBadge: Story = {
   args: { recipe: { ...baseRecipe, status: "draft" }, showStatusBadge: true },
+};
+
+/**
+ * The footer with a caller's badges in it — here the calories and protein the
+ * recipe list passes. Note the wrap: at a card's width, time + category + two
+ * nutrients is a second row.
+ */
+export const WithNutritionBadges: Story = {
+  args: {
+    recipe: baseRecipe,
+    badges: recipeNutritionBadges(
+      makeNutritionRecipeRow("thai-curry", "Thai Curry Chicken Meatballs", {
+        calories_kcal: 1400,
+        protein_g: 96,
+      }),
+    ),
+  },
 };

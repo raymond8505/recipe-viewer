@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import type { RecipeRow } from "@/types/recipe";
 import { formatDuration, getFirstImage, toArray } from "@/lib/format";
 import {
@@ -20,11 +20,18 @@ import { ClockIcon } from "@/components/icons";
 interface RecipeCardProps {
   recipe: RecipeRow;
   showStatusBadge?: boolean;
+  /**
+   * Extra footer badges, rendered in order after the category. Which badges a
+   * card carries — and what each of them says — is the caller's decision; the
+   * card only finds them a place to sit.
+   */
+  badges?: ReactNode[];
 }
 
 export default function RecipeCard({
   recipe,
   showStatusBadge,
+  badges,
 }: RecipeCardProps) {
   const {
     metadata: { schema },
@@ -72,7 +79,9 @@ export default function RecipeCard({
             </CardDescription>
           )}
 
-          <CardFooter className="mt-auto flex items-center gap-3 text-xs text-muted-foreground p-0 pt-2 border-t-0 bg-transparent">
+          {/* Wraps: time, category and the caller's badges are four or more
+              items at the ~320px width a card column renders at. */}
+          <CardFooter className="mt-auto flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground p-0 pt-2 border-t-0 bg-transparent">
             {totalTime && (
               <span className="flex items-center gap-1">
                 <ClockIcon />
@@ -80,6 +89,7 @@ export default function RecipeCard({
               </span>
             )}
             {categories[0] && <RecipeCategoryBadge category={categories[0]} />}
+            {badges}
           </CardFooter>
         </CardContent>
       </Card>
