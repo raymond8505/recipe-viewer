@@ -24,9 +24,9 @@ export interface UseScalableRecipe {
  * carried-over numbers meaningless.
  *
  * `normalized` (the recipe's normalized ingredient nutrition) is baked into the
- * instance, whose `nutrition()` decides whether to serve it or the schema
- * fields. Callers pass it only for the original, unedited document — see
- * RecipeDetail.
+ * instance, whose `nutrition()` decides whether to serve it. Callers derive it
+ * from `doc.ingredients`, memoized on the groups — see RecipeDetail — so a new
+ * value only ever arrives with a new document.
  */
 export function useScalableRecipe(
   doc: RecipeDocument,
@@ -42,8 +42,8 @@ export function useScalableRecipe(
         ? prev
         : new ScalableRecipe(doc.schema, doc.ingredients, undefined, normalized),
     );
-    // `normalized` is derived from the document server-side; rebuilding on the
-    // document's identity is sufficient (and avoids churn from a fresh object
+    // `normalized` is derived from the document's own groups, so rebuilding on
+    // the document's identity covers it (and avoids churn from a fresh object
     // each render).
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [doc]);
