@@ -12,9 +12,17 @@ interface RecipeCategoryBadgeProps {
  * Purpose-built category pill wrapping shadcn `Badge` — carries the brand
  * accent colors. (Badge's base already supplies the padding/size/weight.)
  */
-export function RecipeCategoryBadge({ category, className }: RecipeCategoryBadgeProps) {
+export function RecipeCategoryBadge({
+  category,
+  className,
+}: RecipeCategoryBadgeProps) {
   return (
-    <Badge className={cn("rounded-full bg-brand-subtle text-brand", className)}>
+    <Badge
+      className={cn(
+        "rounded-full bg-muted text-muted-foreground font-medium",
+        className,
+      )}
+    >
       {category}
     </Badge>
   );
