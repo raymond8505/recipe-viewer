@@ -25,6 +25,12 @@ import { TOOL } from "./toolNames";
 export const RECIPE_INGREDIENT_ON_UPDATE_ERROR = `schema.recipeIngredient is not accepted on update — the call FAILS if you send one, it is not ignored. Ingredients go through \`ingredients\`, which REPLACES the whole list: send every line back as groups of { id?, raw_text }, keeping the id ${TOOL.get_recipe} returned for each line so it keeps its catalog match (rewording the text is fine), and leave id off only for a genuinely new line.`;
 
 /**
+ * The instructions twin of the rule above: the same words in the
+ * update_recipe description, on the schema field, and in the thrown error.
+ */
+export const RECIPE_INSTRUCTIONS_ON_UPDATE_ERROR = `schema.recipeInstructions is not accepted on update — the call FAILS if you send one, it is not ignored. Instructions go through \`instructions\`, which REPLACES the whole list: ordered groups of { name?, steps }, each step { text, name?, seconds? } — omit a group's name for an unsectioned run of steps; a step's name is its cook-mode timer label and seconds (whole seconds) is the timer's duration, which requires the name.`;
+
+/**
  * "a, b, or c". Hand-rolled rather than Intl.ListFormat, whose output varies
  * with the runtime's ICU build — these strings are asserted in tests and read
  * by agents, so they must be identical everywhere.

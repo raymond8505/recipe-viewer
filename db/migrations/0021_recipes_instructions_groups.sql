@@ -1,0 +1,38 @@
+-- 0021_recipes_instructions_groups
+--
+-- Give `recipes.instructions` (added in 0016) its own shape: ordered groups of
+-- steps, the app's own type, in place of a mirror of the Schema.org array.
+-- Applied via the Supabase MCP `apply_migration` tool (checked-in record only;
+-- see 0002).
+--
+--   [ { "steps": [ { "text": "Boil water." } ] },
+--     { "name": "Sauce", "steps": [
+--         { "text": "Simmer.", "name": "Simmer", "seconds": 330 } ] } ]
+--
+-- A group's `name` key is ABSENT for the nameless group, as in
+-- `recipes.ingredients`. A step's `name` is its cook-mode timer label and
+-- `seconds` (whole seconds, like prep_time) is the timer's duration; `seconds`
+-- only ever accompanies a `name` — a timer needs a label, a label may stand
+-- alone. Adjacent nameless groups never occur: canonical form merges them.
+--
+-- Why groups rather than the HowToStep / HowToSection array 0016 described: the
+-- same reasoning as ingredients. Schema.org is the wire format the outside
+-- world speaks and is produced only at the edges (JSON-LD, the image webhook,
+-- the window API) by `toSchemaOrgInstructions`; internally the editor and
+-- cooking mode already think in groups, and a flat array whose elements may or
+-- may not be sections is a shape every reader had to branch on. Unlike
+-- ingredients a step has no identity and no other table refers to it, so the
+-- stored shape IS the app shape: no id array, no second table, no hydrate.
+--
+-- This migration is DDL only — the column comment. The data is rewritten by
+-- `yarn sync:instruction-columns` (scripts/sync-instruction-columns.ts), not
+-- SQL, because the translation has to read the markdown strings a few blobs
+-- hold and tolerate every shape scrapers produce (bare strings, objects with no
+-- @type, sections whose itemListElement is a single object or missing) — the
+-- same `fromSchemaOrgInstructions` the app runs on inbound Schema.org. The
+-- script reads `metadata.schema.recipeInstructions`, the last reader of that
+-- key; after the build that reads the column is deployed the key is a dead
+-- pre-0021 artifact, deleted on read and stripped on write.
+
+comment on column public.recipes.instructions is
+  'Ordered instruction groups: [{ name?, steps: [{ text, name?, seconds? }] }]. A group''s name is absent for the nameless group; a step''s name is its cook-mode timer label and seconds (whole seconds) only ever accompanies a name. Source of truth — metadata.schema.recipeInstructions is a dead pre-0021 artifact the app deletes on read and strips on write.';

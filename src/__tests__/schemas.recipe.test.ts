@@ -3,8 +3,63 @@ import { describe, it, expect } from "vitest";
 import {
   recipeCreateInputSchema,
   recipeImageUploadInputSchema,
+  recipeInstructionsInputSchema,
+  schemaOrgInstructionsInputSchema,
   schemaRecipeSchema,
 } from "@/lib/schemas/recipe";
+
+describe("recipeInstructionsInputSchema", () => {
+  it("accepts groups of steps with an optional name and a labelled timer", () => {
+    const result = recipeInstructionsInputSchema.safeParse([
+      { steps: [{ text: "Chop." }] },
+      { name: "Sauce", steps: [{ text: "Simmer.", name: "Simmer", seconds: 330 }] },
+    ]);
+    expect(result.success).toBe(true);
+  });
+
+  it("rejects seconds without a name, naming the seconds field", () => {
+    const result = recipeInstructionsInputSchema.safeParse([
+      { steps: [{ text: "Simmer.", seconds: 330 }] },
+    ]);
+    expect(result.success).toBe(false);
+    expect(result.error?.issues[0]?.path).toEqual([0, "steps", 0, "seconds"]);
+  });
+
+  it("rejects a zero or fractional duration and a blank step", () => {
+    expect(
+      recipeInstructionsInputSchema.safeParse([{ steps: [{ text: "x", name: "T", seconds: 0 }] }])
+        .success,
+    ).toBe(false);
+    expect(
+      recipeInstructionsInputSchema.safeParse([{ steps: [{ text: "x", name: "T", seconds: 1.5 }] }])
+        .success,
+    ).toBe(false);
+    expect(recipeInstructionsInputSchema.safeParse([{ steps: [{ text: "  " }] }]).success).toBe(
+      false,
+    );
+  });
+});
+
+describe("schemaOrgInstructionsInputSchema", () => {
+  it("accepts a markdown string, a single item, and a mixed array", () => {
+    expect(schemaOrgInstructionsInputSchema.safeParse("- Mix.\n- Bake.").success).toBe(true);
+    expect(
+      schemaOrgInstructionsInputSchema.safeParse({ "@type": "HowToStep", text: "Stir." }).success,
+    ).toBe(true);
+    expect(
+      schemaOrgInstructionsInputSchema.safeParse([
+        "Chop.",
+        { text: "Fry." },
+        { "@type": "HowToSection", name: "Lone", itemListElement: { text: "Only." } },
+        { "@type": "HowToSection", name: "Bare" },
+      ]).success,
+    ).toBe(true);
+  });
+
+  it("rejects an object that is neither a step nor a section", () => {
+    expect(schemaOrgInstructionsInputSchema.safeParse([{ name: "no text" }]).success).toBe(false);
+  });
+});
 
 describe("recipeImageUploadInputSchema", () => {
   it("accepts an id and a valid imageUrl", () => {

@@ -99,22 +99,25 @@ export interface RecipeRowColumns {
   cook_time: number | null;
   total_time: number | null;
   ingredients: StoredIngredientGroup[];
+  /** The stored shape IS the app shape — see RecipeInstructionGroup. */
+  instructions: RecipeInstructionGroup[];
   metadata: { schema: SchemaRecipe };
 }
 
 /**
  * A recipe's content as the app carries it, independent of the row it came
- * from: the stored schema, the ingredient groups, and the three column-backed
- * times in seconds. Held together so an operation that replaces the whole
- * recipe (a re-scrape, an undo) does so atomically, and so the outbound
- * Schema.org edges (`toSchemaOrgRecipe` / `toSchemaOrgJsonLd`) read every
- * column-backed field from its column rather than from the blob's copy.
- * Built by `recipeDocument(row)` / `draftRecipeDocument(...)` in
+ * from: the stored schema, the ingredient groups, the instruction groups, and
+ * the three column-backed times in seconds. Held together so an operation that
+ * replaces the whole recipe (a re-scrape, an undo) does so atomically, and so
+ * the outbound Schema.org edges (`toSchemaOrgRecipe` / `toSchemaOrgJsonLd`)
+ * read every column-backed field from its column rather than from the blob's
+ * copy. Built by `recipeDocument(row)` / `draftRecipeDocument(...)` in
  * src/lib/recipeDocument.ts.
  */
 export interface RecipeDocument {
   schema: SchemaRecipe;
   ingredients: RecipeIngredientGroup[];
+  instructions: RecipeInstructionGroup[];
   prep_time: number | null;
   cook_time: number | null;
   total_time: number | null;
@@ -122,10 +125,14 @@ export interface RecipeDocument {
 
 /**
  * A Schema.org/Recipe as served to the outside world: the stored fields plus
- * `recipeIngredient` flattened to plain strings. Produced only at the edges
- * (JSON-LD, webhooks, the window API); nothing internal reads it.
+ * `recipeIngredient` flattened to plain strings and `recipeInstructions` as
+ * the HowTo array. Produced only at the edges (JSON-LD, webhooks, the window
+ * API); nothing internal reads it.
  */
-export type SchemaOrgRecipe = SchemaRecipe & { recipeIngredient?: string[] };
+export type SchemaOrgRecipe = SchemaRecipe & {
+  recipeIngredient?: string[];
+  recipeInstructions?: Array<HowToStep | HowToSection>;
+};
 
 /**
  * A recipe as the app passes it around: the row with its `ingredients` column
@@ -138,6 +145,39 @@ export interface RecipeRow extends Omit<RecipeRowColumns, "ingredients"> {
   ingredients: RecipeIngredientGroup[];
 }
 
+/**
+ * One instruction step. `name` is the cook-mode timer label and `seconds` the
+ * timer's duration in whole seconds; `seconds` only ever accompanies a `name`
+ * — a timer needs a label, a label may stand alone. `canonicalizeInstructions`
+ * (src/lib/recipeInstructions.ts) enforces that at every write.
+ */
+export interface RecipeStep {
+  text: string;
+  name?: string;
+  seconds?: number;
+}
+
+/**
+ * The unit of a recipe's instructions: a run of steps under an optional
+ * heading. `name` is absent for a nameless group, as on RecipeIngredientGroup.
+ * Order between groups is semantic — steps are sequential — so nameless groups
+ * may sit on either side of a named one (never beside each other: canonical
+ * form merges those).
+ *
+ * This is `recipes.instructions` as stored AND as the app carries it: a step
+ * has no identity and no other table refers to one, so there is nothing to
+ * hydrate.
+ */
+export interface RecipeInstructionGroup {
+  name?: string;
+  steps: RecipeStep[];
+}
+
+// Schema.org HowTo types — the wire form of a recipe's instructions. Produced
+// by `toSchemaOrgInstructions` at the outbound edges and consumed by
+// `fromSchemaOrgInstructions` at the inbound ones (src/lib/format.ts); nothing
+// internal carries them.
+
 export interface HowToStep {
   "@type"?: "HowToStep" | string;
   text: string;
@@ -145,11 +185,26 @@ export interface HowToStep {
   timeRequired?: string;
 }
 
+/** A section as the app emits it. */
 export interface HowToSection {
   "@type": "HowToSection";
   name: string;
   itemListElement: HowToStep[];
 }
+
+/** A section as a scraper actually sends it: `itemListElement` may be one step or missing. Inbound only. */
+export interface SchemaOrgHowToSection extends Omit<HowToSection, "itemListElement"> {
+  itemListElement?: HowToStep | HowToStep[];
+}
+
+export type SchemaOrgInstructionItem = string | HowToStep | SchemaOrgHowToSection;
+
+/**
+ * `recipeInstructions` as it arrives from outside: the array, a single item,
+ * or a markdown string (a bare string at the top level is markdown; inside the
+ * array it is one step's text).
+ */
+export type SchemaOrgInstructions = SchemaOrgInstructionItem | SchemaOrgInstructionItem[];
 
 /**
  * Schema.org/QuantitativeValue — the structured form of `recipeYield`.
@@ -183,12 +238,12 @@ export interface SchemaRecipe {
   recipeYield?: string | string[] | QuantitativeValue;
   recipeCuisine?: string;
   recipeCategory?: string | string[];
-  // No `recipeIngredient`: a recipe's ingredients are `RecipeRow.ingredients`
-  // (RecipeIngredientGroup[]), and the Schema.org list exists only on
-  // SchemaOrgRecipe, at the edges. The key still sits in the stored blob of
-  // every pre-0016 row, frozen at backfill time; the repo layer deletes it on
-  // read and strips it on write so nothing above it can see it.
-  recipeInstructions?: Array<HowToStep | HowToSection>;
+  // No `recipeIngredient` and no `recipeInstructions`: a recipe's ingredients
+  // are `RecipeRow.ingredients` (RecipeIngredientGroup[]) and its instructions
+  // `RecipeRow.instructions` (RecipeInstructionGroup[]); the Schema.org forms
+  // exist only on SchemaOrgRecipe, at the edges. Both keys still sit in the
+  // stored blob of older rows, frozen at backfill time; the repo layer deletes
+  // them on read and strips them on write so nothing above it can see them.
   keywords?: string;
   nutrition?: {
     "@type"?: "NutritionInformation";

@@ -2,7 +2,7 @@ import { describe, it, expect, vi, afterEach, beforeEach } from "vitest";
 import { render, cleanup } from "@testing-library/react";
 import WindowApiProvider from "@/components/WindowApiProvider";
 import { notifyRecipeUpdate, registerCookingModeRecipe, unregisterCookingModeRecipe } from "@/lib/windowApi";
-import { makeIngredientLines } from "@/fixtures";
+import { makeIngredientLines, makeInstructionGroup, makeStep, makeSteps } from "@/fixtures";
 import type { RecipeDocument } from "@/types/recipe";
 import { useRouter } from "next/navigation";
 
@@ -126,15 +126,26 @@ describe("WindowApiProvider", () => {
     const mockDoc: RecipeDocument = {
       schema: { name: "Spaghetti", "@type": "Recipe" },
       ingredients: makeIngredientLines(["200 g spaghetti"]),
+      instructions: makeSteps(["Boil."]),
       prep_time: null,
       cook_time: 600,
       total_time: null,
     };
+    const updatedInstructions = [
+      {
+        "@type": "HowToSection" as const,
+        name: "Sauce",
+        itemListElement: [
+          { "@type": "HowToStep", text: "Whisk.", name: "Whisk", timeRequired: "PT1M" },
+        ],
+      },
+    ];
     const updatedRecipe = {
       name: "Carbonara",
       "@type": "Recipe" as const,
       cookTime: "PT20M",
       recipeIngredient: ["1 egg", { name: "50 g guanciale", group: "Sauce" }],
+      recipeInstructions: updatedInstructions,
     };
 
     it("getRecipeViewerRecipe returns null when cooking mode is not active", () => {
@@ -145,12 +156,13 @@ describe("WindowApiProvider", () => {
     it("getRecipeViewerRecipe returns the registered recipe as Schema.org while cooking mode is active", () => {
       render(<WindowApiProvider />);
       registerCookingModeRecipe(mockDoc, vi.fn());
-      // Times come from the document's columns, ingredients from its groups.
+      // Times come from the document's columns, ingredients and instructions from its groups.
       expect(window.recipeTools.getRecipeViewerRecipe()).toEqual({
         name: "Spaghetti",
         "@type": "Recipe",
         cookTime: "PT10M",
         recipeIngredient: ["200 g spaghetti"],
+        recipeInstructions: [{ "@type": "HowToStep", text: "Boil." }],
       });
     });
 
@@ -163,10 +175,11 @@ describe("WindowApiProvider", () => {
         "@type": "Recipe",
         cookTime: "PT20M",
         recipeIngredient: ["1 egg", "50 g guanciale"],
+        recipeInstructions: updatedInstructions,
       });
     });
 
-    it("setRecipeViewerRecipe hands the registered setter the recipe as a document, lines drafted, times parsed", () => {
+    it("setRecipeViewerRecipe hands the registered setter the recipe as a document, lines drafted, steps grouped, times parsed", () => {
       render(<WindowApiProvider />);
       const setter = vi.fn();
       registerCookingModeRecipe(mockDoc, setter);
@@ -181,6 +194,9 @@ describe("WindowApiProvider", () => {
         unit: "g",
         match_status: "unmatched",
       });
+      expect(doc.instructions).toEqual([
+        makeInstructionGroup("Sauce", [makeStep("Whisk.", { name: "Whisk", seconds: 60 })]),
+      ]);
     });
 
     it("getRecipeViewerRecipe returns null after unregisterCookingModeRecipe", () => {

@@ -1,18 +1,23 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import CookingMode from "@/components/CookingMode";
-import type { RecipeRow, SchemaRecipe } from "@/types/recipe";
+import type { RecipeInstructionGroup, RecipeRow, SchemaRecipe } from "@/types/recipe";
 import {
   makeIngredientLines,
+  makeInstructionGroup,
   makeNutritionLines,
   makeRecipe as makeRecipeRow,
+  makeStep,
+  makeSteps,
 } from "@/fixtures";
 
-// useTimers is irrelevant to instruction completion; stub it out
+// The timer store is stubbed; `addTimer` is observable so the seeding rule
+// (a step with both a label and a duration) can be asserted.
+const mockAddTimer = vi.hoisted(() => vi.fn(() => "timer-id"));
 vi.mock("@/hooks/useTimers", () => ({
   useTimers: () => ({
     timers: [],
-    addTimer: vi.fn(),
+    addTimer: mockAddTimer,
     editTimer: vi.fn(),
     togglePause: vi.fn(),
     resetTimer: vi.fn(),
@@ -26,12 +31,14 @@ vi.mock("@/hooks/useTimers", () => ({
 function makeRecipe(
   schema: Partial<SchemaRecipe> = {},
   ingredients: string[] = [],
+  instructions: RecipeInstructionGroup[] = [],
 ): RecipeRow {
   return {
     id: "1",
     url: "https://example.com",
     source: "example.com",
     ingredients: makeIngredientLines(ingredients),
+    instructions,
     metadata: { schema: { name: "Test Recipe", ...schema } },
   };
 }
@@ -45,22 +52,15 @@ beforeEach(() => {
 });
 
 describe("CookingMode — instruction completion", () => {
-  it("renders flat instruction steps", () => {
-    const recipe = makeRecipe({
-      recipeInstructions: [
-        { text: "Boil water" },
-        { text: "Add pasta" },
-      ],
-    });
+  it("renders a nameless run of steps", () => {
+    const recipe = makeRecipe({}, [], makeSteps(["Boil water", "Add pasta"]));
     render(<CookingMode recipe={recipe} onClose={vi.fn()} />);
     expect(screen.getAllByText("Boil water").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Add pasta").length).toBeGreaterThan(0);
   });
 
-  it("marks a flat step as complete when tapped", () => {
-    const recipe = makeRecipe({
-      recipeInstructions: [{ text: "Boil water" }, { text: "Add pasta" }],
-    });
+  it("marks a step as complete when tapped", () => {
+    const recipe = makeRecipe({}, [], makeSteps(["Boil water", "Add pasta"]));
     render(<CookingMode recipe={recipe} onClose={vi.fn()} />);
 
     const step = screen.getAllByRole("button", { name: /step 1/i })[0];
@@ -70,9 +70,7 @@ describe("CookingMode — instruction completion", () => {
   });
 
   it("untoggling a step marks it incomplete again", () => {
-    const recipe = makeRecipe({
-      recipeInstructions: [{ text: "Boil water" }],
-    });
+    const recipe = makeRecipe({}, [], makeSteps(["Boil water"]));
     render(<CookingMode recipe={recipe} onClose={vi.fn()} />);
 
     const step = screen.getAllByRole("button", { name: /step 1/i })[0];
@@ -82,48 +80,51 @@ describe("CookingMode — instruction completion", () => {
     expect(step.getAttribute("aria-pressed")).toBe("false");
   });
 
-  it("renders sectioned instructions", () => {
-    const recipe = makeRecipe({
-      recipeInstructions: [
-        {
-          "@type": "HowToSection",
-          name: "Prep",
-          itemListElement: [{ text: "Chop onions" }],
-        },
-      ],
-    });
+  it("renders a named group under its heading", () => {
+    const recipe = makeRecipe({}, [], [makeInstructionGroup("Prep", ["Chop onions"])]);
     render(<CookingMode recipe={recipe} onClose={vi.fn()} />);
+    expect(screen.getAllByText("Prep").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Chop onions").length).toBeGreaterThan(0);
   });
 
-  it("marks a sectioned step complete when tapped", () => {
-    const recipe = makeRecipe({
-      recipeInstructions: [
-        {
-          "@type": "HowToSection",
-          name: "Prep",
-          itemListElement: [{ text: "Chop onions" }, { text: "Dice tomatoes" }],
-        },
-      ],
-    });
+  // Completion is keyed per group, so the first step of each group is its own
+  // "step 1" and toggling one leaves the other alone.
+  it("tracks completion per group, not per step number", () => {
+    const recipe = makeRecipe({}, [], [
+      makeInstructionGroup(undefined, ["Preheat"]),
+      makeInstructionGroup("Prep", ["Chop onions", "Dice tomatoes"]),
+    ]);
     render(<CookingMode recipe={recipe} onClose={vi.fn()} />);
 
-    const step = screen.getAllByRole("button", { name: /step 1/i })[0];
-    expect(step.getAttribute("aria-pressed")).toBe("false");
-    fireEvent.click(step);
-    expect(step.getAttribute("aria-pressed")).toBe("true");
+    const [first, second] = screen.getAllByRole("button", { name: /step 1/i });
+    fireEvent.click(second);
+    expect(second.getAttribute("aria-pressed")).toBe("true");
+    expect(first.getAttribute("aria-pressed")).toBe("false");
   });
 
   it("completing one step does not affect other steps", () => {
-    const recipe = makeRecipe({
-      recipeInstructions: [{ text: "Step one" }, { text: "Step two" }],
-    });
+    const recipe = makeRecipe({}, [], makeSteps(["Step one", "Step two"]));
     render(<CookingMode recipe={recipe} onClose={vi.fn()} />);
 
     const steps = screen.getAllByRole("button", { name: /step \d/i });
     fireEvent.click(steps[0]);
     expect(steps[0].getAttribute("aria-pressed")).toBe("true");
     expect(steps[1].getAttribute("aria-pressed")).toBe("false");
+  });
+});
+
+describe("CookingMode — timers seeded from steps", () => {
+  beforeEach(() => mockAddTimer.mockClear());
+
+  it("seeds one timer per step carrying both a label and a duration", () => {
+    const recipe = makeRecipe({}, [], [
+      makeInstructionGroup(undefined, [makeStep("Rest.", { name: "Rest" }), "Plain."]),
+      makeInstructionGroup("Sauce", [makeStep("Simmer.", { name: "Simmer", seconds: 330 })]),
+    ]);
+    render(<CookingMode recipe={recipe} onClose={vi.fn()} />);
+
+    expect(mockAddTimer).toHaveBeenCalledTimes(1);
+    expect(mockAddTimer).toHaveBeenCalledWith("Simmer", 330, true);
   });
 });
 

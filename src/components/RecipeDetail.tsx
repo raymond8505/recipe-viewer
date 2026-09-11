@@ -2,12 +2,7 @@
 
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import Image from "next/image";
-import type {
-  RecipeRow,
-  HowToStep,
-  HowToSection,
-  RecipeDocument,
-} from "@/types/recipe";
+import type { RecipeRow, RecipeDocument } from "@/types/recipe";
 import {
   formatDuration,
   formatDate,
@@ -132,11 +127,13 @@ export default function RecipeDetail({
         method: "POST",
       });
       if (!res.ok) throw new Error();
-      const { schema: updated, ingredients } = await res.json();
-      if (!updated || !Array.isArray(ingredients)) throw new Error();
+      const { schema: updated, ingredients, instructions } = await res.json();
+      if (!updated || !Array.isArray(ingredients) || !Array.isArray(instructions)) {
+        throw new Error();
+      }
       // The scraped lines are text only until the review is saved; drafting
       // them gives the page real ingredients to render and scale meanwhile.
-      return draftRecipeDocument(updated, ingredients);
+      return draftRecipeDocument(updated, ingredients, instructions);
     }, [recipe.id]),
   );
   const regenImage = useUndoableOp<RecipeDocument>(
@@ -246,25 +243,27 @@ export default function RecipeDetail({
 
   const handleEditSave = () =>
     editor.runSave(async () => {
-      const { schema: updatedSchema, ingredients } = editor.buildPatch(doc);
+      const { schema: updatedSchema, ingredients, instructions } = editor.buildPatch(doc);
       if (imageUpload.isStaged) {
         updatedSchema.image = await imageUpload.upload(recipe.id);
       }
       const result = await saveRecipe(recipe.id, {
         schema: updatedSchema,
         ingredients,
+        instructions,
         status: draft.status,
         url: draft.url,
         source: draft.source,
       });
       // The route echoes what was persisted, which differs from the draft
       // whenever a value degrades (blank source → no change), canonicalizes
-      // ("Custom" → "custom"), or — for ingredients — a new line gained its
-      // row id. Adopting the echo is what keeps the next save handing every
-      // line's id back.
+      // ("Custom" → "custom", the step list), or — for ingredients — a new
+      // line gained its row id. Adopting the echo is what keeps the next save
+      // handing every line's id back.
       setDoc({
         schema: result.schema,
         ingredients: result.ingredients,
+        instructions: result.instructions,
         prep_time: result.prep_time,
         cook_time: result.cook_time,
         total_time: result.total_time,
@@ -521,10 +520,9 @@ export default function RecipeDetail({
             </div>
           )}
 
-          {/* Instructions */}
+          {/* Instructions — one renderer for every group; numbering restarts per group. */}
           {(isEditing ||
-            (schema.recipeInstructions &&
-              schema.recipeInstructions.length > 0)) && (
+            doc.instructions.some((group) => group.steps.length > 0)) && (
             <div className="sm:col-span-2">
               <h2 className="text-xl text-gray-900 mb-4">Instructions</h2>
               {isEditing ? (
@@ -534,43 +532,30 @@ export default function RecipeDetail({
                   erroredStepIds={editor.instructionErrors}
                   disabled={editState === "saving"}
                 />
-              ) : schema.recipeInstructions![0]["@type"] === "HowToSection" ? (
-                <div className="space-y-6">
-                  {(schema.recipeInstructions as HowToSection[]).map(
-                    (section, i) => (
-                      <div key={i}>
-                        <h3 className="font-sans text-xs font-semibold uppercase tracking-widest text-brand mb-3">
-                          {section.name}
-                        </h3>
-                        <ol className="space-y-3">
-                          {section.itemListElement.map((step, j) => (
-                            <li key={j} className="flex gap-4">
-                              <span className="shrink-0 w-7 h-7 rounded-full bg-secondary-foreground text-white text-sm font-bold flex items-center justify-center">
-                                {j + 1}
-                              </span>
-                              <p className="text-gray-700 leading-relaxed pt-0.5">
-                                {step.text}
-                              </p>
-                            </li>
-                          ))}
-                        </ol>
-                      </div>
-                    ),
-                  )}
-                </div>
               ) : (
-                <ol className="space-y-4">
-                  {(schema.recipeInstructions as HowToStep[]).map((step, i) => (
-                    <li key={i} className="flex gap-4">
-                      <span className="shrink-0 w-7 h-7 rounded-full bg-secondary-foreground text-white text-sm font-bold flex items-center justify-center">
-                        {i + 1}
-                      </span>
-                      <p className="text-gray-700 leading-relaxed pt-0.5">
-                        {step.text}
-                      </p>
-                    </li>
+                <div className="space-y-6">
+                  {doc.instructions.map((group, gi) => (
+                    <div key={gi}>
+                      {group.name && (
+                        <h3 className="font-sans text-xs font-semibold uppercase tracking-widest text-brand mb-3">
+                          {group.name}
+                        </h3>
+                      )}
+                      <ol className="space-y-3">
+                        {group.steps.map((step, si) => (
+                          <li key={si} className="flex gap-4">
+                            <span className="shrink-0 w-7 h-7 rounded-full bg-secondary-foreground text-white text-sm font-bold flex items-center justify-center">
+                              {si + 1}
+                            </span>
+                            <p className="text-gray-700 leading-relaxed pt-0.5">
+                              {step.text}
+                            </p>
+                          </li>
+                        ))}
+                      </ol>
+                    </div>
                   ))}
-                </ol>
+                </div>
               )}
             </div>
           )}

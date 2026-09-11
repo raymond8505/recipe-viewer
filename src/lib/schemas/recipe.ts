@@ -10,7 +10,7 @@ import { z } from "zod";
 import { CUSTOM_RECIPE_SOURCE } from "@/lib/format";
 import { METRIC_YIELD_UNITS } from "@/lib/units";
 import type { Assert, Assignable } from "@/lib/exhaustive";
-import type { RecipeRowColumns } from "@/types/recipe";
+import type { RecipeInstructionGroup, RecipeRowColumns } from "@/types/recipe";
 
 // A Schema.org `recipeIngredient` entry as it arrives from outside (a scrape,
 // create_recipe): a bare string, or an object carrying this app's `group`
@@ -73,6 +73,57 @@ export const howToSectionSchema = z.object({
   itemListElement: z.array(howToStepSchema),
 });
 
+// A section as scrapers send it: `itemListElement` is usually an array,
+// sometimes a lone step, occasionally missing. See SchemaOrgHowToSection.
+const schemaOrgHowToSectionSchema = howToSectionSchema.extend({
+  itemListElement: z.union([z.array(howToStepSchema), howToStepSchema]).optional(),
+});
+
+const schemaOrgInstructionItemSchema = z.union([
+  z.string(),
+  howToStepSchema,
+  schemaOrgHowToSectionSchema,
+]);
+
+// The inbound Schema.org edge for instructions: the array, one item, or the
+// markdown string some scrapers produce. See SchemaOrgInstructions.
+export const schemaOrgInstructionsInputSchema = z.union([
+  z.string(),
+  howToStepSchema,
+  schemaOrgHowToSectionSchema,
+  z.array(schemaOrgInstructionItemSchema),
+]);
+
+// What a writer sends for a recipe's instructions: the stored shape itself,
+// since a step has no identity to preserve. `seconds` is a timer's whole-second
+// duration and needs the timer's label — the same rule the editor enforces.
+export const recipeStepInputSchema = z
+  .object({
+    text: z.string().trim().min(1),
+    name: z.string().trim().min(1).optional(),
+    seconds: z.number().int().min(1).optional(),
+  })
+  .refine((step) => step.seconds === undefined || step.name !== undefined, {
+    message: "seconds needs a name — the timer's label",
+    path: ["seconds"],
+  });
+
+export const recipeInstructionGroupInputSchema = z.object({
+  name: z.string().trim().min(1).optional(),
+  steps: z.array(recipeStepInputSchema),
+});
+
+export const recipeInstructionsInputSchema = z.array(recipeInstructionGroupInputSchema);
+
+// The input IS the stored type; pinned both ways so neither can grow a field
+// the other lacks. In source, not a test — tsconfig excludes src/__tests__.
+export type _InstructionsInputMatchesGroups = Assert<
+  Assignable<z.infer<typeof recipeInstructionsInputSchema>, RecipeInstructionGroup[]>
+>;
+export type _InstructionGroupsMatchInput = Assert<
+  Assignable<RecipeInstructionGroup[], z.infer<typeof recipeInstructionsInputSchema>>
+>;
+
 export const schemaRecipeSchema = z
   .object({
     "@context": z.string().optional(),
@@ -96,7 +147,6 @@ export const schemaRecipeSchema = z
       .optional(),
     recipeCuisine: z.string().optional(),
     recipeCategory: z.union([z.string(), z.array(z.string())]).optional(),
-    recipeInstructions: z.array(z.union([howToStepSchema, howToSectionSchema])).optional(),
     keywords: z.string().optional(),
     nutrition: z
       .object({
@@ -120,13 +170,14 @@ export const schemaRecipeSchema = z
   })
   .passthrough();
 
-// The inbound Schema.org edge: the stored recipe plus `recipeIngredient`, for
-// writers that speak Schema.org because their source does (a scrape landing
-// through create_recipe or the re-scrape webhook). `fromSchemaOrgIngredients`
-// turns the list into ingredient groups at the boundary; the stored schema
-// never carries it.
+// The inbound Schema.org edge: the stored recipe plus `recipeIngredient` and
+// `recipeInstructions`, for writers that speak Schema.org because their source
+// does (a scrape landing through create_recipe or the re-scrape webhook).
+// `fromSchemaOrgIngredients` / `fromSchemaOrgInstructions` turn them into
+// groups at the boundary; the stored schema never carries either.
 export const schemaOrgRecipeInputSchema = schemaRecipeSchema.extend({
   recipeIngredient: z.array(schemaOrgIngredientLineSchema).optional(),
+  recipeInstructions: schemaOrgInstructionsInputSchema.optional(),
 });
 
 // Recipe row `status` column — used as a zod enum at boundaries (MCP tool
@@ -205,8 +256,9 @@ export const recipeCreateInputSchema = z
   .refine(sourceRequiredWithUrl, SOURCE_REQUIRED_WITH_URL_ISSUE);
 
 // Update speaks the app's own shape: `ingredients` replaces the whole list
-// (lines keep their rows by id), and `schema` is the stored recipe — it has no
-// recipeIngredient key, and the tool rejects one rather than silently
+// (lines keep their rows by id), `instructions` replaces the whole step list,
+// and `schema` is the stored recipe — it has neither recipeIngredient nor
+// recipeInstructions, and the tool rejects either rather than silently
 // ignoring it.
 export const recipeUpdateInputSchema = z.object({
   id: z.string().min(1),
@@ -215,6 +267,7 @@ export const recipeUpdateInputSchema = z.object({
   status: recipeStatusSchema.optional(),
   schema: schemaRecipeSchema.partial().optional(),
   ingredients: recipeIngredientsInputSchema.optional(),
+  instructions: recipeInstructionsInputSchema.optional(),
 });
 
 // The MCP tool only fetches images from a URL. Local files go through the

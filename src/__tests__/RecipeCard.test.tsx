@@ -14,7 +14,6 @@ const mockRecipe = makeRecipe("test-id-123", "Chocolate Cake", {
       description: "A rich, moist chocolate cake perfect for any occasion.",
       totalTime: "PT1H",
       recipeCategory: ["Dessert"],
-      recipeInstructions: [{ text: "Mix ingredients." }, { text: "Bake at 350°F." }],
     },
   },
 });

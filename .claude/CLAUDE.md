@@ -19,7 +19,7 @@ Unit tests follow the code: helpers moved into `format.ts` are tested in `format
 
 **UI fetches to `/api/recipes/*` go through `src/lib/api/recipes.ts`** (pattern: `src/lib/api/auth.ts`). No naked fetch in components. Known follow-up: RecipeDetail's `/rescrape` and `/regenerate-image` fetches are still naked, not yet wrapped.
 
-**A recipe's ingredients are `RecipeIngredientGroup[]` of `RecipeIngredient` entities, never a Schema.org `recipeIngredient` array** — that array exists only at the four external edges (JSON-LD, the image webhook, the window API, scraped input). `SchemaRecipe` has no ingredient field; read them off `RecipeRow.ingredients` / `RecipeDocument.ingredients`.
+**A recipe's ingredients are `RecipeIngredientGroup[]` of `RecipeIngredient` entities and its instructions `RecipeInstructionGroup[]` of `RecipeStep`s, never a Schema.org `recipeIngredient` or `recipeInstructions` array** — those arrays exist only at the four external edges (JSON-LD, the image webhook, the window API, scraped input). `SchemaRecipe` has neither field; read them off `RecipeRow` / `RecipeDocument` (`.ingredients`, `.instructions`).
 
 **Never import `@/env` in a client component** — t3-env throws on server-var access in the browser. Server components read it and thread the value down as a prop.
 
@@ -30,9 +30,9 @@ Unit tests follow the code: helpers moved into `format.ts` are tested in `format
 - **Running `next dev` / Storybook, or setting up a fresh clone** (ports, `.env.yarn`, `MCP_PUBLIC_URL`, what's shared between checkouts) → [docs/parallel-checkouts.md](docs/parallel-checkouts.md)
 - **Touching cooking mode** — touch-first tap-target rules, meal sessions, the shopping list → [docs/cooking-mode.md](docs/cooking-mode.md)
 - **Touching the cooking-mode timer UI** (`TimerCard`, `DraggableRibbon`, `TimerColumn`) → [docs/timers.md](docs/timers.md)
-- **Reading or writing `SchemaRecipe` or a recipe's ingredients** — `RecipeIngredientGroup`/`RecipeIngredient`, the Schema.org edges (`toSchemaOrgJsonLd`/`fromSchemaOrgIngredients`), `recipeYield`/servings → [docs/recipe-schema.md](docs/recipe-schema.md)
+- **Reading or writing `SchemaRecipe`, a recipe's ingredients or its instructions** — `RecipeIngredientGroup`/`RecipeIngredient`, `RecipeInstructionGroup`/`RecipeStep`, the Schema.org edges (`toSchemaOrgJsonLd`/`fromSchemaOrgIngredients`/`fromSchemaOrgInstructions`), `recipeYield`/servings → [docs/recipe-schema.md](docs/recipe-schema.md)
 - **Adding or changing anything under `src/app/api/**`, or calling one from the UI** — the auth gate, the dev-only nutrition door, response validation, image upload → [docs/api-routes.md](docs/api-routes.md)
-- **Querying Supabase, adding a column, or writing a migration** — `selectColumns<Row>()`, the `src/lib/recipes.ts` repo layer, `recipes.ingredients` + `recipe_ingredients` (hydrate/reconcile, the write order), derived `content`/`embedding` → [docs/supabase-data-layer.md](docs/supabase-data-layer.md)
+- **Querying Supabase, adding a column, or writing a migration** — `selectColumns<Row>()`, the `src/lib/recipes.ts` repo layer, `recipes.ingredients` + `recipe_ingredients` (hydrate/reconcile, the write order), `recipes.instructions` (canonical form, the dead blob keys), derived `content`/`embedding` → [docs/supabase-data-layer.md](docs/supabase-data-layer.md)
 - **Working on nutrition** — the ingredient catalog, row identity, normalization, USDA, `ScalableRecipe.nutrition()`, NutritionDetail → [docs/nutrition.md](docs/nutrition.md)
 - **Working on the Nutrition Facts label** (`NutritionFactsLabel`, `labelRows.ts`, `NutrientRowTr`) → [docs/nutrition-label.md](docs/nutrition-label.md)
 - **Any visual/CSS work** — theme tokens, fonts, badges, shadcn primitives, the radius doctrine → [docs/styling.md](docs/styling.md)

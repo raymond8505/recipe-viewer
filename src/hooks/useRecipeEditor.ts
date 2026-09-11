@@ -2,6 +2,7 @@ import { useCallback, useMemo, useState } from "react";
 import type {
   RecipeDocument,
   RecipeIngredientGroupInput,
+  RecipeInstructionGroup,
   SchemaRecipe,
 } from "@/types/recipe";
 import type {
@@ -9,13 +10,13 @@ import type {
   EditableInstructions,
 } from "@/types/editor";
 import {
-  editableInstructionsToSchema,
   editableToIngredientInput,
+  editableToInstructions,
   formatTimeInput,
   ingredientsToEditable,
+  instructionsToEditable,
   parseDurationToSeconds,
   parseTimeInput,
-  schemaToEditableInstructions,
   secondsToIso,
 } from "@/lib/format";
 import { applyServings, parseServings } from "@/lib/units";
@@ -88,13 +89,14 @@ export interface UseRecipeEditor {
   /** Leave edit mode (does not touch the canonical document). */
   cancel: () => void;
   /** Merge the current draft onto a base document to produce what to
-   *  persist: the schema to merge, and the ingredient groups to replace the
-   *  list with (each line naming its row). `name` is required on
-   *  SchemaRecipe, so a blank title falls back to the base name rather than
-   *  wiping it. */
+   *  persist: the schema to merge, the ingredient groups to replace the list
+   *  with (each line naming its row), and the instruction groups to replace
+   *  the steps with. `name` is required on SchemaRecipe, so a blank title
+   *  falls back to the base name rather than wiping it. */
   buildPatch: (base: RecipeDocument) => {
     schema: SchemaRecipe;
     ingredients: RecipeIngredientGroupInput[];
+    instructions: RecipeInstructionGroup[];
   };
   /** Run an async persist, owning the saving → idle/error transition. A throw
    *  leaves the editor in "error" with the draft intact so the user can retry. */
@@ -151,15 +153,13 @@ export function useRecipeEditor(): UseRecipeEditor {
 
   const begin = useCallback(
     (doc: RecipeDocument, { status, url, source }: EditRowFields) => {
-      const { schema, ingredients } = doc;
+      const { schema, ingredients, instructions } = doc;
       setDraft({
         name: schema.name,
         url,
         description: schema.description ?? "",
         ingredients: ingredientsToEditable(ingredients),
-        instructions: schemaToEditableInstructions(
-          schema.recipeInstructions ?? [],
-        ),
+        instructions: instructionsToEditable(instructions),
         notes: schema.notes ?? "",
         status,
         source,
@@ -191,7 +191,6 @@ export function useRecipeEditor(): UseRecipeEditor {
           ...base,
           name: draft.name.trim() || base.name,
           description: draft.description || undefined,
-          recipeInstructions: editableInstructionsToSchema(draft.instructions),
           notes: draft.notes || undefined,
           recipeYield: servingsChanged
             ? applyServings(base.recipeYield, n)
@@ -201,6 +200,7 @@ export function useRecipeEditor(): UseRecipeEditor {
           totalTime: buildTime(draft.totalTime, doc.total_time),
         },
         ingredients: editableToIngredientInput(draft.ingredients),
+        instructions: editableToInstructions(draft.instructions),
       };
     },
     [draft],

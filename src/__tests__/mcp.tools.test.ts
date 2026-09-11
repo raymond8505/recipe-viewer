@@ -4,6 +4,7 @@ import {
   makeIngredient,
   makeIngredientLines,
   makeMatchedIngredient,
+  makeSteps,
   recipeFixtures,
 } from "@/fixtures";
 
@@ -540,7 +541,9 @@ describe("getRecipe", () => {
       quantity: 1,
       unit: "lb",
     });
+    expect(out.instructions.map((g) => g.name)).toEqual(["Make the meatballs", "Build the curry"]);
     expect(out.metadata.schema).not.toHaveProperty("recipeIngredient");
+    expect(out.metadata.schema).not.toHaveProperty("recipeInstructions");
   });
 
   it("replaces nutrition with the ingredient-derived per-serving values when fully covered", async () => {
@@ -714,6 +717,38 @@ describe("createRecipe", () => {
     ]);
   });
 
+  // The same edge for the steps: HowTo objects (or a markdown string) become
+  // instruction groups and never reach the stored schema.
+  it("turns schema.recipeInstructions into instruction groups", async () => {
+    const { createRecipeRow } = await import("@/lib/recipes");
+    vi.mocked(createRecipeRow).mockResolvedValueOnce({
+      id: "x",
+      url: "u",
+      source: "s",
+      status: "draft",
+      ingredients: [],
+      instructions: [],
+      metadata: { schema: { name: "New" } },
+    } as never);
+
+    await createRecipe({
+      source: "example.com",
+      schema: {
+        name: "New",
+        recipeInstructions: [
+          { "@type": "HowToStep", text: "Mix.", name: "Mix", timeRequired: "PT2M" },
+          "Bake.",
+        ],
+      },
+    });
+
+    const arg = vi.mocked(createRecipeRow).mock.calls[0][0];
+    expect(arg.schema).not.toHaveProperty("recipeInstructions");
+    expect(arg.instructions).toEqual([
+      { steps: [{ text: "Mix.", name: "Mix", seconds: 120 }, { text: "Bake." }] },
+    ]);
+  });
+
   it("keeps an explicit source rather than defaulting it", async () => {
     const { createRecipeRow } = await import("@/lib/recipes");
     vi.mocked(createRecipeRow).mockResolvedValueOnce({
@@ -809,6 +844,36 @@ describe("updateRecipe", () => {
       existing.id,
       expect.objectContaining({ ingredients, schema: undefined }),
     );
+  });
+
+  it("passes instruction groups through to the repo layer", async () => {
+    const { updateRecipeRow } = await import("@/lib/recipes");
+    const existing = recipeFixtures[2];
+    vi.mocked(updateRecipeRow).mockResolvedValueOnce(existing);
+    const instructions = makeSteps(["Mix.", "Bake."]);
+
+    await updateRecipe({ id: existing.id, instructions });
+
+    expect(updateRecipeRow).toHaveBeenCalledWith(
+      existing.id,
+      expect.objectContaining({ instructions, schema: undefined }),
+    );
+  });
+
+  it("rejects schema.recipeInstructions with a ToolError naming the instructions field", async () => {
+    const { updateRecipeRow } = await import("@/lib/recipes");
+
+    await expect(
+      updateRecipe({
+        id: "r1",
+        schema: { recipeInstructions: [{ text: "Mix." }] } as never,
+      }),
+    ).rejects.toMatchObject({
+      name: "ToolError",
+      code: "invalid_input",
+      message: expect.stringContaining("instructions"),
+    });
+    expect(updateRecipeRow).not.toHaveBeenCalled();
   });
 
   // The stored schema has no recipeIngredient; silently stripping one an agent

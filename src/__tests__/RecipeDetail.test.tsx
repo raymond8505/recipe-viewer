@@ -10,8 +10,6 @@ import RecipeDetail from "@/components/RecipeDetail";
 import type {
   RecipeRow,
   RecipeIngredientGroup,
-  HowToStep,
-  HowToSection,
   SchemaRecipe,
 } from "@/types/recipe";
 import {
@@ -22,8 +20,10 @@ import {
 import {
   makeIngredientGroup,
   makeIngredientLines,
+  makeInstructionGroup,
   makeNutritionLines,
   makeRecipeIngredient,
+  makeSteps,
 } from "@/fixtures";
 import { clickAndConfirm } from "./helpers/confirmBar";
 
@@ -41,6 +41,7 @@ function makeRecipe(
       typeof ingredients[0] === "string"
         ? makeIngredientLines(ingredients as string[])
         : (ingredients as RecipeIngredientGroup[]),
+    instructions: [],
     ...row,
     metadata: {
       schema: {
@@ -135,36 +136,41 @@ describe("RecipeDetail", () => {
     ).toBeTruthy();
   });
 
-  it("renders flat HowToStep instructions as a numbered list", () => {
-    const steps: HowToStep[] = [
-      { "@type": "HowToStep", text: "Boil water." },
-      { "@type": "HowToStep", text: "Add pasta." },
-    ];
-    render(<RecipeDetail recipe={makeRecipe({ recipeInstructions: steps })} />);
+  it("renders a nameless run of steps as a numbered list", () => {
+    render(
+      <RecipeDetail
+        recipe={makeRecipe({}, { instructions: makeSteps(["Boil water.", "Add pasta."]) })}
+      />,
+    );
     expect(screen.getByText("Boil water.")).toBeTruthy();
     expect(screen.getByText("Add pasta.")).toBeTruthy();
   });
 
-  it("renders HowToSection instructions with section headers", () => {
-    const sections: HowToSection[] = [
-      {
-        "@type": "HowToSection",
-        name: "For the sauce",
-        itemListElement: [{ text: "Simmer tomatoes." }],
-      },
-      {
-        "@type": "HowToSection",
-        name: "For the pasta",
-        itemListElement: [{ text: "Boil salted water." }],
-      },
-    ];
+  it("renders named groups with their headings, and a nameless run beside them", () => {
     render(
-      <RecipeDetail recipe={makeRecipe({ recipeInstructions: sections })} />,
+      <RecipeDetail
+        recipe={makeRecipe(
+          {},
+          {
+            instructions: [
+              makeInstructionGroup(undefined, ["Preheat the oven."]),
+              makeInstructionGroup("For the sauce", ["Simmer tomatoes."]),
+              makeInstructionGroup("For the pasta", ["Boil salted water."]),
+            ],
+          },
+        )}
+      />,
     );
+    expect(screen.getByText("Preheat the oven.")).toBeTruthy();
     expect(screen.getByText("For the sauce")).toBeTruthy();
     expect(screen.getByText("Simmer tomatoes.")).toBeTruthy();
     expect(screen.getByText("For the pasta")).toBeTruthy();
     expect(screen.getByText("Boil salted water.")).toBeTruthy();
+  });
+
+  it("hides the instructions section when every group is empty", () => {
+    render(<RecipeDetail recipe={makeRecipe({}, { instructions: [{ steps: [] }] })} />);
+    expect(screen.queryByText("Instructions")).toBeNull();
   });
 
   // The nutrition the page shows is computed from the catalog rows its
@@ -270,6 +276,7 @@ describe("RecipeDetail", () => {
         JSON.stringify({
           schema: recipe.metadata.schema,
           ingredients: recipe.ingredients,
+          instructions: recipe.instructions,
           prep_time: null,
           cook_time: null,
           total_time: null,
@@ -317,6 +324,7 @@ describe("RecipeDetail", () => {
         JSON.stringify({
           schema: recipe.metadata.schema,
           ingredients: echoedGroups,
+          instructions: recipe.instructions,
           prep_time: null,
           cook_time: null,
           total_time: null,
@@ -352,7 +360,10 @@ describe("RecipeDetail", () => {
   // server render — so the row it opens with has to be built from the live
   // document, or a saved edit is invisible in cook mode until a reload.
   it("opens cook mode on the saved document, not the server-render row", async () => {
-    const recipe = makeRecipe({ name: "Server Name" });
+    const recipe = makeRecipe(
+      { name: "Server Name" },
+      { instructions: makeSteps(["Server step."]) },
+    );
     vi.stubGlobal(
       "fetch",
       vi.fn().mockResolvedValue(
@@ -390,6 +401,10 @@ describe("RecipeDetail", () => {
         screen.getAllByRole("heading", { level: 1, name: "Saved Name" }),
       ).toHaveLength(2),
     );
+    // Every column-backed field has to make the same trip, not just the schema:
+    // cook mode shows the saved steps, and the row's pre-edit ones are gone.
+    expect(screen.getAllByText("Bake for 30 minutes.")).toHaveLength(2);
+    expect(screen.queryByText("Server step.")).toBeNull();
     expect(screen.queryByText("Server Name")).toBeNull();
   });
 
@@ -1001,7 +1016,12 @@ describe("RecipeDetail — controls section", () => {
         .fn()
         .mockResolvedValue(
           new Response(
-            JSON.stringify({ schema: updatedSchema, ingredients: [], status: "published" }),
+            JSON.stringify({
+              schema: updatedSchema,
+              ingredients: [],
+              instructions: [],
+              status: "published",
+            }),
             { status: 200 },
           ),
         ),

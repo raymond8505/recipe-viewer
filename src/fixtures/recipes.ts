@@ -1,6 +1,7 @@
 import type { RecipeRow } from "@/types/recipe";
 import type { IngredientNutrition } from "@/types/ingredient";
 import { makeIngredientGroup, makeNutritionLines } from "./ingredients";
+import { makeInstructionGroup } from "./instructions";
 
 // Time columns are SECONDS (see RecipeRow). These are HYDRATED rows — what
 // every consumer above src/lib/recipes.ts sees.
@@ -18,6 +19,7 @@ export const recipeFixtures: RecipeRow[] = [
     cook_time: null,
     total_time: 300,
     ingredients: [],
+    instructions: [],
     metadata: {
       schema: {
         name: "Chorizo Tofu Marinade",
@@ -49,6 +51,7 @@ export const recipeFixtures: RecipeRow[] = [
     cook_time: 2100,
     total_time: 3300,
     ingredients: [],
+    instructions: [],
     metadata: {
       schema: {
         name: "Black Bean & Mushroom Enchiladas with Charred Tomatillo Sauce",
@@ -103,6 +106,19 @@ export const recipeFixtures: RecipeRow[] = [
         "cilantro, to taste",
       ]),
     ],
+    instructions: [
+      makeInstructionGroup("Make the meatballs", [
+        "Combine chicken, garlic, fish sauce, panko, and egg in a bowl. Mix until just combined — overworking makes them tough.",
+        "Form into 16 meatballs, roughly 1 inch across. Refrigerate for 10 minutes to firm up.",
+        "Heat a tablespoon of oil in a heavy skillet over medium-high. Brown the meatballs on all sides, about 6 minutes total. Remove and set aside.",
+      ]),
+      makeInstructionGroup("Build the curry", [
+        "In the same skillet, fry the red curry paste in any residual fat for 30 seconds until fragrant.",
+        "Pour in the coconut milk and whisk until smooth. Add brown sugar and lime juice.",
+        "Return the meatballs to the pan. Simmer for 15 minutes, turning halfway, until the sauce coats the back of a spoon and the meatballs are cooked through.",
+        "Tear in the basil at the end. Serve over jasmine rice topped with crushed peanuts and cilantro.",
+      ]),
+    ],
     metadata: {
       schema: {
         name: "Thai Curry Chicken Meatballs",
@@ -117,27 +133,6 @@ export const recipeFixtures: RecipeRow[] = [
         recipeCuisine: "Thai",
         recipeCategory: "Main Course",
         datePublished: "2026-01-09",
-        recipeInstructions: [
-          {
-            "@type": "HowToSection",
-            name: "Make the meatballs",
-            itemListElement: [
-              { "@type": "HowToStep", text: "Combine chicken, garlic, fish sauce, panko, and egg in a bowl. Mix until just combined — overworking makes them tough." },
-              { "@type": "HowToStep", text: "Form into 16 meatballs, roughly 1 inch across. Refrigerate for 10 minutes to firm up." },
-              { "@type": "HowToStep", text: "Heat a tablespoon of oil in a heavy skillet over medium-high. Brown the meatballs on all sides, about 6 minutes total. Remove and set aside." },
-            ],
-          },
-          {
-            "@type": "HowToSection",
-            name: "Build the curry",
-            itemListElement: [
-              { "@type": "HowToStep", text: "In the same skillet, fry the red curry paste in any residual fat for 30 seconds until fragrant." },
-              { "@type": "HowToStep", text: "Pour in the coconut milk and whisk until smooth. Add brown sugar and lime juice." },
-              { "@type": "HowToStep", text: "Return the meatballs to the pan. Simmer for 15 minutes, turning halfway, until the sauce coats the back of a spoon and the meatballs are cooked through." },
-              { "@type": "HowToStep", text: "Tear in the basil at the end. Serve over jasmine rice topped with crushed peanuts and cilantro." },
-            ],
-          },
-        ],
         notes:
           "Coconut milk brand matters: Aroy-D and Chaokoh emulsify cleanly. Lighter supermarket brands break the sauce. If your basil is wilting, save it for garnish instead of stirring in.",
         nutrition: {
@@ -160,6 +155,7 @@ export const recipeFixtures: RecipeRow[] = [
     cook_time: 2100,
     total_time: 14400,
     ingredients: [],
+    instructions: [],
     metadata: {
       schema: {
         name: "Strawberry Oat Bars",
@@ -195,6 +191,7 @@ export const recipeFixtures: RecipeRow[] = [
     cook_time: null,
     total_time: 300,
     ingredients: [],
+    instructions: [],
     metadata: {
       schema: {
         name: "Quick Yakisoba Sauce",
@@ -235,6 +232,7 @@ export function makeRecipe(
     cook_time: null,
     total_time: null,
     ingredients: [],
+    instructions: [],
     metadata: { schema: { name } },
     ...overrides,
   };

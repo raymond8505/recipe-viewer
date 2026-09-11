@@ -4,9 +4,10 @@ import type { RecipeDocument, SchemaOrgRecipe } from "@/types/recipe";
 
 // The window.recipeTools API is an EXTERNAL edge: whatever drives it (a
 // browser extension, an agent) speaks Schema.org. Recipes go out as
-// SchemaOrgRecipe (the stored schema with the lines flattened to strings) and
-// come in the same way, converted to the app's own document at the boundary —
-// nothing past this module sees a `recipeIngredient` array.
+// SchemaOrgRecipe (the stored schema with the lines flattened to strings and
+// the steps as HowToStep / HowToSection) and come in the same way, converted
+// to the app's own document at the boundary — nothing past this module sees a
+// `recipeIngredient` or `recipeInstructions` array.
 
 export interface McpInputSchema {
   type: "object";
@@ -53,7 +54,7 @@ export const API_TOOLS: McpTool[] = [
   {
     name: "getRecipeViewerRecipe",
     description:
-      "getRecipeViewerRecipe(): Recipe | null — Returns the current recipe displayed in cooking mode as a Schema.org Recipe (recipeIngredient as plain strings), or null if cooking mode is not active.",
+      "getRecipeViewerRecipe(): Recipe | null — Returns the current recipe displayed in cooking mode as a Schema.org Recipe (recipeIngredient as plain strings, recipeInstructions as HowToStep / HowToSection objects), or null if cooking mode is not active.",
     inputSchema: {
       type: "object",
       properties: {},
@@ -62,7 +63,7 @@ export const API_TOOLS: McpTool[] = [
   {
     name: "setRecipeViewerRecipe",
     description:
-      "setRecipeViewerRecipe(recipe: Recipe): void — Replaces the recipe displayed in cooking mode with a Schema.org Recipe (recipeIngredient as strings, or { name, group } objects). Only takes effect while cooking mode is active.",
+      "setRecipeViewerRecipe(recipe: Recipe): void — Replaces the recipe displayed in cooking mode with a Schema.org Recipe (recipeIngredient as strings, or { name, group } objects; recipeInstructions as HowToStep / HowToSection objects, a single object, or a markdown string). Only takes effect while cooking mode is active.",
     inputSchema: {
       type: "object",
       properties: {

@@ -2,19 +2,14 @@
 
 import { useRef, useState, useEffect, useMemo } from "react";
 import Image from "next/image";
-import type {
-  RecipeRow,
-  RecipeDocument,
-  HowToStep,
-  HowToSection,
-} from "@/types/recipe";
+import type { RecipeRow, RecipeDocument } from "@/types/recipe";
 import {
   formatDuration,
   formatDate,
   getFirstImage,
   toArray,
-  parseDurationToSeconds,
 } from "@/lib/format";
+import { stepTimers } from "@/lib/recipeInstructions";
 import { useTimers, timerState, editorSeconds } from "@/hooks/useTimers";
 import type { Timer } from "@/hooks/useTimers";
 import { ScalableRecipe, formatScaledIngredient } from "@/lib/ScalableRecipe";
@@ -92,9 +87,9 @@ export default function CookingMode({
     resetAll,
   } = useTimers(recipe.url);
 
-  // The primary recipe as one document (schema + ingredient groups), which the
-  // window API may replace wholesale. `initialDoc` is the document registered
-  // with the window API on mount.
+  // The primary recipe as one document (schema, ingredient groups, instruction
+  // groups, time columns), which the window API may replace wholesale.
+  // `initialDoc` is the document registered with the window API on mount.
   const [initialDoc] = useState<RecipeDocument>(() => recipeDocument(recipe));
   const [doc, setDoc] = useState(initialDoc);
   const { schema } = doc;
@@ -158,6 +153,10 @@ export default function CookingMode({
   const primaryScalable = scalables.get(recipe.id)!;
   const activeScalable = scalables.get(mealRecipes[activeIndex].id)!;
   const activeSchema = activeScalable.schema;
+  // The primary's steps come from the live `doc` so a window-API replacement
+  // wins; a secondary's come from its own row.
+  const activeInstructions =
+    activeIndex === 0 ? doc.instructions : mealRecipes[activeIndex].instructions;
 
   const updateScalable = (
     id: string,
@@ -222,19 +221,12 @@ export default function CookingMode({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Seed timers from steps that declare both name + timeRequired, but only
-  // if no timers are already stored for this recipe.
+  // Seed timers from the steps that declare one, but only if no timers are
+  // already stored for this recipe.
   useEffect(() => {
     if (timers.length > 0) return;
-    for (const item of schema.recipeInstructions ?? []) {
-      const steps =
-        item["@type"] === "HowToSection"
-          ? (item as HowToSection).itemListElement
-          : [item as HowToStep];
-      for (const step of steps) {
-        const secs = parseDurationToSeconds(step.timeRequired);
-        if (step.name && secs) addTimer(step.name, secs, true);
-      }
+    for (const { name, seconds } of stepTimers(doc.instructions)) {
+      addTimer(name, seconds, true);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -307,15 +299,8 @@ export default function CookingMode({
     );
     // Seed this recipe's timers unconditionally (bypass the "skip if timers > 0" guard on mount)
     const seededIds: string[] = [];
-    for (const item of newRecipe.metadata.schema.recipeInstructions ?? []) {
-      const steps =
-        item["@type"] === "HowToSection"
-          ? (item as HowToSection).itemListElement
-          : [item as HowToStep];
-      for (const step of steps) {
-        const secs = parseDurationToSeconds(step.timeRequired);
-        if (step.name && secs) seededIds.push(addTimer(step.name, secs, true));
-      }
+    for (const { name, seconds } of stepTimers(newRecipe.instructions)) {
+      seededIds.push(addTimer(name, seconds, true));
     }
     if (seededIds.length > 0) {
       setMealTimerIds((prev) => new Map(prev).set(newRecipe.id, seededIds));
@@ -660,72 +645,37 @@ export default function CookingMode({
                   </div>
                 )}
 
-              {/* Instructions */}
-              {activeSchema.recipeInstructions &&
-                activeSchema.recipeInstructions.length > 0 && (
-                  <div className="sm:col-span-2">
-                    <h2 className="text-2xl sm:text-xl text-gray-900 mb-4">
-                      Instructions
-                    </h2>
-                    {activeSchema.recipeInstructions[0]["@type"] ===
-                    "HowToSection" ? (
-                      <div className="space-y-6">
-                        {(
-                          activeSchema.recipeInstructions as HowToSection[]
-                        ).map((section, i) => (
-                          <div key={i}>
-                            <h3 className="font-sans text-sm sm:text-xs font-semibold uppercase tracking-widest text-brand mb-3">
-                              {section.name}
-                            </h3>
-                            <ol className="space-y-3">
-                              {section.itemListElement.map((step, j) => {
-                                const key = `${i}-${j}`;
-                                const done = completedSteps.has(key);
-                                return (
-                                  <li
-                                    key={j}
-                                    className="flex gap-4 active:opacity-60"
-                                    onClick={() => toggleStep(key)}
-                                    role="button"
-                                    aria-pressed={done}
-                                    aria-label={`Step ${j + 1}: ${done ? "completed" : "mark complete"}`}
-                                  >
-                                    <span
-                                      className={`shrink-0 w-8 h-8 sm:w-7 sm:h-7 rounded-full text-base sm:text-sm font-bold flex items-center justify-center transition-colors ${done ? "bg-green-500 text-white" : "bg-secondary-foreground text-white"}`}
-                                    >
-                                      {done ? <CheckIcon size={14} /> : j + 1}
-                                    </span>
-                                    <p
-                                      className={`text-xl sm:text-base leading-relaxed pt-0.5 transition-colors ${done ? "line-through text-gray-400" : "text-gray-700"}`}
-                                    >
-                                      {step.text}
-                                    </p>
-                                  </li>
-                                );
-                              })}
-                            </ol>
-                          </div>
-                        ))}
-                      </div>
-                    ) : (
-                      <ol className="space-y-4">
-                        {(activeSchema.recipeInstructions as HowToStep[]).map(
-                          (step, i) => {
-                            const key = `${i}`;
+              {/* Instructions — one renderer for every group; completion keys are "group-step" */}
+              {activeInstructions.some((group) => group.steps.length > 0) && (
+                <div className="sm:col-span-2">
+                  <h2 className="text-2xl sm:text-xl text-gray-900 mb-4">
+                    Instructions
+                  </h2>
+                  <div className="space-y-6">
+                    {activeInstructions.map((group, gi) => (
+                      <div key={gi}>
+                        {group.name && (
+                          <h3 className="font-sans text-sm sm:text-xs font-semibold uppercase tracking-widest text-brand mb-3">
+                            {group.name}
+                          </h3>
+                        )}
+                        <ol className="space-y-3">
+                          {group.steps.map((step, si) => {
+                            const key = `${gi}-${si}`;
                             const done = completedSteps.has(key);
                             return (
                               <li
-                                key={i}
+                                key={si}
                                 className="flex gap-4 active:opacity-60"
                                 onClick={() => toggleStep(key)}
                                 role="button"
                                 aria-pressed={done}
-                                aria-label={`Step ${i + 1}: ${done ? "completed" : "mark complete"}`}
+                                aria-label={`Step ${si + 1}: ${done ? "completed" : "mark complete"}`}
                               >
                                 <span
                                   className={`shrink-0 w-8 h-8 sm:w-7 sm:h-7 rounded-full text-base sm:text-sm font-bold flex items-center justify-center transition-colors ${done ? "bg-green-500 text-white" : "bg-secondary-foreground text-white"}`}
                                 >
-                                  {done ? <CheckIcon size={14} /> : i + 1}
+                                  {done ? <CheckIcon size={14} /> : si + 1}
                                 </span>
                                 <p
                                   className={`text-xl sm:text-base leading-relaxed pt-0.5 transition-colors ${done ? "line-through text-gray-400" : "text-gray-700"}`}
@@ -734,12 +684,13 @@ export default function CookingMode({
                                 </p>
                               </li>
                             );
-                          },
-                        )}
-                      </ol>
-                    )}
+                          })}
+                        </ol>
+                      </div>
+                    ))}
                   </div>
-                )}
+                </div>
+              )}
             </div>
 
             {/* Notes */}

@@ -20,10 +20,10 @@ interface InstructionsEditorProps {
 
 /**
  * Structured instruction editor: each step is a draggable card with a body
- * textarea plus an optional timer label + hours/minutes → the schema's
- * `HowToStep.name` / `timeRequired`, which seed cook-mode timers. A label may
+ * textarea plus an optional timer label + minutes:seconds → the recipe's
+ * `RecipeStep.name` / `seconds`, which seed cook-mode timers. A label may
  * stand alone, but a timer requires a label.
- * Sections (HowToSection) map to reorderable groups, same as ingredient groups.
+ * Groups map one to one onto `RecipeInstructionGroup`s, same as ingredient groups.
  */
 export default function InstructionsEditor({
   value,

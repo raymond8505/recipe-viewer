@@ -55,7 +55,13 @@ import {
   updateRecipeRow,
 } from "@/lib/recipes";
 import { recipeToMarkdown } from "@/lib/format";
-import { ingredientFixtures, makeRecipeIngredientRow } from "@/fixtures";
+import {
+  ingredientFixtures,
+  makeInstructionGroup,
+  makeRecipeIngredientRow,
+  makeStep,
+  makeSteps,
+} from "@/fixtures";
 
 beforeEach(() => {
   mockGetRecipeIngredients.mockReset().mockResolvedValue([]);
@@ -116,7 +122,7 @@ describe("getRecipes", () => {
   });
 
   it("returns data and count from supabase", async () => {
-    const data = [{ id: "1", url: "u", source: "s", ingredients: [], metadata: { schema: { name: "Pasta" } } }];
+    const data = [{ id: "1", url: "u", source: "s", ingredients: [], instructions: [], metadata: { schema: { name: "Pasta" } } }];
     makeSupabaseMock({ data, count: 1 });
 
     const result = await getRecipes();
@@ -188,7 +194,7 @@ describe("getRecipes", () => {
   // Note: mock cannot verify SQL NULL semantics — this test confirms the correct filter
   // method is called; validate against a real DB if this regresses in production.
   it("includes null-status recipes in the logged-in default view", async () => {
-    const nullStatusRecipe = { id: "99", url: "u", source: "s", status: null, ingredients: [], metadata: { schema: { name: "Test" } } };
+    const nullStatusRecipe = { id: "99", url: "u", source: "s", status: null, ingredients: [], instructions: [], metadata: { schema: { name: "Test" } } };
     const { builder } = makeSupabaseMock({ data: [nullStatusRecipe], count: 1 });
     const result = await getRecipes();
 
@@ -315,7 +321,7 @@ describe("getStatusCounts", () => {
 
 describe("getRecipeById", () => {
   it("returns the recipe when found", async () => {
-    const recipe = { id: "42", url: "u", source: "s", ingredients: [], metadata: { schema: { name: "Pizza" } } };
+    const recipe = { id: "42", url: "u", source: "s", ingredients: [], instructions: [], metadata: { schema: { name: "Pizza" } } };
     makeSupabaseMock({ singleData: recipe });
 
     const result = await getRecipeById("42");
@@ -336,20 +342,6 @@ describe("getRecipeById", () => {
     expect(result).toBeNull();
   });
 
-  it("normalizes string recipeInstructions to an array", async () => {
-    const recipe = {
-      id: "99",
-      url: "u",
-      source: "s",
-      ingredients: [],
-      metadata: { schema: { name: "Soup", recipeInstructions: "Boil water." } },
-    };
-    makeSupabaseMock({ singleData: recipe });
-
-    const result = await getRecipeById("99");
-    expect(Array.isArray(result!.metadata.schema.recipeInstructions)).toBe(true);
-    expect((result!.metadata.schema.recipeInstructions as { text: string }[])[0].text).toBe("Boil water.");
-  });
 });
 
 /**
@@ -422,6 +414,7 @@ describe("createRecipeRow", () => {
       source: "example.com",
       status: "draft",
       ingredients: [],
+      instructions: [],
       metadata: { schema },
     };
     const { inserts } = makeWriteSupabaseMock({ insertSingle: { data: inserted, error: null } });
@@ -434,7 +427,7 @@ describe("createRecipeRow", () => {
 
     expect(inserts[0]).toMatchObject({
       name: "Soup",
-      content: recipeToMarkdown(schema, []),
+      content: recipeToMarkdown(schema, [], []),
       url: "https://example.com",
       source: "example.com",
       status: "draft",
@@ -444,7 +437,7 @@ describe("createRecipeRow", () => {
   it("includes the embedding as a pgvector literal when generation succeeds", async () => {
     mockGenerateEmbedding.mockResolvedValueOnce([0.1, 0.2, 0.3]);
     const { inserts } = makeWriteSupabaseMock({
-      insertSingle: { data: { id: "x", ingredients: [] }, error: null },
+      insertSingle: { data: { id: "x", ingredients: [], instructions: [] }, error: null },
     });
 
     await createRecipeRow({
@@ -459,7 +452,7 @@ describe("createRecipeRow", () => {
   it("omits the embedding column when generation fails (null)", async () => {
     mockGenerateEmbedding.mockResolvedValueOnce(null);
     const { inserts } = makeWriteSupabaseMock({
-      insertSingle: { data: { id: "x", ingredients: [] }, error: null },
+      insertSingle: { data: { id: "x", ingredients: [], instructions: [] }, error: null },
     });
 
     await createRecipeRow({
@@ -487,7 +480,7 @@ describe("createRecipeRow", () => {
     const { inserts } = makeWriteSupabaseMock({
       // The database echoes the column it just stored.
       insertSingle: (row) => ({
-        data: { id: "new-id", ingredients: row.ingredients },
+        data: { id: "new-id", ingredients: row.ingredients, instructions: [] },
         error: null,
       }),
     });
@@ -524,7 +517,7 @@ describe("createRecipeRow", () => {
 
   it("does not schedule normalization when there are no ingredients", async () => {
     makeWriteSupabaseMock({
-      insertSingle: { data: { id: "new-id", ingredients: [] }, error: null },
+      insertSingle: { data: { id: "new-id", ingredients: [], instructions: [] }, error: null },
     });
 
     await createRecipeRow({
@@ -539,7 +532,7 @@ describe("createRecipeRow", () => {
 
   it("strips a stray recipeIngredient key out of the blob", async () => {
     const { inserts } = makeWriteSupabaseMock({
-      insertSingle: { data: { id: "x", ingredients: [] }, error: null },
+      insertSingle: { data: { id: "x", ingredients: [], instructions: [] }, error: null },
     });
 
     await createRecipeRow({
@@ -562,6 +555,7 @@ describe("updateRecipeRow", () => {
     source: "example.com",
     status: "published",
     ingredients: [],
+    instructions: [],
     metadata: { schema: { name: "Original", description: "Old blurb" } },
   };
 
@@ -591,7 +585,7 @@ describe("updateRecipeRow", () => {
     await updateRecipeRow("r1", { schema: { description: "Fresh blurb" } });
 
     const mergedSchema = { name: "Original", description: "Fresh blurb" };
-    expect(updates[0]).toMatchObject({ content: recipeToMarkdown(mergedSchema, []) });
+    expect(updates[0]).toMatchObject({ content: recipeToMarkdown(mergedSchema, [], []) });
   });
 
   it("sets the embedding from the merged schema when generation succeeds", async () => {
@@ -875,6 +869,7 @@ describe("recipe time columns", () => {
     cook_time: 2100,
     total_time: 3300,
     ingredients: [],
+    instructions: [],
     metadata: {
       schema: {
         name: "Enchiladas",
@@ -924,7 +919,7 @@ describe("recipe time columns", () => {
 
   it("writes times to columns and keeps them out of the blob on create", async () => {
     const { inserts } = makeWriteSupabaseMock({
-      insertSingle: { data: { id: "x", ingredients: [] }, error: null },
+      insertSingle: { data: { id: "x", ingredients: [], instructions: [] }, error: null },
     });
 
     await createRecipeRow({
@@ -945,7 +940,7 @@ describe("recipe time columns", () => {
 
   it("still puts the times in the searchable markdown on create", async () => {
     const { inserts } = makeWriteSupabaseMock({
-      insertSingle: { data: { id: "x", ingredients: [] }, error: null },
+      insertSingle: { data: { id: "x", ingredients: [], instructions: [] }, error: null },
     });
 
     await createRecipeRow({
@@ -1001,6 +996,133 @@ describe("recipe time columns", () => {
 });
 
 // ---------------------------------------------------------------------------
+// The 0021 instructions seam. `recipes.instructions` IS the app's shape, so
+// there is nothing to join; what the repo layer owes is the dead blob key
+// deleted on read, stripped on write, and the column written in canonical
+// form with the markdown rendered from it.
+// ---------------------------------------------------------------------------
+describe("recipe instructions column", () => {
+  const stored = [
+    makeInstructionGroup("Sauce", [makeStep("Simmer.", { name: "Simmer", seconds: 330 })]),
+  ];
+  // A row shaped like this exists for real: the blob's copy is frozen at its
+  // backfill value while the column moved on.
+  const staleBlobRow = {
+    id: "r1",
+    url: "https://example.com",
+    source: "example.com",
+    status: "published",
+    prep_time: null,
+    cook_time: null,
+    total_time: null,
+    ingredients: [],
+    instructions: stored,
+    metadata: {
+      schema: { name: "Curry", recipeInstructions: [{ "@type": "HowToStep", text: "STALE" }] },
+    },
+  };
+
+  beforeEach(() => {
+    mockGenerateEmbedding.mockReset().mockResolvedValue(null);
+  });
+
+  it("reads the column and deletes the blob's dead recipeInstructions key", async () => {
+    makeSupabaseMock({ singleData: structuredClone(staleBlobRow) });
+
+    const row = await getRecipeById("r1");
+
+    expect(row?.instructions).toEqual(stored);
+    expect(row?.metadata.schema).not.toHaveProperty("recipeInstructions");
+  });
+
+  it("does the same on a list read", async () => {
+    makeSupabaseMock({ data: [structuredClone(staleBlobRow)], count: 1 });
+
+    const { data } = await getRecipes();
+
+    expect(data[0].instructions).toEqual(stored);
+    expect(data[0].metadata.schema).not.toHaveProperty("recipeInstructions");
+  });
+
+  it("writes the column in canonical form and renders the steps into content on create", async () => {
+    const { inserts } = makeWriteSupabaseMock({
+      insertSingle: { data: { id: "x", ingredients: [], instructions: [] }, error: null },
+    });
+
+    await createRecipeRow({
+      url: "https://example.com",
+      source: "example.com",
+      schema: { name: "Curry" },
+      instructions: [
+        { steps: [{ text: " Chop. ", seconds: 60 }] },
+        { name: "Sauce", steps: [{ text: "Simmer.", name: "Simmer", seconds: 330 }] },
+      ],
+    });
+
+    expect(inserts[0].instructions).toEqual([makeInstructionGroup(undefined, ["Chop."]), ...stored]);
+    expect(inserts[0].content).toContain("## Instructions\n- Chop.\n\n## Sauce\n- Simmer.");
+  });
+
+  it("strips a stray recipeInstructions key out of the blob on create", async () => {
+    const { inserts } = makeWriteSupabaseMock({
+      insertSingle: { data: { id: "x", ingredients: [], instructions: [] }, error: null },
+    });
+
+    await createRecipeRow({
+      url: "https://example.com",
+      source: "example.com",
+      // The zod schema is passthrough, so an agent can still send the dead key.
+      schema: { name: "Curry", recipeInstructions: [{ text: "x" }] } as never,
+    });
+
+    expect((inserts[0].metadata as { schema: object }).schema).not.toHaveProperty(
+      "recipeInstructions",
+    );
+    expect(inserts[0].instructions).toEqual([]);
+  });
+
+  it("replaces the column and recomputes content when the patch carries instructions", async () => {
+    const { updates } = makeWriteSupabaseMock({
+      selectSingle: { data: structuredClone(staleBlobRow), error: null },
+      updateSingle: { data: structuredClone(staleBlobRow), error: null },
+    });
+
+    await updateRecipeRow("r1", { instructions: makeSteps([" Plate. "]) });
+
+    expect(updates[0].instructions).toEqual(makeSteps(["Plate."]));
+    expect(updates[0].content).toContain("- Plate.");
+    expect(updates[0].content).not.toContain("Simmer.");
+  });
+
+  it("leaves the column alone and renders the stored steps when the patch has none", async () => {
+    const { updates } = makeWriteSupabaseMock({
+      selectSingle: { data: structuredClone(staleBlobRow), error: null },
+      updateSingle: { data: structuredClone(staleBlobRow), error: null },
+    });
+
+    await updateRecipeRow("r1", { schema: { description: "Fresh blurb" } });
+
+    expect(updates[0]).not.toHaveProperty("instructions");
+    expect(updates[0].content).toContain("## Sauce\n- Simmer.");
+    expect(updates[0].content).not.toContain("STALE");
+  });
+
+  it("never writes recipeInstructions back into the blob on update", async () => {
+    const { updates } = makeWriteSupabaseMock({
+      selectSingle: { data: structuredClone(staleBlobRow), error: null },
+      updateSingle: { data: structuredClone(staleBlobRow), error: null },
+    });
+
+    await updateRecipeRow("r1", {
+      schema: { recipeInstructions: [{ text: "x" }] } as never,
+    });
+
+    const blob = (updates[0].metadata as { schema: object }).schema;
+    expect(blob).not.toHaveProperty("recipeInstructions");
+  });
+});
+
+// ---------------------------------------------------------------------------
 // The 0016 ingredients seam. `recipes.ingredients` holds groups of row ids;
 // the repo layer joins them to the recipe_ingredients rows at every read exit
 // so everything above it sees RecipeIngredientGroup[].
@@ -1019,6 +1141,7 @@ describe("recipe ingredients hydration", () => {
       { name: "Rub", ingredients: ["ri-b", "ri-a"] },
       { ingredients: ["ri-c"] },
     ],
+    instructions: [],
     metadata: { schema: { name: "Curry" } },
   };
   const rows = [

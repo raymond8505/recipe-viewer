@@ -2,17 +2,17 @@ import { describe, it, expect } from "vitest";
 import { renderHook, act } from "@testing-library/react";
 import { useRecipeEditor } from "@/hooks/useRecipeEditor";
 import type { EditRowFields } from "@/hooks/useRecipeEditor";
-import { makeIngredientLines } from "@/fixtures";
+import { makeIngredientLines, makeSteps } from "@/fixtures";
 import type { RecipeDocument, SchemaRecipe } from "@/types/recipe";
 
 const doc: RecipeDocument = {
   schema: {
     name: "Pancakes",
     description: "Fluffy.",
-    recipeInstructions: [{ "@type": "HowToStep", text: "Mix" }],
     notes: "Use buttermilk.",
   },
   ingredients: makeIngredientLines(["2 cups flour", "1 egg"]),
+  instructions: makeSteps(["Mix"]),
   prep_time: null,
   cook_time: null,
   total_time: null,
@@ -83,7 +83,7 @@ describe("useRecipeEditor", () => {
     expect(built.description).toBeUndefined();
   });
 
-  it("buildPatch produces the ingredient groups and the instruction array", () => {
+  it("buildPatch produces the ingredient groups and the instruction groups beside the schema", () => {
     const { result } = renderHook(() => useRecipeEditor());
     act(() => result.current.begin(doc, ROW));
     const built = result.current.buildPatch(doc);
@@ -95,10 +95,9 @@ describe("useRecipeEditor", () => {
         ],
       },
     ]);
+    expect(built.instructions).toEqual(makeSteps(["Mix"]));
     expect(built.schema).not.toHaveProperty("recipeIngredient");
-    expect(built.schema.recipeInstructions).toEqual([
-      { "@type": "HowToStep", text: "Mix" },
-    ]);
+    expect(built.schema).not.toHaveProperty("recipeInstructions");
   });
 
   // The row id is what keeps a line's catalog match across a save. An editor
@@ -315,6 +314,7 @@ describe("useRecipeEditor", () => {
     const timed: RecipeDocument = {
       schema: { name: "Pancakes", prepTime: "PT5M", cookTime: "PT1H30M", totalTime: "PT2H" },
       ingredients: [],
+      instructions: [],
       prep_time: 900,
       cook_time: 5400,
       total_time: null,

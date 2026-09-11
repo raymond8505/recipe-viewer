@@ -1,8 +1,14 @@
+import { fromSchemaOrgInstructions } from "@/lib/format";
 import { draftRecipeDocument } from "@/lib/recipeDocument";
 import { fromSchemaOrgIngredients } from "@/lib/recipeIngredients";
-import type { RecipeDocument, SchemaOrgRecipe, SchemaRecipe } from "@/types/recipe";
+import type {
+  RecipeDocument,
+  RecipeInstructionGroup,
+  SchemaOrgRecipe,
+  SchemaRecipe,
+} from "@/types/recipe";
 
-/** What the re-scrape webhook returns: a Schema.org Recipe, lines as strings. */
+/** What the re-scrape webhook returns: a Schema.org Recipe, lines as strings, steps as HowToSteps. */
 export const rescrapeFixture: SchemaOrgRecipe = {
   name: "Re-scraped Chocolate Cake",
   description: "Freshly scraped version of the recipe.",
@@ -16,15 +22,17 @@ export const rescrapeFixture: SchemaOrgRecipe = {
   recipeYield: "12 servings",
 };
 
-const { recipeIngredient, ...rescrapeSchema } = rescrapeFixture;
+const { recipeIngredient, recipeInstructions, ...rescrapeSchema } = rescrapeFixture;
 
 /** The same recipe as the /rescrape route hands it to the client: split at the edge. */
 export const rescrapeResponseFixture: {
   schema: SchemaRecipe;
   ingredients: ReturnType<typeof fromSchemaOrgIngredients>;
+  instructions: RecipeInstructionGroup[];
 } = {
   schema: rescrapeSchema,
   ingredients: fromSchemaOrgIngredients(recipeIngredient ?? []),
+  instructions: fromSchemaOrgInstructions(recipeInstructions),
 };
 
 /** The same recipe as /update echoes it after a save: every line a row with
@@ -32,4 +40,5 @@ export const rescrapeResponseFixture: {
 export const rescrapeSavedFixture: RecipeDocument = draftRecipeDocument(
   rescrapeSchema,
   rescrapeResponseFixture.ingredients,
+  rescrapeResponseFixture.instructions,
 );
