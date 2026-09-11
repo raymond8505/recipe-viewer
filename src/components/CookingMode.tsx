@@ -9,7 +9,7 @@ import {
   getFirstImage,
   toArray,
 } from "@/lib/format";
-import { stepTimers } from "@/lib/recipeInstructions";
+import { stepKey, stepTimers } from "@/lib/recipeInstructions";
 import { useTimers, timerState, editorSeconds } from "@/hooks/useTimers";
 import type { Timer } from "@/hooks/useTimers";
 import { ScalableRecipe, formatScaledIngredient } from "@/lib/ScalableRecipe";
@@ -27,7 +27,6 @@ import DraggableRibbon, { RibbonItem } from "@/components/cooking/DraggableRibbo
 import MealSearch from "@/components/cooking/MealSearch";
 import MealTabs from "@/components/cooking/MealTabs";
 import {
-  CheckIcon,
   EnterFullscreenIcon,
   ExitFullscreenIcon,
 } from "@/components/icons";
@@ -38,7 +37,8 @@ import {
   CloseButton,
   CopyShoppingListButton,
 } from "@/components/buttons";
-import IngredientItem from "@/components/IngredientItem";
+import IngredientList from "@/components/IngredientList";
+import InstructionList from "@/components/InstructionList";
 import TimeYieldStats from "@/components/TimeYieldStats";
 import NutritionPanel from "@/components/NutritionPanel";
 
@@ -590,105 +590,44 @@ export default function CookingMode({
                         copied={copyFeedback}
                       />
                     </div>
-                    {activeScalable.groupedIngredients.map(
-                      ({ heading, items }, gi) => (
-                        <div key={gi} className={gi > 0 ? "mt-4" : ""}>
-                          {heading && (
-                            <h3 className="font-sans text-sm sm:text-xs font-semibold uppercase tracking-widest text-brand mb-2">
-                              {heading}
-                            </h3>
-                          )}
-                          <ul className="space-y-2">
-                            {items.map((ing) => {
-                              const text = ing.original;
-                              const selected = selectedIngredients.has(
-                                `${mealRecipes[activeIndex].id}::${ing.id}`,
-                              );
-                              return (
-                                <li
-                                  key={ing.id}
-                                  className={`flex items-start gap-2 text-lg sm:text-sm rounded-lg px-2 py-1 -mx-2 cursor-pointer select-none transition-colors active:opacity-60 ${selected ? "bg-green-50 text-gray-700" : "text-gray-700"}`}
-                                  onClick={() =>
-                                    toggleIngredient(
-                                      mealRecipes[activeIndex].id,
-                                      ing.id,
-                                    )
-                                  }
-                                  role="checkbox"
-                                  aria-checked={selected}
-                                  aria-label={text}
-                                >
-                                  <span
-                                    className={`mt-1.5 w-1.5 h-1.5 rounded-full shrink-0 transition-colors ${selected ? "bg-green-500" : "bg-brand"}`}
-                                  />
-                                  <IngredientItem
-                                    ingredient={ing}
-                                    onAnchor={
-                                      activeIndex === 0
-                                        ? (amount) =>
-                                            updateScalable(recipe.id, (r) =>
-                                              r.anchorIngredientAmount(
-                                                ing.index,
-                                                amount,
-                                              ),
-                                            )
-                                        : undefined
-                                    }
-                                  />
-                                </li>
-                              );
-                            })}
-                          </ul>
-                        </div>
-                      ),
-                    )}
+                    <IngredientList
+                      groups={activeScalable.groupedIngredients}
+                      headingClassName="text-sm sm:text-xs"
+                      itemClassName="text-lg sm:text-sm"
+                      isSelected={(ing) =>
+                        selectedIngredients.has(
+                          `${mealRecipes[activeIndex].id}::${ing.id}`,
+                        )
+                      }
+                      onToggle={(ing) =>
+                        toggleIngredient(mealRecipes[activeIndex].id, ing.id)
+                      }
+                      onAnchor={
+                        activeIndex === 0
+                          ? (ing, amount) =>
+                              updateScalable(recipe.id, (r) =>
+                                r.anchorIngredientAmount(ing.index, amount),
+                              )
+                          : undefined
+                      }
+                    />
                   </div>
                 )}
 
-              {/* Instructions — one renderer for every group; completion keys are "group-step" */}
+              {/* Instructions */}
               {activeInstructions.some((group) => group.steps.length > 0) && (
                 <div className="sm:col-span-2">
                   <h2 className="text-2xl sm:text-xl text-gray-900 mb-4">
                     Instructions
                   </h2>
-                  <div className="space-y-6">
-                    {activeInstructions.map((group, gi) => (
-                      <div key={gi}>
-                        {group.name && (
-                          <h3 className="font-sans text-sm sm:text-xs font-semibold uppercase tracking-widest text-brand mb-3">
-                            {group.name}
-                          </h3>
-                        )}
-                        <ol className="space-y-3">
-                          {group.steps.map((step, si) => {
-                            const key = `${gi}-${si}`;
-                            const done = completedSteps.has(key);
-                            return (
-                              <li
-                                key={si}
-                                className="flex gap-4 active:opacity-60"
-                                onClick={() => toggleStep(key)}
-                                role="button"
-                                aria-pressed={done}
-                                aria-label={`Step ${si + 1}: ${done ? "completed" : "mark complete"}`}
-                              >
-                                <span
-                                  className={`shrink-0 w-8 h-8 sm:w-7 sm:h-7 rounded-full text-base sm:text-sm font-bold flex items-center justify-center transition-colors ${done ? "bg-green-500 text-white" : "bg-secondary-foreground text-white"}`}
-                                >
-                                  {done ? <CheckIcon size={14} /> : si + 1}
-                                </span>
-                                <p
-                                  className={`text-xl sm:text-base leading-relaxed pt-0.5 transition-colors ${done ? "line-through text-gray-400" : "text-gray-700"}`}
-                                >
-                                  {step.text}
-                                </p>
-                              </li>
-                            );
-                          })}
-                        </ol>
-                      </div>
-                    ))}
-                  </div>
+                  <InstructionList
+                    groups={activeInstructions}
+                    headingClassName="text-sm sm:text-xs"
+                    stepBadgeClassName="w-8 h-8 sm:w-7 sm:h-7 text-base sm:text-sm"
+                    stepTextClassName="text-xl sm:text-base"
+                    isStepDone={(gi, si) => completedSteps.has(stepKey(gi, si))}
+                    onToggleStep={(gi, si) => toggleStep(stepKey(gi, si))}
+                  />
                 </div>
               )}
             </div>

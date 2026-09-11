@@ -20,7 +20,7 @@ Cook mode supports grouping multiple recipes into a "meal" session. State lives 
 - `useScaling` is called once on the primary recipe's `recipeYield`; non-primary recipes get `scale={1}` with no `onScaleChange` — scaling is intentionally primary-only for now
 - All timers (primary + added recipes) land in a single localStorage bucket keyed by the primary recipe's URL hash. Timers come from `stepTimers(groups)` — every step with both a label and a duration. Those of added recipes are seeded imperatively in `handleAddToMeal` and are **not** deduplicated — if a recipe is added a second time its timers are re-seeded
 
-**Step completion** is tracked per-recipe via `completedStepsMap: Map<recipe.id, Set<string>>`. Step keys are `"group-step"` indexes (`"0-2"`) and are only unique within a recipe's own bucket.
+**Step completion** is tracked per-recipe via `completedStepsMap: Map<recipe.id, Set<string>>`. Step keys are `"group-step"` indexes (`"0-2"`), built by `stepKey(groupIndex, stepIndex)` in `src/lib/recipeInstructions.ts`, and are only unique within a recipe's own bucket.
 
 **MealTabs pattern:** closable tabs use two adjacent `<button>` elements (tab name + ×) inside a flex `<div>` — NOT a button inside a button (invalid HTML). The × has `tabIndex={-1}` and is outside the roving tabindex cycle. All tab buttons share `aria-controls="meal-recipe-panel"` pointing to the single panel ID in CookingMode.
 
