@@ -64,7 +64,7 @@ export function RecipeNutritionBadge({
   const amount = formatNutrientDisplay(value, { compact: true });
   return (
     <Badge
-      title={`${formatNutrientDisplay(value)} per serving`}
+      title={`${amount} per serving`}
       className={cn("rounded-full bg-muted text-muted-foreground", className)}
     >
       {label ? `${amount} ${label}` : amount}
