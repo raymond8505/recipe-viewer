@@ -32,7 +32,7 @@ import RecipeControls from "./RecipeControls";
 import { CopyShoppingListButton } from "@/components/buttons";
 import IngredientsEditor from "./editor/IngredientsEditor";
 import InstructionsEditor from "./editor/InstructionsEditor";
-import IngredientItem from "./IngredientItem";
+import IngredientList from "./IngredientList";
 import TimeYieldStats from "./TimeYieldStats";
 import NutritionPanel from "./NutritionPanel";
 import RecipeTitleInput from "./RecipeTitleInput";
@@ -481,41 +481,16 @@ export default function RecipeDetail({
                   disabled={editState === "saving"}
                 />
               ) : (
-                scalable.groupedIngredients.map(({ heading, items }, gi) => (
-                  <div key={gi} className={gi > 0 ? "mt-4" : ""}>
-                    {heading && (
-                      <h3 className="font-sans text-xs font-semibold uppercase tracking-widest text-brand mb-2">
-                        {heading}
-                      </h3>
-                    )}
-                    <ul className="space-y-2">
-                      {items.map((ing) => {
-                        const text = ing.original;
-                        const selected = selectedIngredients.has(ing.id);
-                        return (
-                          <li
-                            key={ing.id}
-                            className={`flex items-start gap-2 text-sm rounded-lg px-2 py-1 -mx-2 cursor-pointer select-none transition-colors active:opacity-60 ${selected ? "bg-green-50 text-gray-700" : "text-gray-700"}`}
-                            onClick={() => toggleIngredient(ing.id)}
-                            role="checkbox"
-                            aria-checked={selected}
-                            aria-label={text}
-                          >
-                            <span
-                              className={`mt-1.5 w-1.5 h-1.5 rounded-full shrink-0 transition-colors ${selected ? "bg-green-500" : "bg-brand"}`}
-                            />
-                            <IngredientItem
-                              ingredient={ing}
-                              onAnchor={(amount) =>
-                                anchorIngredientAmount(ing.index, amount)
-                              }
-                            />
-                          </li>
-                        );
-                      })}
-                    </ul>
-                  </div>
-                ))
+                <IngredientList
+                  groups={scalable.groupedIngredients}
+                  headingClassName="text-xs"
+                  itemClassName="text-sm"
+                  isSelected={(ing) => selectedIngredients.has(ing.id)}
+                  onToggle={(ing) => toggleIngredient(ing.id)}
+                  onAnchor={(ing, amount) =>
+                    anchorIngredientAmount(ing.index, amount)
+                  }
+                />
               )}
             </div>
           )}
