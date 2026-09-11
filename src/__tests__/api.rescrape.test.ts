@@ -101,9 +101,9 @@ describe("POST /api/recipes/[id]/rescrape", () => {
     );
   });
 
-  // Some scrapers hand back the steps as one markdown string; that must read
-  // as a recipe, not as a malformed response.
-  it("accepts a markdown-string recipeInstructions from the webhook", async () => {
+  // The webhook's contract is the HowTo array; any other shape is a malformed
+  // response, not a recipe.
+  it("returns 502 when the webhook's recipeInstructions is a string", async () => {
     const { getRecipeById } = await import("@/lib/recipes");
     vi.mocked(getRecipeById).mockResolvedValueOnce(storedRecipe);
     vi.stubGlobal(
@@ -116,8 +116,7 @@ describe("POST /api/recipes/[id]/rescrape", () => {
     );
 
     const res = await POST(postReq(), makeParams());
-    expect(res.status).toBe(200);
-    expect((await res.json()).instructions).toEqual(makeSteps(["Mix.", "Bake."]));
+    expect(res.status).toBe(502);
   });
 
   it("posts the recipe URL to the webhook", async () => {

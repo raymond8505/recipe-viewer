@@ -717,8 +717,8 @@ describe("createRecipe", () => {
     ]);
   });
 
-  // The same edge for the steps: HowTo objects (or a markdown string) become
-  // instruction groups and never reach the stored schema.
+  // The same edge for the steps: HowTo objects become instruction groups and
+  // never reach the stored schema.
   it("turns schema.recipeInstructions into instruction groups", async () => {
     const { createRecipeRow } = await import("@/lib/recipes");
     vi.mocked(createRecipeRow).mockResolvedValueOnce({
@@ -737,7 +737,7 @@ describe("createRecipe", () => {
         name: "New",
         recipeInstructions: [
           { "@type": "HowToStep", text: "Mix.", name: "Mix", timeRequired: "PT2M" },
-          "Bake.",
+          { "@type": "HowToStep", text: "Bake." },
         ],
       },
     });

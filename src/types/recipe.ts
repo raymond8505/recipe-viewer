@@ -173,10 +173,11 @@ export interface RecipeInstructionGroup {
   steps: RecipeStep[];
 }
 
-// Schema.org HowTo types — the wire form of a recipe's instructions. Produced
-// by `toSchemaOrgInstructions` at the outbound edges and consumed by
-// `fromSchemaOrgInstructions` at the inbound ones (src/lib/format.ts); nothing
-// internal carries them.
+// Schema.org HowTo types — the wire form of a recipe's instructions, the same
+// in both directions: `recipeInstructions` is an array of these. Produced by
+// `toSchemaOrgInstructions` at the outbound edges and consumed by
+// `fromSchemaOrgInstructions` at the inbound ones (src/lib/format.ts), where
+// `schemaOrgRecipeInputSchema` validates them; nothing internal carries them.
 
 export interface HowToStep {
   "@type"?: "HowToStep" | string;
@@ -185,26 +186,11 @@ export interface HowToStep {
   timeRequired?: string;
 }
 
-/** A section as the app emits it. */
 export interface HowToSection {
   "@type": "HowToSection";
   name: string;
   itemListElement: HowToStep[];
 }
-
-/** A section as a scraper actually sends it: `itemListElement` may be one step or missing. Inbound only. */
-export interface SchemaOrgHowToSection extends Omit<HowToSection, "itemListElement"> {
-  itemListElement?: HowToStep | HowToStep[];
-}
-
-export type SchemaOrgInstructionItem = string | HowToStep | SchemaOrgHowToSection;
-
-/**
- * `recipeInstructions` as it arrives from outside: the array, a single item,
- * or a markdown string (a bare string at the top level is markdown; inside the
- * array it is one step's text).
- */
-export type SchemaOrgInstructions = SchemaOrgInstructionItem | SchemaOrgInstructionItem[];
 
 /**
  * Schema.org/QuantitativeValue — the structured form of `recipeYield`.

@@ -4,7 +4,7 @@ import {
   recipeCreateInputSchema,
   recipeImageUploadInputSchema,
   recipeInstructionsInputSchema,
-  schemaOrgInstructionsInputSchema,
+  schemaOrgRecipeInputSchema,
   schemaRecipeSchema,
 } from "@/lib/schemas/recipe";
 
@@ -40,24 +40,35 @@ describe("recipeInstructionsInputSchema", () => {
   });
 });
 
-describe("schemaOrgInstructionsInputSchema", () => {
-  it("accepts a markdown string, a single item, and a mixed array", () => {
-    expect(schemaOrgInstructionsInputSchema.safeParse("- Mix.\n- Bake.").success).toBe(true);
+describe("schemaOrgRecipeInputSchema — recipeInstructions", () => {
+  const withInstructions = (recipeInstructions: unknown) =>
+    schemaOrgRecipeInputSchema.safeParse({ name: "Soup", recipeInstructions }).success;
+
+  it("accepts an array of steps, with or without @type, and sections", () => {
     expect(
-      schemaOrgInstructionsInputSchema.safeParse({ "@type": "HowToStep", text: "Stir." }).success,
-    ).toBe(true);
-    expect(
-      schemaOrgInstructionsInputSchema.safeParse([
-        "Chop.",
+      withInstructions([
+        { "@type": "HowToStep", text: "Chop." },
         { text: "Fry." },
-        { "@type": "HowToSection", name: "Lone", itemListElement: { text: "Only." } },
-        { "@type": "HowToSection", name: "Bare" },
-      ]).success,
+        { "@type": "HowToSection", name: "Sauce", itemListElement: [{ text: "Simmer." }] },
+      ]),
     ).toBe(true);
   });
 
+  it("rejects a string, a lone step, and a bare string inside the array", () => {
+    expect(withInstructions("- Mix.\n- Bake.")).toBe(false);
+    expect(withInstructions({ "@type": "HowToStep", text: "Stir." })).toBe(false);
+    expect(withInstructions(["Chop."])).toBe(false);
+  });
+
+  it("rejects a section whose itemListElement is missing or a lone step", () => {
+    expect(withInstructions([{ "@type": "HowToSection", name: "Bare" }])).toBe(false);
+    expect(
+      withInstructions([{ "@type": "HowToSection", name: "Lone", itemListElement: { text: "Only." } }]),
+    ).toBe(false);
+  });
+
   it("rejects an object that is neither a step nor a section", () => {
-    expect(schemaOrgInstructionsInputSchema.safeParse([{ name: "no text" }]).success).toBe(false);
+    expect(withInstructions([{ name: "no text" }])).toBe(false);
   });
 });
 

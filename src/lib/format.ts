@@ -250,9 +250,6 @@ import type {
   RecipeIngredientGroupInput,
   RecipeInstructionGroup,
   RecipeStep,
-  SchemaOrgHowToSection,
-  SchemaOrgInstructionItem,
-  SchemaOrgInstructions,
   SchemaOrgRecipe,
   SchemaRecipe,
 } from "@/types/recipe";
@@ -489,53 +486,12 @@ export function toSchemaOrgJsonLd(
 // steps on either side of a section stay on either side.
 // ---------------------------------------------------------------------------
 
-/**
- * Parse markdown into instruction groups: "## Name" opens a named group,
- * "- text" / "* text" / "1. text" and bare lines are steps in the current
- * group (nameless before any heading), blank lines are ignored. The string
- * form some scrapers deliver `recipeInstructions` in.
- */
-export function markdownToInstructions(markdown: string): RecipeInstructionGroup[] {
-  const groups: RecipeInstructionGroup[] = [];
-  let current: RecipeInstructionGroup | null = null;
-
-  for (const rawLine of markdown.split("\n")) {
-    const line = rawLine.trim();
-    if (!line) continue;
-
-    if (line.startsWith("## ")) {
-      current = { name: line.slice(3).trim(), steps: [] };
-      groups.push(current);
-      continue;
-    }
-
-    let text: string;
-    if (line.startsWith("- ") || line.startsWith("* ")) {
-      text = line.slice(2).trim();
-    } else if (/^\d+\.\s/.test(line)) {
-      text = line.replace(/^\d+\.\s+/, "").trim();
-    } else {
-      text = line;
-    }
-
-    if (!text) continue;
-    if (!current) {
-      current = { steps: [] };
-      groups.push(current);
-    }
-    current.steps.push({ text });
-  }
-
-  return canonicalizeInstructions(groups);
+function isSchemaOrgSection(item: HowToStep | HowToSection): item is HowToSection {
+  return item?.["@type"] === "HowToSection";
 }
 
-function isSchemaOrgSection(item: SchemaOrgInstructionItem): item is SchemaOrgHowToSection {
-  return typeof item === "object" && item !== null && item["@type"] === "HowToSection";
-}
-
-/** One inbound item that is not a section → at most one step; an object with no text is nothing. */
-function stepFromSchemaOrg(item: string | HowToStep): RecipeStep[] {
-  if (typeof item === "string") return [{ text: item }];
+/** One inbound step → at most one step; an object with no text is nothing. */
+function stepFromSchemaOrg(item: HowToStep): RecipeStep[] {
   if (typeof item?.text !== "string") return [];
   const step: RecipeStep = { text: item.text };
   if (typeof item.name === "string" && item.name.trim()) step.name = item.name;
@@ -545,32 +501,27 @@ function stepFromSchemaOrg(item: string | HowToStep): RecipeStep[] {
 }
 
 /**
- * The inbound edge: `recipeInstructions` as a scrape, create_recipe, the
- * re-scrape webhook or the window API delivers it → canonical groups. Accepts
- * every shape the wild produces — a markdown string, one bare item, or an
- * array mixing strings, `{ text }` objects with or without `@type`, and
- * sections whose `itemListElement` is an array, a single step or missing.
+ * The inbound edge: `recipeInstructions` as create_recipe, the re-scrape
+ * webhook or the window API delivers it → canonical groups. The wire form is
+ * the array `schemaOrgRecipeInputSchema` validates: HowToStep objects, `@type`
+ * optional, and HowToSections whose `itemListElement` is an array of them.
+ * Anything but an array is no steps — the window API hands its argument over
+ * unvalidated, and iterating a string yields its characters, not its steps.
  *
  * A duration survives only beside a name (the rule `stepTimers` reads);
  * "PT0M" and durations the parser can't read are dropped with it.
  */
 export function fromSchemaOrgInstructions(
-  raw: SchemaOrgInstructions | null | undefined,
+  raw: Array<HowToStep | HowToSection> | undefined,
 ): RecipeInstructionGroup[] {
-  if (raw == null) return [];
-  if (typeof raw === "string") return markdownToInstructions(raw);
+  if (!Array.isArray(raw)) return [];
 
   const groups: RecipeInstructionGroup[] = [];
   let run: RecipeInstructionGroup | null = null;
-  for (const item of Array.isArray(raw) ? raw : [raw]) {
+  for (const item of raw) {
     if (isSchemaOrgSection(item)) {
       run = null;
-      const list = item.itemListElement;
-      const items = Array.isArray(list) ? list : list == null ? [] : [list];
-      groups.push({
-        name: typeof item.name === "string" ? item.name : "",
-        steps: items.flatMap(stepFromSchemaOrg),
-      });
+      groups.push({ name: item.name, steps: item.itemListElement.flatMap(stepFromSchemaOrg) });
       continue;
     }
     if (!run) {
