@@ -71,3 +71,22 @@ export const NotesSaving: Story = {
     notesSaveState: "saving",
   },
 };
+
+/**
+ * A column shorter than its header and notes together — a landscape phone with
+ * the on-screen keyboard open. The timer list shrinks to its padding and the
+ * column itself scrolls, so the notes stay reachable rather than clipped.
+ */
+export const NotesInShortViewport: Story = {
+  // The height is the point: 160px is less than the header plus the notes.
+  globals: { viewport: { value: "360px-160px" } },
+  args: {
+    timers: [
+      makeTimer("t1", "Pasta"),
+      makeTimer("t2", "Sauce", { remaining: 180, paused: true }),
+    ],
+    onNotesChange: fn(),
+    cookingNotes: "Added extra garlic this time.",
+    notesSaveState: "idle",
+  },
+};

@@ -34,7 +34,10 @@ export default function TimerColumn({
   notesSaveState = "idle",
 }: TimerColumnProps) {
   return (
-    <div className="w-full h-full border-l border-gray-200 flex flex-col min-w-0">
+    // The column scrolls only when the timer list has collapsed and the header
+    // and notes still overflow — a short viewport with the keyboard open — so
+    // the browser can scroll a focused notes textarea into view.
+    <div className="w-full h-full border-l border-gray-200 flex flex-col min-w-0 overflow-y-auto">
       {/* Sticky header */}
       <div className="shrink-0 bg-card border-b border-gray-200 px-4 py-3 flex items-center gap-2">
         <AddTimerButton onClick={onAddTimer} />
