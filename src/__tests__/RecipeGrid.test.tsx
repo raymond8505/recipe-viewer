@@ -54,8 +54,8 @@ describe("RecipeGrid", () => {
       />,
     );
 
-    expect(screen.getByText("350 kcal")).toBeTruthy();
-    expect(screen.getByText("24 g protein")).toBeTruthy();
+    expect(screen.getByText("350kcal")).toBeTruthy();
+    expect(screen.getByText("24g protein")).toBeTruthy();
   });
 
   // The default is calories and protein *where they resolve* — a recipe that
@@ -91,7 +91,7 @@ describe("RecipeGrid", () => {
     );
 
     expect(screen.getByText(/from new.raymonds.recipes/)).toBeTruthy();
-    expect(screen.queryByText("350 kcal")).toBeNull();
+    expect(screen.queryByText("350kcal")).toBeNull();
   });
 
   it("overlays each card's category by default", () => {
@@ -111,6 +111,23 @@ describe("RecipeGrid", () => {
 
     render(<RecipeGrid recipes={recipes} showStatusBadge />);
     expect(screen.getByText("draft")).toBeTruthy();
+  });
+
+  // The overlay packs towards the corner, so the last badge is the one in it,
+  // and the status is what has to be there.
+  it("puts the status badge last, in the corner", () => {
+    const { container } = render(
+      <RecipeGrid
+        recipes={[categorized("1", "Pasta", { status: "draft" })]}
+        showStatusBadge
+      />,
+    );
+
+    const overlay = container.querySelector(".absolute.top-2.right-2");
+    expect([...(overlay?.children ?? [])].map((el) => el.textContent)).toEqual([
+      "Dinner",
+      "draft",
+    ]);
   });
 
   it("lets a caller's top badges take over the status flag as well", () => {

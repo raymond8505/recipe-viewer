@@ -74,15 +74,13 @@ export const NoTimeOrBadges: Story = {
 
 /**
  * Status sits in the same array as the category, so a signed-in listing is
- * just a listing whose top-badge array has one more entry in it.
+ * just a listing whose top-badge array has one more entry in it. It goes last,
+ * always — the overlay packs right, so last is the corner.
  */
 export const WithStatusBadge: Story = {
   args: {
     recipe: { ...baseRecipe, status: "draft" },
-    topBadges: [
-      <RecipeStatusBadge key="status" status="draft" />,
-      categoryBadge,
-    ],
+    topBadges: [categoryBadge, <RecipeStatusBadge key="status" status="draft" />],
   },
 };
 
@@ -95,10 +93,7 @@ export const WithNutritionBadges: Story = {
 export const EveryBadge: Story = {
   args: {
     recipe: { ...baseRecipe, status: "draft" },
-    topBadges: [
-      <RecipeStatusBadge key="status" status="draft" />,
-      categoryBadge,
-    ],
+    topBadges: [categoryBadge, <RecipeStatusBadge key="status" status="draft" />],
     badges: nutritionBadges,
   },
 };

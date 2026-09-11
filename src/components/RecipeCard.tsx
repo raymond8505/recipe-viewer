@@ -20,7 +20,8 @@ interface RecipeCardProps {
   /**
    * Badges overlaid on the image, top right. Which badges a card carries —
    * and what each of them says — is the caller's decision; the card only
-   * finds them a place to sit.
+   * finds them a place to sit. They pack towards the corner, so the LAST one
+   * is the one in it: a status badge belongs at the end of this array.
    */
   topBadges?: ReactNode[];
   /** Badges in the footer, after the time. Same contract as `topBadges`. */

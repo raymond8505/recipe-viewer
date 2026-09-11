@@ -77,7 +77,7 @@ describe("RecipeCard", () => {
       />,
     );
 
-    expect(screen.getByText("350 kcal")).toBeTruthy();
+    expect(screen.getByText("350kcal")).toBeTruthy();
     expect(screen.getByText("anything at all")).toBeTruthy();
   });
 

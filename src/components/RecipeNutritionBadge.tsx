@@ -49,8 +49,11 @@ interface RecipeNutritionBadgeProps {
  * padding/size/weight.)
  *
  * Per serving, always. A card has no room to spell that out, so the basis
- * lives in the tooltip — without it "350 kcal" reads just as easily as the
+ * lives in the tooltip — without it "350kcal" reads just as easily as the
  * whole recipe.
+ *
+ * Compact on the face, spaced in the tooltip: a card footer is measured in
+ * pixels, a tooltip is read.
  */
 export function RecipeNutritionBadge({
   field,
@@ -58,14 +61,13 @@ export function RecipeNutritionBadge({
   className,
 }: RecipeNutritionBadgeProps) {
   const label = NUTRIENT_BADGE_LABELS[field];
+  const amount = formatNutrientDisplay(value, { compact: true });
   return (
     <Badge
-      title={`${value.value} per serving`}
+      title={`${formatNutrientDisplay(value)} per serving`}
       className={cn("rounded-full bg-muted text-muted-foreground", className)}
     >
-      {label
-        ? `${formatNutrientDisplay(value)} ${label}`
-        : formatNutrientDisplay(value)}
+      {label ? `${amount} ${label}` : amount}
     </Badge>
   );
 }

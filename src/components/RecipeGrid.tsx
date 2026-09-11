@@ -12,8 +12,9 @@ interface RecipeGridProps {
   showStatusBadge?: boolean;
   /**
    * The badges overlaid on each card's image. Defaults to the recipe's first
-   * category, preceded by its status when `showStatusBadge` is set — supplying
-   * this takes over both, `showStatusBadge` included.
+   * category, followed by its status when `showStatusBadge` is set — supplying
+   * this takes over both, `showStatusBadge` included, and owes the status the
+   * last slot too.
    */
   topBadges?: (recipe: RecipeRow) => ReactNode[];
   /**
@@ -25,8 +26,10 @@ interface RecipeGridProps {
 }
 
 /**
- * Status first so it keeps the corner it has always occupied, with the
- * category growing leftwards from it.
+ * Status goes last, which is where every top-badge array has to put it: the
+ * overlay is `justify-end`, so the last badge is the one in the corner, and
+ * the corner is where a reader's eye looks for "is this thing published?".
+ * Everything else grows leftwards from it.
  */
 function defaultTopBadges(
   recipe: RecipeRow,

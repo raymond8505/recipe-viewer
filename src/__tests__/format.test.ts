@@ -717,6 +717,17 @@ describe("formatNutrientDisplay", () => {
   it("prints bare when the unit is empty", () => {
     expect(formatNutrientDisplay({ value: 250, unit: "" })).toBe("250");
   });
+
+  // The badges on a recipe card, where the gap costs a pixel the footer needs.
+  it("closes the gap before the unit when compact", () => {
+    expect(formatNutrientDisplay({ value: 9.96, unit: "g" }, { compact: true })).toBe("10g");
+    expect(formatNutrientDisplay({ value: 350, unit: "kcal" }, { compact: true })).toBe("350kcal");
+    expect(formatNutrientDisplay({ value: 0.2, unit: "g" }, { compact: true })).toBe("0.2g");
+  });
+
+  it("has nothing to close up when compact and the unit is empty", () => {
+    expect(formatNutrientDisplay({ value: 250, unit: "" }, { compact: true })).toBe("250");
+  });
 });
 
 describe("isIsoDuration", () => {

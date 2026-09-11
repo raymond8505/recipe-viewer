@@ -190,15 +190,24 @@ export function parseNumeric(raw: string): number | null | undefined {
 }
 
 /**
- * Nutrition-panel display rounding: values over 1 round to the nearest
- * integer (9.96 → "10 g", 12.4 → "12 g"); values ≤ 1 round to 2dp (0.2 →
- * "0.2 g") — integer-rounding those would erase them entirely. Display-only:
- * JSON-LD/MCP serialization keeps its own (1dp) precision.
+ * Nutrition display rounding: values over 1 round to the nearest integer
+ * (9.96 → "10 g", 12.4 → "12 g"); values ≤ 1 round to 2dp (0.2 → "0.2 g") —
+ * integer-rounding those would erase them entirely. Display-only: JSON-LD/MCP
+ * serialization keeps its own (1dp) precision.
+ *
+ * `compact` closes the gap before the unit ("10g"), for surfaces measured in
+ * pixels rather than reading comfort — a recipe card's badges. Spaced is the
+ * default because the panel and the Nutrition Facts label are prose-width and
+ * the label follows the FDA's spacing.
  */
-export function formatNutrientDisplay(nv: NutrientValue): string {
+export function formatNutrientDisplay(
+  nv: NutrientValue,
+  { compact = false }: { compact?: boolean } = {},
+): string {
   const rounded =
     nv.value > 1 ? Math.round(nv.value) : Math.round(nv.value * 100) / 100;
-  return nv.unit ? `${rounded}${nv.unit}` : String(rounded);
+  if (!nv.unit) return String(rounded);
+  return compact ? `${rounded}${nv.unit}` : `${rounded} ${nv.unit}`;
 }
 
 /** Pick the singular or plural form of a noun for a count. Returns the word

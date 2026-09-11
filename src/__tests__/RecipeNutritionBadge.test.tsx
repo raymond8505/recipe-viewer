@@ -21,6 +21,8 @@ function renderBadges(badges: React.ReactElement[]) {
 }
 
 describe("RecipeNutritionBadge", () => {
+  // Compact on the face — the amount and its unit close up, and only the
+  // nutrient's name is held off by a space.
   it("names the nutrient after its amount", () => {
     render(
       <RecipeNutritionBadge
@@ -28,21 +30,23 @@ describe("RecipeNutritionBadge", () => {
         value={{ value: 24, unit: "g" }}
       />,
     );
-    expect(screen.getByText("24 g protein")).toBeTruthy();
+    expect(screen.getByText("24g protein")).toBeTruthy();
   });
 
   it("leaves calories unnamed, because kcal already names it", () => {
     render(
       <RecipeNutritionBadge field="calories" value={{ value: 350, unit: "kcal" }} />,
     );
-    expect(screen.getByText("350 kcal")).toBeTruthy();
+    expect(screen.getByText("350kcal")).toBeTruthy();
   });
 
+  // Spaced in the tooltip, which is read rather than measured, and which is
+  // the only place the per-serving basis is stated.
   it("states the per-serving basis the card has no room to spell out", () => {
     render(
       <RecipeNutritionBadge field="calories" value={{ value: 350, unit: "kcal" }} />,
     );
-    expect(screen.getByTitle("Per serving")).toBeTruthy();
+    expect(screen.getByTitle("350 kcal per serving")).toBeTruthy();
   });
 
   it("rounds a display value the way every other nutrition surface does", () => {
@@ -52,7 +56,7 @@ describe("RecipeNutritionBadge", () => {
         value={{ value: 23.6, unit: "g" }}
       />,
     );
-    expect(screen.getByText("24 g protein")).toBeTruthy();
+    expect(screen.getByText("24g protein")).toBeTruthy();
   });
 });
 
@@ -64,8 +68,8 @@ describe("recipeNutritionBadges", () => {
 
     expect(badges).toHaveLength(2);
     renderBadges(badges);
-    expect(screen.getByText("350 kcal")).toBeTruthy();
-    expect(screen.getByText("24 g protein")).toBeTruthy();
+    expect(screen.getByText("350kcal")).toBeTruthy();
+    expect(screen.getByText("24g protein")).toBeTruthy();
   });
 
   it("picks the fields it is given, in the order given", () => {
@@ -78,8 +82,8 @@ describe("recipeNutritionBadges", () => {
     );
 
     renderBadges(badges);
-    expect(screen.getByText("50 g carbs")).toBeTruthy();
-    expect(screen.getByText("350 kcal")).toBeTruthy();
+    expect(screen.getByText("50g carbs")).toBeTruthy();
+    expect(screen.getByText("350kcal")).toBeTruthy();
     expect(screen.queryByText(/protein/)).toBeNull();
   });
 
@@ -90,7 +94,7 @@ describe("recipeNutritionBadges", () => {
 
     expect(badges).toHaveLength(1);
     renderBadges(badges);
-    expect(screen.getByText("350 kcal")).toBeTruthy();
+    expect(screen.getByText("350kcal")).toBeTruthy();
   });
 
   // The four ways a recipe reaches "no nutrition". All four render nothing
