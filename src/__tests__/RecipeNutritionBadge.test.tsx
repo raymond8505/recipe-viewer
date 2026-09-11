@@ -35,7 +35,10 @@ describe("RecipeNutritionBadge", () => {
 
   it("leaves calories unnamed, because kcal already names it", () => {
     render(
-      <RecipeNutritionBadge field="calories" value={{ value: 350, unit: "kcal" }} />,
+      <RecipeNutritionBadge
+        field="calories"
+        value={{ value: 350, unit: "kcal" }}
+      />,
     );
     expect(screen.getByText("350kcal")).toBeTruthy();
   });
@@ -44,9 +47,12 @@ describe("RecipeNutritionBadge", () => {
   // the only place the per-serving basis is stated.
   it("states the per-serving basis the card has no room to spell out", () => {
     render(
-      <RecipeNutritionBadge field="calories" value={{ value: 350, unit: "kcal" }} />,
+      <RecipeNutritionBadge
+        field="calories"
+        value={{ value: 350, unit: "kcal" }}
+      />,
     );
-    expect(screen.getByTitle("350 kcal per serving")).toBeTruthy();
+    expect(screen.getByTitle("350kcal per serving")).toBeTruthy();
   });
 
   it("rounds a display value the way every other nutrition surface does", () => {
