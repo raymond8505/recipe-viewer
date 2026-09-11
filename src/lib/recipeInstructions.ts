@@ -12,6 +12,14 @@ export function flattenSteps(
   return groups.flatMap((group) => group.steps);
 }
 
+/**
+ * A step's completion key in cooking mode: its group and step indexes. Unique
+ * only within one recipe — cooking mode keeps one bucket of keys per recipe.
+ */
+export function stepKey(groupIndex: number, stepIndex: number): string {
+  return `${groupIndex}-${stepIndex}`;
+}
+
 /** The timers a recipe declares: every step carrying both a label and a duration, in reading order. */
 export function stepTimers(
   groups: readonly RecipeInstructionGroup[],

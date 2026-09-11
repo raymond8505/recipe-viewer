@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   canonicalizeInstructions,
   flattenSteps,
+  stepKey,
   stepTimers,
 } from "@/lib/recipeInstructions";
 import { makeInstructionGroup, makeStep, makeSteps } from "@/fixtures";
@@ -30,6 +31,13 @@ describe("flattenSteps / stepTimers", () => {
       { name: "Boil", seconds: 300 },
       { name: "Simmer", seconds: 330 },
     ]);
+  });
+});
+
+describe("stepKey", () => {
+  it("joins the group and step indexes", () => {
+    expect(stepKey(0, 2)).toBe("0-2");
+    expect(stepKey(3, 0)).toBe("3-0");
   });
 });
 
