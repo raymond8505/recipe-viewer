@@ -54,20 +54,24 @@ export const WithTimers: Story = {
   },
 };
 
-export const WithNotes: Story = {
+/**
+ * Logged in, the header gains a Notes button right of Reset All; it opens
+ * CookingNotesModal over the whole cooking view.
+ */
+export const LoggedIn: Story = {
   args: {
     timers: [makeTimer("t1", "Pasta")],
-    onNotesChange: fn(),
-    cookingNotes: "Added extra garlic this time.",
-    notesSaveState: "saved",
+    onOpenNotes: fn(),
   },
 };
 
-export const NotesSaving: Story = {
+/**
+ * Notes doesn't depend on timers: with none, Reset All is hidden and Notes
+ * sits directly beside Add Timer.
+ */
+export const LoggedInNoTimers: Story = {
   args: {
     timers: [],
-    onNotesChange: fn(),
-    cookingNotes: "Reducing the sauce…",
-    notesSaveState: "saving",
+    onOpenNotes: fn(),
   },
 };

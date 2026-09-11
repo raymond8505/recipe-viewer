@@ -23,6 +23,9 @@ import {
 import TimerColumn from "@/components/cooking/TimerColumn";
 import TimerCard from "@/components/cooking/TimerCard";
 import AddTimerModal from "@/components/cooking/AddTimerModal";
+import CookingNotesModal, {
+  type NotesSaveState,
+} from "@/components/cooking/CookingNotesModal";
 import DraggableRibbon, { RibbonItem } from "@/components/cooking/DraggableRibbon";
 import MealSearch from "@/components/cooking/MealSearch";
 import MealTabs from "@/components/cooking/MealTabs";
@@ -35,6 +38,7 @@ import {
   IconButton,
   AddTimerButton,
   ResetTimersButton,
+  CookingNotesButton,
   CloseButton,
   CopyShoppingListButton,
 } from "@/components/buttons";
@@ -96,9 +100,8 @@ export default function CookingMode({
   const [cookingNotes, setCookingNotes] = useState(
     () => recipe.metadata.schema.cookingNotes ?? "",
   );
-  const [notesSaveState, setNotesSaveState] = useState<
-    "idle" | "saving" | "saved" | "error"
-  >("idle");
+  const [notesSaveState, setNotesSaveState] = useState<NotesSaveState>("idle");
+  const [showNotes, setShowNotes] = useState(false);
   const notesFirstRender = useRef(true);
 
   // Meal state — primary recipe is always at index 0 and cannot be removed
@@ -416,11 +419,17 @@ export default function CookingMode({
 
       {/* Mobile timer ribbon — sticky below header, only on small screens */}
       <div className="lg:hidden shrink-0 bg-card border-b border-gray-200">
-        {/* Add timer + Reset all — inline, add timer grows */}
+        {/* Add timer + Reset all + Notes — inline, add timer grows */}
         <div className="flex items-center gap-2 px-3 pt-2 pb-1">
           <AddTimerButton compact onClick={() => setShowAddTimer(true)} />
           {timers.length > 0 && (
             <ResetTimersButton onClick={resetAll} className="px-3 py-2.5" />
+          )}
+          {isLoggedIn && (
+            <CookingNotesButton
+              onClick={() => setShowNotes(true)}
+              className="px-3 py-2.5"
+            />
           )}
         </div>
         {/* Horizontal scrollable timer cards */}
@@ -449,33 +458,6 @@ export default function CookingMode({
           </p>
         )}
       </div>
-
-      {/* Mobile cooking notes — sticky below timer ribbon, above scrollable content (logged-in only) */}
-      {isLoggedIn && (
-        <div className="lg:hidden shrink-0 bg-card border-b border-gray-200 px-3 py-2">
-          <div className="flex items-center justify-between mb-1">
-            <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">
-              Cooking notes
-            </p>
-            {notesSaveState === "saving" && (
-              <span className="text-xs text-gray-400">Saving…</span>
-            )}
-            {notesSaveState === "saved" && (
-              <span className="text-xs text-green-500">Saved ✓</span>
-            )}
-            {notesSaveState === "error" && (
-              <span className="text-xs text-red-500">Error saving</span>
-            )}
-          </div>
-          <textarea
-            value={cookingNotes}
-            onChange={(e) => setCookingNotes(e.target.value)}
-            placeholder="Note changes for next time…"
-            rows={3}
-            className="w-full resize-none text-sm text-gray-700 placeholder-gray-400 focus:outline-hidden leading-relaxed"
-          />
-        </div>
-      )}
 
       {/* Main content row */}
       <div className="flex-1 flex overflow-hidden min-h-0">
@@ -730,17 +712,21 @@ export default function CookingMode({
             onDismissTimer={dismissTimer}
             onResetAll={resetAll}
             timerRecipeNames={timerRecipeNames}
-            {...(isLoggedIn && {
-              cookingNotes,
-              onNotesChange: setCookingNotes,
-              notesSaveState,
-            })}
+            onOpenNotes={isLoggedIn ? () => setShowNotes(true) : undefined}
           />
         </div>
       </div>
       {/* end main content row */}
 
       {/* Modals — children of cooking mode wrapper, not the column */}
+      {isLoggedIn && showNotes && (
+        <CookingNotesModal
+          value={cookingNotes}
+          onChange={setCookingNotes}
+          saveState={notesSaveState}
+          onClose={() => setShowNotes(false)}
+        />
+      )}
       {showAddTimer && (
         <AddTimerModal
           onAdd={(label, duration) => {
