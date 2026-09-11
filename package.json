@@ -10,7 +10,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint . --max-warnings 0",
-    "prepare": "husky",
+    "postinstall": "husky",
     "test": "vitest",
     "test:run": "vitest run",
     "deploy:quick": "yarn build && deploy",
