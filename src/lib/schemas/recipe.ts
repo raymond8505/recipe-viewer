@@ -73,27 +73,6 @@ export const howToSectionSchema = z.object({
   itemListElement: z.array(howToStepSchema),
 });
 
-// A section as scrapers send it: `itemListElement` is usually an array,
-// sometimes a lone step, occasionally missing. See SchemaOrgHowToSection.
-const schemaOrgHowToSectionSchema = howToSectionSchema.extend({
-  itemListElement: z.union([z.array(howToStepSchema), howToStepSchema]).optional(),
-});
-
-const schemaOrgInstructionItemSchema = z.union([
-  z.string(),
-  howToStepSchema,
-  schemaOrgHowToSectionSchema,
-]);
-
-// The inbound Schema.org edge for instructions: the array, one item, or the
-// markdown string some scrapers produce. See SchemaOrgInstructions.
-export const schemaOrgInstructionsInputSchema = z.union([
-  z.string(),
-  howToStepSchema,
-  schemaOrgHowToSectionSchema,
-  z.array(schemaOrgInstructionItemSchema),
-]);
-
 // What a writer sends for a recipe's instructions: the stored shape itself,
 // since a step has no identity to preserve. `seconds` is a timer's whole-second
 // duration and needs the timer's label — the same rule the editor enforces.
@@ -177,7 +156,7 @@ export const schemaRecipeSchema = z
 // groups at the boundary; the stored schema never carries either.
 export const schemaOrgRecipeInputSchema = schemaRecipeSchema.extend({
   recipeIngredient: z.array(schemaOrgIngredientLineSchema).optional(),
-  recipeInstructions: schemaOrgInstructionsInputSchema.optional(),
+  recipeInstructions: z.array(z.union([howToStepSchema, howToSectionSchema])).optional(),
 });
 
 // Recipe row `status` column — used as a zod enum at boundaries (MCP tool

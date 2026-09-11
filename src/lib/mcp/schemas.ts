@@ -117,13 +117,10 @@ const schemaOrgRecipeJsonSchema = {
       },
     },
     recipeInstructions: {
+      type: "array",
       description:
-        "The steps as a scraper produces them: an array of HowToStep ({ text, name?, timeRequired? }) and HowToSection ({ name, itemListElement }) objects, a single such object, or a markdown string. The server turns these into instruction groups; read them back as `instructions`.",
-      oneOf: [
-        { type: "array", items: { oneOf: [{ type: "string" }, { type: "object" }] } },
-        { type: "object" },
-        { type: "string" },
-      ],
+        "The steps as a scraper produces them: an array of HowToStep ({ text, name?, timeRequired? }) and HowToSection ({ name, itemListElement: HowToStep[] }) objects. The server turns these into instruction groups; read them back as `instructions`.",
+      items: { type: "object" },
     },
   },
 } as const;

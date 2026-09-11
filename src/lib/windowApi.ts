@@ -63,7 +63,7 @@ export const API_TOOLS: McpTool[] = [
   {
     name: "setRecipeViewerRecipe",
     description:
-      "setRecipeViewerRecipe(recipe: Recipe): void — Replaces the recipe displayed in cooking mode with a Schema.org Recipe (recipeIngredient as strings, or { name, group } objects; recipeInstructions as HowToStep / HowToSection objects, a single object, or a markdown string). Only takes effect while cooking mode is active.",
+      "setRecipeViewerRecipe(recipe: Recipe): void — Replaces the recipe displayed in cooking mode with a Schema.org Recipe (recipeIngredient as strings, or { name, group } objects; recipeInstructions as an array of HowToStep / HowToSection objects). Only takes effect while cooking mode is active.",
     inputSchema: {
       type: "object",
       properties: {

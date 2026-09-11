@@ -14,7 +14,6 @@ import {
   isBrowsableUrl,
   canonicalizeRecipeSource,
   CUSTOM_RECIPE_SOURCE,
-  markdownToInstructions,
   fromSchemaOrgInstructions,
   toSchemaOrgInstructions,
   toSchemaOrgJsonLd,
@@ -337,52 +336,18 @@ describe("isBrowsableUrl", () => {
   });
 });
 
-describe("markdownToInstructions", () => {
-  it("parses bullet lines into one nameless group", () => {
-    expect(markdownToInstructions("- Boil water.\n- Add pasta.")).toEqual(
-      makeSteps(["Boil water.", "Add pasta."]),
-    );
-  });
-
-  it("parses numbered and bare lines as steps", () => {
-    expect(markdownToInstructions("1. First step\n2. Second step\nThird")).toEqual(
-      makeSteps(["First step", "Second step", "Third"]),
-    );
-  });
-
-  it("opens a named group at each ## header", () => {
-    expect(
-      markdownToInstructions("- Chop.\n## Sauce\n- Simmer.\n- Season.\n## Serve\n- Plate."),
-    ).toEqual([
-      makeInstructionGroup(undefined, ["Chop."]),
-      makeInstructionGroup("Sauce", ["Simmer.", "Season."]),
-      makeInstructionGroup("Serve", ["Plate."]),
-    ]);
-  });
-
-  it("ignores empty lines and an empty string", () => {
-    expect(markdownToInstructions("- Step one\n\n- Step two")).toEqual(
-      makeSteps(["Step one", "Step two"]),
-    );
-    expect(markdownToInstructions("")).toEqual([]);
-  });
-});
-
 describe("fromSchemaOrgInstructions", () => {
   it("returns nothing for nothing", () => {
-    expect(fromSchemaOrgInstructions(null)).toEqual([]);
     expect(fromSchemaOrgInstructions(undefined)).toEqual([]);
     expect(fromSchemaOrgInstructions([])).toEqual([]);
   });
 
-  it("reads a markdown string, a single item, and bare strings inside the array", () => {
-    expect(fromSchemaOrgInstructions("- Mix.\n- Bake.")).toEqual(makeSteps(["Mix.", "Bake."]));
-    expect(fromSchemaOrgInstructions({ "@type": "HowToStep", text: "Stir." })).toEqual(
-      makeSteps(["Stir."]),
-    );
-    expect(fromSchemaOrgInstructions(["Chop.", { text: "Fry." }])).toEqual(
-      makeSteps(["Chop.", "Fry."]),
-    );
+  // The window API passes its argument through unvalidated.
+  it("reads anything but an array as no steps", () => {
+    expect(fromSchemaOrgInstructions("- Mix.\n- Bake." as unknown as HowToStep[])).toEqual([]);
+    expect(
+      fromSchemaOrgInstructions({ "@type": "HowToStep", text: "Stir." } as unknown as HowToStep[]),
+    ).toEqual([]);
   });
 
   it("groups top-level steps by run around a section, in order", () => {
@@ -401,19 +366,6 @@ describe("fromSchemaOrgInstructions", () => {
       makeInstructionGroup(undefined, ["One.", "Two."]),
       makeInstructionGroup("Sauce", ["Three."]),
       makeInstructionGroup(undefined, ["Four."]),
-    ]);
-  });
-
-  it("reads a section whose itemListElement is a single step or missing", () => {
-    expect(
-      fromSchemaOrgInstructions([
-        { "@type": "HowToSection", name: "Lone", itemListElement: { text: "Only." } },
-        { "@type": "HowToSection", name: "Bare" },
-        { "@type": "HowToStep", text: "After." },
-      ]),
-    ).toEqual([
-      makeInstructionGroup("Lone", ["Only."]),
-      makeInstructionGroup(undefined, ["After."]),
     ]);
   });
 
@@ -442,7 +394,7 @@ describe("fromSchemaOrgInstructions", () => {
       fromSchemaOrgInstructions([
         { "@type": "HowToStep", text: "  " },
         { "@type": "HowToStep" } as unknown as HowToStep,
-        "Keep.",
+        { "@type": "HowToStep", text: "Keep." },
       ]),
     ).toEqual(makeSteps(["Keep."]));
   });
