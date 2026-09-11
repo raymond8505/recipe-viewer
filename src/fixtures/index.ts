@@ -1,4 +1,4 @@
-export { recipeFixtures, makeRecipe } from "./recipes";
+export { recipeFixtures, makeRecipe, makeNutritionRecipeRow } from "./recipes";
 export {
   ingredientFixtures,
   makeIngredient,

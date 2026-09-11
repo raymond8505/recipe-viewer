@@ -1,5 +1,6 @@
 import type { RecipeRow } from "@/types/recipe";
-import { makeIngredientGroup } from "./ingredients";
+import type { IngredientNutrition } from "@/types/ingredient";
+import { makeIngredientGroup, makeNutritionLines } from "./ingredients";
 import { makeInstructionGroup } from "./instructions";
 
 // Time columns are SECONDS (see RecipeRow). These are HYDRATED rows — what
@@ -235,4 +236,34 @@ export function makeRecipe(
     metadata: { schema: { name } },
     ...overrides,
   };
+}
+
+/**
+ * A row that resolves nutrition — the two things `recipeFixtures` and
+ * `makeRecipe` deliberately lack, a yield and a matched line, supplied
+ * together because either alone still resolves to nothing.
+ *
+ * `total` is the WHOLE-RECIPE figure over `servings` portions, so 1400 kcal
+ * across the default four reads "350 kcal". Pass `servings: null` for the
+ * yield-less case, or add an unmatched line through `overrides.ingredients`
+ * for the half-covered one; both are "no nutrition", and they are worth
+ * telling apart in a test.
+ */
+export function makeNutritionRecipeRow(
+  id: string,
+  name: string,
+  total: IngredientNutrition,
+  { servings = 4, ...overrides }: Partial<RecipeRow> & { servings?: number | null } = {},
+): RecipeRow {
+  return makeRecipe(id, name, {
+    ingredients: makeNutritionLines(total, `1 portion ${name}`),
+    ...overrides,
+    metadata: {
+      schema: {
+        name,
+        ...(servings == null ? {} : { recipeYield: `${servings} servings` }),
+        ...overrides.metadata?.schema,
+      },
+    },
+  });
 }

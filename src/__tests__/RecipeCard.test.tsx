@@ -1,12 +1,13 @@
 import { describe, it, expect } from "vitest";
 import { render, screen } from "@testing-library/react";
 import RecipeCard from "@/components/RecipeCard";
-import type { RecipeRow } from "@/types/recipe";
+import { RecipeNutritionBadge } from "@/components/RecipeNutritionBadge";
+import { makeRecipe } from "@/fixtures";
 
-const mockRecipe: RecipeRow = {
-  id: "test-id-123",
+const mockRecipe = makeRecipe("test-id-123", "Chocolate Cake", {
   url: "https://example.com/recipe",
   source: "example.com",
+  total_time: 3600,
   metadata: {
     schema: {
       name: "Chocolate Cake",
@@ -15,7 +16,7 @@ const mockRecipe: RecipeRow = {
       recipeCategory: ["Dessert"],
     },
   },
-};
+});
 
 describe("RecipeCard", () => {
   it("renders the recipe name", () => {
@@ -35,11 +36,6 @@ describe("RecipeCard", () => {
     expect(screen.getByText("1 hr")).toBeTruthy();
   });
 
-  it("renders the category tag", () => {
-    render(<RecipeCard recipe={mockRecipe} />);
-    expect(screen.getByText("Dessert")).toBeTruthy();
-  });
-
   it("links to the recipe detail page", () => {
     render(<RecipeCard recipe={mockRecipe} />);
     const link = screen.getByRole("link");
@@ -53,14 +49,57 @@ describe("RecipeCard", () => {
   });
 
   it("renders image when provided", () => {
-    const recipeWithImage: RecipeRow = {
-      ...mockRecipe,
+    const recipeWithImage = makeRecipe("test-id-123", "Chocolate Cake", {
       metadata: {
         schema: { ...mockRecipe.metadata.schema, image: "https://example.com/cake.jpg" },
       },
-    };
+    });
     render(<RecipeCard recipe={recipeWithImage} />);
     const img = screen.getByRole("img");
     expect(img.getAttribute("src")).toContain("cake.jpg");
+  });
+
+  // The card places badges; it does not choose or build them. Anything the
+  // caller hands it lands in the footer, after the time.
+  it("renders the footer badges it is given", () => {
+    render(
+      <RecipeCard
+        recipe={mockRecipe}
+        badges={[
+          <RecipeNutritionBadge
+            key="calories"
+            field="calories"
+            value={{ value: 350, unit: "kcal" }}
+          />,
+          <span key="custom">anything at all</span>,
+        ]}
+      />,
+    );
+
+    expect(screen.getByText("350kcal")).toBeTruthy();
+    expect(screen.getByText("anything at all")).toBeTruthy();
+  });
+
+  it("overlays the top badges it is given", () => {
+    render(
+      <RecipeCard
+        recipe={mockRecipe}
+        topBadges={[<span key="status">draft</span>, <span key="cat">Dessert</span>]}
+      />,
+    );
+
+    expect(screen.getByText("draft")).toBeTruthy();
+    expect(screen.getByText("Dessert")).toBeTruthy();
+  });
+
+  // A card is a card with no badges at all — the time still renders, and the
+  // image carries no empty overlay box.
+  it("renders without badges when given none", () => {
+    const { container } = render(
+      <RecipeCard recipe={mockRecipe} topBadges={[]} badges={[]} />,
+    );
+
+    expect(screen.getByText("1 hr")).toBeTruthy();
+    expect(container.querySelector(".absolute")).toBeNull();
   });
 });

@@ -2,14 +2,14 @@ import { describe, it, expect } from "vitest";
 import { render, screen } from "@testing-library/react";
 import RecipeGrid from "@/components/RecipeGrid";
 import type { RecipeRow } from "@/types/recipe";
+import { makeRecipe, makeNutritionRecipeRow, makeIngredientLines } from "@/fixtures";
 
-function makeRecipe(id: string, name: string): RecipeRow {
-  return {
-    id,
-    url: `https://example.com/${id}`,
-    source: "example.com",
-    metadata: { schema: { name } },
-  };
+/** A recipe with a category, so the default top badges have something to show. */
+function categorized(id: string, name: string, overrides: Partial<RecipeRow> = {}) {
+  return makeRecipe(id, name, {
+    ...overrides,
+    metadata: { schema: { name, recipeCategory: "Dinner" } },
+  });
 }
 
 describe("RecipeGrid", () => {
@@ -40,5 +40,107 @@ describe("RecipeGrid", () => {
   it("does not render the empty state when recipes are present", () => {
     render(<RecipeGrid recipes={[makeRecipe("1", "Pasta")]} />);
     expect(screen.queryByText("No recipes found.")).toBeNull();
+  });
+
+  it("gives each card calories and protein by default", () => {
+    render(
+      <RecipeGrid
+        recipes={[
+          makeNutritionRecipeRow("1", "Pasta", {
+            calories_kcal: 1400,
+            protein_g: 96,
+          }),
+        ]}
+      />,
+    );
+
+    expect(screen.getByText("350kcal")).toBeTruthy();
+    expect(screen.getByText("24g protein")).toBeTruthy();
+  });
+
+  // The default is calories and protein *where they resolve* — a recipe that
+  // can't price its lines simply carries no nutrition badge, which is why the
+  // grid needs no per-recipe opt-out.
+  it("leaves a recipe with no resolvable nutrition without badges", () => {
+    render(
+      <RecipeGrid
+        recipes={[
+          makeRecipe("1", "Pasta", {
+            ingredients: makeIngredientLines(["2 cups flour"]),
+            metadata: { schema: { name: "Pasta", recipeYield: "4 servings" } },
+          }),
+        ]}
+      />,
+    );
+
+    expect(screen.getByText("Pasta")).toBeTruthy();
+    expect(screen.queryByText(/kcal/)).toBeNull();
+  });
+
+  it("uses the badges the caller supplies instead of the default", () => {
+    render(
+      <RecipeGrid
+        recipes={[
+          makeNutritionRecipeRow("1", "Pasta", {
+            calories_kcal: 1400,
+            protein_g: 96,
+          }),
+        ]}
+        badges={(recipe) => [<span key="src">from {recipe.source}</span>]}
+      />,
+    );
+
+    expect(screen.getByText(/from new.raymonds.recipes/)).toBeTruthy();
+    expect(screen.queryByText("350kcal")).toBeNull();
+  });
+
+  it("overlays each card's category by default", () => {
+    render(<RecipeGrid recipes={[categorized("1", "Pasta")]} />);
+
+    expect(screen.getByText("Dinner")).toBeTruthy();
+  });
+
+  // Whether a card shows its status is decided by what goes into the top-badge
+  // array, not by anything the card asks.
+  it("adds the status badge to the overlay only when asked", () => {
+    const recipes = [categorized("1", "Pasta", { status: "draft" })];
+
+    const { unmount } = render(<RecipeGrid recipes={recipes} />);
+    expect(screen.queryByText("draft")).toBeNull();
+    unmount();
+
+    render(<RecipeGrid recipes={recipes} showStatusBadge />);
+    expect(screen.getByText("draft")).toBeTruthy();
+  });
+
+  // The overlay packs towards the corner, so the last badge is the one in it,
+  // and the status is what has to be there.
+  it("puts the status badge last, in the corner", () => {
+    const { container } = render(
+      <RecipeGrid
+        recipes={[categorized("1", "Pasta", { status: "draft" })]}
+        showStatusBadge
+      />,
+    );
+
+    const overlay = container.querySelector(".absolute.top-2.right-2");
+    expect([...(overlay?.children ?? [])].map((el) => el.textContent)).toEqual([
+      "Dinner",
+      "draft",
+    ]);
+  });
+
+  it("lets a caller's top badges take over the status flag as well", () => {
+    render(
+      <RecipeGrid
+        recipes={[categorized("1", "Pasta", { status: "draft" })]}
+        showStatusBadge
+        topBadges={() => [<span key="mine">mine only</span>]}
+      />,
+    );
+
+    expect(screen.getByText("mine only")).toBeTruthy();
+    expect(screen.queryByText("draft")).toBeNull();
+    expect(screen.queryByText("Dinner")).toBeNull();
   });
 });
