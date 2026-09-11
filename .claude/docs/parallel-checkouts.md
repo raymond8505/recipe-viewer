@@ -22,6 +22,9 @@ var consumed in `src/` must go through `src/env.ts` + deploy wiring, which these
 - After a fresh clone: `yarn install`, copy `.env.local` + create `.env.yarn` /
   `.claude/settings.local.json`, and run `npx next typegen` (typecheck needs the generated
   `RouteContext` types).
+- **`yarn install` installs the git hooks** — husky runs from `postinstall`, because Yarn 4 never
+  runs a `prepare` script. Confirm with `git config core.hooksPath` → `.husky/_`; with it unset, git
+  finds no hooks and pushes skip the pre-push test run.
 - **Still shared between checkouts** (accept, don't fight): production Supabase (same rows, storage
   bucket, `oauth_clients`), `OAUTH_JWT_SECRET` + issuer (tokens minted by one checkout validate in
   another), and Gemini/USDA quotas — concurrent edits of the same recipe schedule duplicate
