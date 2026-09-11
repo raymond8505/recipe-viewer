@@ -43,3 +43,11 @@ The unit in a copied line is the recipe's own wording, preserved as `ParsedIngre
 **Selection keys are the line's `ing.id`** (`ScaledIngredient.id`, the `recipe_ingredients` row id) — an identity stable across scaling, so a selection survives the user changing the scale afterwards, and across a reword. Only the copy output scales.
 
 **Primary recipe copy must reflect the live `doc`, not `mealRecipes[0]`** — preserves window API overrides. Satisfied structurally rather than by branching on `r.id`: the effect that rebuilds `scalables` keys the primary off `doc`, so iterating `scalables` is already correct. Don't reintroduce a `recipe.metadata.schema` / `recipe.ingredients` read here.
+
+## On-screen keyboard
+
+The cooking-mode container is `position: fixed`, and CookingMode locks body scroll while it is open. Android Chrome's default `interactive-widget=resizes-visual` shrinks only the *visual* viewport for the keyboard, so `.cook-mode-container`'s `100svh` keeps its full height, and the bottom of the container sits under the keyboard with no scrollable ancestor that could bring a focused field into view. In the landscape (`lg`) layout, that bottom is the `TimerColumn` notes textarea.
+
+- **The container fits the visible area.** `useVisualViewport` (`src/hooks/useVisualViewport.ts`) returns the rect left visible while something covers the bottom of an unzoomed viewport, and CookingMode applies it as inline `height`/`top`, overriding the class. `null` (keyboard closed, pinch-zoomed, or no `visualViewport`) leaves the height to the class. Removing this puts the landscape notes back under the keyboard.
+- **`TimerColumn`'s root is `overflow-y-auto`** for viewports where even the fitted container is shorter than the column header plus the notes (a landscape phone at `lg`). The timer list gives up its height first; then the column scrolls, so the browser can scroll the focused textarea into view. Storybook: `TimerColumn` → `NotesInShortViewport`.
+- Tests stand in for jsdom's missing `visualViewport` with `FakeVisualViewport` from `@/fixtures/visualViewport` (test-only, not in the barrel).

@@ -28,7 +28,7 @@ Unit tests follow the code: helpers moved into `format.ts` are tested in `format
 ## Read the doc when the trigger fires
 
 - **Running `next dev` / Storybook, or setting up a fresh clone** (ports, `.env.yarn`, `MCP_PUBLIC_URL`, what's shared between checkouts) → [docs/parallel-checkouts.md](docs/parallel-checkouts.md)
-- **Touching cooking mode** — touch-first tap-target rules, meal sessions, the shopping list → [docs/cooking-mode.md](docs/cooking-mode.md)
+- **Touching cooking mode** — touch-first tap-target rules, meal sessions, the shopping list, fitting the container above the on-screen keyboard → [docs/cooking-mode.md](docs/cooking-mode.md)
 - **Touching the cooking-mode timer UI** (`TimerCard`, `DraggableRibbon`, `TimerColumn`) → [docs/timers.md](docs/timers.md)
 - **Reading or writing `SchemaRecipe`, a recipe's ingredients or its instructions** — `RecipeIngredientGroup`/`RecipeIngredient`, `RecipeInstructionGroup`/`RecipeStep`, the Schema.org edges (`toSchemaOrgJsonLd`/`fromSchemaOrgIngredients`/`fromSchemaOrgInstructions`), `recipeYield`/servings → [docs/recipe-schema.md](docs/recipe-schema.md)
 - **Adding or changing anything under `src/app/api/**`, or calling one from the UI** — the auth gate, the dev-only nutrition door, response validation, image upload → [docs/api-routes.md](docs/api-routes.md)
