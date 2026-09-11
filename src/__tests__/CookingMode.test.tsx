@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { render, screen, fireEvent, waitFor, within } from "@testing-library/react";
 import CookingMode from "@/components/CookingMode";
 import type { RecipeInstructionGroup, RecipeRow, SchemaRecipe } from "@/types/recipe";
 import {
@@ -242,34 +242,48 @@ describe("CookingMode — shopping list", () => {
 });
 
 describe("CookingMode — cooking notes", () => {
-  it("does not render notes textarea when logged out", () => {
+  const notesField = () =>
+    screen.getByPlaceholderText(/note changes for next time/i) as HTMLTextAreaElement;
+
+  it("offers no Notes button when logged out", () => {
     const recipe = makeRecipe({ cookingNotes: "less salt next time" });
     render(<CookingMode recipe={recipe} onClose={vi.fn()} />);
+    expect(screen.queryByRole("button", { name: "Notes" })).toBeNull();
     expect(screen.queryByPlaceholderText(/note changes for next time/i)).toBeNull();
   });
 
-  it("renders cooking notes textareas when logged in", () => {
+  it("renders a Notes button in both timer views and no inline textarea when logged in", () => {
     const recipe = makeRecipe({ cookingNotes: "less salt next time" });
     render(<CookingMode recipe={recipe} onClose={vi.fn()} isLoggedIn />);
-    const textareas = screen.getAllByPlaceholderText(/note changes for next time/i);
-    // Both portrait and desktop panels render (CSS hides one at runtime)
-    expect(textareas.length).toBeGreaterThanOrEqual(1);
-    expect((textareas[0] as HTMLTextAreaElement).value).toBe("less salt next time");
+    // The portrait ribbon and the desktop column both render; CSS hides one.
+    expect(screen.getAllByRole("button", { name: "Notes" })).toHaveLength(2);
+    expect(screen.queryByPlaceholderText(/note changes for next time/i)).toBeNull();
   });
 
-  it("shows empty textarea when recipe has no cookingNotes (logged in)", () => {
-    const recipe = makeRecipe({});
+  it("opens the notes modal holding the recipe's saved notes", () => {
+    const recipe = makeRecipe({ cookingNotes: "less salt next time" });
     render(<CookingMode recipe={recipe} onClose={vi.fn()} isLoggedIn />);
-    const textareas = screen.getAllByPlaceholderText(/note changes for next time/i);
-    expect((textareas[0] as HTMLTextAreaElement).value).toBe("");
+    fireEvent.click(screen.getAllByRole("button", { name: "Notes" })[0]);
+    const dialog = screen.getByRole("dialog", { name: "Cooking notes" });
+    expect(within(dialog).getByPlaceholderText(/note changes for next time/i)).toBe(
+      notesField(),
+    );
+    expect(notesField().value).toBe("less salt next time");
   });
 
-  it("updating the textarea changes its value (logged in)", () => {
+  it("keeps an edit after the modal is closed and reopened", () => {
     const recipe = makeRecipe({});
     render(<CookingMode recipe={recipe} onClose={vi.fn()} isLoggedIn />);
-    const textareas = screen.getAllByPlaceholderText(/note changes for next time/i);
-    fireEvent.change(textareas[0], { target: { value: "add more garlic" } });
-    expect((textareas[0] as HTMLTextAreaElement).value).toBe("add more garlic");
+    const [notesButton] = screen.getAllByRole("button", { name: "Notes" });
+
+    fireEvent.click(notesButton);
+    expect(notesField().value).toBe("");
+    fireEvent.change(notesField(), { target: { value: "add more garlic" } });
+    fireEvent.click(screen.getByRole("button", { name: "Done" }));
+    expect(screen.queryByRole("dialog", { name: "Cooking notes" })).toBeNull();
+
+    fireEvent.click(notesButton);
+    expect(notesField().value).toBe("add more garlic");
   });
 });
 

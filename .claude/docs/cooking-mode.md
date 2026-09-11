@@ -26,6 +26,12 @@ Cook mode supports grouping multiple recipes into a "meal" session. State lives 
 
 **MealSearch** is always rendered (no toggle). Click-outside clears query; ArrowDown from input moves focus to first result; ArrowUp from first result returns to input.
 
+## Cooking Notes
+
+Logged-in only. `CookingMode` owns the text (`cookingNotes`, seeded from `schema.cookingNotes`), `notesSaveState`, and the 1.5s debounced autosave to `POST /api/recipes/[id]/notes`. `CookingNotesModal` is controlled and only displays them, so closing it never cancels a pending save.
+
+The modal opens from `CookingNotesButton`, right of "Reset All" in **both** timer views — the mobile ribbon row and the `TimerColumn` header. `TimerColumn` renders it only when handed `onOpenNotes`, independent of `timers.length`. The modal renders from `CookingMode` beside `AddTimerModal`, not inside the column: its `absolute inset-0` overlay has to cover the whole cooking view.
+
 ## Shopping List
 
 Ingredients in both `CookingMode` and `RecipeDetail` are tappable checkboxes that build a shopping list, copied to clipboard as newline-separated text.

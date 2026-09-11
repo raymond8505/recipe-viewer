@@ -2,7 +2,11 @@
 
 import type { Timer } from "@/hooks/useTimers";
 import TimerCard from "./TimerCard";
-import { AddTimerButton, ResetTimersButton } from "@/components/buttons";
+import {
+  AddTimerButton,
+  CookingNotesButton,
+  ResetTimersButton,
+} from "@/components/buttons";
 
 interface TimerColumnProps {
   timers: Timer[];
@@ -14,9 +18,8 @@ interface TimerColumnProps {
   onDismissTimer: (id: string) => void;
   onResetAll: () => void;
   timerRecipeNames?: Map<string, string>;
-  cookingNotes?: string;
-  onNotesChange?: (value: string) => void;
-  notesSaveState?: "idle" | "saving" | "saved" | "error";
+  /** Opens the cooking-notes modal. The Notes button renders only when given. */
+  onOpenNotes?: () => void;
 }
 
 export default function TimerColumn({
@@ -29,9 +32,7 @@ export default function TimerColumn({
   onDismissTimer,
   onResetAll,
   timerRecipeNames,
-  cookingNotes = "",
-  onNotesChange,
-  notesSaveState = "idle",
+  onOpenNotes,
 }: TimerColumnProps) {
   return (
     <div className="w-full h-full border-l border-gray-200 flex flex-col min-w-0">
@@ -40,6 +41,9 @@ export default function TimerColumn({
         <AddTimerButton onClick={onAddTimer} />
         {timers.length > 0 && (
           <ResetTimersButton onClick={onResetAll} className="px-3 py-3" />
+        )}
+        {onOpenNotes && (
+          <CookingNotesButton onClick={onOpenNotes} className="px-3 py-3" />
         )}
       </div>
 
@@ -62,25 +66,6 @@ export default function TimerColumn({
           </div>
         ))}
       </div>
-
-      {/* Cooking notes — pinned at bottom (only when onNotesChange provided, i.e. logged in) */}
-      {onNotesChange && (
-        <div className="shrink-0 border-t border-gray-200 px-4 py-3">
-          <div className="flex items-center justify-between mb-1.5">
-            <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">Cooking notes</p>
-            {notesSaveState === "saving" && <span className="text-xs text-gray-400">Saving…</span>}
-            {notesSaveState === "saved" && <span className="text-xs text-green-500">Saved ✓</span>}
-            {notesSaveState === "error" && <span className="text-xs text-red-500">Error saving</span>}
-          </div>
-          <textarea
-            value={cookingNotes}
-            onChange={(e) => onNotesChange(e.target.value)}
-            placeholder="Note changes for next time…"
-            rows={4}
-            className="w-full resize-none text-sm text-gray-700 placeholder-gray-400 focus:outline-hidden leading-relaxed"
-          />
-        </div>
-      )}
     </div>
   );
 }

@@ -7,7 +7,17 @@ import {
   PortionStepperButton,
   SegmentButton,
   DragHandleButton,
+  CookingNotesButton,
 } from "@/components/buttons";
+
+describe("CookingNotesButton", () => {
+  it("renders the Notes label and forwards clicks", async () => {
+    const onClick = vi.fn();
+    render(<CookingNotesButton onClick={onClick} />);
+    await userEvent.click(screen.getByRole("button", { name: "Notes" }));
+    expect(onClick).toHaveBeenCalledOnce();
+  });
+});
 
 describe("PrimaryActionButton", () => {
   it("renders a real <button> and forwards clicks", async () => {

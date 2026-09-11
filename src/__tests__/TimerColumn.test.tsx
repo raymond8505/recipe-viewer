@@ -1,17 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
 import TimerColumn from "@/components/cooking/TimerColumn";
-import type { Timer } from "@/hooks/useTimers";
-
-const makeTimer = (overrides: Partial<Timer> = {}): Timer => ({
-  id: "t1",
-  label: "Pasta",
-  duration: 300,
-  remaining: 150,
-  paused: false,
-  finished: false,
-  ...overrides,
-});
+import { makeTimer } from "@/fixtures";
 
 const defaultProps = {
   onAddTimer: vi.fn(),
@@ -21,9 +11,6 @@ const defaultProps = {
   onRemoveTimer: vi.fn(),
   onDismissTimer: vi.fn(),
   onResetAll: vi.fn(),
-  cookingNotes: "",
-  onNotesChange: vi.fn(),
-  notesSaveState: "idle" as const,
 };
 
 describe("TimerColumn", () => {
@@ -38,12 +25,12 @@ describe("TimerColumn", () => {
   });
 
   it("renders timer cards", () => {
-    render(<TimerColumn timers={[makeTimer()]} {...defaultProps} />);
+    render(<TimerColumn timers={[makeTimer("t1", "Pasta")]} {...defaultProps} />);
     expect(screen.getByText("Pasta")).toBeTruthy();
   });
 
   it("shows Reset All button when timers exist", () => {
-    render(<TimerColumn timers={[makeTimer()]} {...defaultProps} />);
+    render(<TimerColumn timers={[makeTimer("t1", "Pasta")]} {...defaultProps} />);
     expect(screen.getByRole("button", { name: /reset all/i })).toBeTruthy();
   });
 
@@ -61,40 +48,34 @@ describe("TimerColumn", () => {
 
   it("calls onResetAll when Reset All is clicked", () => {
     const onResetAll = vi.fn();
-    render(<TimerColumn timers={[makeTimer()]} {...defaultProps} onResetAll={onResetAll} />);
+    render(<TimerColumn timers={[makeTimer("t1", "Pasta")]} {...defaultProps} onResetAll={onResetAll} />);
     fireEvent.click(screen.getByRole("button", { name: /reset all/i }));
     expect(onResetAll).toHaveBeenCalled();
   });
 
-  it("renders the cooking notes textarea", () => {
-    render(<TimerColumn timers={[]} {...defaultProps} cookingNotes="use more garlic" />);
-    const textarea = screen.getByPlaceholderText(/note changes for next time/i);
-    expect(textarea).toBeTruthy();
-    expect((textarea as HTMLTextAreaElement).value).toBe("use more garlic");
+  it("shows the Notes button when onOpenNotes is provided, even with no timers", () => {
+    render(<TimerColumn timers={[]} {...defaultProps} onOpenNotes={vi.fn()} />);
+    expect(screen.getByRole("button", { name: "Notes" })).toBeTruthy();
   });
 
-  it("calls onNotesChange when textarea value changes", () => {
-    const onNotesChange = vi.fn();
-    render(<TimerColumn timers={[]} {...defaultProps} onNotesChange={onNotesChange} />);
-    fireEvent.change(screen.getByPlaceholderText(/note changes for next time/i), {
-      target: { value: "add salt earlier" },
-    });
-    expect(onNotesChange).toHaveBeenCalledWith("add salt earlier");
+  it("hides the Notes button when onOpenNotes is not provided", () => {
+    render(<TimerColumn timers={[makeTimer("t1", "Pasta")]} {...defaultProps} />);
+    expect(screen.queryByRole("button", { name: "Notes" })).toBeNull();
   });
 
-  it("shows saving indicator when notesSaveState is saving", () => {
-    render(<TimerColumn timers={[]} {...defaultProps} notesSaveState="saving" />);
-    expect(screen.getByText(/saving…/i)).toBeTruthy();
+  it("places Notes to the right of Reset All", () => {
+    render(<TimerColumn timers={[makeTimer("t1", "Pasta")]} {...defaultProps} onOpenNotes={vi.fn()} />);
+    const resetAll = screen.getByRole("button", { name: /reset all/i });
+    const notes = screen.getByRole("button", { name: "Notes" });
+    expect(
+      resetAll.compareDocumentPosition(notes) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
   });
 
-  it("shows saved indicator when notesSaveState is saved", () => {
-    render(<TimerColumn timers={[]} {...defaultProps} notesSaveState="saved" />);
-    expect(screen.getByText(/saved ✓/i)).toBeTruthy();
-  });
-
-  it("does not render cooking notes section when onNotesChange is not provided", () => {
-    const { onNotesChange: _omit, ...propsWithoutNotes } = defaultProps;
-    render(<TimerColumn timers={[]} {...propsWithoutNotes} />);
-    expect(screen.queryByPlaceholderText(/note changes for next time/i)).toBeNull();
+  it("calls onOpenNotes when Notes is clicked", () => {
+    const onOpenNotes = vi.fn();
+    render(<TimerColumn timers={[]} {...defaultProps} onOpenNotes={onOpenNotes} />);
+    fireEvent.click(screen.getByRole("button", { name: "Notes" }));
+    expect(onOpenNotes).toHaveBeenCalledOnce();
   });
 });
