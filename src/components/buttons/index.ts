@@ -7,5 +7,6 @@ export { CookButton } from "./CookButton";
 export { CloseButton } from "./CloseButton";
 export { AddTimerButton } from "./AddTimerButton";
 export { ResetTimersButton } from "./ResetTimersButton";
+export { CookingNotesButton } from "./CookingNotesButton";
 export { CopyShoppingListButton } from "./CopyShoppingListButton";
 export { SetCustomSourceButton } from "./SetCustomSourceButton";
