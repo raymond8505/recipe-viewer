@@ -33,6 +33,7 @@ import { CopyShoppingListButton } from "@/components/buttons";
 import IngredientsEditor from "./editor/IngredientsEditor";
 import InstructionsEditor from "./editor/InstructionsEditor";
 import IngredientList from "./IngredientList";
+import InstructionList from "./InstructionList";
 import TimeYieldStats from "./TimeYieldStats";
 import NutritionPanel from "./NutritionPanel";
 import RecipeTitleInput from "./RecipeTitleInput";
@@ -495,7 +496,7 @@ export default function RecipeDetail({
             </div>
           )}
 
-          {/* Instructions — one renderer for every group; numbering restarts per group. */}
+          {/* Instructions */}
           {(isEditing ||
             doc.instructions.some((group) => group.steps.length > 0)) && (
             <div className="sm:col-span-2">
@@ -508,29 +509,11 @@ export default function RecipeDetail({
                   disabled={editState === "saving"}
                 />
               ) : (
-                <div className="space-y-6">
-                  {doc.instructions.map((group, gi) => (
-                    <div key={gi}>
-                      {group.name && (
-                        <h3 className="font-sans text-xs font-semibold uppercase tracking-widest text-brand mb-3">
-                          {group.name}
-                        </h3>
-                      )}
-                      <ol className="space-y-3">
-                        {group.steps.map((step, si) => (
-                          <li key={si} className="flex gap-4">
-                            <span className="shrink-0 w-7 h-7 rounded-full bg-secondary-foreground text-white text-sm font-bold flex items-center justify-center">
-                              {si + 1}
-                            </span>
-                            <p className="text-gray-700 leading-relaxed pt-0.5">
-                              {step.text}
-                            </p>
-                          </li>
-                        ))}
-                      </ol>
-                    </div>
-                  ))}
-                </div>
+                <InstructionList
+                  groups={doc.instructions}
+                  headingClassName="text-xs"
+                  stepBadgeClassName="w-7 h-7 text-sm"
+                />
               )}
             </div>
           )}
