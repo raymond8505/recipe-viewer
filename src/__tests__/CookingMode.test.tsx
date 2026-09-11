@@ -1,6 +1,7 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { act, render, screen, fireEvent, waitFor } from "@testing-library/react";
 import CookingMode from "@/components/CookingMode";
+import { FakeVisualViewport } from "@/fixtures/visualViewport";
 import type { RecipeInstructionGroup, RecipeRow, SchemaRecipe } from "@/types/recipe";
 import {
   makeIngredientLines,
@@ -270,6 +271,41 @@ describe("CookingMode — cooking notes", () => {
     const textareas = screen.getAllByPlaceholderText(/note changes for next time/i);
     fireEvent.change(textareas[0], { target: { value: "add more garlic" } });
     expect((textareas[0] as HTMLTextAreaElement).value).toBe("add more garlic");
+  });
+});
+
+describe("CookingMode — on-screen keyboard", () => {
+  let vv: FakeVisualViewport;
+
+  beforeEach(() => {
+    vv = new FakeVisualViewport(800);
+    vi.stubGlobal("visualViewport", vv);
+    vi.stubGlobal("innerHeight", 800);
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("fits the container to the area the keyboard leaves visible", () => {
+    const { container } = render(
+      <CookingMode recipe={makeRecipe()} onClose={vi.fn()} isLoggedIn />,
+    );
+    act(() => vv.set({ height: 450, offsetTop: 40 }));
+    const root = container.firstElementChild as HTMLElement;
+    expect(root.style.height).toBe("450px");
+    expect(root.style.top).toBe("40px");
+  });
+
+  it("leaves the container's height to its class while the keyboard is closed", () => {
+    const { container } = render(
+      <CookingMode recipe={makeRecipe()} onClose={vi.fn()} isLoggedIn />,
+    );
+    act(() => vv.set({ height: 450 }));
+    act(() => vv.set({ height: 800 }));
+    const root = container.firstElementChild as HTMLElement;
+    expect(root.style.height).toBe("");
+    expect(root.style.top).toBe("");
   });
 });
 

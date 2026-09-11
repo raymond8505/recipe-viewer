@@ -15,6 +15,7 @@ import type { Timer } from "@/hooks/useTimers";
 import { ScalableRecipe, formatScaledIngredient } from "@/lib/ScalableRecipe";
 import { recipeNormalizedNutrition } from "@/lib/nutritionMath";
 import { useWakeLock } from "@/hooks/useWakeLock";
+import { useVisualViewport } from "@/hooks/useVisualViewport";
 import { recipeDocument } from "@/lib/recipeDocument";
 import {
   registerCookingModeRecipe,
@@ -67,6 +68,7 @@ export default function CookingMode({
 }: CookingModeProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const pendingScrollId = useRef<string | null>(null);
+  const visibleViewport = useVisualViewport();
   // Fullscreen state is always derived from the real browser state via the event.
   // Initialize from current DOM state so it's correct even if fullscreen was
   // entered before this component mounted.
@@ -390,7 +392,16 @@ export default function CookingMode({
     <div
       ref={containerRef}
       className="fixed inset-0 z-50 bg-card flex flex-col cook-mode-container"
-      style={{ width: "100vw" }}
+      // While the keyboard covers part of the screen, the container fits the
+      // visible area so the notes stay above it; `cook-mode-container`'s svh
+      // height ignores the keyboard.
+      style={{
+        width: "100vw",
+        ...(visibleViewport && {
+          height: visibleViewport.height,
+          top: visibleViewport.offsetTop,
+        }),
+      }}
     >
       {/* Sticky header */}
       <div className="shrink-0 flex items-center justify-between px-4 py-2 border-b border-gray-200 bg-card">
