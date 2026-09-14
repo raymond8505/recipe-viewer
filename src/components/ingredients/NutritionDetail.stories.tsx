@@ -96,12 +96,12 @@ export const Default: Story = {
 };
 
 /**
- * How the recipe page composes this table. The caller bounds its own height —
- * `max-h-[24rem]` here stands in for the page's one-viewport cap — and the
- * `className` arg hands that bound down, so the scroll box claims whatever is
- * left below the Normalize row. The table is then the only thing that scrolls,
- * and the "Recipe total" / "Per portion" rows stay pinned to the bottom of it
- * while the lines they add up scroll past underneath.
+ * How the recipe page composes this table. The caller has a height to give —
+ * `max-h-[24rem]` here stands in for the screenful the app shell hands the
+ * page — and the `className` arg passes it down, so the scroll box claims
+ * whatever is left below the Normalize row. The table is then the only thing
+ * that scrolls, and the "Recipe total" / "Per portion" rows stay pinned to the
+ * bottom of it while the lines they add up scroll past underneath.
  */
 export const PinnedTotals: Story = {
   args: {
