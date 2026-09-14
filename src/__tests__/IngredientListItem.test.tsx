@@ -3,90 +3,80 @@ import { render, screen, fireEvent } from "@testing-library/react";
 import IngredientListItem from "@/components/IngredientListItem";
 import { makeScaledIngredient } from "@/fixtures";
 
-describe("IngredientListItem", () => {
-  it("is a checkbox named by the line's text, checked when selected", () => {
-    const { rerender } = render(
-      <ul>
-        <IngredientListItem
-          ingredient={makeScaledIngredient("2 cups flour")}
-          selected={false}
-          onToggle={() => {}}
-        />
-      </ul>,
-    );
-    const row = screen.getByRole("checkbox", { name: "2 cups flour" });
-    expect(row).toHaveAttribute("aria-checked", "false");
+function renderRow(props: Partial<React.ComponentProps<typeof IngredientListItem>> = {}) {
+  return render(
+    <ul>
+      <IngredientListItem
+        ingredient={makeScaledIngredient("2 cups flour")}
+        selected={false}
+        onToggle={() => {}}
+        {...props}
+      />
+    </ul>,
+  );
+}
 
-    rerender(
-      <ul>
-        <IngredientListItem
-          ingredient={makeScaledIngredient("2 cups flour")}
-          selected
-          onToggle={() => {}}
-        />
-      </ul>,
-    );
-    expect(row).toHaveAttribute("aria-checked", "true");
+describe("IngredientListItem", () => {
+  it("is a native checkbox named by the line's text", () => {
+    renderRow();
+    const box = screen.getByRole("checkbox", { name: "2 cups flour" });
+    // Native, so it is focusable and Space-operable without any tabIndex or key handler.
+    expect(box.tagName).toBe("INPUT");
+    expect(box).toHaveAttribute("type", "checkbox");
+    expect(box).not.toBeChecked();
   });
 
-  it("toggles when the row is clicked", () => {
+  it("reflects the selected prop", () => {
+    renderRow({ selected: true });
+    expect(screen.getByRole("checkbox", { name: "2 cups flour" })).toBeChecked();
+  });
+
+  it("toggles when the checkbox is clicked", () => {
     const onToggle = vi.fn();
-    render(
-      <ul>
-        <IngredientListItem
-          ingredient={makeScaledIngredient("2 cups flour")}
-          selected={false}
-          onToggle={onToggle}
-        />
-      </ul>,
-    );
+    renderRow({ onToggle });
     fireEvent.click(screen.getByRole("checkbox", { name: "2 cups flour" }));
     expect(onToggle).toHaveBeenCalledTimes(1);
   });
 
+  it("toggles when the row-covering label is clicked", () => {
+    const onToggle = vi.fn();
+    const { container } = renderRow({ onToggle });
+    fireEvent.click(container.querySelector("label")!);
+    expect(onToggle).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps the amount button outside the checkbox, where a screen reader can reach it", () => {
+    renderRow({ onAnchor: () => {} });
+    const box = screen.getByRole("checkbox", { name: "2 cups flour" });
+    const amount = screen.getByRole("button", { name: /edit amount/i });
+    const unit = screen.getByRole("combobox", { name: "unit" });
+    expect(box.contains(amount)).toBe(false);
+    expect(box.contains(unit)).toBe(false);
+  });
+
   it("does not toggle when the editable amount is clicked", () => {
     const onToggle = vi.fn();
-    render(
-      <ul>
-        <IngredientListItem
-          ingredient={makeScaledIngredient("2 cups flour")}
-          selected={false}
-          onToggle={onToggle}
-          onAnchor={() => {}}
-        />
-      </ul>,
-    );
+    renderRow({ onToggle, onAnchor: () => {} });
     fireEvent.click(screen.getByRole("button", { name: /edit amount/i }));
     expect(onToggle).not.toHaveBeenCalled();
   });
 
+  it("does not toggle when the unit is changed", () => {
+    const onToggle = vi.fn();
+    renderRow({ onToggle });
+    fireEvent.change(screen.getByRole("combobox", { name: "unit" }), {
+      target: { value: "tbsp" },
+    });
+    expect(onToggle).not.toHaveBeenCalled();
+  });
+
   it("renders a read-only amount without onAnchor", () => {
-    render(
-      <ul>
-        <IngredientListItem
-          ingredient={makeScaledIngredient("2 cups flour")}
-          selected={false}
-          onToggle={() => {}}
-        />
-      </ul>,
-    );
+    renderRow();
     expect(screen.queryByRole("button", { name: /edit amount/i })).toBeNull();
   });
 
   it("applies the caller's className to the row", () => {
-    render(
-      <ul>
-        <IngredientListItem
-          ingredient={makeScaledIngredient("2 cups flour")}
-          selected={false}
-          onToggle={() => {}}
-          className="text-lg sm:text-sm"
-        />
-      </ul>,
-    );
-    expect(screen.getByRole("checkbox", { name: "2 cups flour" })).toHaveClass(
-      "text-lg",
-      "sm:text-sm",
-    );
+    renderRow({ className: "text-lg sm:text-sm" });
+    expect(screen.getByRole("listitem")).toHaveClass("text-lg", "sm:text-sm");
   });
 });

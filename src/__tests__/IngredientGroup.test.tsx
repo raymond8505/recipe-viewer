@@ -35,14 +35,8 @@ describe("IngredientGroup", () => {
         onToggle={() => {}}
       />,
     );
-    expect(screen.getByRole("checkbox", { name: "1 cup butter" })).toHaveAttribute(
-      "aria-checked",
-      "true",
-    );
-    expect(screen.getByRole("checkbox", { name: "1/4 cup sugar" })).toHaveAttribute(
-      "aria-checked",
-      "false",
-    );
+    expect(screen.getByRole("checkbox", { name: "1 cup butter" })).toBeChecked();
+    expect(screen.getByRole("checkbox", { name: "1/4 cup sugar" })).not.toBeChecked();
   });
 
   it("hands onToggle the clicked ingredient", () => {
@@ -83,6 +77,6 @@ describe("IngredientGroup", () => {
         itemClassName="text-lg"
       />,
     );
-    for (const row of screen.getAllByRole("checkbox")) expect(row).toHaveClass("text-lg");
+    for (const row of screen.getAllByRole("listitem")) expect(row).toHaveClass("text-lg");
   });
 });

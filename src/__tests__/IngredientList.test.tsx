@@ -24,8 +24,9 @@ describe("IngredientList", () => {
     );
     const checked = screen
       .getAllByRole("checkbox")
-      .filter((row) => row.getAttribute("aria-checked") === "true");
-    expect(checked.map((row) => row.getAttribute("aria-label"))).toEqual(["2 cups flour"]);
+      .filter((box) => (box as HTMLInputElement).checked);
+    expect(checked.map((box) => box.getAttribute("aria-label") ?? box.labels?.[0]?.textContent))
+      .toEqual(["2 cups flour"]);
   });
 
   it("hands onToggle the clicked ingredient, whichever group it sits in", () => {
@@ -48,6 +49,6 @@ describe("IngredientList", () => {
       />,
     );
     expect(screen.getByRole("heading", { level: 3, name: "Wet" })).toHaveClass("text-sm");
-    for (const row of screen.getAllByRole("checkbox")) expect(row).toHaveClass("text-lg");
+    for (const row of screen.getAllByRole("listitem")) expect(row).toHaveClass("text-lg");
   });
 });
