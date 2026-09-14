@@ -1,6 +1,6 @@
 // Frozen columns + sticky header for the ingredient catalog table. The table
-// lives in a single max-h-screen scroll box (IngredientsTable) that scrolls
-// both axes, so:
+// lives in a single scroll box (IngredientsTable) that claims the height its
+// caller gives it and scrolls both axes, so:
 //   - the header cells stick to the top (column labels stay visible while the
 //     body scrolls vertically),
 //   - Name + Aliases stick to the left and Actions sticks to the right (the

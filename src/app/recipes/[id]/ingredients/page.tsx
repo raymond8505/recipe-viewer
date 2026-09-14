@@ -48,13 +48,10 @@ export default async function RecipeIngredientsPage({
   const { schema } = recipe.metadata;
 
   return (
-    // The screen is one viewport tall, so the table is the only thing that
+    // Fills exactly what the shell leaves, so the table is the only thing that
     // scrolls: a page scrollbar beside the table's own leaves no way to tell
-    // which one a wheel gesture will move. 7.5rem is the chrome around this
-    // section in layout.tsx — the header's `h-14` plus `main`'s `py-8`; change
-    // it there and this follows. The height is a cap, not a fixed size, so a
-    // recipe short enough to fit keeps its natural height.
-    <section className="flex max-h-[calc(100dvh-7.5rem)] flex-col gap-6">
+    // which one a wheel gesture will move.
+    <section className="flex min-h-0 flex-1 flex-col gap-6">
       <div>
         <p className="text-sm">
           <Link href={`/recipes/${id}`} className="text-brand hover:underline">

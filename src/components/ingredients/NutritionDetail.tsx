@@ -41,9 +41,9 @@ interface NutritionDetailProps {
   /** DI seam for the autocomplete's USDA fallback search. */
   usdaSearch?: UsdaFoodSearch;
   /**
-   * Growth classes for the root. A caller that bounds its own height passes
-   * `flex min-h-0 flex-1 flex-col` so the scroll box below takes the leftover
-   * space; unstyled, the table caps itself at the viewport instead.
+   * Growth classes for the root. A caller with a height to give passes
+   * `flex min-h-0 flex-1 flex-col` so the scroll box below claims it;
+   * unstyled, the table caps itself at the viewport instead.
    */
   className?: string;
 }
@@ -112,11 +112,11 @@ export default function NutritionDetail({
           the recipe-text and normalized-ingredient columns stick to the left,
           the totals stick to the bottom, and the shadcn Table's own overflow
           wrapper is neutralized so it can't become the scrollport.
-          Both size caps are load-bearing: inside a height-bounded flex column
-          `flex-1` claims exactly the leftover space, so the page never grows a
-          second scrollbar beside this one; with no such parent (Storybook, a
-          test) the flex classes are inert on a block box and the viewport cap
-          is what stops the table running off the screen. */}
+          Both size rules are load-bearing: given a height by the flex column
+          above, `flex-1` claims it exactly, so the page never grows a second
+          scrollbar beside this one; with no such parent (Storybook, a test)
+          the flex classes are inert on a block box and the viewport cap is
+          what stops the table running off the screen. */}
       <div className="max-h-[100dvh] min-h-0 flex-1 overflow-auto [&_[data-slot=table-container]]:overflow-visible">
         <Table>
           <TableHeader>
