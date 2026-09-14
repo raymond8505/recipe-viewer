@@ -13,6 +13,8 @@ scoped to one component, subsystem or workflow is a trigger + a doc, however sho
 
 Unit tests follow the code: helpers moved into `format.ts` are tested in `format.test.ts`; component files keep only component tests.
 
+**A shared component takes no `variant`/mode prop named after its callers** (e.g. `"detail" | "cook"`). Whatever differs between call sites is its own explicit prop the parent sets — sizes as `…ClassName` props, behavior by which callbacks are passed (`onAnchor` present ⇒ amounts editable; `onToggleStep` present ⇒ steps completable). `IngredientList`/`InstructionList` and their groups and items are the worked example: the six read-only list components in `src/components/` never name a view.
+
 **All icon components live in `src/components/icons/`** — one file per icon, barrel at `src/components/icons/index.ts`. Import from `@/components/icons`. Do not define icon components inline in feature files.
 
 **`invisible` not conditional render** — the copy button is always in the DOM (using Tailwind `invisible` when disabled) so it never shifts the heading layout. Apply this pattern to any button that appears next to a heading.
