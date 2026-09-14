@@ -96,6 +96,43 @@ export const Default: Story = {
 };
 
 /**
+ * How the recipe page composes this table. The caller bounds its own height —
+ * `max-h-[24rem]` here stands in for the page's one-viewport cap — and the
+ * `className` arg hands that bound down, so the scroll box claims whatever is
+ * left below the Normalize row. The table is then the only thing that scrolls,
+ * and the "Recipe total" / "Per portion" rows stay pinned to the bottom of it
+ * while the lines they add up scroll past underneath.
+ */
+export const PinnedTotals: Story = {
+  args: {
+    className: "flex max-h-[24rem] flex-col",
+    ingredients: [
+      makeIngredientGroup("Spice rub", [
+        makeMatchedIngredient("2 tsp cumin seed", cumin),
+        makeMatchedIngredient("125 g all-purpose flour", flour),
+        makeMatchedIngredient("1 tsp kosher salt", salt, { name_text: "kosher salt" }),
+      ]),
+      makeIngredientGroup("Sauce", [
+        makeMatchedIngredient("1 tbsp olive oil", oliveOil),
+        makeMatchedIngredient("1 cup diced yellow onion", onion, { name_text: "yellow onion" }),
+        makeMatchedIngredient("1/2 tsp cumin seed, toasted", cumin),
+        makeMatchedIngredient("2 tbsp all-purpose flour", flour),
+      ]),
+      makeIngredientGroup("To finish", [
+        makeMatchedIngredient("1 tsp olive oil, to drizzle", oliveOil),
+        makeMatchedIngredient("1/4 tsp kosher salt, to finish", salt, {
+          name_text: "kosher salt",
+        }),
+        makeMatchedIngredient("2 tbsp minced yellow onion", onion, {
+          name_text: "yellow onion",
+        }),
+      ]),
+    ],
+    recipeYield: "4 servings",
+  },
+};
+
+/**
  * The what-if lens: the "Sauce" group has been switched off, so its line is
  * faded and struck through while its numbers stay readable, the group toggle
  * reads unchecked, the recipe total and per-portion rows count only the
