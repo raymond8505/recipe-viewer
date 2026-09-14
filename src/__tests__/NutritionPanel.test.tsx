@@ -251,7 +251,7 @@ describe("NutritionPanel — summary/label view toggle", () => {
   });
 });
 
-describe("NutritionPanel — ingredient breakdown link", () => {
+describe("NutritionPanel — nutrition breakdown link", () => {
   it("renders the link with the given href alongside nutrition data", () => {
     const r = makeNutritionRecipe({ calories_kcal: 1400 });
     render(
@@ -261,7 +261,7 @@ describe("NutritionPanel — ingredient breakdown link", () => {
         ingredientsHref="/recipes/r-1/ingredients"
       />,
     );
-    const link = screen.getByRole("link", { name: "Ingredient breakdown" });
+    const link = screen.getByRole("link", { name: "Nutrition breakdown" });
     expect(link).toHaveAttribute("href", "/recipes/r-1/ingredients");
     expect(screen.getByText("350 kcal")).toBeTruthy();
   });
@@ -276,7 +276,7 @@ describe("NutritionPanel — ingredient breakdown link", () => {
       />,
     );
     expect(screen.getByText("Nutrition")).toBeTruthy();
-    expect(screen.getByRole("link", { name: "Ingredient breakdown" })).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Nutrition breakdown" })).toBeTruthy();
     expect(screen.getByText("No nutrition data on this recipe yet.")).toBeTruthy();
   });
 

@@ -642,12 +642,12 @@ describe("RecipeDetail — controls section", () => {
       <RecipeDetail recipe={makeRecipe()} isLoggedIn={true} />,
     );
     expect(
-      screen.getByRole("link", { name: "Ingredient breakdown" }),
+      screen.getByRole("link", { name: "Nutrition breakdown" }),
     ).toHaveAttribute("href", "/recipes/1/ingredients");
     unmount();
 
     render(<RecipeDetail recipe={makeRecipe()} isLoggedIn={false} />);
-    expect(screen.queryByRole("link", { name: "Ingredient breakdown" })).toBeNull();
+    expect(screen.queryByRole("link", { name: "Nutrition breakdown" })).toBeNull();
   });
 
   // The whole contract of the dev-only nutrition door in one case: the nutrition
@@ -664,7 +664,7 @@ describe("RecipeDetail — controls section", () => {
     );
 
     expect(
-      screen.getByRole("link", { name: "Ingredient breakdown" }),
+      screen.getByRole("link", { name: "Nutrition breakdown" }),
     ).toHaveAttribute("href", "/recipes/1/ingredients");
     expect(screen.queryByRole("button", { name: /^edit$/i })).toBeNull();
     expect(screen.queryByRole("button", { name: /re-scrape/i })).toBeNull();
@@ -673,7 +673,7 @@ describe("RecipeDetail — controls section", () => {
   it("defaults canCurateNutrition to isLoggedIn — curation is never wider than login by accident", () => {
     render(<RecipeDetail recipe={makeRecipe()} isLoggedIn={true} />);
     expect(
-      screen.getByRole("link", { name: "Ingredient breakdown" }),
+      screen.getByRole("link", { name: "Nutrition breakdown" }),
     ).toHaveAttribute("href", "/recipes/1/ingredients");
   });
 
