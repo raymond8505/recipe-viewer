@@ -139,8 +139,8 @@ describe("CookingMode — shopping list", () => {
     const recipe = makeRecipe({}, ["2 cups flour", "1 tsp salt"]);
     render(<CookingMode recipe={recipe} onClose={vi.fn()} />);
     const boxes = screen.getAllByRole("checkbox");
-    expect(boxes[0].getAttribute("aria-checked")).toBe("false");
-    expect(boxes[1].getAttribute("aria-checked")).toBe("false");
+    expect(boxes[0]).not.toBeChecked();
+    expect(boxes[1]).not.toBeChecked();
   });
 
   it("clicking an ingredient marks it checked", () => {
@@ -148,7 +148,7 @@ describe("CookingMode — shopping list", () => {
     render(<CookingMode recipe={recipe} onClose={vi.fn()} />);
     const box = screen.getByRole("checkbox", { name: "2 cups flour" });
     fireEvent.click(box);
-    expect(box.getAttribute("aria-checked")).toBe("true");
+    expect(box).toBeChecked();
   });
 
   it("clicking a checked ingredient unchecks it", () => {
@@ -157,7 +157,7 @@ describe("CookingMode — shopping list", () => {
     const box = screen.getByRole("checkbox", { name: "2 cups flour" });
     fireEvent.click(box);
     fireEvent.click(box);
-    expect(box.getAttribute("aria-checked")).toBe("false");
+    expect(box).not.toBeChecked();
   });
 
   it("copy button is disabled when no ingredients are selected", () => {

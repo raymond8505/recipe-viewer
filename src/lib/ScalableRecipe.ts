@@ -63,6 +63,12 @@ export interface ScaledIngredient {
   rest: string;
 }
 
+/** One ingredient group's scaled lines; `heading` is null for the nameless group. */
+export interface ScaledIngredientGroup {
+  heading: string | null;
+  items: ScaledIngredient[];
+}
+
 export type IngredientRef = number | { index: number };
 
 /**
@@ -233,7 +239,7 @@ export class ScalableRecipe {
    * group in order, `heading` null for the nameless group. A recipe with no
    * ingredients yields no groups.
    */
-  get groupedIngredients(): Array<{ heading: string | null; items: ScaledIngredient[] }> {
+  get groupedIngredients(): ScaledIngredientGroup[] {
     const items = this.ingredients;
     let offset = 0;
     return this.ingredientGroups.map((group) => {

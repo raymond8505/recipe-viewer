@@ -456,8 +456,8 @@ describe("RecipeDetail — shopping list", () => {
       />,
     );
     const boxes = screen.getAllByRole("checkbox");
-    expect(boxes[0].getAttribute("aria-checked")).toBe("false");
-    expect(boxes[1].getAttribute("aria-checked")).toBe("false");
+    expect(boxes[0]).not.toBeChecked();
+    expect(boxes[1]).not.toBeChecked();
   });
 
   it("clicking an ingredient checks it", () => {
@@ -468,7 +468,7 @@ describe("RecipeDetail — shopping list", () => {
     );
     const box = screen.getByRole("checkbox", { name: "2 cups flour" });
     fireEvent.click(box);
-    expect(box.getAttribute("aria-checked")).toBe("true");
+    expect(box).toBeChecked();
   });
 
   it("clicking a checked ingredient unchecks it", () => {
@@ -480,7 +480,7 @@ describe("RecipeDetail — shopping list", () => {
     const box = screen.getByRole("checkbox", { name: "2 cups flour" });
     fireEvent.click(box);
     fireEvent.click(box);
-    expect(box.getAttribute("aria-checked")).toBe("false");
+    expect(box).not.toBeChecked();
   });
 
   it("copy button is disabled when nothing is selected", () => {
