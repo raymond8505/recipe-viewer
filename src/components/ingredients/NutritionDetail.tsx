@@ -5,6 +5,7 @@ import {
   Table,
   TableBody,
   TableCell,
+  TableFooter,
   TableHead,
   TableHeader,
   TableRow,
@@ -12,6 +13,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { WarningIcon } from "@/components/icons";
 import { pluralize } from "@/lib/format";
+import { cn } from "@/lib/utils";
 import { useNutritionDetail } from "@/hooks/useNutritionDetail";
 import type { QuantitativeValue, RecipeIngredientGroup } from "@/types/recipe";
 import type {
@@ -38,6 +40,12 @@ interface NutritionDetailProps {
   search?: IngredientAutocompleteSearch;
   /** DI seam for the autocomplete's USDA fallback search. */
   usdaSearch?: UsdaFoodSearch;
+  /**
+   * Growth classes for the root. A caller that bounds its own height passes
+   * `flex min-h-0 flex-1 flex-col` so the scroll box below takes the leftover
+   * space; unstyled, the table caps itself at the viewport instead.
+   */
+  className?: string;
 }
 
 /**
@@ -47,7 +55,9 @@ interface NutritionDetailProps {
  * line text (edits the recipe itself — a deterministic re-parse, never a
  * re-match) and the normalized-ingredient autocomplete, which persists the
  * association and recomputes the row + totals. Table chrome (frozen columns,
- * sticky header, capped scroll box) mirrors IngredientsTable.
+ * sticky header, capped scroll box) mirrors IngredientsTable, plus a pinned
+ * footer: the numbers a curator is watching while they toggle lines stay in
+ * view.
  *
  * Re-matching is only ever something the CURATOR asks for: the autocomplete,
  * the Estimate action, or the Normalize button. Rewording a line is not a
@@ -65,6 +75,7 @@ export default function NutritionDetail({
   recipeYield,
   search,
   usdaSearch,
+  className,
 }: NutritionDetailProps) {
   const {
     groups,
@@ -86,7 +97,7 @@ export default function NutritionDetail({
   } = useNutritionDetail(recipeId, ingredients, recipeYield);
 
   return (
-    <div className="space-y-4">
+    <div className={cn("space-y-4", className)}>
       <div className="flex flex-wrap items-center gap-3">
         <NormalizeAction recipeId={recipeId} />
       </div>
@@ -99,9 +110,14 @@ export default function NutritionDetail({
 
       {/* Same single scroll box as IngredientsTable: header sticks to the top,
           the recipe-text and normalized-ingredient columns stick to the left,
-          and the shadcn Table's own overflow wrapper is neutralized so it
-          can't become the scrollport. */}
-      <div className="max-h-[73vh] overflow-auto [&_[data-slot=table-container]]:overflow-visible">
+          the totals stick to the bottom, and the shadcn Table's own overflow
+          wrapper is neutralized so it can't become the scrollport.
+          Both size caps are load-bearing: inside a height-bounded flex column
+          `flex-1` claims exactly the leftover space, so the page never grows a
+          second scrollbar beside this one; with no such parent (Storybook, a
+          test) the flex classes are inert on a block box and the viewport cap
+          is what stops the table running off the screen. */}
+      <div className="max-h-[100dvh] min-h-0 flex-1 overflow-auto [&_[data-slot=table-container]]:overflow-visible">
         <Table>
           <TableHeader>
             <TableRow className="hover:bg-transparent">
@@ -161,13 +177,20 @@ export default function NutritionDetail({
                 </Fragment>
               ))
             )}
+          </TableBody>
+          {/* Sticky on the `<tfoot>`, not on its cells: the two rows have to
+              pin as one block, and cell-level sticky would mean hardcoding the
+              per-portion row's height as the total row's offset. The opaque
+              `bg-muted` overrides the primitive's translucent band, which the
+              scrolling rows would otherwise show through. */}
+          <TableFooter className="sticky bottom-0 z-20 bg-muted">
             <NutritionSummaryRow label="Recipe total" nutrition={totals} />
             <NutritionSummaryRow
               label={servings != null ? `Per portion (÷${servings})` : "Per portion"}
               nutrition={perPortion}
               missingTitle="Servings unknown — recipeYield has no number"
             />
-          </TableBody>
+          </TableFooter>
         </Table>
       </div>
 

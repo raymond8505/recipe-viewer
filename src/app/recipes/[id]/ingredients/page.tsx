@@ -16,7 +16,7 @@ export async function generateMetadata({
   const { id } = await params;
   const recipe = await getRecipeById(id);
   if (!recipe) return { title: "Recipe Not Found" };
-  return { title: `${recipe.metadata.schema.name} — Ingredients` };
+  return { title: `${recipe.metadata.schema.name} — Nutrition Breakdown` };
 }
 
 // Login-gated curation surface for a recipe's normalized ingredient layer,
@@ -48,7 +48,13 @@ export default async function RecipeIngredientsPage({
   const { schema } = recipe.metadata;
 
   return (
-    <section className="space-y-6">
+    // The screen is one viewport tall, so the table is the only thing that
+    // scrolls: a page scrollbar beside the table's own leaves no way to tell
+    // which one a wheel gesture will move. 7.5rem is the chrome around this
+    // section in layout.tsx — the header's `h-14` plus `main`'s `py-8`; change
+    // it there and this follows. The height is a cap, not a fixed size, so a
+    // recipe short enough to fit keeps its natural height.
+    <section className="flex max-h-[calc(100dvh-7.5rem)] flex-col gap-6">
       <div>
         <p className="text-sm">
           <Link href={`/recipes/${id}`} className="text-brand hover:underline">
@@ -56,14 +62,9 @@ export default async function RecipeIngredientsPage({
           </Link>
         </p>
         <h1 className="text-3xl mt-1">Nutrition Breakdown</h1>
-        <p className="text-muted-foreground mt-1">
-          Each line&apos;s contribution to the recipe, computed from the ingredient
-          catalog (per 100 g × parsed amount). Fix a wrong match by picking a
-          different catalog ingredient, or edit a line&apos;s text to fix the
-          recipe itself.
-        </p>
       </div>
       <NutritionDetail
+        className="flex min-h-0 flex-1 flex-col"
         recipeId={id}
         ingredients={recipe.ingredients}
         recipeYield={schema.recipeYield}

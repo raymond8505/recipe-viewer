@@ -33,3 +33,13 @@ export const STICKY_NAME_HEAD = `sticky left-0 top-0 z-30 ${NAME_COL} bg-backgro
 export const STICKY_ALIASES_HEAD = `sticky left-44 top-0 z-30 ${NAME_COL} border-r border-border bg-background`;
 export const STICKY_ACTIONS_HEAD =
   "sticky right-0 top-0 z-30 border-l border-border bg-background";
+
+// Cells of a pinned footer (NutritionDetail's totals). The `<tfoot>` carries
+// `sticky bottom-0 z-20`, which makes it a stacking context — so the frozen
+// two only have to outrank their own row (z-10), not the body's frozen
+// columns. Their tint is the footer band's `bg-muted`, not the page's, and it
+// must stay opaque: the rows scrolling under the band would show through
+// anything less.
+export const FOOTER_CELL = "text-right tabular-nums";
+export const FOOTER_NAME_CELL = `sticky left-0 z-10 ${NAME_COL} bg-muted`;
+export const FOOTER_ALIASES_CELL = `sticky left-44 z-10 ${NAME_COL} border-r border-border bg-muted`;
