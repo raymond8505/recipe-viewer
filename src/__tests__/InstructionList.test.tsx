@@ -29,7 +29,7 @@ describe("InstructionList", () => {
   it("hands onToggleStep the group and step index", () => {
     const onToggleStep = vi.fn();
     render(<InstructionList groups={groups} onToggleStep={onToggleStep} />);
-    const [, sauceFirst] = screen.getAllByRole("button", { name: "Step 1: mark complete" });
+    const [, sauceFirst] = screen.getAllByRole("button", { name: /^step 1:/i });
     fireEvent.click(sauceFirst);
     expect(onToggleStep).toHaveBeenCalledWith(1, 0);
   });
@@ -44,7 +44,7 @@ describe("InstructionList", () => {
     );
     const done = screen.getAllByRole("button", { pressed: true });
     expect(done).toHaveLength(1);
-    expect(done[0]).toHaveAccessibleName("Step 2: completed");
+    expect(done[0]).toHaveAccessibleName("Step 2: Season.");
     expect(screen.getByText("Season.")).toHaveClass("line-through");
   });
 

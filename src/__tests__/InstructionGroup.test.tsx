@@ -34,7 +34,7 @@ describe("InstructionGroup", () => {
   it("hands onToggleStep the tapped step's index", () => {
     const onToggleStep = vi.fn();
     render(<InstructionGroup group={sauce} onToggleStep={onToggleStep} />);
-    fireEvent.click(screen.getByRole("button", { name: "Step 2: mark complete" }));
+    fireEvent.click(screen.getByRole("button", { name: /step 2/i }));
     expect(onToggleStep).toHaveBeenCalledWith(1);
   });
 
@@ -42,11 +42,11 @@ describe("InstructionGroup", () => {
     render(
       <InstructionGroup group={sauce} onToggleStep={() => {}} isStepDone={(si) => si === 0} />,
     );
-    expect(screen.getByRole("button", { name: "Step 1: completed" })).toHaveAttribute(
+    expect(screen.getByRole("button", { name: /step 1/i })).toHaveAttribute(
       "aria-pressed",
       "true",
     );
-    expect(screen.getByRole("button", { name: "Step 2: mark complete" })).toHaveAttribute(
+    expect(screen.getByRole("button", { name: /step 2/i })).toHaveAttribute(
       "aria-pressed",
       "false",
     );
