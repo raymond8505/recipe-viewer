@@ -2,9 +2,9 @@
 
 ## Ingredients and instructions are not on `SchemaRecipe`
 
-Internally a recipe is `SchemaRecipe` (`metadata.schema` — name, yield, nutrition, notes) plus the column-backed fields: its ingredients, `RecipeRow.ingredients: RecipeIngredientGroup[]`, its instructions, `RecipeRow.instructions: RecipeInstructionGroup[]`, and its times, `prep_time`/`cook_time`/`total_time` in seconds. They travel together as a `RecipeDocument` (`{ schema, ingredients, instructions, prep_time, cook_time, total_time }`), built by `recipeDocument(row)` for a stored recipe, `draftRecipeDocument(schema, lines, steps)` for content not saved yet (a re-scrape under review), or `documentFromSchemaOrg(recipe)` at the inbound window-API edge (`src/lib/recipeDocument.ts`, client-safe). `applyRecipeDocument(row, doc)` is the way back: the row with **every** column-backed field — schema, ingredients, instructions, times — laid over it, which is what RecipeDetail hands cook mode so a saved edit is what opens there. A field promoted to a column has to be added there too, and nothing in the type system says so: `...row` already supplies one of the right type, just the stale one. There is no `recipeIngredient` or `recipeInstructions` field anywhere inside the app; the type has neither, and the repo layer deletes both keys from the stored blob at every read exit (full rules → [supabase-data-layer.md](supabase-data-layer.md)).
+Internally a recipe is `SchemaRecipe` (`metadata.schema` — name, nutrition, notes) plus the column-backed fields: its ingredients, `RecipeRow.ingredients: RecipeIngredientGroup[]`, its instructions, `RecipeRow.instructions: RecipeInstructionGroup[]`, its times, `prep_time`/`cook_time`/`total_time` in seconds, and its servings, `servings_amount`/`servings_unit` plus `total_weight_amount`/`total_weight_unit`. They travel together as a `RecipeDocument` (`{ schema, ingredients, instructions, prep_time, cook_time, total_time, servings_amount, servings_unit, total_weight_amount, total_weight_unit }`), built by `recipeDocument(row)` for a stored recipe, `draftRecipeDocument(schema, lines, steps)` for content not saved yet (a re-scrape under review), or `documentFromSchemaOrg(recipe)` at the inbound window-API edge (`src/lib/recipeDocument.ts`, client-safe). `applyRecipeDocument(row, doc)` is the way back: the row with **every** column-backed field — schema, ingredients, instructions, times, servings — laid over it, which is what RecipeDetail hands cook mode so a saved edit is what opens there. A field promoted to a column has to be added there too, and nothing in the type system says so: `...row` already supplies one of the right type, just the stale one. There is no `recipeIngredient`, `recipeInstructions`, `recipeYield` or `nutrition.servingSize` field anywhere inside the app; the type has none of them, and the repo layer deletes all four keys from the stored blob at every read exit (full rules → [supabase-data-layer.md](supabase-data-layer.md)).
 
-`metadata.schema` is scheduled for eventual deprecation, field by field: each field that gains a column is read from the column, and the outbound Schema.org edges below translate the document into a Schema.org superset. Ingredients, instructions and times are the fields promoted so far.
+`metadata.schema` is scheduled for eventual deprecation, field by field: each field that gains a column is read from the column, and the outbound Schema.org edges below translate the document into a Schema.org superset. Ingredients, instructions, times and servings are the fields promoted so far.
 
 ```ts
 interface RecipeIngredientGroup { name?: string; ingredients: RecipeIngredient[] }
@@ -25,25 +25,57 @@ interface RecipeStep { text: string; name?: string; seconds?: number }   // name
 
 ## The four Schema.org edges
 
-Schema.org is a wire format for the outside world, produced and consumed in exactly four places. Nothing else may build a `recipeIngredient` or `recipeInstructions` array or read one. Both outbound functions take a `RecipeDocument` and read every column-backed field from its column: `recipeIngredient` is the groups flattened to `raw_text`; `recipeInstructions` is `toSchemaOrgInstructions(doc.instructions)` — a nameless group emits top-level `HowToStep`s, a named group a `HowToSection`, and `timeRequired` (ISO 8601 via `secondsToIso`) appears only on a step with both a label and a duration; `prepTime`/`cookTime`/`totalTime` are the three seconds columns as ISO 8601 (a null column drops the key). The copies the blob may still carry are never read — `format.test.ts` pins that a stale `schema.cookTime` loses to `cook_time` and a stale `schema.recipeInstructions` loses to `doc.instructions`.
+Schema.org is a wire format for the outside world, produced and consumed in exactly four places. Nothing else may build a `recipeIngredient` or `recipeInstructions` array, or a `recipeYield`, or read one. Both outbound functions take a `RecipeDocument` and read every column-backed field from its column: `recipeIngredient` is the groups flattened to `raw_text`; `recipeInstructions` is `toSchemaOrgInstructions(doc.instructions)` — a nameless group emits top-level `HowToStep`s, a named group a `HowToSection`, and `timeRequired` (ISO 8601 via `secondsToIso`) appears only on a step with both a label and a duration; `prepTime`/`cookTime`/`totalTime` are the three seconds columns as ISO 8601 (a null column drops the key); `recipeYield` is `schemaOrgYield(doc)` — always a QuantitativeValue built from the servings and weight columns, absent when there is no count. The copies the blob may still carry are never read — `format.test.ts` pins that a stale `schema.cookTime` loses to `cook_time` and a stale `schema.recipeInstructions` loses to `doc.instructions`.
 
 | Edge | Direction | Function |
 | --- | --- | --- |
 | JSON-LD `<script>` in `RecipeDetail` | out | `toSchemaOrgJsonLd(doc, options?)` — explicit allowlist of standard fields; lines flattened to strings; steps as HowTo objects |
 | Image-generation webhook (`/regenerate-image`) | out | `toSchemaOrgRecipe(doc)` — the whole document, custom fields included, lines flattened, steps as HowTo objects |
-| `window.recipeTools` (`src/lib/windowApi.ts`) | both | `toSchemaOrgRecipe` out; `documentFromSchemaOrg` in (lines drafted, steps grouped, ISO times parsed to seconds) |
+| `window.recipeTools` (`src/lib/windowApi.ts`) | both | `toSchemaOrgRecipe` out; `documentFromSchemaOrg` in (lines drafted, steps grouped, ISO times parsed to seconds, the yield parsed to columns) |
 | Scraped input — MCP `create_recipe`, the `/rescrape` webhook response | in | `fromSchemaOrgIngredients(lines)` → `RecipeIngredientGroupInput[]`; groups by first appearance, ungrouped lines join the one nameless group. `fromSchemaOrgInstructions(raw)` → `RecipeInstructionGroup[]`; takes the array `schemaOrgRecipeInputSchema` validates — `HowToStep` objects (`@type` optional) and `HowToSection`s whose `itemListElement` is an array of them — and reads anything but an array as no steps; top-level steps group **by run** around sections; a duration survives only beside a name |
 
-The types: `SchemaOrgRecipe = SchemaRecipe & { recipeIngredient?: string[]; recipeInstructions?: Array<HowToStep | HowToSection> }` (outbound; `recipeInstructions` is the same array inbound) and `SchemaOrgIngredientLine` (`{ name, group? }`, accepted alongside bare strings inbound). MCP `update_recipe` speaks the internal shape — `ingredients` and `instructions` groups — and rejects `schema.recipeIngredient` / `schema.recipeInstructions` outright rather than silently stripping them.
+The types: `SchemaOrgRecipe = SchemaRecipe & { recipeIngredient?: string[]; recipeInstructions?: Array<HowToStep | HowToSection>; recipeYield?: string | string[] | QuantitativeValue; nutrition?: SchemaOrgNutrition }` (outbound; `recipeInstructions` and `recipeYield` are the same inbound, and `SchemaOrgNutrition` is `SchemaNutrition` plus the derived `servingSize`) and `SchemaOrgIngredientLine` (`{ name, group? }`, accepted alongside bare strings inbound). MCP `update_recipe` speaks the internal shape — `ingredients` and `instructions` groups, `servings` and `total_weight` — and rejects `schema.recipeIngredient` / `schema.recipeInstructions` / `schema.recipeYield` outright rather than silently stripping them.
 
-## Base Servings Editing
+## Recipe Servings
 
-Edit mode edits the recipe's **base servings** (persisted `recipeYield`), distinct from the `ServingsControl` stepper which only scales the display. `recipeYield` is `string | string[] | QuantitativeValue`; `parseServings` (read) and `applyServings` (write-back) in `src/lib/units.ts` are inverses: `parseServings(applyServings(yld, n)) === n`.
+`recipeYield` and `nutrition.servingSize` are **column-backed** as of 0022 —
+`recipes.servings_amount` (numeric, nullable) + `servings_unit` (text, nullable, stored PLURAL as the
+source wrote it) are the serving count and what it counts, and `total_weight_amount` /
+`total_weight_unit` (metric: `g|kg|ml|l`) are the whole recipe's raw weight, the ex-`valueReference`.
+All four ride on `RecipeDocument`. **There is no hydrate-back**: unlike the times, nothing above
+`src/lib/recipes.ts` reads either key off the blob, so writing them back at the read exit would
+recreate the string round trip this replaced. Both join `SCHEMA_ORG_ONLY_KEYS` instead — deleted at
+the read exit, stripped from every write.
 
-- **`applyServings` preserves shape:** QV keeps `unitText`/`valueReference` (whole-recipe weight — per-serving weight recomputes); strings get their first amount token replaced ("Makes 6" → "Makes 8"); ranges and arrays deliberately collapse to a single string; no/unparseable yield becomes `{ "@type": "QuantitativeValue", value: n }`.
-- **`useRecipeEditor.buildPatch` only applies servings when the parsed input differs from `parseServings(base.recipeYield)`.** Load-bearing: `"6-8 servings"` seeds the input with midpoint "7", so an untouched save must not collapse the range (pinned by a test in `useRecipeEditor.test.ts`). Invalid input (blank/non-integer/<1) degrades to "no change" — it never blocks Save.
-- **UI:** `TimeYieldStats`'s `servingsEdit` prop takes precedence over the stepper and forces the band to render even with zero stats (so a yield-less recipe can gain one). The band's cell components `Stat` and `ServingsInputCell` live in their own modules in `src/components/` with their own stories (PR #60 review) — don't fold them back in.
-- A heavyweight multi-field `YieldEditor` was removed in 7e81735; don't re-add whole-yield editing, servings-only is intentional.
+- **`parseYield` (`src/lib/units.ts`) is the app's only yield parse**, and it runs at exactly two
+  inbound edges: `draftRecipeDocument` (which covers the window API and a re-scrape) and
+  `createRecipeRow`. It returns `{ amount, unit, weight } | null`, and **null means unparseable —
+  callers leave the columns alone and report it, never substitute a default.** The amount must be
+  anchored at the FRONT of the string (after `makes|serves|yields|about|~`); ranges collapse to their
+  rounded midpoint. A yield whose unit is a *measurement* (`300ml`, `1 lb`, `~1.5 cups`, `9 tbsp`)
+  is rejected outright: it states how much the recipe makes, not how many portions it divides into.
+- **`applyServings` does not exist.** A write sets the columns: `UpdateRecipePatch.servings`
+  (`{ amount, unit? }`) and `.totalWeight`, three-way like the times — key absent leaves them alone,
+  `amount: null` clears, a number sets. `SchemaRecipe` has no `recipeYield` to splice.
+- **Outbound, `schemaOrgYield(doc)` (`src/lib/format.ts`) builds a QuantitativeValue from the
+  columns** — never free text — and `recipeYield` is deliberately NOT on `toSchemaOrgJsonLd`'s
+  `optionalFields` allowlist: a key on that list is read straight off the blob, where a stale string
+  still sits on older rows.
+- **`nutrition.servingSize` is derived, not stored**: `ScalableRecipe.servingSizeLabel` is
+  `1 <singular servings_unit>` ("1 serving", "1 kebab"), switching to "portion" when split exactly as
+  `nutritionUnitLabel` does, so the panel's phrase and the published value cannot drift. Its only two
+  consumers are RecipeDetail's JSON-LD and MCP `get_recipe`; nothing in the UI renders it.
+- **`formatServings(amount, unit)` is the one display formatter** and singularizes at a count of 1.
+- **UI:** editing mirrors the times — `TimeYieldStats` takes `servingsAmount` / `servingsUnit`, and
+  its `servingsEdit` prop takes precedence over the stepper and forces the band to render even with
+  zero stats, so a recipe with no count can gain one. The cell components `Stat` and
+  `ServingsInputCell` live in their own modules with their own stories (PR #60 review) — don't fold
+  them back in. **The editor edits the amount only**; correcting a *unit* is an MCP `update_recipe`
+  call. A heavyweight multi-field `YieldEditor` was removed in 7e81735; don't re-add whole-yield
+  editing, servings-only is intentional.
+- **MCP:** `create_recipe` accepts `schema.recipeYield` (a scrape speaks Schema.org) and parses it
+  once; `update_recipe` **rejects** it with `RECIPE_YIELD_ON_UPDATE_ERROR` and takes `servings` /
+  `total_weight` instead — the same call the ingredient and instruction rules make.
 
 ## Recipe Times
 
@@ -62,6 +94,6 @@ Custom fields (`notes`, `cookingNotes`, ingredient group names, row ids) must ne
 `toSchemaOrgJsonLd(doc, options?)` in `src/lib/format.ts` is the single gatekeeper: it uses an **explicit allowlist** of standard fields, emits `recipeIngredient` as the lines' `raw_text` in group order, `recipeInstructions` from the document's groups, and the times from the document's columns.
 
 **Rules:**
-- Any new standard Schema.org/Recipe property added to `SchemaRecipe` must also be added to the `optionalFields` array in `toSchemaOrgJsonLd`, or it won't appear in JSON-LD output. A property promoted to a column instead joins `DOCUMENT_TIME_FIELDS`'s pattern: read from the document, never from the blob
+- Any new standard Schema.org/Recipe property added to `SchemaRecipe` must also be added to the `optionalFields` array in `toSchemaOrgJsonLd`, or it won't appear in JSON-LD output. A property promoted to a column instead joins `schemaOrgTimes` / `schemaOrgYield`'s pattern: built from the document and kept OFF the allowlist, so the blob's copy can never win
 - Any new custom/app-level field on `SchemaRecipe` must be intentionally left out of `toSchemaOrgJsonLd`
 - Ingredient groups and entities are internal-only — only their text crosses this boundary. Instruction groups cross as `HowToSection`s (a nameless run as top-level steps) and a step's timer as `name` + `timeRequired`
