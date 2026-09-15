@@ -330,21 +330,27 @@ export const SERVINGS_UNIT_FALLBACK = "servings";
  * Human-readable label for the servings columns: "4 kebabs", "8 servings".
  * Null when the recipe has no serving count, which is what makes the stat
  * disappear rather than render an empty one.
+ *
+ * The unit is stored plural, so a count of exactly one is singularized here —
+ * "1 serving", not "1 servings". This is the same rule `servingSizeLabel`
+ * applies, which is why both go through `singularServingUnit`.
  */
 export function formatServings(
   amount: number | null,
   unit: string | null,
 ): string | null {
   if (amount == null) return null;
-  return `${formatAmount(amount)} ${unit?.trim() || SERVINGS_UNIT_FALLBACK}`;
+  const plural = unit?.trim() || SERVINGS_UNIT_FALLBACK;
+  const noun = amount === 1 ? singularServingUnit(plural) : plural;
+  return `${formatAmount(amount)} ${noun}`;
 }
 
 /**
  * One serving's worth of a plural servings unit: "servings" → "serving",
- * "wraps" → "wrap". Its only caller says "1 <this>", so a naive trailing-s
+ * "wraps" → "wrap". Both callers say "one of these", so a naive trailing-s
  * strip suffices; an "ss" ending stays intact so "glass" survives. Irregular
  * plurals (and non-English ones) come out slightly wrong, which is acceptable
- * because this reaches no UI — only the wire.
+ * at the scale this renders: a stat cell and a wire field.
  */
 export function singularServingUnit(unit: string | null): string {
   const trimmed = unit?.trim();

@@ -298,6 +298,33 @@ describe("parseYield", () => {
     expect(parseYield("Enough for one 350g brick of tofu")).toBeNull();
   });
 
+  // A yield measured in g/ml/cups states HOW MUCH the recipe makes, not how
+  // many portions it divides into. Reading the number as a serving count scales
+  // every ingredient and nutrient by it.
+  it.each([
+    "400–450g tofu",
+    "300ml",
+    "~1.5 cups",
+    "1 lb",
+    "3 lbs of beef",
+    "12 cups",
+  ])("rejects the quantity yield %j rather than counting servings", (yld) => {
+    expect(parseYield(yld)).toBeNull();
+  });
+
+  // Nine one-tablespoon servings and a nine-tablespoon batch have the same
+  // spelling and differ by a factor of nine. A null column offers no scaling;
+  // a wrong count silently rewrites the recipe.
+  it("rejects an ambiguous measure-unit yield rather than guessing", () => {
+    expect(parseYield("9 tbsp")).toBeNull();
+  });
+
+  it("still counts a yield whose unit names a thing, not a measure", () => {
+    expect(parseYield("12 meatballs")?.amount).toBe(12);
+    expect(parseYield("4 kebabs")?.unit).toBe("kebabs");
+    expect(parseYield("1 block (350g) tofu")?.unit).toBe("block");
+  });
+
   it("rejects prose with no amount at all", () => {
     expect(parseYield("Not specified")).toBeNull();
     expect(parseYield("Varies (ping pong size balls)")).toBeNull();

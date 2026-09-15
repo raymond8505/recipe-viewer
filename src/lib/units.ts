@@ -318,6 +318,22 @@ function unitFromTail(tail: string): string | null {
   return clause;
 }
 
+/**
+ * Whether a yield's unit measures a QUANTITY rather than counting servings.
+ * "400g tofu", "300ml", "~1.5 cups" state how much the recipe makes, not how
+ * many portions it divides into — reading the number as a serving count scales
+ * every ingredient and nutrient by it. Keyed on the first word, so "g tofu"
+ * and "cups" both match.
+ *
+ * This deliberately also rejects a yield like "9 tbsp" that MIGHT mean nine
+ * one-tablespoon servings. Which of the two a string means is not recoverable
+ * from the string, and the two answers differ by a factor of nine: a null
+ * column offers no scaling, where a wrong count silently rewrites the recipe.
+ */
+function isMeasurementUnit(unit: string): boolean {
+  return unitKeyForAlias(unit.split(/\s+/)[0]) !== null;
+}
+
 // A yield string's amount must sit at the FRONT, after at most a lead-in word.
 // Scanning the whole string instead would take the first number anywhere in it:
 // "Enough for one 350g brick of tofu" reads as 350 servings, and every amount
@@ -371,5 +387,7 @@ export function parseYield(
       ? Math.round(parsed.value)
       : Math.round((parsed.min + parsed.max) / 2);
   if (amount <= 0) return null;
-  return { amount, unit: unitFromTail(raw.slice(m[0].length)), weight: null };
+  const unit = unitFromTail(raw.slice(m[0].length));
+  if (unit && isMeasurementUnit(unit)) return null;
+  return { amount, unit, weight: null };
 }

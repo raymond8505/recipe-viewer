@@ -194,6 +194,18 @@ describe("formatServings", () => {
     expect(formatServings(null, "kebabs")).toBeNull();
   });
 
+  // The unit is stored plural, so exactly one of them has to read singular.
+  it("singularizes the unit for a count of one", () => {
+    expect(formatServings(1, "servings")).toBe("1 serving");
+    expect(formatServings(1, "kebabs")).toBe("1 kebab");
+    expect(formatServings(1, null)).toBe("1 serving");
+  });
+
+  it("keeps the plural for any other count", () => {
+    expect(formatServings(2, "kebabs")).toBe("2 kebabs");
+    expect(formatServings(0.5, "servings")).toBe("0.5 servings");
+  });
+
   it("formats a fractional amount rather than printing its float", () => {
     expect(formatServings(2.5, "servings")).toBe("2.5 servings");
   });
