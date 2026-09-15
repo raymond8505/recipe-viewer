@@ -2,7 +2,7 @@ import ServingsControl from "@/components/ServingsControl";
 import ServingsInputCell from "@/components/ServingsInputCell";
 import Stat from "@/components/Stat";
 import TimeInputCell from "@/components/TimeInputCell";
-import { formatServings, SERVINGS_UNIT_FALLBACK } from "@/lib/format";
+import { formatServings } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
 interface TimeYieldStatsProps {
@@ -24,14 +24,16 @@ interface TimeYieldStatsProps {
   currentServings?: number | null;
   onServingsChange?: (n: number) => void;
   /**
-   * When set, the servings cell becomes a base-servings editor (the persisted
-   * `servings_amount`, not display scaling) and takes precedence over the stepper.
-   * The band renders even with no stats at all, so a recipe without a yield
+   * When set, the servings cell becomes a base-servings editor — both persisted
+   * columns, not display scaling — and takes precedence over the stepper. The
+   * band renders even with no stats at all, so a recipe with no serving count
    * can gain one while editing.
    */
   servingsEdit?: {
     value: string;
     onChange: (value: string) => void;
+    unit: string;
+    onUnitChange: (value: string) => void;
     disabled?: boolean;
   };
   /**
@@ -104,12 +106,7 @@ export default function TimeYieldStats({
           </>
         )}
         {servingsEdit ? (
-          <ServingsInputCell
-            label={servingsUnit?.trim() || SERVINGS_UNIT_FALLBACK}
-            value={servingsEdit.value}
-            onChange={servingsEdit.onChange}
-            disabled={servingsEdit.disabled}
-          />
+          <ServingsInputCell {...servingsEdit} />
         ) : (
           servingsAmount != null &&
           (currentServings != null && onServingsChange ? (

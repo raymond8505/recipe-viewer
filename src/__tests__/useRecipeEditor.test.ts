@@ -218,28 +218,70 @@ describe("useRecipeEditor", () => {
       expect(result.current.draft.servings).toBe("");
     });
 
-    it("begin seeds the count straight off the column", () => {
+    it("begin seeds the count and the unit straight off the columns", () => {
       const { result } = renderHook(() => useRecipeEditor());
-      act(() => result.current.begin(withServings(4), ROW));
+      act(() => result.current.begin(withServings(4, "kebabs"), ROW));
       expect(result.current.draft.servings).toBe("4");
+      expect(result.current.draft.servingsUnit).toBe("kebabs");
     });
 
-    it("buildPatch sends the edited count as a servings patch", () => {
-      const base = withServings(4);
+    it("begin seeds a blank unit when the source named none", () => {
       const { result } = renderHook(() => useRecipeEditor());
-      act(() => result.current.begin(base, ROW));
-      act(() => result.current.patch({ servings: "8" }));
-      expect(result.current.buildPatch(base).servings).toEqual({ amount: 8 });
+      act(() => result.current.begin(withServings(4, null), ROW));
+      expect(result.current.draft.servingsUnit).toBe("");
     });
 
-    // The patch carries the amount alone, so the stored unit survives an edit
-    // without the editor having to round-trip a word it never showed the user.
-    it("buildPatch leaves the unit out of the patch entirely", () => {
+    it("buildPatch sends the edited count and unit as a servings patch", () => {
       const base = withServings(4, "kebabs");
       const { result } = renderHook(() => useRecipeEditor());
       act(() => result.current.begin(base, ROW));
       act(() => result.current.patch({ servings: "8" }));
-      expect(result.current.buildPatch(base).servings).not.toHaveProperty("unit");
+      expect(result.current.buildPatch(base).servings).toEqual({
+        amount: 8,
+        unit: "kebabs",
+      });
+    });
+
+    it("buildPatch sends an edited unit", () => {
+      const base = withServings(4, "kebabs");
+      const { result } = renderHook(() => useRecipeEditor());
+      act(() => result.current.begin(base, ROW));
+      act(() => result.current.patch({ servingsUnit: "skewers" }));
+      expect(result.current.buildPatch(base).servings).toEqual({
+        amount: 4,
+        unit: "skewers",
+      });
+    });
+
+    // A blank unit is a CLEAR, not "leave it alone": the field shows the
+    // fallback word as its placeholder, so emptying it asks for that word back.
+    it.each(["", "   "])("buildPatch clears the unit for blank input %j", (unit) => {
+      const base = withServings(4, "kebabs");
+      const { result } = renderHook(() => useRecipeEditor());
+      act(() => result.current.begin(base, ROW));
+      act(() => result.current.patch({ servingsUnit: unit }));
+      expect(result.current.buildPatch(base).servings).toEqual({
+        amount: 4,
+        unit: null,
+      });
+    });
+
+    it("buildPatch trims the unit", () => {
+      const base = withServings(4, "kebabs");
+      const { result } = renderHook(() => useRecipeEditor());
+      act(() => result.current.begin(base, ROW));
+      act(() => result.current.patch({ servingsUnit: "  wraps  " }));
+      expect(result.current.buildPatch(base).servings?.unit).toBe("wraps");
+    });
+
+    // The amount gates the whole patch: a unit with no count is not a state a
+    // recipe can be in, so a typo in the count must not half-apply the edit.
+    it("buildPatch drops an edited unit when the count is unusable", () => {
+      const base = withServings(4, "kebabs");
+      const { result } = renderHook(() => useRecipeEditor());
+      act(() => result.current.begin(base, ROW));
+      act(() => result.current.patch({ servings: "abc", servingsUnit: "skewers" }));
+      expect(result.current.buildPatch(base)).not.toHaveProperty("servings");
     });
 
     it.each(["", "abc", "0", "-2", "2.5"])(
@@ -260,14 +302,20 @@ describe("useRecipeEditor", () => {
       const { result } = renderHook(() => useRecipeEditor());
       act(() => result.current.begin(base, ROW));
       expect(result.current.draft.servings).toBe("7");
-      expect(result.current.buildPatch(base).servings).toEqual({ amount: 7 });
+      expect(result.current.buildPatch(base).servings).toEqual({
+        amount: 7,
+        unit: "servings",
+      });
     });
 
     it("buildPatch sets a count on a recipe that had none", () => {
       const { result } = renderHook(() => useRecipeEditor());
       act(() => result.current.begin(doc, ROW));
       act(() => result.current.patch({ servings: "6" }));
-      expect(result.current.buildPatch(doc).servings).toEqual({ amount: 6 });
+      expect(result.current.buildPatch(doc).servings).toEqual({
+        amount: 6,
+        unit: null,
+      });
     });
 
     it("keeps the servings out of the schema half of the patch", () => {

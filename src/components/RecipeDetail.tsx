@@ -412,6 +412,8 @@ export default function RecipeDetail({
             ? {
                 value: draft.servings,
                 onChange: (servings) => patch({ servings }),
+                unit: draft.servingsUnit,
+                onUnitChange: (servingsUnit) => patch({ servingsUnit }),
                 disabled: editState === "saving",
               }
             : undefined

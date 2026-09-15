@@ -31,7 +31,7 @@ export interface RecipeEditPatch {
   schema: SchemaRecipe;
   ingredients: RecipeIngredientGroupInput[];
   instructions: RecipeInstructionGroup[];
-  servings?: { amount: number };
+  servings?: { amount: number; unit: string | null };
 }
 
 export type EditState = "idle" | "editing" | "saving" | "error";
@@ -51,6 +51,9 @@ export interface EditDraft {
   source: string;
   /** Base servings as raw input text; parsed (integer >= 1) on save. */
   servings: string;
+  /** What the servings count, as raw input text. Blank clears the unit, which
+   *  falls the display back to SERVINGS_UNIT_FALLBACK. */
+  servingsUnit: string;
   /** Persisted recipe times as raw input text in `H:MM`; parsed by
    *  `parseTimeInput` on save. Blank clears the time outright. */
   prepTime: string;
@@ -77,6 +80,7 @@ const EMPTY_DRAFT: EditDraft = {
   status: "",
   source: "",
   servings: "",
+  servingsUnit: "",
   prepTime: "",
   cookTime: "",
   totalTime: "",
@@ -171,6 +175,7 @@ export function useRecipeEditor(): UseRecipeEditor {
         status,
         source,
         servings: doc.servings_amount?.toString() ?? "",
+        servingsUnit: doc.servings_unit ?? "",
         // The columns are the times; the schema's copies are not read.
         prepTime: formatTimeInput(doc.prep_time),
         cookTime: formatTimeInput(doc.cook_time),
@@ -186,14 +191,22 @@ export function useRecipeEditor(): UseRecipeEditor {
   const buildPatch = useCallback(
     (doc: RecipeDocument): RecipeEditPatch => {
       const { schema: base } = doc;
-      // Servings go to their own column, not into the schema. Invalid input
+      // Servings go to their own columns, not into the schema. Invalid input
       // (blank, non-integer, < 1) omits the key entirely, which reads as "leave
       // it alone" — a typo in the servings box must never block Save or clear a
       // count. Re-sending an unchanged number is a no-op by definition now that
       // the column holds one value rather than a string a write had to splice.
+      //
+      // The unit rides with the amount rather than patching separately: a unit
+      // with no count is not a state a recipe can be in, so the amount is what
+      // gates the write. A blank unit is an explicit CLEAR (null), not "leave it
+      // alone" — the field shows the fallback word as its placeholder, so a user
+      // who empties it is asking for that generic word back.
       const n = Number(draft.servings.trim());
       const servings =
-        Number.isInteger(n) && n >= 1 ? { amount: n } : undefined;
+        Number.isInteger(n) && n >= 1
+          ? { amount: n, unit: draft.servingsUnit.trim() || null }
+          : undefined;
       return {
         schema: {
           ...base,

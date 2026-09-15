@@ -1475,6 +1475,40 @@ describe("RecipeDetail — controls section", () => {
 
     await waitFor(() => expect(mockFetch).toHaveBeenCalled());
     const body = JSON.parse(mockFetch.mock.calls[0][1].body);
-    expect(body.servings).toEqual({ amount: 8 });
+    expect(body.servings).toEqual({ amount: 8, unit: "servings" });
+  });
+
+  it("includes an edited servings unit in the save request body", async () => {
+    const mockFetch = vi
+      .fn()
+      .mockResolvedValue(
+        new Response(
+          JSON.stringify({ ...rescrapeSavedFixture, status: "draft" }),
+          { status: 200 },
+        ),
+      );
+    vi.stubGlobal("fetch", mockFetch);
+
+    render(
+      <RecipeDetail
+        recipe={makeRecipe({}, { servings_amount: 4, servings_unit: "servings" })}
+        isLoggedIn={true}
+      />,
+    );
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /^edit$/i }));
+    });
+    await act(async () => {
+      fireEvent.change(screen.getByRole("textbox", { name: /servings unit/i }), {
+        target: { value: "kebabs" },
+      });
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /^save$/i }));
+    });
+
+    await waitFor(() => expect(mockFetch).toHaveBeenCalled());
+    const body = JSON.parse(mockFetch.mock.calls[0][1].body);
+    expect(body.servings).toEqual({ amount: 4, unit: "kebabs" });
   });
 });

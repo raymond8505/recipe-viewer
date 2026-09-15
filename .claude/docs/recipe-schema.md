@@ -70,9 +70,15 @@ the read exit, stripped from every write.
   its `servingsEdit` prop takes precedence over the stepper and forces the band to render even with
   zero stats, so a recipe with no count can gain one. The cell components `Stat` and
   `ServingsInputCell` live in their own modules with their own stories (PR #60 review) — don't fold
-  them back in. **The editor edits the amount only**; correcting a *unit* is an MCP `update_recipe`
-  call. A heavyweight multi-field `YieldEditor` was removed in 7e81735; don't re-add whole-yield
-  editing, servings-only is intentional.
+  them back in. **The editor edits both columns**: `ServingsInputCell` is two inputs, the count and
+  the unit, which is why its heading is the static word "Servings" rather than the unit — an
+  editable unit beside a unit heading renders the same word twice. A blank unit input is a CLEAR
+  (`unit: null`), not "leave it alone", and the field carries `SERVINGS_UNIT_FALLBACK` as its
+  placeholder so the user can see what blank means. The count gates the whole patch: an unusable
+  count drops the unit edit with it, because a unit with no count is not a state a recipe can be in.
+  **The recipe's raw weight (`total_weight_*`) stays MCP-only** — a heavyweight multi-field
+  `YieldEditor` was removed in 7e81735, and this is deliberately not that: two columns, two text
+  inputs, no editor-only type and no converters.
 - **MCP:** `create_recipe` accepts `schema.recipeYield` (a scrape speaks Schema.org) and parses it
   once; `update_recipe` **rejects** it with `RECIPE_YIELD_ON_UPDATE_ERROR` and takes `servings` /
   `total_weight` instead — the same call the ingredient and instruction rules make.

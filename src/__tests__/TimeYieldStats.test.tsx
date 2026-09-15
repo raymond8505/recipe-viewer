@@ -59,29 +59,66 @@ describe("TimeYieldStats", () => {
   });
 
   describe("servingsEdit", () => {
-    it("renders an input wired to onChange", async () => {
+    // Mirrors the `noop` helper the timesEdit block uses: the cell needs four
+    // props to render at all, and only one varies per case.
+    const edit = (over: Partial<Parameters<typeof TimeYieldStats>[0]["servingsEdit"] & object> = {}) => ({
+      value: "4",
+      onChange: vi.fn(),
+      unit: "servings",
+      onUnitChange: vi.fn(),
+      ...over,
+    });
+
+    it("renders a count input wired to onChange", async () => {
       const onChange = vi.fn();
-      render(
-        <TimeYieldStats
-          servingsAmount={4}
-        servingsUnit="servings"
-          servingsEdit={{ value: "4", onChange }}
-        />,
-      );
+      render(<TimeYieldStats servingsAmount={4} servingsEdit={edit({ onChange })} />);
       const input = screen.getByLabelText("Servings") as HTMLInputElement;
       expect(input.value).toBe("4");
       await userEvent.type(input, "2");
       expect(onChange).toHaveBeenCalledWith("42");
     });
 
+    it("renders a unit input wired to onUnitChange", async () => {
+      const onUnitChange = vi.fn();
+      render(
+        <TimeYieldStats
+          servingsAmount={4}
+          servingsEdit={edit({ unit: "kebab", onUnitChange })}
+        />,
+      );
+      const input = screen.getByLabelText("Servings unit") as HTMLInputElement;
+      expect(input.value).toBe("kebab");
+      await userEvent.type(input, "s");
+      expect(onUnitChange).toHaveBeenCalledWith("kebabs");
+    });
+
+    // The heading is the static word, not the unit: with the unit editable
+    // beside it, a unit heading would render the same word twice.
+    it("heads the cell with the static word, not the unit", () => {
+      render(
+        <TimeYieldStats servingsAmount={4} servingsEdit={edit({ unit: "kebabs" })} />,
+      );
+      expect(screen.getByText("Servings")).toBeInTheDocument();
+      expect(screen.getByLabelText("Servings unit")).toHaveValue("kebabs");
+    });
+
+    // Blank saves as "no unit named", which renders as the fallback — so the
+    // field shows that word rather than leaving the user guessing.
+    it("shows the fallback word as the unit placeholder", () => {
+      render(<TimeYieldStats servingsAmount={4} servingsEdit={edit({ unit: "" })} />);
+      expect(screen.getByLabelText("Servings unit")).toHaveAttribute(
+        "placeholder",
+        "servings",
+      );
+    });
+
     it("takes precedence over the scaling stepper", () => {
       render(
         <TimeYieldStats
           servingsAmount={4}
-        servingsUnit="servings"
           currentServings={4}
           onServingsChange={vi.fn()}
-          servingsEdit={{ value: "4", onChange: vi.fn() }}
+          servingsEdit={edit()}
         />,
       );
       expect(screen.getByLabelText("Servings")).toBeInTheDocument();
@@ -91,32 +128,20 @@ describe("TimeYieldStats", () => {
     });
 
     it("renders the band even when there are no stats at all", () => {
-      render(<TimeYieldStats servingsEdit={{ value: "", onChange: vi.fn() }} />);
+      render(<TimeYieldStats servingsEdit={edit({ value: "", unit: "" })} />);
       expect(screen.getByLabelText("Servings")).toBeInTheDocument();
+      expect(screen.getByLabelText("Servings unit")).toBeInTheDocument();
     });
 
-    it("labels the cell with the servings unit", () => {
+    it("disables both inputs when disabled", () => {
       render(
-        <TimeYieldStats
-          servingsAmount={4}
-          servingsUnit="kebabs"
-          servingsEdit={{ value: "4", onChange: vi.fn() }}
-        />,
-      );
-      expect(screen.getByText("kebabs")).toBeInTheDocument();
-    });
-
-    it("disables the input when disabled", () => {
-      render(
-        <TimeYieldStats
-          servingsAmount={4}
-        servingsUnit="servings"
-          servingsEdit={{ value: "4", onChange: vi.fn(), disabled: true }}
-        />,
+        <TimeYieldStats servingsAmount={4} servingsEdit={edit({ disabled: true })} />,
       );
       expect(screen.getByLabelText("Servings")).toBeDisabled();
+      expect(screen.getByLabelText("Servings unit")).toBeDisabled();
     });
   });
+
   describe("timesEdit", () => {
     const noop = { value: "", onChange: vi.fn() };
 

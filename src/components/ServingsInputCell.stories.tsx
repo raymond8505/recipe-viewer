@@ -6,8 +6,8 @@ const meta: Meta<typeof ServingsInputCell> = {
   component: ServingsInputCell,
   title: "Components/Recipes/ServingsInputCell",
   args: {
-    label: "Servings",
     onChange: fn(),
+    onUnitChange: fn(),
   },
 };
 
@@ -15,22 +15,30 @@ export default meta;
 
 type Story = StoryObj<typeof ServingsInputCell>;
 
-/** Edits the recipe's BASE servings — unlike ServingsControl's display scaling. */
+/** Edits the recipe's BASE servings — both columns — unlike ServingsControl's display scaling. */
 export const Default: Story = {
-  args: { value: "4" },
+  args: { value: "4", unit: "servings" },
 };
 
-/** A QuantitativeValue yield's `unitText` replaces the generic "Servings" label. */
-export const WithUnitLabel: Story = {
-  args: { value: "4", label: "kebabs" },
+/** A recipe that counts something of its own. The heading stays the static word. */
+export const CustomUnit: Story = {
+  args: { value: "12", unit: "kebabs" },
 };
 
-/** Empty input — a recipe with no yield yet gaining one while editing. */
+/**
+ * No unit stored: the field shows the fallback word as a placeholder, which is
+ * what a blank saves as and what the recipe will render.
+ */
+export const NoUnit: Story = {
+  args: { value: "4", unit: "" },
+};
+
+/** Both empty — a recipe with no serving count yet gaining one while editing. */
 export const Empty: Story = {
-  args: { value: "" },
+  args: { value: "", unit: "" },
 };
 
 /** Disabled while the edit is saving. */
 export const Disabled: Story = {
-  args: { value: "4", disabled: true },
+  args: { value: "4", unit: "kebabs", disabled: true },
 };
