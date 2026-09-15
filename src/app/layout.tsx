@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import "./globals.css";
-import WindowApiProvider from "@/components/WindowApiProvider";
 import AuthButton from "@/components/AuthButton";
 import { getIsLoggedIn } from "@/lib/auth";
 import { canCurateNutrition } from "@/lib/devAccess";
@@ -18,9 +17,6 @@ export const metadata: Metadata = {
     template: "%s | Recipe Viewer",
   },
   description: "Browse and share recipes",
-  other: {
-    "x-agent-api": "window.recipeTools",
-  },
 };
 
 export default async function RootLayout({
@@ -59,7 +55,6 @@ export default async function RootLayout({
             </div>
           </div>
         </header>
-        <WindowApiProvider />
         {/* The site's scrollport, and the only element below <body> with a
             definite height (`flex-1` against the body's `h-dvh`). That is what
             lets a page fill the screen by saying `flex-1 min-h-0` instead of
