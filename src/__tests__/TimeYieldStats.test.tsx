@@ -19,8 +19,8 @@ describe("TimeYieldStats", () => {
     expect(screen.queryByText("Cook time")).not.toBeInTheDocument();
   });
 
-  it("shows recipeYield as a static servings stat when not scalable", () => {
-    render(<TimeYieldStats recipeYield={["6 servings", "6"]} />);
+  it("shows the servings columns as a static stat when not scalable", () => {
+    render(<TimeYieldStats servingsAmount={6} servingsUnit="servings" />);
     expect(screen.getByText("Servings")).toBeInTheDocument();
     expect(screen.getByText("6 servings")).toBeInTheDocument();
     expect(screen.queryByLabelText("Increase servings")).not.toBeInTheDocument();
@@ -30,7 +30,8 @@ describe("TimeYieldStats", () => {
     const onServingsChange = vi.fn();
     render(
       <TimeYieldStats
-        recipeYield="4 servings"
+        servingsAmount={4}
+        servingsUnit="servings"
         currentServings={4}
         onServingsChange={onServingsChange}
       />,
@@ -42,10 +43,11 @@ describe("TimeYieldStats", () => {
     expect(onServingsChange).toHaveBeenCalledWith(3);
   });
 
-  it("labels the stepper with the yield unitText for an object yield", () => {
+  it("labels the stepper with the servings unit", () => {
     render(
       <TimeYieldStats
-        recipeYield={{ "@type": "QuantitativeValue", value: 4, unitText: "kebabs" }}
+        servingsAmount={4}
+        servingsUnit="kebabs"
         currentServings={4}
         onServingsChange={vi.fn()}
       />,
@@ -61,7 +63,8 @@ describe("TimeYieldStats", () => {
       const onChange = vi.fn();
       render(
         <TimeYieldStats
-          recipeYield="4 servings"
+          servingsAmount={4}
+        servingsUnit="servings"
           servingsEdit={{ value: "4", onChange }}
         />,
       );
@@ -74,7 +77,8 @@ describe("TimeYieldStats", () => {
     it("takes precedence over the scaling stepper", () => {
       render(
         <TimeYieldStats
-          recipeYield="4 servings"
+          servingsAmount={4}
+        servingsUnit="servings"
           currentServings={4}
           onServingsChange={vi.fn()}
           servingsEdit={{ value: "4", onChange: vi.fn() }}
@@ -91,10 +95,11 @@ describe("TimeYieldStats", () => {
       expect(screen.getByLabelText("Servings")).toBeInTheDocument();
     });
 
-    it("labels the cell with the yield unitText for an object yield", () => {
+    it("labels the cell with the servings unit", () => {
       render(
         <TimeYieldStats
-          recipeYield={{ "@type": "QuantitativeValue", value: 4, unitText: "kebabs" }}
+          servingsAmount={4}
+          servingsUnit="kebabs"
           servingsEdit={{ value: "4", onChange: vi.fn() }}
         />,
       );
@@ -104,7 +109,8 @@ describe("TimeYieldStats", () => {
     it("disables the input when disabled", () => {
       render(
         <TimeYieldStats
-          recipeYield="4 servings"
+          servingsAmount={4}
+        servingsUnit="servings"
           servingsEdit={{ value: "4", onChange: vi.fn(), disabled: true }}
         />,
       );

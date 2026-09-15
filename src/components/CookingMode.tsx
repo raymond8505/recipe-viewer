@@ -123,12 +123,7 @@ export default function CookingMode({
       new Map([
         [
           recipe.id,
-          new ScalableRecipe(
-            doc.schema,
-            doc.ingredients,
-            undefined,
-            recipeNormalizedNutrition(doc),
-          ),
+          new ScalableRecipe(doc, undefined, recipeNormalizedNutrition(doc)),
         ],
       ]),
   );
@@ -142,12 +137,7 @@ export default function CookingMode({
       const next = new Map(prev);
       next.set(
         recipe.id,
-        new ScalableRecipe(
-          doc.schema,
-          doc.ingredients,
-          undefined,
-          recipeNormalizedNutrition(doc),
-        ),
+        new ScalableRecipe(doc, undefined, recipeNormalizedNutrition(doc)),
       );
       return next;
     });
@@ -297,7 +287,7 @@ export default function CookingMode({
     setScalables((prev) =>
       new Map(prev).set(
         newRecipe.id,
-        new ScalableRecipe(newRecipe.metadata.schema, newRecipe.ingredients),
+        new ScalableRecipe(recipeDocument(newRecipe)),
       ),
     );
     // Seed this recipe's timers unconditionally (bypass the "skip if timers > 0" guard on mount)
@@ -521,7 +511,8 @@ export default function CookingMode({
             prepTime={prepTime}
             cookTime={cookTime}
             totalTime={totalTime}
-            recipeYield={schema.recipeYield}
+            servingsAmount={doc.servings_amount}
+            servingsUnit={doc.servings_unit}
             currentServings={primaryScalable.currentServings}
             onServingsChange={(n) =>
               updateScalable(recipe.id, (r) => r.scalePortionsTo(n))

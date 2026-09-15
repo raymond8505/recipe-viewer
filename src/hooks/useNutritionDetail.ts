@@ -8,7 +8,6 @@ import {
   type LineComputation,
 } from "@/lib/nutritionMath";
 import { flattenIngredients, toRecipeIngredient } from "@/lib/recipeIngredients";
-import { parseServings } from "@/lib/units";
 import {
   estimateIngredientGrams,
   setIngredientGrams,
@@ -18,7 +17,6 @@ import {
 import { importUsdaIngredient } from "@/lib/api/ingredients";
 import type { UsdaSearchFood } from "@/lib/usda";
 import type {
-  QuantitativeValue,
   RecipeIngredient,
   RecipeIngredientGroup,
 } from "@/types/recipe";
@@ -81,7 +79,8 @@ function catalogFromGroups(
 export function useNutritionDetail(
   recipeId: string,
   initialIngredients: RecipeIngredientGroup[],
-  recipeYield: string | string[] | QuantitativeValue | undefined,
+  /** The recipe's serving count, straight off `servings_amount`. Null disables the per-serving column. */
+  servings: number | null,
 ) {
   const [groupsState, setGroups] = useState(initialIngredients);
   // Catalog rows by id, layered over what the groups carry: an association
@@ -144,7 +143,6 @@ export function useNutritionDetail(
     [enabledLines],
   );
 
-  const servings = useMemo(() => parseServings(recipeYield), [recipeYield]);
   const perPortion = useMemo(
     () => (servings != null && servings > 0 ? perPortionNutrition(totals, servings) : null),
     [totals, servings],

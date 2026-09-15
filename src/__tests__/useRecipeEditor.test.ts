@@ -16,7 +16,16 @@ const doc: RecipeDocument = {
   prep_time: null,
   cook_time: null,
   total_time: null,
+  servings_amount: null,
+  servings_unit: null,
+  total_weight_amount: null,
+  total_weight_unit: null,
 };
+
+/** The same document with a serving count — servings are columns, not schema. */
+function withServings(amount: number | null, unit: string | null = "servings"): RecipeDocument {
+  return { ...doc, servings_amount: amount, servings_unit: unit };
+}
 
 /** The same document with some schema fields swapped. */
 function withSchema(overrides: Partial<SchemaRecipe>): RecipeDocument {
@@ -203,86 +212,70 @@ describe("useRecipeEditor", () => {
   });
 
   describe("servings", () => {
-    it("begin seeds an empty string when the schema has no yield", () => {
+    it("begin seeds an empty string when the recipe has no serving count", () => {
       const { result } = renderHook(() => useRecipeEditor());
       act(() => result.current.begin(doc, ROW));
       expect(result.current.draft.servings).toBe("");
     });
 
-    it("begin seeds the parsed count from a string yield", () => {
+    it("begin seeds the count straight off the column", () => {
       const { result } = renderHook(() => useRecipeEditor());
-      act(() => result.current.begin(withSchema({ recipeYield: "4 servings" }), ROW));
+      act(() => result.current.begin(withServings(4), ROW));
       expect(result.current.draft.servings).toBe("4");
     });
 
-    it("begin seeds the value from a QuantitativeValue yield", () => {
-      const { result } = renderHook(() => useRecipeEditor());
-      act(() =>
-        result.current.begin(
-          withSchema({ recipeYield: { "@type": "QuantitativeValue", value: 4 } }),
-          ROW,
-        ),
-      );
-      expect(result.current.draft.servings).toBe("4");
-    });
-
-    it("buildPatch rewrites a string yield when servings change", () => {
-      const base = withSchema({ recipeYield: "4 servings" });
+    it("buildPatch sends the edited count as a servings patch", () => {
+      const base = withServings(4);
       const { result } = renderHook(() => useRecipeEditor());
       act(() => result.current.begin(base, ROW));
       act(() => result.current.patch({ servings: "8" }));
-      expect(result.current.buildPatch(base).schema.recipeYield).toBe("8 servings");
+      expect(result.current.buildPatch(base).servings).toEqual({ amount: 8 });
     });
 
-    it("buildPatch replaces only the value on a QuantitativeValue yield", () => {
-      const base = withSchema({
-        recipeYield: {
-          "@type": "QuantitativeValue",
-          value: 4,
-          unitText: "kebabs",
-          valueReference: { value: 454, unitText: "g" },
-        },
-      });
+    // The patch carries the amount alone, so the stored unit survives an edit
+    // without the editor having to round-trip a word it never showed the user.
+    it("buildPatch leaves the unit out of the patch entirely", () => {
+      const base = withServings(4, "kebabs");
       const { result } = renderHook(() => useRecipeEditor());
       act(() => result.current.begin(base, ROW));
       act(() => result.current.patch({ servings: "8" }));
-      expect(result.current.buildPatch(base).schema.recipeYield).toEqual({
-        "@type": "QuantitativeValue",
-        value: 8,
-        unitText: "kebabs",
-        valueReference: { value: 454, unitText: "g" },
-      });
+      expect(result.current.buildPatch(base).servings).not.toHaveProperty("unit");
     });
 
     it.each(["", "abc", "0", "-2", "2.5"])(
-      "buildPatch leaves the yield untouched for invalid input %j",
+      "buildPatch omits the servings key for invalid input %j",
       (servings) => {
-        const base = withSchema({ recipeYield: "4 servings" });
+        const base = withServings(4);
         const { result } = renderHook(() => useRecipeEditor());
         act(() => result.current.begin(base, ROW));
         act(() => result.current.patch({ servings }));
-        expect(result.current.buildPatch(base).schema.recipeYield).toBe("4 servings");
+        expect(result.current.buildPatch(base)).not.toHaveProperty("servings");
       },
     );
 
-    it("an untouched save preserves a range yield verbatim", () => {
-      // "6-8 servings" seeds the input with its midpoint "7"; saving without
-      // editing must not collapse the range to "7 servings".
-      const base = withSchema({ recipeYield: "6-8 servings" });
+    // The column holds one number, so re-sending an unchanged count is a no-op
+    // by construction — buildPatch needs no changed-check to stay safe.
+    it("an untouched save re-sends the same count harmlessly", () => {
+      const base = withServings(7);
       const { result } = renderHook(() => useRecipeEditor());
       act(() => result.current.begin(base, ROW));
       expect(result.current.draft.servings).toBe("7");
-      expect(result.current.buildPatch(base).schema.recipeYield).toBe("6-8 servings");
+      expect(result.current.buildPatch(base).servings).toEqual({ amount: 7 });
     });
 
-    it("buildPatch creates a yield on a recipe that had none", () => {
+    it("buildPatch sets a count on a recipe that had none", () => {
       const { result } = renderHook(() => useRecipeEditor());
       act(() => result.current.begin(doc, ROW));
       act(() => result.current.patch({ servings: "6" }));
-      expect(result.current.buildPatch(doc).schema.recipeYield).toEqual({
-        "@type": "QuantitativeValue",
-        value: 6,
-      });
+      expect(result.current.buildPatch(doc).servings).toEqual({ amount: 6 });
+    });
+
+    it("keeps the servings out of the schema half of the patch", () => {
+      const base = withServings(4);
+      const { result } = renderHook(() => useRecipeEditor());
+      act(() => result.current.begin(base, ROW));
+      act(() => result.current.patch({ servings: "8" }));
+      expect(result.current.buildPatch(base).schema).not.toHaveProperty("recipeYield");
     });
   });
 

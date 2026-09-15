@@ -62,6 +62,23 @@ import {
   makeStep,
   makeSteps,
 } from "@/fixtures";
+import type { RecipeDocument, SchemaRecipe } from "@/types/recipe";
+
+/** The document the repo builds for `content`, for a schema-only expectation. */
+function markdownDoc(schema: SchemaRecipe): RecipeDocument {
+  return {
+    schema,
+    ingredients: [],
+    instructions: [],
+    prep_time: null,
+    cook_time: null,
+    total_time: null,
+    servings_amount: null,
+    servings_unit: null,
+    total_weight_amount: null,
+    total_weight_unit: null,
+  };
+}
 
 beforeEach(() => {
   mockGetRecipeIngredients.mockReset().mockResolvedValue([]);
@@ -427,7 +444,7 @@ describe("createRecipeRow", () => {
 
     expect(inserts[0]).toMatchObject({
       name: "Soup",
-      content: recipeToMarkdown(schema, [], []),
+      content: recipeToMarkdown(markdownDoc(schema)),
       url: "https://example.com",
       source: "example.com",
       status: "draft",
@@ -585,7 +602,9 @@ describe("updateRecipeRow", () => {
     await updateRecipeRow("r1", { schema: { description: "Fresh blurb" } });
 
     const mergedSchema = { name: "Original", description: "Fresh blurb" };
-    expect(updates[0]).toMatchObject({ content: recipeToMarkdown(mergedSchema, [], []) });
+    expect(updates[0]).toMatchObject({
+      content: recipeToMarkdown(markdownDoc(mergedSchema)),
+    });
   });
 
   it("sets the embedding from the merged schema when generation succeeds", async () => {

@@ -1,6 +1,13 @@
 import { getSupabaseClient, selectColumns, toVectorLiteral } from "./supabase";
 import { getFeatures } from "./features";
-import { parseDurationToSeconds, recipeToMarkdown, secondsToIso } from "./format";
+import {
+  parseDurationToSeconds,
+  recipeToMarkdown,
+  SCHEMA_ORG_ONLY_KEYS,
+  secondsToIso,
+  stripSchemaOrgKeys,
+} from "./format";
+import { parseYield } from "./units";
 import { generateEmbedding } from "./embedding";
 import {
   deleteRecipeIngredientRows,
@@ -28,6 +35,7 @@ import type {
   RecipeRow,
   RecipeRowColumns,
   RecipesResult,
+  SchemaOrgRecipe,
   SchemaRecipe,
   SortOption,
   StoredIngredientGroup,
@@ -68,6 +76,10 @@ const RECIPE_COLUMNS = selectColumns<RecipeRowColumns>()([
   "prep_time",
   "cook_time",
   "total_time",
+  "servings_amount",
+  "servings_unit",
+  "total_weight_amount",
+  "total_weight_unit",
   "ingredients",
   "instructions",
   "metadata",
@@ -124,21 +136,21 @@ function stripTimes(schema: SchemaRecipe): SchemaRecipe {
   return next;
 }
 
-// Neither key is on SchemaRecipe any more, but both are still in older rows'
-// blobs, and the zod schema is `.passthrough()` — an agent or a stale client
-// can still send them. Neither may reach a consumer or a write.
-const DEAD_SCHEMA_KEYS = ["recipeIngredient", "recipeInstructions"] as const;
+// None of these keys is on SchemaRecipe any more, but all are still in older
+// rows' blobs, and the zod schema is `.passthrough()` — an agent or a stale
+// client can still send them. None may reach a consumer or a write.
+// `SCHEMA_ORG_ONLY_KEYS` (src/lib/format.ts) is the list, and `stripSchemaOrgKeys`
+// the copying half, shared with the client-side inbound edge so the two can
+// never disagree about what counts as stored.
 
+/** The mutating half, for the read exit: the MCP server stringifies whole rows,
+ *  so a dead key has to be gone from the object itself, not from a copy. */
 function deleteDeadKeys(schema: SchemaRecipe): void {
-  for (const key of DEAD_SCHEMA_KEYS) {
-    delete (schema as unknown as Record<string, unknown>)[key];
-  }
-}
-
-function stripDeadKeys<T extends object>(schema: T): T {
-  const next = { ...schema };
-  for (const key of DEAD_SCHEMA_KEYS) delete (next as Record<string, unknown>)[key];
-  return next;
+  const blob = schema as unknown as Record<string, unknown> & {
+    nutrition?: Record<string, unknown>;
+  };
+  for (const key of SCHEMA_ORG_ONLY_KEYS) delete blob[key];
+  if (blob.nutrition) delete blob.nutrition.servingSize;
 }
 
 /**
@@ -172,7 +184,13 @@ export interface CreateRecipeInput {
   url: string;
   source: string;
   status?: RecipeStatus;
-  schema: SchemaRecipe;
+  /**
+   * The Schema.org form, because create IS an inbound edge — a scrape and an
+   * MCP payload both speak `recipeYield`. It is parsed into the columns here
+   * and stripped from the blob; `updateRecipeRow` takes `SchemaRecipe` and
+   * rejects the wire-only keys instead.
+   */
+  schema: SchemaOrgRecipe;
   ingredients?: RecipeIngredientGroupInput[];
   instructions?: RecipeInstructionGroup[];
 }
@@ -187,6 +205,18 @@ export interface UpdateRecipePatch {
   ingredients?: RecipeIngredientGroupInput[];
   /** Replaces the whole step list; stored in canonical form. */
   instructions?: RecipeInstructionGroup[];
+  /**
+   * The servings columns, three-way like the times: the key absent leaves both
+   * alone, `amount: null` clears the count, a number sets it; `unit` absent
+   * leaves the unit alone and `null` clears it. Grouped rather than two loose
+   * scalars so a caller cannot pass them in the wrong order.
+   *
+   * No `recipeYield` here on purpose — update speaks the app's shape, and the
+   * MCP tool rejects a Schema.org yield outright rather than parsing one.
+   */
+  servings?: { amount: number | null; unit?: string | null };
+  /** The whole-recipe raw weight, same three-way semantics. */
+  totalWeight?: { amount: number | null; unit?: string | null };
 }
 
 const PAGE_SIZE = 24;
@@ -340,7 +370,11 @@ export async function getRecipeById(id: string): Promise<RecipeRow | null> {
  */
 export async function createRecipeRow(input: CreateRecipeInput): Promise<RecipeRow> {
   const supabase = getSupabaseClient();
-  const schema = stripDeadKeys(input.schema);
+  // Create is an inbound Schema.org edge: a scrape speaks `recipeYield`, so it
+  // is read here and ONLY here. Before the strip, which deletes the key — parse
+  // after it and every scraped recipe lands with null servings and no error.
+  const yld = parseYield(input.schema.recipeYield);
+  const schema = stripSchemaOrgKeys(input.schema);
   // Every line becomes a row, and the row's id is its identity from the moment
   // it exists. The recipe id is minted here when the caller didn't, because
   // the rows have to carry it and the column default would decide it too late.
@@ -350,9 +384,20 @@ export async function createRecipeRow(input: CreateRecipeInput): Promise<RecipeR
   const instructions = canonicalizeInstructions(input.instructions ?? []);
 
   // Markdown (and therefore the embedding) is built from the times-bearing
-  // schema, the lines and the steps — the columns are where those LAND, not a
-  // reason for the searchable text to stop mentioning them.
-  const content = recipeToMarkdown(schema, ingredients, instructions);
+  // schema, the lines, the steps and the servings — the columns are where those
+  // LAND, not a reason for the searchable text to stop mentioning them.
+  const content = recipeToMarkdown({
+    schema,
+    ingredients,
+    instructions,
+    prep_time: parseDurationToSeconds(schema.prepTime),
+    cook_time: parseDurationToSeconds(schema.cookTime),
+    total_time: parseDurationToSeconds(schema.totalTime),
+    servings_amount: yld?.amount ?? null,
+    servings_unit: yld?.unit ?? null,
+    total_weight_amount: yld?.weight?.amount ?? null,
+    total_weight_unit: yld?.weight?.unit ?? null,
+  });
   const embedding = await generateEmbedding(content);
   const { data, error } = await supabase
     .from("recipes")
@@ -367,6 +412,10 @@ export async function createRecipeRow(input: CreateRecipeInput): Promise<RecipeR
       prep_time: parseDurationToSeconds(schema.prepTime),
       cook_time: parseDurationToSeconds(schema.cookTime),
       total_time: parseDurationToSeconds(schema.totalTime),
+      servings_amount: yld?.amount ?? null,
+      servings_unit: yld?.unit ?? null,
+      total_weight_amount: yld?.weight?.amount ?? null,
+      total_weight_unit: yld?.weight?.unit ?? null,
       ingredients: reconcile.stored,
       instructions,
       metadata: { schema: stripTimes(schema) },
@@ -449,6 +498,10 @@ export async function updateRecipeRow(
     prep_time: number | null;
     cook_time: number | null;
     total_time: number | null;
+    servings_amount: number | null;
+    servings_unit: string | null;
+    total_weight_amount: number | null;
+    total_weight_unit: string | null;
     ingredients: StoredIngredientGroup[];
     instructions: RecipeInstructionGroup[];
     metadata: { schema: SchemaRecipe };
@@ -460,6 +513,31 @@ export async function updateRecipeRow(
   if (patch.instructions !== undefined) {
     writePatch.instructions = canonicalizeInstructions(patch.instructions);
   }
+  if (patch.servings !== undefined) {
+    writePatch.servings_amount = patch.servings.amount;
+    if (patch.servings.unit !== undefined) {
+      writePatch.servings_unit = patch.servings.unit;
+    }
+  }
+  if (patch.totalWeight !== undefined) {
+    writePatch.total_weight_amount = patch.totalWeight.amount;
+    if (patch.totalWeight.unit !== undefined) {
+      writePatch.total_weight_unit = patch.totalWeight.unit;
+    }
+  }
+  // The values the row will HOLD once this write lands — patch where given,
+  // current otherwise. The markdown below has to describe the saved recipe, not
+  // the one being replaced. Keyed on PRESENCE, not on `??`, because clearing the
+  // count writes null — which `??` would read as "no value given" and replace
+  // with the very count the write is removing.
+  const servingsAmount =
+    "servings_amount" in writePatch
+      ? (writePatch.servings_amount ?? null)
+      : current.servings_amount;
+  const servingsUnit =
+    "servings_unit" in writePatch
+      ? (writePatch.servings_unit ?? null)
+      : current.servings_unit;
 
   // Normalization exists to GUESS an association for a line that has none, so
   // it only has work when the SET of lines changes — one was added or removed.
@@ -475,8 +553,16 @@ export async function updateRecipeRow(
   const finalRows = reconcile ? reconcile.rows : existingRows;
   if (reconcile) writePatch.ingredients = reconcile.stored;
 
-  if (patch.schema !== undefined || reconcile || writePatch.instructions) {
-    const mergedSchema = stripDeadKeys({
+  // A servings change counts too: the markdown's Yield line reads the columns,
+  // so leaving `content` alone would leave the embedded text describing the old
+  // serving count.
+  if (
+    patch.schema !== undefined ||
+    reconcile ||
+    writePatch.instructions ||
+    patch.servings !== undefined
+  ) {
+    const mergedSchema = stripSchemaOrgKeys({
       ...current.metadata.schema,
       ...(patch.schema ?? {}),
     }) as SchemaRecipe;
@@ -493,11 +579,21 @@ export async function updateRecipeRow(
     // merged schema on any schema, ingredient or instruction change. Embedding
     // is best-effort: on failure we leave the existing embedding untouched
     // rather than nulling it.
-    const content = recipeToMarkdown(
-      mergedSchema,
-      hydrateIngredientGroups(reconcile?.stored ?? existingStored, finalRows),
-      writePatch.instructions ?? current.instructions,
-    );
+    const content = recipeToMarkdown({
+      schema: mergedSchema,
+      ingredients: hydrateIngredientGroups(
+        reconcile?.stored ?? existingStored,
+        finalRows,
+      ),
+      instructions: writePatch.instructions ?? current.instructions,
+      prep_time: writePatch.prep_time,
+      cook_time: writePatch.cook_time,
+      total_time: writePatch.total_time,
+      servings_amount: servingsAmount,
+      servings_unit: servingsUnit,
+      total_weight_amount: current.total_weight_amount,
+      total_weight_unit: current.total_weight_unit,
+    });
     writePatch.content = content;
     const embedding = await generateEmbedding(content);
     if (embedding) writePatch.embedding = toVectorLiteral(embedding);

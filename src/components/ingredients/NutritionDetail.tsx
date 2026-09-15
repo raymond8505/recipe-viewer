@@ -13,7 +13,7 @@ import { Button } from "@/components/ui/button";
 import { WarningIcon } from "@/components/icons";
 import { pluralize } from "@/lib/format";
 import { useNutritionDetail } from "@/hooks/useNutritionDetail";
-import type { QuantitativeValue, RecipeIngredientGroup } from "@/types/recipe";
+import type { RecipeIngredientGroup } from "@/types/recipe";
 import type {
   IngredientAutocompleteSearch,
   UsdaFoodSearch,
@@ -33,7 +33,8 @@ interface NutritionDetailProps {
   recipeId: string;
   /** The recipe's ingredient groups, each line carrying its catalog `ingredient`. */
   ingredients: RecipeIngredientGroup[];
-  recipeYield: string | string[] | QuantitativeValue | undefined;
+  /** The recipe's serving count (`servings_amount`); null hides the per-portion divisor. */
+  servings: number | null;
   /** DI seam for the autocomplete so stories/tests run without a backend. */
   search?: IngredientAutocompleteSearch;
   /** DI seam for the autocomplete's USDA fallback search. */
@@ -62,7 +63,7 @@ interface NutritionDetailProps {
 export default function NutritionDetail({
   recipeId,
   ingredients,
-  recipeYield,
+  servings,
   search,
   usdaSearch,
 }: NutritionDetailProps) {
@@ -70,7 +71,6 @@ export default function NutritionDetail({
     groups,
     totals,
     perPortion,
-    servings,
     excludedCount,
     disabledCount,
     savingRowId,
@@ -83,7 +83,7 @@ export default function NutritionDetail({
     toggleLine,
     setLinesEnabled,
     enableAll,
-  } = useNutritionDetail(recipeId, ingredients, recipeYield);
+  } = useNutritionDetail(recipeId, ingredients, servings);
 
   return (
     <div className="space-y-4">
@@ -165,7 +165,7 @@ export default function NutritionDetail({
             <NutritionSummaryRow
               label={servings != null ? `Per portion (÷${servings})` : "Per portion"}
               nutrition={perPortion}
-              missingTitle="Servings unknown — recipeYield has no number"
+              missingTitle="Servings unknown — this recipe has no serving count"
             />
           </TableBody>
         </Table>

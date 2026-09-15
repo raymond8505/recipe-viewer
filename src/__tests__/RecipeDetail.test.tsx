@@ -42,6 +42,10 @@ function makeRecipe(
         ? makeIngredientLines(ingredients as string[])
         : (ingredients as RecipeIngredientGroup[]),
     instructions: [],
+    servings_amount: null,
+    servings_unit: "servings",
+    total_weight_amount: null,
+    total_weight_unit: null,
     ...row,
     metadata: {
       schema: {
@@ -116,7 +120,7 @@ describe("RecipeDetail", () => {
   it("renders servings stepper from array yield (first element)", () => {
     render(
       <RecipeDetail
-        recipe={makeRecipe({ recipeYield: ["4 servings", "8 pieces"] })}
+        recipe={makeRecipe({}, { servings_amount: 4 })}
       />,
     );
     expect(screen.getByText("4")).toBeTruthy();
@@ -129,7 +133,7 @@ describe("RecipeDetail", () => {
   });
 
   it("renders servings stepper from string yield", () => {
-    render(<RecipeDetail recipe={makeRecipe({ recipeYield: "6 servings" })} />);
+    render(<RecipeDetail recipe={makeRecipe({}, { servings_amount: 6 })} />);
     expect(screen.getByText("6")).toBeTruthy();
     expect(
       screen.getByRole("button", { name: /increase servings/i }),
@@ -175,14 +179,14 @@ describe("RecipeDetail", () => {
 
   // The nutrition the page shows is computed from the catalog rows its
   // ingredient lines carry, never from the recipe's own stored fields. The
-  // fixture's total is whole-recipe and the yield below is four servings, so
+  // fixture's total is whole-recipe and the count below is four servings, so
   // it reads as ÷4.
   it("shows the nutrition section from the lines' catalog total", () => {
     render(
       <RecipeDetail
         recipe={makeRecipe(
-          { recipeYield: "4 servings" },
           {},
+          { servings_amount: 4 },
           makeNutritionLines({ calories_kcal: 1400 }),
         )}
       />,
@@ -195,8 +199,8 @@ describe("RecipeDetail", () => {
     render(
       <RecipeDetail
         recipe={makeRecipe(
-          { recipeYield: "4 servings" },
           {},
+          { servings_amount: 4 },
           makeNutritionLines({
             calories_kcal: 1400,
             protein_g: 80,
@@ -217,8 +221,8 @@ describe("RecipeDetail", () => {
     render(
       <RecipeDetail
         recipe={makeRecipe(
-          { recipeYield: "4 servings", nutrition: { servingSize: "1 cup" } },
           {},
+          { servings_amount: 4 },
           makeNutritionLines({}),
         )}
       />,
@@ -236,7 +240,7 @@ describe("RecipeDetail", () => {
     // off its total rather than undercounting it.
     render(
       <RecipeDetail
-        recipe={makeRecipe({ recipeYield: "4 servings" }, {}, [
+        recipe={makeRecipe({}, { servings_amount: 4 }, [
           makeIngredientGroup(undefined, [
             ...makeNutritionLines({ calories_kcal: 1400 })[0].ingredients,
             "1 cup sugar",
@@ -252,10 +256,10 @@ describe("RecipeDetail", () => {
     // nothing regardless of how complete its stored fields are.
     render(
       <RecipeDetail
-        recipe={makeRecipe({
-          recipeYield: "4 servings",
-          nutrition: { calories: "350 kcal", proteinContent: "20 g" },
-        })}
+        recipe={makeRecipe(
+          { nutrition: { calories: "350 kcal", proteinContent: "20 g" } },
+          { servings_amount: 4 },
+        )}
       />,
     );
     expect(screen.queryByText("Nutrition")).toBeNull();
@@ -267,8 +271,8 @@ describe("RecipeDetail", () => {
   // must survive an edit that touched no ingredient.
   it("keeps nutrition after a save that changes no ingredient line", async () => {
     const recipe = makeRecipe(
-      { recipeYield: "4 servings" },
       {},
+      { servings_amount: 4 },
       makeNutritionLines({ calories_kcal: 1400 }),
     );
     const mockFetch = vi.fn().mockResolvedValue(
@@ -280,6 +284,10 @@ describe("RecipeDetail", () => {
           prep_time: null,
           cook_time: null,
           total_time: null,
+          servings_amount: 4,
+          servings_unit: "servings",
+          total_weight_amount: null,
+          total_weight_unit: null,
           status: "draft",
           url: recipe.url,
           source: recipe.source,
@@ -307,8 +315,8 @@ describe("RecipeDetail", () => {
 
   it("drops nutrition after a save whose echo carries an unmatched line", async () => {
     const recipe = makeRecipe(
-      { recipeYield: "4 servings" },
       {},
+      { servings_amount: 4 },
       makeNutritionLines({ calories_kcal: 1400 }),
     );
     // A line added in the editor comes back as a row with no catalog match;
@@ -328,6 +336,10 @@ describe("RecipeDetail", () => {
           prep_time: null,
           cook_time: null,
           total_time: null,
+          servings_amount: 4,
+          servings_unit: "servings",
+          total_weight_amount: null,
+          total_weight_unit: null,
           status: "draft",
           url: recipe.url,
           source: recipe.source,
@@ -525,7 +537,7 @@ describe("RecipeDetail — shopping list", () => {
   it("copies scaled amounts after the recipe is scaled", async () => {
     render(
       <RecipeDetail
-        recipe={makeRecipe({ recipeYield: "1 serving" }, {}, ["2 cups flour", "1 tsp salt"])}
+        recipe={makeRecipe({}, { servings_amount: 1, servings_unit: "serving" }, ["2 cups flour", "1 tsp salt"])}
       />,
     );
     // Selection is keyed by the line's id, so it survives the scale change.
@@ -1419,7 +1431,7 @@ describe("RecipeDetail — controls section", () => {
   it("shows a servings input pre-filled with the base servings in edit mode", async () => {
     render(
       <RecipeDetail
-        recipe={makeRecipe({ recipeYield: "4 servings" })}
+        recipe={makeRecipe({}, { servings_amount: 4 })}
         isLoggedIn={true}
       />,
     );
@@ -1445,7 +1457,7 @@ describe("RecipeDetail — controls section", () => {
 
     render(
       <RecipeDetail
-        recipe={makeRecipe({ recipeYield: "4 servings" })}
+        recipe={makeRecipe({}, { servings_amount: 4 })}
         isLoggedIn={true}
       />,
     );
@@ -1463,6 +1475,6 @@ describe("RecipeDetail — controls section", () => {
 
     await waitFor(() => expect(mockFetch).toHaveBeenCalled());
     const body = JSON.parse(mockFetch.mock.calls[0][1].body);
-    expect(body.schema.recipeYield).toBe("8 servings");
+    expect(body.servings).toEqual({ amount: 8 });
   });
 });

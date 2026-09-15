@@ -7,8 +7,7 @@ import {
   getUnitGroup,
   getUnitDisplay,
   formatAmount,
-  parseServings,
-  applyServings,
+  parseYield,
   roundDecimal,
   getDefaultVolumeUnit,
   closestCommonFraction,
@@ -247,143 +246,109 @@ describe("closestCommonFraction", () => {
   });
 });
 
-describe("parseServings", () => {
+describe("parseYield", () => {
   it("parses plain number string", () => {
-    expect(parseServings("4")).toBe(4);
+    expect(parseYield("4")).toEqual({ amount: 4, unit: null, weight: null });
   });
 
   it("parses 'N servings' format", () => {
-    expect(parseServings("4 servings")).toBe(4);
+    expect(parseYield("4 servings")).toEqual({
+      amount: 4,
+      unit: "servings",
+      weight: null,
+    });
   });
 
   it("parses 'Makes N' format", () => {
-    expect(parseServings("Makes 6")).toBe(6);
+    expect(parseYield("Makes 6")).toEqual({ amount: 6, unit: null, weight: null });
   });
 
   it("parses range and returns midpoint", () => {
     // "6-8 servings" → midpoint 7. Consistent with anchor-on-range semantics in ScalableRecipe.
-    expect(parseServings("6-8 servings")).toBe(7);
+    expect(parseYield("6-8 servings")?.amount).toBe(7);
   });
 
   it("parses 'to' range and returns midpoint", () => {
-    expect(parseServings("2 to 4 servings")).toBe(3);
+    expect(parseYield("2 to 4 servings")?.amount).toBe(3);
   });
 
   it("parses en-dash range and returns midpoint", () => {
-    expect(parseServings("4–6 servings")).toBe(5);
+    expect(parseYield("4–6 servings")?.amount).toBe(5);
   });
 
   it("parses array by using first element", () => {
-    expect(parseServings(["8 servings", "8"])).toBe(8);
+    expect(parseYield(["8 servings", "8"])?.amount).toBe(8);
   });
 
   it("returns null for undefined", () => {
-    expect(parseServings(undefined)).toBeNull();
+    expect(parseYield(undefined)).toBeNull();
   });
 
   it("returns null for empty string", () => {
-    expect(parseServings("")).toBeNull();
+    expect(parseYield("")).toBeNull();
   });
 
   it("returns null when no number present", () => {
-    expect(parseServings("a few servings")).toBeNull();
+    expect(parseYield("a few servings")).toBeNull();
   });
 
-  it("reads value from a QuantitativeValue object", () => {
+  // The amount has to be AT THE FRONT. Scanning the whole string read this as
+  // 350 servings and divided the recipe's nutrition by it.
+  it("rejects a number buried in prose rather than reading it as a count", () => {
+    expect(parseYield("Enough for one 350g brick of tofu")).toBeNull();
+  });
+
+  it("rejects prose with no amount at all", () => {
+    expect(parseYield("Not specified")).toBeNull();
+    expect(parseYield("Varies (ping pong size balls)")).toBeNull();
+  });
+
+  it("reads value and unitText from a QuantitativeValue object", () => {
     expect(
-      parseServings({ "@type": "QuantitativeValue", value: 4, unitText: "kebabs" }),
-    ).toBe(4);
+      parseYield({ "@type": "QuantitativeValue", value: 4, unitText: "kebabs" }),
+    ).toEqual({ amount: 4, unit: "kebabs", weight: null });
   });
 
   it("keeps a fractional QuantitativeValue value unrounded", () => {
-    expect(parseServings({ value: 2.5 })).toBe(2.5);
+    expect(parseYield({ value: 2.5 })?.amount).toBe(2.5);
   });
 
   it("returns null for a QuantitativeValue with no numeric value", () => {
-    expect(parseServings({ unitText: "kebabs" })).toBeNull();
+    expect(parseYield({ unitText: "kebabs" })).toBeNull();
   });
-});
 
-describe("applyServings", () => {
-  it("replaces value on a QuantitativeValue, preserving unitText and valueReference", () => {
+  it("reads the whole-recipe weight from a metric valueReference", () => {
     expect(
-      applyServings(
-        {
-          "@type": "QuantitativeValue",
-          value: 4,
-          unitText: "kebabs",
-          valueReference: { value: 454, unitText: "g" },
-        },
-        8,
-      ),
-    ).toEqual({
-      "@type": "QuantitativeValue",
-      value: 8,
-      unitText: "kebabs",
-      valueReference: { value: 454, unitText: "g" },
-    });
+      parseYield({
+        value: 4,
+        unitText: "kebabs",
+        valueReference: { value: 454, unitText: "g" },
+      })?.weight,
+    ).toEqual({ amount: 454, unit: "g" });
   });
 
-  it("adds a value to a QuantitativeValue that has none", () => {
-    expect(applyServings({ unitText: "kebabs" }, 8)).toEqual({
-      unitText: "kebabs",
-      value: 8,
-    });
+  // The weight columns only accept the metric symbols the zod validator does.
+  // The servings still parse — half the value is not a reason to drop the rest.
+  it("drops a non-metric valueReference but keeps the servings", () => {
+    expect(
+      parseYield({
+        value: 9,
+        unitText: "servings",
+        valueReference: { value: 2, unitText: "cups" },
+      }),
+    ).toEqual({ amount: 9, unit: "servings", weight: null });
   });
 
-  it("replaces the number in 'N servings'", () => {
-    expect(applyServings("4 servings", 8)).toBe("8 servings");
+  it("cuts the unit at a parenthetical rather than swallowing it", () => {
+    expect(parseYield("4 wraps (about 9 inches / 23 cm each)")?.unit).toBe("wraps");
   });
 
-  it("replaces a mid-string number ('Makes N')", () => {
-    expect(applyServings("Makes 6", 8)).toBe("Makes 8");
+  it("cuts the unit at a clause break", () => {
+    expect(parseYield("12 meatballs, serves 3-4")?.unit).toBe("meatballs");
   });
 
-  it("replaces a bare number string", () => {
-    expect(applyServings("4", 8)).toBe("8");
-  });
-
-  it.each(["4 to 6 servings", "6-8 servings", "4–6 servings"])(
-    "collapses the range in %j to the single new amount",
-    (yld) => {
-      expect(applyServings(yld, 8)).toBe("8 servings");
-    },
-  );
-
-  it("replaces a mixed unicode-fraction token whole", () => {
-    expect(applyServings("2½ servings", 8)).toBe("8 servings");
-  });
-
-  it("collapses an array to the rewritten first element", () => {
-    expect(applyServings(["6 servings", "6"], 8)).toBe("8 servings");
-  });
-
-  it.each([undefined, "", "a few servings"])(
-    "creates a QuantitativeValue when there is no amount to replace (%j)",
-    (yld) => {
-      expect(applyServings(yld, 8)).toEqual({
-        "@type": "QuantitativeValue",
-        value: 8,
-      });
-    },
-  );
-
-  it("round-trips through parseServings for every yield shape", () => {
-    const shapes = [
-      "4 servings",
-      "Makes 6",
-      "6-8 servings",
-      "2 to 4 servings",
-      "2½ servings",
-      ["8 servings", "8"],
-      { "@type": "QuantitativeValue" as const, value: 4, unitText: "kebabs" },
-      { unitText: "kebabs" },
-      "a few servings",
-      undefined,
-    ];
-    for (const shape of shapes) {
-      expect(parseServings(applyServings(shape, 8))).toBe(8);
-    }
+  it("reports no unit when the tail is prose rather than a unit", () => {
+    expect(parseYield("2–3 as a side of something")?.unit).toBeNull();
   });
 });
 

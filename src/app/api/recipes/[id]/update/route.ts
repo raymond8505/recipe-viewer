@@ -27,6 +27,9 @@ export const POST = requireSessionOrRecipeToken(
       ingredients?: RecipeIngredientGroupInput[];
       // Same contract for the steps.
       instructions?: RecipeInstructionGroup[];
+      // Absent = leave the base servings alone, which is what an invalid entry
+      // in the editor's servings box degrades to.
+      servings?: { amount: number | null; unit?: string | null };
       status: RecipeStatus;
       url?: string;
       source?: string;
@@ -55,6 +58,7 @@ export const POST = requireSessionOrRecipeToken(
         schema: body.schema,
         ingredients: body.ingredients,
         instructions: body.instructions,
+        servings: body.servings,
         status: body.status,
       });
     } catch (err) {
@@ -70,7 +74,7 @@ export const POST = requireSessionOrRecipeToken(
     // re-seed from what was actually persisted rather than from its own draft
     // — the two differ whenever a value degrades (blank source), is
     // canonicalized server-side (a source, a step list), gained a row id (a new
-    // ingredient), or was parsed into a column (a time).
+    // ingredient), or was parsed into a column (a time, the servings).
     return NextResponse.json({
       schema: saved.metadata.schema,
       ingredients: saved.ingredients,
@@ -78,6 +82,10 @@ export const POST = requireSessionOrRecipeToken(
       prep_time: saved.prep_time,
       cook_time: saved.cook_time,
       total_time: saved.total_time,
+      servings_amount: saved.servings_amount,
+      servings_unit: saved.servings_unit,
+      total_weight_amount: saved.total_weight_amount,
+      total_weight_unit: saved.total_weight_unit,
       status: saved.status,
       url: saved.url,
       source: saved.source,

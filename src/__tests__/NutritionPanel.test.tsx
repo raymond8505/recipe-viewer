@@ -3,7 +3,7 @@ import { useState } from "react";
 import { render, screen, fireEvent } from "@testing-library/react";
 import NutritionPanel from "@/components/NutritionPanel";
 import { ScalableRecipe } from "@/lib/ScalableRecipe";
-import { makeNutritionRecipe, quantitativeValueYield } from "@/fixtures";
+import { makeNutritionRecipe, weighedYieldColumns } from "@/fixtures";
 
 /** Stateful wrapper so the stepper can actually update via onSplitPortions. */
 function Harness({ initial }: { initial: ScalableRecipe }) {
@@ -20,7 +20,7 @@ function Harness({ initial }: { initial: ScalableRecipe }) {
 // fully-covered catalog total, no schema.nutrition in play. Totals are
 // WHOLE-RECIPE, so the per-serving figure each test asserts is the total ÷ 4 —
 // 1400 kcal reads as "350 kcal". Only the cases that need something else (a
-// structured yield, no yield, an uncovered list) pass overrides.
+// a weighed recipe, no serving count, an uncovered list) pass overrides.
 describe("NutritionPanel", () => {
   it("renders nutrition section with fields", () => {
     const r = makeNutritionRecipe({ calories_kcal: 1400, protein_g: 80 });
@@ -108,12 +108,12 @@ describe("NutritionPanel", () => {
     expect(decreaseBtn).toBeDisabled();
   });
 
-  it("hides stepper when recipe has no parsed yield", () => {
-    // No yield means no servings to divide by, so nothing resolves — the panel
+  it("hides stepper when the recipe has no serving count", () => {
+    // No count means nothing to divide by, so nothing resolves — the panel
     // needs the breakdown link to render its shell at all.
     const r = makeNutritionRecipe(
       { calories_kcal: 1400 },
-      { schema: { recipeYield: undefined } },
+      { servings_amount: null },
     );
     render(
       <NutritionPanel
@@ -127,11 +127,11 @@ describe("NutritionPanel", () => {
     expect(screen.getByText("No nutrition data on this recipe yet.")).toBeTruthy();
   });
 
-  it("shows the per-serving weight when the yield carries a valueReference", () => {
+  it("shows the per-serving weight when the recipe carries a total weight", () => {
     // 4 kebabs from 454 g → 454/4 = 113.5 → "per 114 g serving".
     const r = makeNutritionRecipe(
       { calories_kcal: 1400 },
-      { schema: { recipeYield: quantitativeValueYield } },
+      weighedYieldColumns,
     );
     render(<Harness initial={r} />);
     expect(screen.getByText("per 114 g serving")).toBeTruthy();

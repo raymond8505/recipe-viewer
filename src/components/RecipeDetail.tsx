@@ -104,15 +104,11 @@ export default function RecipeDetail({
   } = useScalableRecipe(doc, normalized);
   // JSON-LD serializes the base per-serving nutrition. A default-state
   // instance keeps it independent of the user's live scale/split (which
-  // `scalable` tracks).
-  const jsonLdNutrition = useMemo(
-    () =>
-      new ScalableRecipe(
-        doc.schema,
-        doc.ingredients,
-        undefined,
-        normalized,
-      ).nutrition(),
+  // `scalable` tracks). The INSTANCE is memoized, not just its nutrition: the
+  // published `servingSize` is the denominator for these numbers, so it has to
+  // come from the same default-state instance that produced them.
+  const jsonLdRecipe = useMemo(
+    () => new ScalableRecipe(doc, undefined, normalized),
     [doc, normalized],
   );
 
@@ -244,7 +240,12 @@ export default function RecipeDetail({
 
   const handleEditSave = () =>
     editor.runSave(async () => {
-      const { schema: updatedSchema, ingredients, instructions } = editor.buildPatch(doc);
+      const {
+        schema: updatedSchema,
+        ingredients,
+        instructions,
+        servings,
+      } = editor.buildPatch(doc);
       if (imageUpload.isStaged) {
         updatedSchema.image = await imageUpload.upload(recipe.id);
       }
@@ -252,6 +253,9 @@ export default function RecipeDetail({
         schema: updatedSchema,
         ingredients,
         instructions,
+        // Absent when the servings box holds something unusable, which the
+        // route reads as "leave the count alone" rather than as a clear.
+        ...(servings ? { servings } : {}),
         status: draft.status,
         url: draft.url,
         source: draft.source,
@@ -261,6 +265,8 @@ export default function RecipeDetail({
       // ("Custom" → "custom", the step list), or — for ingredients — a new
       // line gained its row id. Adopting the echo is what keeps the next save
       // handing every line's id back.
+      // Every column-backed field is listed; this is an object literal, not a
+      // spread, so a field left out here silently reverts to the pre-save value.
       setDoc({
         schema: result.schema,
         ingredients: result.ingredients,
@@ -268,6 +274,10 @@ export default function RecipeDetail({
         prep_time: result.prep_time,
         cook_time: result.cook_time,
         total_time: result.total_time,
+        servings_amount: result.servings_amount,
+        servings_unit: result.servings_unit,
+        total_weight_amount: result.total_weight_amount,
+        total_weight_unit: result.total_weight_unit,
       });
       setStatus(result.status);
       // The url guard is a type check, not a truthiness one: url is persisted
@@ -393,7 +403,8 @@ export default function RecipeDetail({
         prepTime={prepTime}
         cookTime={cookTime}
         totalTime={totalTime}
-        recipeYield={schema.recipeYield}
+        servingsAmount={doc.servings_amount}
+        servingsUnit={doc.servings_unit}
         currentServings={scalable.currentServings}
         onServingsChange={scalePortionsTo}
         servingsEdit={
@@ -555,10 +566,11 @@ export default function RecipeDetail({
           dangerouslySetInnerHTML={{
             __html: JSON.stringify(
               toSchemaOrgJsonLd(doc, {
-                nutritionOverride: jsonLdNutrition
+                nutritionOverride: jsonLdRecipe.nutrition()
                   ? {
                       "@type": "NutritionInformation",
-                      ...nutrientValuesToSchema(jsonLdNutrition),
+                      servingSize: jsonLdRecipe.servingSizeLabel,
+                      ...nutrientValuesToSchema(jsonLdRecipe.nutrition()!),
                     }
                   : undefined,
               }),

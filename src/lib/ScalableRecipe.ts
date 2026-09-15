@@ -1,13 +1,16 @@
-import type { RecipeIngredientGroup, SchemaRecipe } from "@/types/recipe";
+import type {
+  RecipeDocument,
+  RecipeIngredientGroup,
+  SchemaRecipe,
+} from "@/types/recipe";
 import type { IngredientNutrition } from "@/types/ingredient";
 import {
   parseIngredient,
-  parseServings,
   formatParsedAmount,
   type ParsedAmount,
   type ParsedIngredient,
 } from "./units";
-import { getYieldValueReference } from "./format";
+import { singularServingUnit } from "./format";
 import {
   NUTRIENT_FIELDS,
   normalizedTotalToPerServing,
@@ -73,11 +76,13 @@ export type IngredientRef = number | { index: number };
 
 /**
  * Object-valued resolved nutrition: every nutrient is a `NutrientValue`
- * (numbers internally, full precision); `servingSize` stays the free-text
- * Schema.org string ("1 slice"). Stringified only at the boundaries via
+ * (numbers internally, full precision). Nutrients ONLY — the serving descriptor
+ * is `servingSizeLabel`, derived from the servings columns, and carrying free
+ * text here instead would put a non-nutrient on a numeric type. Stringified
+ * only at the boundaries via
  * `nutrientValuesToSchema` / `formatNutrientDisplay`.
  */
-export type ScaledNutrition = NutrientValues & { servingSize?: string };
+export type ScaledNutrition = NutrientValues;
 
 // ─── Private helpers (used by ScalableRecipe below) ───────────────────────
 
@@ -114,8 +119,12 @@ interface InternalEntry {
  * groups are never modified.
  */
 export class ScalableRecipe {
-  readonly schema: SchemaRecipe;
-  readonly ingredientGroups: readonly RecipeIngredientGroup[];
+  /**
+   * The whole document, not a schema plus loose extras. Every field promoted to
+   * a column travels on it, so a future promotion needs no new constructor
+   * argument — and cannot be forgotten at one of the six call sites.
+   */
+  readonly document: RecipeDocument;
   readonly state: ScalableRecipeState;
   readonly baseServings: number | null;
   /**
@@ -127,14 +136,13 @@ export class ScalableRecipe {
   private readonly _entries: ReadonlyArray<InternalEntry>;
 
   constructor(
-    schema: SchemaRecipe,
-    ingredients: readonly RecipeIngredientGroup[] = [],
+    document: RecipeDocument,
     state?: Partial<ScalableRecipeState>,
     normalized?: NormalizedNutrition | null,
   ) {
-    this.schema = schema;
-    this.ingredientGroups = ingredients;
-    this.baseServings = parseServings(schema.recipeYield);
+    this.document = document;
+    const ingredients = document.ingredients;
+    this.baseServings = document.servings_amount;
     this.normalized = normalized ?? null;
     this.state = Object.freeze({
       ingredientScale: state?.ingredientScale ?? 1,
@@ -156,8 +164,21 @@ export class ScalableRecipe {
     this._entries = Object.freeze(entries);
   }
 
+  get schema(): SchemaRecipe {
+    return this.document.schema;
+  }
+
+  get ingredientGroups(): readonly RecipeIngredientGroup[] {
+    return this.document.ingredients;
+  }
+
+  /** What the recipe counts servings in, as stored — null when unnamed. */
+  get servingsUnit(): string | null {
+    return this.document.servings_unit;
+  }
+
   private with(state: ScalableRecipeState): ScalableRecipe {
-    return new ScalableRecipe(this.schema, this.ingredientGroups, state, this.normalized);
+    return new ScalableRecipe(this.document, state, this.normalized);
   }
 
   scalePortionsTo(targetServings: number): ScalableRecipe {
@@ -207,7 +228,7 @@ export class ScalableRecipe {
     ) {
       return this;
     }
-    return new ScalableRecipe(this.schema, this.ingredientGroups, undefined, this.normalized);
+    return new ScalableRecipe(this.document, undefined, this.normalized);
   }
 
   get ingredients(): ScaledIngredient[] {
@@ -278,22 +299,21 @@ export class ScalableRecipe {
   }
 
   /**
-   * Raw weight/volume of one displayed portion, from the yield's
-   * `valueReference` (the whole-recipe weight at base). Scales with
-   * `ingredientScale` and divides by `displayPortions`, so at rest it equals
-   * valueReference.value / baseServings (e.g. 454 g / 4 = 113.5). null when the
-   * yield carries no valueReference (legacy/string yields) or the numbers can't
-   * support the division.
+   * Raw weight/volume of one displayed portion, from the whole-recipe weight
+   * columns. Scales with `ingredientScale` and divides by `displayPortions`, so
+   * at rest it equals total_weight_amount / baseServings (e.g. 454 g / 4 =
+   * 113.5). null when the recipe carries no weight or the numbers can't support
+   * the division.
    */
   get servingWeight(): { value: number; unitText: string } | null {
-    const vr = getYieldValueReference(this.schema.recipeYield);
-    if (!vr || typeof vr.value !== "number" || vr.value <= 0) return null;
+    const amount = this.document.total_weight_amount;
+    if (amount == null || amount <= 0) return null;
     if (this.baseServings == null || this.baseServings <= 0) return null;
     const dp = this.displayPortions;
     if (dp <= 0) return null;
     return {
-      value: (vr.value * this.state.ingredientScale) / dp,
-      unitText: vr.unitText ?? "",
+      value: (amount * this.state.ingredientScale) / dp,
+      unitText: this.document.total_weight_unit ?? "",
     };
   }
 
@@ -313,15 +333,32 @@ export class ScalableRecipe {
   }
 
   /**
+   * What one serving IS, for the wire: "1 serving", "1 kebab", "1 portion".
+   * Schema.org's `nutrition.servingSize` is DERIVED here rather than stored,
+   * because the servings columns already say the same thing — one stored copy
+   * beside them is a second spelling free to disagree. The noun follows
+   * `nutritionLabel`'s split rule so the published value and the panel's own
+   * label always match.
+   *
+   * Nothing in the UI renders this — it exists for JSON-LD and MCP `get_recipe`,
+   * which publish nutrition numbers that need a denominator.
+   */
+  get servingSizeLabel(): string {
+    const noun =
+      this.nutritionLabel === "per portion"
+        ? "portion"
+        : singularServingUnit(this.servingsUnit);
+    return `1 ${noun}`;
+  }
+
+  /**
    * Apply `nutritionMultiplier` to a per-serving nutrition base. Returns null
-   * when the base is absent or carries no nutrient value (a bare servingSize
-   * doesn't count).
+   * when the base is absent or carries no nutrient value.
    */
   private scaleNutrition(base: ScaledNutrition | undefined): ScaledNutrition | null {
     if (!base || !NUTRIENT_FIELDS.some((k) => !!base[k])) return null;
     const mult = this.nutritionMultiplier;
     const result: ScaledNutrition = {};
-    if (base.servingSize != null) result.servingSize = base.servingSize;
     for (const k of NUTRIENT_FIELDS) {
       const v = base[k];
       if (v == null) continue;
@@ -350,20 +387,12 @@ export class ScalableRecipe {
    * when every line is covered and the servings are known, and otherwise
    * nothing is — `schema.nutrition` is stored but deliberately never read back
    * as nutrition, so a half-normalized recipe reports no data rather than a
-   * number nobody can trace to an ingredient.
-   *
-   * `servingSize` is the exception, and it isn't a fallback: it's the free-text
-   * serving descriptor ("1 cup"), not a nutrient, and the catalog has no slot
-   * for it — so it still rides along from the schema.
+   * number nobody can trace to an ingredient. Nothing rides along from the
+   * schema any more: the serving descriptor is `servingSizeLabel`.
    */
   nutrition(): ScaledNutrition | null {
     if (!this.normalized?.fullyCovered) return null;
-    const fromIngredients = this.ingredientsNutrition();
-    if (!fromIngredients) return null;
-    const servingSize = this.schema.nutrition?.servingSize;
-    return servingSize != null
-      ? { servingSize, ...fromIngredients }
-      : fromIngredients;
+    return this.ingredientsNutrition();
   }
 
   get hasNutrition(): boolean {

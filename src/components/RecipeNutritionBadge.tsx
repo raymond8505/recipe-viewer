@@ -3,6 +3,7 @@ import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { formatNutrientDisplay } from "@/lib/format";
 import { ScalableRecipe } from "@/lib/ScalableRecipe";
+import { recipeDocument } from "@/lib/recipeDocument";
 import {
   recipeNormalizedNutrition,
   type NutrientField,
@@ -84,12 +85,26 @@ export function RecipeNutritionBadge({
  * that undercounts the lines it couldn't price.
  */
 export function recipeNutritionBadges(
-  recipe: Pick<RecipeRow, "metadata" | "ingredients">,
+  // The exhaustive list IS the documentation of what a badge needs: the
+  // servings columns gate the per-serving math, so a caller handing over a
+  // partial row gets a compile error rather than a silently empty badge row.
+  recipe: Pick<
+    RecipeRow,
+    | "metadata"
+    | "ingredients"
+    | "instructions"
+    | "prep_time"
+    | "cook_time"
+    | "total_time"
+    | "servings_amount"
+    | "servings_unit"
+    | "total_weight_amount"
+    | "total_weight_unit"
+  >,
   fields: readonly NutrientField[] = DEFAULT_CARD_NUTRIENTS,
 ): ReactElement[] {
   const nutrition = new ScalableRecipe(
-    recipe.metadata.schema,
-    recipe.ingredients,
+    recipeDocument(recipe),
     undefined,
     recipeNormalizedNutrition(recipe),
   ).nutrition();

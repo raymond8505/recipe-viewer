@@ -1,12 +1,16 @@
-import { fromSchemaOrgInstructions, parseDurationToSeconds } from "./format";
+import {
+  fromSchemaOrgInstructions,
+  parseDurationToSeconds,
+  stripSchemaOrgKeys,
+} from "./format";
 import { draftIngredientGroups, fromSchemaOrgIngredients } from "./recipeIngredients";
+import { parseYield } from "./units";
 import type {
   RecipeDocument,
   RecipeIngredientGroupInput,
   RecipeInstructionGroup,
   RecipeRow,
   SchemaOrgRecipe,
-  SchemaRecipe,
 } from "@/types/recipe";
 
 // The three ways a RecipeDocument comes to exist. Client-safe on purpose:
@@ -17,7 +21,16 @@ import type {
 export function recipeDocument(
   row: Pick<
     RecipeRow,
-    "metadata" | "ingredients" | "instructions" | "prep_time" | "cook_time" | "total_time"
+    | "metadata"
+    | "ingredients"
+    | "instructions"
+    | "prep_time"
+    | "cook_time"
+    | "total_time"
+    | "servings_amount"
+    | "servings_unit"
+    | "total_weight_amount"
+    | "total_weight_unit"
   >,
 ): RecipeDocument {
   return {
@@ -27,6 +40,10 @@ export function recipeDocument(
     prep_time: row.prep_time,
     cook_time: row.cook_time,
     total_time: row.total_time,
+    servings_amount: row.servings_amount,
+    servings_unit: row.servings_unit,
+    total_weight_amount: row.total_weight_amount,
+    total_weight_unit: row.total_weight_unit,
   };
 }
 
@@ -36,6 +53,9 @@ export function recipeDocument(
  * has moved on from the row it was served — a saved edit, a re-scrape.
  */
 export function applyRecipeDocument(row: RecipeRow, doc: RecipeDocument): RecipeRow {
+  // Every column-backed field is listed explicitly. `...row` already supplies
+  // one of each, of exactly the right type — just the stale one — so an
+  // omission here is a silent revert the compiler cannot see.
   return {
     ...row,
     metadata: { ...row.metadata, schema: doc.schema },
@@ -44,37 +64,53 @@ export function applyRecipeDocument(row: RecipeRow, doc: RecipeDocument): Recipe
     prep_time: doc.prep_time,
     cook_time: doc.cook_time,
     total_time: doc.total_time,
+    servings_amount: doc.servings_amount,
+    servings_unit: doc.servings_unit,
+    total_weight_amount: doc.total_weight_amount,
+    total_weight_unit: doc.total_weight_unit,
   };
 }
 
 /**
  * A document for content that is not saved yet — a re-scrape under review.
- * The times come from the schema's ISO strings (a scrape speaks Schema.org),
- * the lines are drafted from text, the instructions are taken as given.
+ * This is an INBOUND Schema.org edge, so it is where the wire forms are reduced
+ * to columns exactly once: the times from ISO strings, the yield from whatever
+ * of the three shapes the source wrote. The lines are drafted from text, the
+ * instructions taken as given, and every edge-only key is stripped off the
+ * schema it keeps — `parseYield` has already read the yield, and leaving the
+ * string on the blob is what would let a later reader parse it again.
+ *
+ * An unparseable yield leaves all four columns null rather than guessing: a
+ * wrong serving count silently rescales the whole recipe.
+ *
  * `instructions` is required rather than defaulted: an omitted argument is
  * exactly the forgotten-field bug the single-document shape exists to prevent.
  */
 export function draftRecipeDocument(
-  schema: SchemaRecipe,
+  schema: SchemaOrgRecipe,
   ingredients: readonly RecipeIngredientGroupInput[],
   instructions: readonly RecipeInstructionGroup[],
 ): RecipeDocument {
+  const yld = parseYield(schema.recipeYield);
   return {
-    schema,
+    schema: stripSchemaOrgKeys(schema),
     ingredients: draftIngredientGroups(ingredients),
     instructions: [...instructions],
     prep_time: parseDurationToSeconds(schema.prepTime),
     cook_time: parseDurationToSeconds(schema.cookTime),
     total_time: parseDurationToSeconds(schema.totalTime),
+    servings_amount: yld?.amount ?? null,
+    servings_unit: yld?.unit ?? null,
+    total_weight_amount: yld?.weight?.amount ?? null,
+    total_weight_unit: yld?.weight?.unit ?? null,
   };
 }
 
 /** The inbound Schema.org edge: a whole Schema.org Recipe → a draft document. */
 export function documentFromSchemaOrg(recipe: SchemaOrgRecipe): RecipeDocument {
-  const { recipeIngredient, recipeInstructions, ...schema } = recipe;
   return draftRecipeDocument(
-    schema,
-    fromSchemaOrgIngredients(recipeIngredient ?? []),
-    fromSchemaOrgInstructions(recipeInstructions),
+    recipe,
+    fromSchemaOrgIngredients(recipe.recipeIngredient ?? []),
+    fromSchemaOrgInstructions(recipe.recipeInstructions),
   );
 }

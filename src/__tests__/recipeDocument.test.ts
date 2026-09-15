@@ -11,10 +11,11 @@ import {
   makeRecipe,
   makeStep,
   makeSteps,
+  weighedYieldColumns,
 } from "@/fixtures";
 
 describe("recipeDocument", () => {
-  it("lifts the row's schema, groups, steps and time columns", () => {
+  it("lifts the row's schema, groups, steps and every column", () => {
     const ingredients = makeIngredientLines(["2 cups flour"]);
     const instructions = makeSteps(["Mix."]);
     const row = makeRecipe("recipe-1", "Cake", {
@@ -23,6 +24,7 @@ describe("recipeDocument", () => {
       prep_time: 600,
       cook_time: 1800,
       total_time: null,
+      ...weighedYieldColumns,
     });
 
     expect(recipeDocument(row)).toEqual({
@@ -32,6 +34,10 @@ describe("recipeDocument", () => {
       prep_time: 600,
       cook_time: 1800,
       total_time: null,
+      servings_amount: 4,
+      servings_unit: "kebabs",
+      total_weight_amount: 454,
+      total_weight_unit: "g",
     });
   });
 

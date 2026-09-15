@@ -16,6 +16,7 @@ import {
   type UpdateIngredientPatch,
 } from "@/lib/ingredients";
 import { ScalableRecipe } from "@/lib/ScalableRecipe";
+import { recipeDocument } from "@/lib/recipeDocument";
 import {
   nutrientValuesToSchema,
   recipeNormalizedNutrition,
@@ -38,7 +39,11 @@ import {
   StorageUploadError,
   uploadRecipeImage as uploadImageToStorage,
 } from "@/lib/storage";
-import type { RecipeRow } from "@/types/recipe";
+import type {
+  RecipeRow,
+  SchemaOrgNutrition,
+  SchemaRecipe,
+} from "@/types/recipe";
 import type {
   RecipeCreateInput,
   RecipeIdInput,
@@ -239,7 +244,20 @@ export async function deleteIngredient(
   }
 }
 
-export async function getRecipe(args: RecipeIdInput): Promise<RecipeRow> {
+/**
+ * A row as `get_recipe` publishes it: the stored row, plus the nutrition block
+ * in its WIRE form. That block is the one part of the response that is derived
+ * rather than stored — resolved nutrients and the `servingSize` denominator
+ * they are counted against — so it is the one part typed as Schema.org rather
+ * than as the app's own shape.
+ */
+export type PublishedRecipeRow = Omit<RecipeRow, "metadata"> & {
+  metadata: { schema: SchemaRecipe & { nutrition?: SchemaOrgNutrition } };
+};
+
+export async function getRecipe(
+  args: RecipeIdInput,
+): Promise<PublishedRecipeRow> {
   const row = await getRecipeById(args.id);
   if (!row) throw new ToolError("not_found", `Recipe ${args.id} not found`);
 
@@ -251,12 +269,12 @@ export async function getRecipe(args: RecipeIdInput): Promise<RecipeRow> {
   // we kept storing those fields even though nothing reads them back as
   // nutrition any more.
   const schema = row.metadata.schema;
-  const resolved = new ScalableRecipe(
-    schema,
-    row.ingredients,
+  const scalable = new ScalableRecipe(
+    recipeDocument(row),
     undefined,
     recipeNormalizedNutrition(row),
-  ).nutrition();
+  );
+  const resolved = scalable.nutrition();
   if (!resolved) return row;
 
   return {
@@ -267,6 +285,9 @@ export async function getRecipe(args: RecipeIdInput): Promise<RecipeRow> {
         ...schema,
         nutrition: {
           "@type": "NutritionInformation",
+          // The denominator for the numbers below, derived from the servings
+          // columns by the same instance that produced them.
+          servingSize: scalable.servingSizeLabel,
           ...nutrientValuesToSchema(resolved),
         },
       },

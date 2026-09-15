@@ -184,9 +184,6 @@ const SINGLE_TOKEN =
   `|\\d+(?:\\.\\d+)?)`;                   // decimal or integer
 const RANGE_SEP = `(?:\\s*[-–—]\\s*|\\s+to\\s+)`;
 const AMOUNT_RANGE_RE = new RegExp(`^(${SINGLE_TOKEN}(?:${RANGE_SEP}${SINGLE_TOKEN})?)\\s*`);
-// Shared by parseServings/applyServings so both agree on what "the amount
-// token" in a yield string is: the first single-or-range amount anywhere in it.
-const YIELD_AMOUNT_RE = new RegExp(`(${SINGLE_TOKEN}(?:${RANGE_SEP}${SINGLE_TOKEN})?)`);
 
 function parseSingleToken(raw: string): number | null {
   const s = raw.trim();
@@ -287,55 +284,92 @@ export function parseIngredient(str: string): ParsedIngredient | null {
   };
 }
 
+export type MetricYieldUnit = (typeof METRIC_YIELD_UNITS)[number];
+
 /**
- * Extract the recipe yield as a single number.
- * - QuantitativeValue object → its `value` verbatim (authoritative, no rounding).
- * - String/array → first numeric token; ranges collapse to their midpoint
- *   (e.g. "6-8 servings" → 7).
+ * A recipe's yield reduced to the four columns that store it: how many, of
+ * what, and what the whole recipe weighs.
  */
-export function parseServings(
-  yld: string | string[] | QuantitativeValue | undefined | null,
-): number | null {
-  if (yld && typeof yld === "object" && !Array.isArray(yld)) {
-    return typeof yld.value === "number" ? yld.value : null;
-  }
-  const raw = Array.isArray(yld) ? yld[0] : yld;
-  if (!raw) return null;
-  const m = raw.match(YIELD_AMOUNT_RE);
-  if (!m) return null;
-  const parsed = parseAmountToken(m[1]);
-  if (!parsed) return null;
-  return parsed.kind === "single"
-    ? Math.round(parsed.value)
-    : Math.round((parsed.min + parsed.max) / 2);
+export interface ParsedYield {
+  amount: number;
+  /** null when the source named no unit — callers apply SERVINGS_UNIT_FALLBACK. */
+  unit: string | null;
+  /** null when there is no whole-recipe weight, or its unit isn't metric. */
+  weight: { amount: number; unit: MetricYieldUnit } | null;
+}
+
+function isMetricYieldUnit(u: string | undefined): u is MetricYieldUnit {
+  return (METRIC_YIELD_UNITS as readonly string[]).includes(u?.trim() ?? "");
 }
 
 /**
- * Write a new base-servings count back onto a yield, preserving its shape —
- * the inverse of `parseServings`: `parseServings(applyServings(yld, n)) === n`
- * for any integer n >= 1.
- * - QuantitativeValue → same object with `value` replaced (`unitText` /
- *   `valueReference` kept; valueReference is whole-recipe weight, so
- *   per-serving weight recomputes from the new count).
- * - String/array → the first amount token of the (first) string is replaced,
- *   so surrounding text survives ("Makes 6" → "Makes 8"). Ranges collapse to
- *   the single new amount, and arrays collapse to the one rewritten string —
- *   alternates would otherwise contradict it in exported JSON-LD.
- * - No yield / no amount token → a minimal QuantitativeValue.
+ * The tail of a yield string after its amount, reduced to a unit. Cut at the
+ * first bracket or clause break so a parenthetical stays out of the unit
+ * ("wraps (about 9 inches each)" → "wraps", "meatballs, serves 3-4" →
+ * "meatballs"), then accepted only as 1-3 digit-free words — anything longer or
+ * numeric is prose, not a unit, and becomes null rather than a guess.
  */
-export function applyServings(
+function unitFromTail(tail: string): string | null {
+  const clause = tail.split(/[(,;–—]/)[0].trim();
+  if (!clause) return null;
+  const words = clause.split(/\s+/);
+  if (words.length > 3) return null;
+  if (words.some((w) => /\d/.test(w))) return null;
+  return clause;
+}
+
+// A yield string's amount must sit at the FRONT, after at most a lead-in word.
+// Scanning the whole string instead would take the first number anywhere in it:
+// "Enough for one 350g brick of tofu" reads as 350 servings, and every amount
+// and nutrient on that recipe is then divided by it, with nothing to flag.
+const YIELD_LEAD_IN = `(?:(?:makes|serves|yields?|about|approx\\.?|approximately|~)\\s*)*`;
+const YIELD_HEAD_RE = new RegExp(
+  `^\\s*${YIELD_LEAD_IN}(${SINGLE_TOKEN}(?:${RANGE_SEP}${SINGLE_TOKEN})?)`,
+  "i",
+);
+
+/**
+ * Reduce any inbound `recipeYield` to the stored columns. This is the ONLY
+ * yield parse in the app: it runs at the two inbound Schema.org edges
+ * (`draftRecipeDocument`, `createRecipeRow`) and in the backfill, and every
+ * reader downstream takes the columns instead.
+ *
+ * - QuantitativeValue → `value` verbatim (authoritative, no rounding), its
+ *   `unitText`, and its `valueReference` when that names a metric unit.
+ * - Array → its first element.
+ * - String → the amount must be anchored at the front; ranges collapse to their
+ *   rounded midpoint ("6-8 servings" → 7), which is what every consumer already
+ *   computed.
+ *
+ * Returns null when there is no amount to be had. Null means UNPARSEABLE, and
+ * callers must leave the columns alone and report it — never substitute a
+ * default, because a wrong serving count silently rescales a whole recipe.
+ */
+export function parseYield(
   yld: string | string[] | QuantitativeValue | undefined | null,
-  n: number,
-): string | QuantitativeValue {
+): ParsedYield | null {
   if (yld && typeof yld === "object" && !Array.isArray(yld)) {
-    return { ...yld, value: n };
+    if (typeof yld.value !== "number" || !Number.isFinite(yld.value)) return null;
+    const vr = yld.valueReference;
+    return {
+      amount: yld.value,
+      unit: yld.unitText?.trim() || null,
+      weight:
+        vr && typeof vr.value === "number" && vr.value > 0 && isMetricYieldUnit(vr.unitText)
+          ? { amount: vr.value, unit: vr.unitText.trim() as MetricYieldUnit }
+          : null,
+    };
   }
   const raw = Array.isArray(yld) ? yld[0] : yld;
-  const m = raw?.match(YIELD_AMOUNT_RE);
-  if (raw && m && m.index != null) {
-    return (
-      raw.slice(0, m.index) + String(n) + raw.slice(m.index + m[1].length)
-    );
-  }
-  return { "@type": "QuantitativeValue", value: n };
+  if (!raw) return null;
+  const m = raw.match(YIELD_HEAD_RE);
+  if (!m) return null;
+  const parsed = parseAmountToken(m[1]);
+  if (!parsed) return null;
+  const amount =
+    parsed.kind === "single"
+      ? Math.round(parsed.value)
+      : Math.round((parsed.min + parsed.max) / 2);
+  if (amount <= 0) return null;
+  return { amount, unit: unitFromTail(raw.slice(m[0].length)), weight: null };
 }

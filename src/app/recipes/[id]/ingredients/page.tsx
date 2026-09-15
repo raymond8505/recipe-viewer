@@ -66,7 +66,7 @@ export default async function RecipeIngredientsPage({
       <NutritionDetail
         recipeId={id}
         ingredients={recipe.ingredients}
-        recipeYield={schema.recipeYield}
+        servings={recipe.servings_amount}
       />
     </section>
   );

@@ -70,16 +70,14 @@ function makeGroups(): RecipeIngredientGroup[] {
 
 function renderDetail(overrides?: {
   ingredients?: RecipeIngredientGroup[];
-  recipeYield?: string | undefined;
+  servings?: number | null;
 }) {
   return render(
     <NutritionDetail
       recipeId="r-1"
       ingredients={overrides?.ingredients ?? makeGroups()}
-      recipeYield={
-        overrides && "recipeYield" in overrides
-          ? overrides.recipeYield
-          : "4 servings"
+      servings={
+        overrides && "servings" in overrides ? (overrides.servings ?? null) : 4
       }
       search={search}
       usdaSearch={usdaSearch}
@@ -194,7 +192,7 @@ describe("NutritionDetail", () => {
   });
 
   it("renders a dashed per-portion row when servings are unknown", () => {
-    renderDetail({ recipeYield: undefined });
+    renderDetail({ servings: null });
 
     const perPortion = rowFor("Per portion");
     expect(within(perPortion).queryByText(/181/)).not.toBeInTheDocument();

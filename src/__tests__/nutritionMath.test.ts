@@ -616,21 +616,18 @@ describe("formatNutrientString", () => {
 describe("schemaNutritionToValues / nutrientValuesToSchema", () => {
   it("round-trips wire strings through object values", () => {
     const wire = {
-      servingSize: "1 slice",
       calories: "350 kcal",
       proteinContent: "20g",
       fiberContent: "0.5 g",
     };
     const values = schemaNutritionToValues(wire);
     expect(values).toEqual({
-      servingSize: "1 slice",
       calories: { value: 350, unit: "kcal" },
       proteinContent: { value: 20, unit: "g" },
       fiberContent: { value: 0.5, unit: "g" },
     });
     // Attached units come back spaced — the wire format is normalized.
     expect(nutrientValuesToSchema(values)).toEqual({
-      servingSize: "1 slice",
       calories: "350 kcal",
       proteinContent: "20 g",
       fiberContent: "0.5 g",

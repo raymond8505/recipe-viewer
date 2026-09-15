@@ -17,6 +17,11 @@ export interface SaveRecipeBody {
   ingredients: RecipeIngredientGroupInput[];
   /** The whole step list; the editor always sends it. */
   instructions: RecipeInstructionGroup[];
+  /**
+   * The base servings, three-way like the repo patch: omitted leaves the count
+   * alone, which is what an invalid entry in the servings box degrades to.
+   */
+  servings?: { amount: number | null; unit?: string | null };
   status: string;
   url: string;
   source: string;
@@ -31,6 +36,11 @@ export interface SavedRecipe {
   prep_time: number | null;
   cook_time: number | null;
   total_time: number | null;
+  /** The column-backed servings and whole-recipe weight, as stored. */
+  servings_amount: number | null;
+  servings_unit: string | null;
+  total_weight_amount: number | null;
+  total_weight_unit: string | null;
   status: RecipeStatus;
   url: string;
   source: string;

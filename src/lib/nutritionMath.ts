@@ -298,7 +298,7 @@ export interface NutrientValue {
   unit: string;
 }
 
-/** The nutrient fields of SchemaNutrition (everything but @type/servingSize). */
+/** The nutrient fields of SchemaNutrition (everything but @type). */
 export const NUTRIENT_FIELDS = [
   "calories",
   "proteinContent",
@@ -343,14 +343,11 @@ export function formatNutrientString(nv: NutrientValue): string {
 
 /**
  * Parse boundary: schema.nutrition wire strings → object values. Fields
- * without a leading number are omitted; servingSize is free text ("1 slice")
- * and rides along verbatim.
+ * without a leading number are omitted. Nutrients only — a serving descriptor
+ * is not one, and is derived from the servings columns at the wire instead.
  */
-export function schemaNutritionToValues(
-  n: SchemaNutrition,
-): NutrientValues & { servingSize?: string } {
-  const result: NutrientValues & { servingSize?: string } = {};
-  if (n.servingSize != null) result.servingSize = n.servingSize;
+export function schemaNutritionToValues(n: SchemaNutrition): NutrientValues {
+  const result: NutrientValues = {};
   for (const field of NUTRIENT_FIELDS) {
     const raw = n[field];
     if (raw == null) continue;
@@ -365,11 +362,8 @@ export function schemaNutritionToValues(
  * JSON-LD and MCP serialization. Rounding (1dp) happens here, so internal
  * values stay full-precision until the edge.
  */
-export function nutrientValuesToSchema(
-  values: NutrientValues & { servingSize?: string },
-): SchemaNutrition {
+export function nutrientValuesToSchema(values: NutrientValues): SchemaNutrition {
   const result: SchemaNutrition = {};
-  if (values.servingSize != null) result.servingSize = values.servingSize;
   for (const field of NUTRIENT_FIELDS) {
     const nv = values[field];
     if (nv) result[field] = formatNutrientString(nv);
