@@ -379,12 +379,13 @@ export function getYieldUnit(
 // Internally a recipe is a RecipeDocument: the stored schema, the ingredient
 // groups, the instruction groups, and the column-backed times. Anything that
 // leaves the app as a Schema.org Recipe — the JSON-LD script, the
-// image-generation webhook, the window API — is assembled here and nowhere
-// else. Every column-backed field is read from its column (times in seconds →
+// image-generation webhook — is assembled here and nowhere else. Every
+// column-backed field is read from its column (times in seconds →
 // ISO 8601; lines → their text, groups in order; instruction groups → HowTo
 // steps and sections), never from the copy the blob may still carry, so this
 // is the translation layer that grows as more of `metadata.schema` moves out.
-// The inbound half is `documentFromSchemaOrg` in ./recipeDocument.
+// The inbound half is `fromSchemaOrgIngredients` in ./recipeIngredients and
+// `fromSchemaOrgInstructions` below.
 // ---------------------------------------------------------------------------
 
 const DOCUMENT_TIME_FIELDS = [
@@ -412,8 +413,8 @@ function schemaOrgTimes(
  * schema, its three time keys replaced from the columns, `recipeIngredient`
  * flattened to the lines' text, and `recipeInstructions` as HowTo steps and
  * sections. For consumers that want the full document (the image webhook
- * reads `notes`; the window API hands agents everything). JSON-LD, which must
- * be spec-clean, goes through `toSchemaOrgJsonLd` instead.
+ * reads `notes`). JSON-LD, which must be spec-clean, goes through
+ * `toSchemaOrgJsonLd` instead.
  */
 export function toSchemaOrgRecipe(doc: RecipeDocument): SchemaOrgRecipe {
   const { prepTime: _p, cookTime: _c, totalTime: _t, ...rest } = doc.schema;
@@ -501,12 +502,12 @@ function stepFromSchemaOrg(item: HowToStep): RecipeStep[] {
 }
 
 /**
- * The inbound edge: `recipeInstructions` as create_recipe, the re-scrape
- * webhook or the window API delivers it → canonical groups. The wire form is
- * the array `schemaOrgRecipeInputSchema` validates: HowToStep objects, `@type`
- * optional, and HowToSections whose `itemListElement` is an array of them.
- * Anything but an array is no steps — the window API hands its argument over
- * unvalidated, and iterating a string yields its characters, not its steps.
+ * The inbound edge: `recipeInstructions` as create_recipe or the re-scrape
+ * webhook delivers it → canonical groups. The wire form is the array
+ * `schemaOrgRecipeInputSchema` validates: HowToStep objects, `@type` optional,
+ * and HowToSections whose `itemListElement` is an array of them. Anything but
+ * an array is no steps: a string is iterable too, and iterating it would yield
+ * its characters, not its steps.
  *
  * A duration survives only beside a name (the rule `stepTimers` reads);
  * "PT0M" and durations the parser can't read are dropped with it.

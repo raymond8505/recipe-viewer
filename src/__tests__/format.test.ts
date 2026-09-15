@@ -342,7 +342,7 @@ describe("fromSchemaOrgInstructions", () => {
     expect(fromSchemaOrgInstructions([])).toEqual([]);
   });
 
-  // The window API passes its argument through unvalidated.
+  // A string is iterable; without the guard it would become one step per character.
   it("reads anything but an array as no steps", () => {
     expect(fromSchemaOrgInstructions("- Mix.\n- Bake." as unknown as HowToStep[])).toEqual([]);
     expect(
