@@ -874,6 +874,53 @@ describe("updateRecipe", () => {
     expect(updateRecipeRow).not.toHaveBeenCalled();
   });
 
+  // Rejected, not stripped: a silently dropped yield looks to the agent like a
+  // serving count it successfully set.
+  it("rejects schema.recipeYield with a ToolError naming the servings field", async () => {
+    const { updateRecipeRow } = await import("@/lib/recipes");
+
+    await expect(
+      updateRecipe({
+        id: "r1",
+        schema: { recipeYield: "12 servings" } as never,
+      }),
+    ).rejects.toMatchObject({
+      name: "ToolError",
+      code: "invalid_input",
+      message: expect.stringContaining("servings"),
+    });
+    expect(updateRecipeRow).not.toHaveBeenCalled();
+  });
+
+  it("passes servings and total_weight straight through to the repo patch", async () => {
+    const { updateRecipeRow } = await import("@/lib/recipes");
+
+    await updateRecipe({
+      id: "r1",
+      servings: { amount: 8 },
+      total_weight: { amount: 900, unit: "g" },
+    });
+    expect(updateRecipeRow).toHaveBeenCalledWith(
+      "r1",
+      expect.objectContaining({
+        servings: { amount: 8 },
+        totalWeight: { amount: 900, unit: "g" },
+      }),
+    );
+  });
+
+  // Absent means "leave the count alone"; null is the explicit clear. The two
+  // have to stay distinguishable all the way to the column.
+  it("forwards an explicit null amount as a clear", async () => {
+    const { updateRecipeRow } = await import("@/lib/recipes");
+
+    await updateRecipe({ id: "r1", servings: { amount: null } });
+    expect(updateRecipeRow).toHaveBeenCalledWith(
+      "r1",
+      expect.objectContaining({ servings: { amount: null } }),
+    );
+  });
+
   // The stored schema has no recipeIngredient; silently stripping one an agent
   // sent would lose its edit, so the tool fails loudly and says what to send.
   it("rejects schema.recipeIngredient with a ToolError naming the ingredients field", async () => {

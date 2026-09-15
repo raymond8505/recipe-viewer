@@ -6,6 +6,8 @@ import {
   recipeInstructionsInputSchema,
   schemaOrgRecipeInputSchema,
   schemaRecipeSchema,
+  servingsInputSchema,
+  totalWeightInputSchema,
 } from "@/lib/schemas/recipe";
 
 describe("recipeInstructionsInputSchema", () => {
@@ -141,9 +143,12 @@ describe("recipeCreateInputSchema — url/source coupling", () => {
   });
 });
 
-describe("schemaRecipeSchema — recipeYield valueReference units", () => {
+// recipeYield validates at the INBOUND EDGE schema, not the stored one: it is
+// column-backed, so only a writer that speaks Schema.org (a scrape, an MCP
+// create) may send it.
+describe("schemaOrgRecipeInputSchema — recipeYield valueReference units", () => {
   const withRef = (unitText: string) =>
-    schemaRecipeSchema.safeParse({
+    schemaOrgRecipeInputSchema.safeParse({
       name: "Kebabs",
       recipeYield: {
         "@type": "QuantitativeValue",
@@ -171,7 +176,7 @@ describe("schemaRecipeSchema — recipeYield valueReference units", () => {
   });
 
   it("keeps the serving-level unitText free text", () => {
-    const result = schemaRecipeSchema.safeParse({
+    const result = schemaOrgRecipeInputSchema.safeParse({
       name: "Kebabs",
       recipeYield: { "@type": "QuantitativeValue", value: 4, unitText: "kebabs" },
     });
@@ -179,10 +184,63 @@ describe("schemaRecipeSchema — recipeYield valueReference units", () => {
   });
 
   it("accepts a yield with no valueReference", () => {
-    const result = schemaRecipeSchema.safeParse({
+    const result = schemaOrgRecipeInputSchema.safeParse({
       name: "Kebabs",
       recipeYield: { "@type": "QuantitativeValue", value: 4, unitText: "kebabs" },
     });
     expect(result.success).toBe(true);
+  });
+});
+
+describe("schemaRecipeSchema — the column-backed keys", () => {
+  // The schema is `.passthrough()`, so a sender CAN still put these on the
+  // wire; what matters is that it neither declares nor validates them, which is
+  // why the repo layer strips them from every write instead.
+  it("declares neither recipeYield nor nutrition.servingSize", () => {
+    expect(Object.keys(schemaRecipeSchema.shape)).not.toContain("recipeYield");
+    const nutrition = schemaRecipeSchema.shape.nutrition;
+    expect(Object.keys(nutrition.unwrap().shape)).not.toContain("servingSize");
+  });
+});
+
+describe("servingsInputSchema", () => {
+  it("takes a positive amount, with or without a unit", () => {
+    expect(servingsInputSchema.safeParse({ amount: 4 }).success).toBe(true);
+    expect(
+      servingsInputSchema.safeParse({ amount: 4, unit: "kebabs" }).success,
+    ).toBe(true);
+  });
+
+  // null CLEARS the count, which is a different instruction from omitting the
+  // key; the repo layer relies on the two staying distinguishable.
+  it("takes a null amount as an explicit clear", () => {
+    expect(servingsInputSchema.safeParse({ amount: null }).success).toBe(true);
+  });
+
+  it("rejects a zero or negative count", () => {
+    expect(servingsInputSchema.safeParse({ amount: 0 }).success).toBe(false);
+    expect(servingsInputSchema.safeParse({ amount: -2 }).success).toBe(false);
+  });
+
+  it("rejects a blank unit — null is how a unit is cleared", () => {
+    expect(servingsInputSchema.safeParse({ amount: 4, unit: "" }).success).toBe(
+      false,
+    );
+    expect(
+      servingsInputSchema.safeParse({ amount: 4, unit: null }).success,
+    ).toBe(true);
+  });
+});
+
+describe("totalWeightInputSchema", () => {
+  it("accepts each metric unit and rejects everything else", () => {
+    for (const unit of ["g", "kg", "ml", "l"]) {
+      expect(totalWeightInputSchema.safeParse({ amount: 454, unit }).success).toBe(
+        true,
+      );
+    }
+    expect(
+      totalWeightInputSchema.safeParse({ amount: 454, unit: "cups" }).success,
+    ).toBe(false);
   });
 });

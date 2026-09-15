@@ -31,6 +31,14 @@ export const RECIPE_INGREDIENT_ON_UPDATE_ERROR = `schema.recipeIngredient is not
 export const RECIPE_INSTRUCTIONS_ON_UPDATE_ERROR = `schema.recipeInstructions is not accepted on update — the call FAILS if you send one, it is not ignored. Instructions go through \`instructions\`, which REPLACES the whole list: ordered groups of { name?, steps }, each step { text, name?, seconds? } — omit a group's name for an unsectioned run of steps; a step's name is its cook-mode timer label and seconds (whole seconds) is the timer's duration, which requires the name.`;
 
 /**
+ * The yield twin of the two rules above, for the same reason: one wording in
+ * the update_recipe description, on the schema field, and in the thrown error.
+ * Rejected rather than stripped — a silently dropped yield looks to the agent
+ * like a serving count it successfully set.
+ */
+export const RECIPE_YIELD_ON_UPDATE_ERROR = `schema.recipeYield is not accepted on update — the call FAILS if you send one, it is not ignored. A recipe's serving count is column-backed: send \`servings\` ({ amount, unit? }) instead, where amount is the number of servings and unit is what they are counted in ("servings", "kebabs"). Omit \`servings\` to leave the count alone; send { "amount": null } to clear it. The whole recipe's raw weight goes through \`total_weight\` ({ amount, unit }), NOT a valueReference. ${TOOL.get_recipe} returns all four as servings_amount / servings_unit / total_weight_amount / total_weight_unit.`;
+
+/**
  * "a, b, or c". Hand-rolled rather than Intl.ListFormat, whose output varies
  * with the runtime's ICU build — these strings are asserted in tests and read
  * by agents, so they must be identical everywhere.

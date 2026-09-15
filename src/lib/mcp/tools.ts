@@ -30,6 +30,7 @@ import { CUSTOM_RECIPE_SOURCE, fromSchemaOrgInstructions } from "@/lib/format";
 import {
   RECIPE_INGREDIENT_ON_UPDATE_ERROR,
   RECIPE_INSTRUCTIONS_ON_UPDATE_ERROR,
+  RECIPE_YIELD_ON_UPDATE_ERROR,
 } from "./copy";
 import { ARCHIVED_RECIPE_STATUS } from "@/lib/schemas/recipe";
 import { RECIPE_TOKEN_TTL_SECONDS, signRecipeToken } from "./recipeToken";
@@ -364,6 +365,9 @@ export async function updateRecipe(
   if ("recipeInstructions" in schema) {
     throw new ToolError("invalid_input", RECIPE_INSTRUCTIONS_ON_UPDATE_ERROR);
   }
+  if ("recipeYield" in schema) {
+    throw new ToolError("invalid_input", RECIPE_YIELD_ON_UPDATE_ERROR);
+  }
   try {
     const row = await updateRecipeRow(args.id, {
       url: args.url,
@@ -372,6 +376,8 @@ export async function updateRecipe(
       schema: args.schema !== undefined ? schema : undefined,
       ingredients: args.ingredients,
       instructions: args.instructions,
+      servings: args.servings,
+      totalWeight: args.total_weight,
     });
     return cookingNotes !== undefined
       ? { ...row, warnings: [COOKING_NOTES_IGNORED_WARNING] }
