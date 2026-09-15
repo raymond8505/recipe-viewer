@@ -51,7 +51,7 @@ export default function NutritionPanel({
 
   const breakdownLink = ingredientsHref ? (
     <Button asChild size="sm" variant="secondary">
-      <Link href={ingredientsHref}>Ingredient breakdown</Link>
+      <Link href={ingredientsHref}>Nutrition breakdown</Link>
     </Button>
   ) : null;
 

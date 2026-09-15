@@ -11,6 +11,14 @@
 @custom-variant dark (&:is(.dark *));
 
 /*
+  Height-based variant. Tailwind's breakpoints are all width-based, but a
+  screen that fills the viewport is rationing vertical space: below this a
+  pinned band costs more than it is worth, because the rows it sits on are the
+  thing the user came to read. 500px is roughly a landscape phone.
+*/
+@custom-variant tall (@media (min-height: 500px));
+
+/*
   Warm-neutral palette: the whole gray scale is remapped to Tailwind's stone
   values (copied verbatim from tailwindcss/theme.css), so every raw
   `bg/text/border-gray-*` in the app renders warm without call-site edits.

@@ -193,6 +193,16 @@ describe("NutritionDetail", () => {
     expect(perPortion).toHaveTextContent("181.19");
   });
 
+  it("keeps both summary rows in the table footer, out of the scrolling body", () => {
+    renderDetail();
+
+    // The footer is what pins them to the bottom of the scroll box, so this is
+    // structural, not cosmetic: back in <tbody> they scroll away with the
+    // lines whose contributions they are totalling.
+    expect(rowFor("Recipe total").closest("tfoot")).not.toBeNull();
+    expect(rowFor("Per portion (÷4)").closest("tfoot")).not.toBeNull();
+  });
+
   it("renders a dashed per-portion row when servings are unknown", () => {
     renderDetail({ recipeYield: undefined });
 

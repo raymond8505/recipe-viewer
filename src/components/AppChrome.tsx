@@ -20,8 +20,18 @@ export const headingFont = Source_Serif_4({
   axes: ["opsz"],
 });
 
-/** Background + min height for the page surface (site: <body>). */
-export const APP_SURFACE_CLASS = "bg-background min-h-screen";
+/** Background for the page surface (site: <body>, Storybook: the wrapper below). */
+export const APP_SURFACE_CLASS = "bg-background";
+
+/**
+ * The site shell (site: `<body>`). One definite viewport height at the root is
+ * what lets every height beneath it resolve, so a screen that wants to fill
+ * what is left says `flex-1 min-h-0` and never has to subtract chrome it
+ * cannot measure. `<main>` owns the scrolling; the body itself never scrolls.
+ * Storybook has no header/main to divide, so `AppChrome` keeps a plain
+ * `min-h-screen` instead.
+ */
+export const APP_SHELL_CLASS = "flex h-dvh flex-col overflow-hidden";
 
 export interface AppChromeProps {
   children: ReactNode;
@@ -41,6 +51,7 @@ export function AppChrome({ children, className }: AppChromeProps) {
         headingFont.variable,
         bodyFont.className,
         APP_SURFACE_CLASS,
+        "min-h-screen",
         className,
       )}
     >

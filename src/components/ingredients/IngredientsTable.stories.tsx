@@ -38,6 +38,21 @@ export const Empty: Story = {
 };
 
 /**
+ * How the manager page composes this table. The caller has a height to give —
+ * `max-h-[24rem]` here stands in for the screenful the app shell hands the
+ * page — and the `className` arg passes it down, so the scroll box claims what
+ * is left below the search row and the count/pager stays in view. The table is
+ * then the only thing that scrolls; the page itself does not.
+ */
+export const BoundedHeight: Story = {
+  args: {
+    initialIngredients: ingredientFixtures,
+    initialCount: ingredientFixtures.length,
+    className: "flex max-h-[24rem] flex-col",
+  },
+};
+
+/**
  * A dirty row: editing any cell keeps changes draft-local and reveals the
  * per-row Save. Demonstrates the save affordance without a network call.
  */
