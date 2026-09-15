@@ -182,8 +182,11 @@ export default function NutritionDetail({
               pin as one block, and cell-level sticky would mean hardcoding the
               per-portion row's height as the total row's offset. The opaque
               `bg-muted` overrides the primitive's translucent band, which the
-              scrolling rows would otherwise show through. */}
-          <TableFooter className="sticky bottom-0 z-20 bg-muted">
+              scrolling rows would otherwise show through.
+              Only pinned on a tall enough viewport (`tall:`, globals.css): the
+              band costs two rows' worth of a short screen, and there the rows
+              are worth more than a running total. */}
+          <TableFooter className="bg-muted tall:sticky tall:bottom-0 tall:z-20">
             <NutritionSummaryRow label="Recipe total" nutrition={totals} />
             <NutritionSummaryRow
               label={servings != null ? `Per portion (÷${servings})` : "Per portion"}

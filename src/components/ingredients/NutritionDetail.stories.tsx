@@ -133,6 +133,19 @@ export const PinnedTotals: Story = {
 };
 
 /**
+ * The same table on a viewport too short to spend two rows on a pinned band.
+ * Below 500px tall (the `tall:` variant in globals.css) the totals go back to
+ * being the last rows of the table and scroll away with everything else, so
+ * the screen spends its height on the ingredients instead. The canvas is
+ * pinned to an exact height here because the threshold is the whole point.
+ */
+export const TotalsUnpinnedWhenShort: Story = {
+  ...PinnedTotals,
+  parameters: { layout: "fullscreen" },
+  globals: { viewport: { value: "760px-420px" } },
+};
+
+/**
  * The what-if lens: the "Sauce" group has been switched off, so its line is
  * faded and struck through while its numbers stay readable, the group toggle
  * reads unchecked, the recipe total and per-portion rows count only the
