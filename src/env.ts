@@ -6,7 +6,6 @@ export const env = createEnv({
   server: {
     AUTH_PASSWORD: z.string().min(1),
     RESCRAPE_WEBHOOK_URL: z.string().url(),
-    MCP_API_TOKEN: z.string().min(1),
     GEMINI_API_KEY: z.string().min(1),
     USDA_API_KEY: z.string().min(1),
     REGEN_IMAGE_WEBHOOK_URL: z.string().url(),
@@ -26,7 +25,6 @@ export const env = createEnv({
   runtimeEnv: {
     AUTH_PASSWORD: process.env.AUTH_PASSWORD,
     RESCRAPE_WEBHOOK_URL: process.env.RESCRAPE_WEBHOOK_URL,
-    MCP_API_TOKEN: process.env.MCP_API_TOKEN,
     GEMINI_API_KEY: process.env.GEMINI_API_KEY,
     USDA_API_KEY: process.env.USDA_API_KEY,
     REGEN_IMAGE_WEBHOOK_URL: process.env.REGEN_IMAGE_WEBHOOK_URL,
