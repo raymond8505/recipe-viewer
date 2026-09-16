@@ -15,6 +15,7 @@
     "test:run": "vitest run",
     "deploy:quick": "yarn build && deploy",
     "storybook": "storybook dev -p ${SB_PORT:-6006}",
+    "stop": "tsx scripts/stop-dev.ts",
     "build-storybook": "storybook build --output-dir public/storybook",
     "build:prod": "yarn build-storybook && yarn build",
     "typecheck": "tsc --noEmit",
