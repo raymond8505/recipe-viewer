@@ -137,4 +137,4 @@ Deliberately simple, the user likely has a pre-existing list solution of choice 
 
 ### Serving Scaling v Portion Splitting
 
-A recipe has a suggested serving size by default, when you change servings in the UI, the ingredients scale accordingly. In the nutrition panel you can split the recipe down into different portions. The use-case is a user who might want to divide the meal after cooking, for example a 4 slice personal pizza might have its serving size at 1, but the user might want to know the per slice nutrition. Early UAT suggests the UI is a bit clunky for this feature, it's a work in progress.
+A recipe carries a base serving count (`servings_amount`) and what it counts them in (`servings_unit`, e.g. "servings" or "kebabs"); when you change servings in the UI, the ingredients scale accordingly. In the nutrition panel you can split the recipe down into different portions. The use-case is a user who might want to divide the meal after cooking, for example a 4 slice personal pizza might have its serving size at 1, but the user might want to know the per slice nutrition. Early UAT suggests the UI is a bit clunky for this feature, it's a work in progress.

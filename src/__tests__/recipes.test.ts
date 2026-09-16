@@ -62,6 +62,23 @@ import {
   makeStep,
   makeSteps,
 } from "@/fixtures";
+import type { RecipeDocument, SchemaRecipe } from "@/types/recipe";
+
+/** The document the repo builds for `content`, for a schema-only expectation. */
+function markdownDoc(schema: SchemaRecipe): RecipeDocument {
+  return {
+    schema,
+    ingredients: [],
+    instructions: [],
+    prep_time: null,
+    cook_time: null,
+    total_time: null,
+    servings_amount: null,
+    servings_unit: null,
+    total_weight_amount: null,
+    total_weight_unit: null,
+  };
+}
 
 beforeEach(() => {
   mockGetRecipeIngredients.mockReset().mockResolvedValue([]);
@@ -427,7 +444,7 @@ describe("createRecipeRow", () => {
 
     expect(inserts[0]).toMatchObject({
       name: "Soup",
-      content: recipeToMarkdown(schema, [], []),
+      content: recipeToMarkdown(markdownDoc(schema)),
       url: "https://example.com",
       source: "example.com",
       status: "draft",
@@ -447,6 +464,96 @@ describe("createRecipeRow", () => {
     });
 
     expect(inserts[0]).toMatchObject({ embedding: "[0.1,0.2,0.3]" });
+  });
+
+  // Create IS the inbound Schema.org edge, so the yield is parsed here and
+  // nowhere downstream — and stripped from the blob it is parsed out of, so a
+  // later reader cannot find a string to parse again.
+  it("parses schema.recipeYield into the four columns and strips it from the blob", async () => {
+    const { inserts } = makeWriteSupabaseMock({
+      insertSingle: { data: { id: "x", ingredients: [], instructions: [] }, error: null },
+    });
+
+    await createRecipeRow({
+      url: "https://example.com",
+      source: "example.com",
+      schema: {
+        name: "Kebabs",
+        recipeYield: {
+          "@type": "QuantitativeValue",
+          value: 4,
+          unitText: "kebabs",
+          valueReference: { "@type": "QuantitativeValue", value: 454, unitText: "g" },
+        },
+      },
+    });
+
+    expect(inserts[0]).toMatchObject({
+      servings_amount: 4,
+      servings_unit: "kebabs",
+      total_weight_amount: 454,
+      total_weight_unit: "g",
+    });
+    expect(inserts[0].metadata).not.toHaveProperty("schema.recipeYield");
+    expect(
+      (inserts[0].metadata as { schema: Record<string, unknown> }).schema,
+    ).not.toHaveProperty("recipeYield");
+  });
+
+  it("parses a plain-string yield the same way, with no weight", async () => {
+    const { inserts } = makeWriteSupabaseMock({
+      insertSingle: { data: { id: "x", ingredients: [], instructions: [] }, error: null },
+    });
+
+    await createRecipeRow({
+      url: "https://example.com",
+      source: "example.com",
+      schema: { name: "Stew", recipeYield: "6-8 servings" },
+    });
+
+    // The range collapses to its midpoint, which is what every consumer read
+    // from the string anyway.
+    expect(inserts[0]).toMatchObject({
+      servings_amount: 7,
+      servings_unit: "servings",
+      total_weight_amount: null,
+    });
+  });
+
+  // An unparseable yield leaves the columns NULL rather than guessing: a wrong
+  // serving count silently rescales the whole recipe.
+  it("leaves the columns null for an unparseable yield", async () => {
+    const { inserts } = makeWriteSupabaseMock({
+      insertSingle: { data: { id: "x", ingredients: [], instructions: [] }, error: null },
+    });
+
+    await createRecipeRow({
+      url: "https://example.com",
+      source: "example.com",
+      schema: { name: "Marinade", recipeYield: "Enough for one 350g brick of tofu" },
+    });
+
+    expect(inserts[0]).toMatchObject({
+      servings_amount: null,
+      servings_unit: null,
+    });
+  });
+
+  it("strips a nutrition.servingSize without mutating the caller's object", async () => {
+    const { inserts } = makeWriteSupabaseMock({
+      insertSingle: { data: { id: "x", ingredients: [], instructions: [] }, error: null },
+    });
+    const nutrition = { calories: "300 kcal", servingSize: "1 cup" };
+    const schema = { name: "Soup", nutrition };
+
+    await createRecipeRow({ url: "https://example.com", source: "example.com", schema });
+
+    const stored = (inserts[0].metadata as { schema: { nutrition: object } }).schema;
+    expect(stored.nutrition).not.toHaveProperty("servingSize");
+    expect(stored.nutrition).toMatchObject({ calories: "300 kcal" });
+    // The spread is shallow, so a careless delete would reach into the payload
+    // the MCP handler still owns.
+    expect(nutrition.servingSize).toBe("1 cup");
   });
 
   it("omits the embedding column when generation fails (null)", async () => {
@@ -556,8 +663,86 @@ describe("updateRecipeRow", () => {
     status: "published",
     ingredients: [],
     instructions: [],
+    servings_amount: 4,
+    servings_unit: "kebabs",
+    total_weight_amount: null,
+    total_weight_unit: null,
     metadata: { schema: { name: "Original", description: "Old blurb" } },
   };
+
+  // Three-way, like the times: the key absent leaves both columns alone, an
+  // explicit null clears the count, a number sets it. `unit` moves separately so
+  // correcting a count never restates what it counts.
+  describe("servings", () => {
+    it("sets the amount and leaves the stored unit alone", async () => {
+      const { updates } = makeWriteSupabaseMock({
+        selectSingle: { data: existing, error: null },
+        updateSingle: { data: existing, error: null },
+      });
+
+      await updateRecipeRow("r1", { servings: { amount: 8 } });
+      expect(updates[0]).toMatchObject({ servings_amount: 8 });
+      expect(updates[0]).not.toHaveProperty("servings_unit");
+    });
+
+    it("clears the count on an explicit null", async () => {
+      const { updates } = makeWriteSupabaseMock({
+        selectSingle: { data: existing, error: null },
+        updateSingle: { data: existing, error: null },
+      });
+
+      await updateRecipeRow("r1", { servings: { amount: null } });
+      expect(updates[0].servings_amount).toBeNull();
+    });
+
+    it("writes neither column when the key is absent", async () => {
+      const { updates } = makeWriteSupabaseMock({
+        selectSingle: { data: existing, error: null },
+        updateSingle: { data: existing, error: null },
+      });
+
+      await updateRecipeRow("r1", { schema: { description: "Fresh blurb" } });
+      expect(updates[0]).not.toHaveProperty("servings_amount");
+      expect(updates[0]).not.toHaveProperty("servings_unit");
+    });
+
+    it("sets the unit when one is given", async () => {
+      const { updates } = makeWriteSupabaseMock({
+        selectSingle: { data: existing, error: null },
+        updateSingle: { data: existing, error: null },
+      });
+
+      await updateRecipeRow("r1", { servings: { amount: 8, unit: "wraps" } });
+      expect(updates[0]).toMatchObject({ servings_amount: 8, servings_unit: "wraps" });
+    });
+
+    // The markdown's Yield line reads the columns, so a servings-only change
+    // still has to re-render `content` — an untouched one leaves the embedded
+    // text contradicting the row it describes.
+    it("recomputes content from the saved count, not the replaced one", async () => {
+      const { updates } = makeWriteSupabaseMock({
+        selectSingle: { data: existing, error: null },
+        updateSingle: { data: existing, error: null },
+      });
+
+      await updateRecipeRow("r1", { servings: { amount: 8 } });
+      expect(updates[0].content).toContain("Yield: 8 kebabs");
+    });
+
+    it("never writes the yield back into the blob", async () => {
+      const { updates } = makeWriteSupabaseMock({
+        selectSingle: { data: existing, error: null },
+        updateSingle: { data: existing, error: null },
+      });
+
+      await updateRecipeRow("r1", {
+        servings: { amount: 8 },
+        schema: { description: "Fresh blurb" },
+      });
+      const stored = (updates[0].metadata as { schema: object }).schema;
+      expect(stored).not.toHaveProperty("recipeYield");
+    });
+  });
 
   beforeEach(() => {
     mockGenerateEmbedding.mockReset().mockResolvedValue(null);
@@ -585,7 +770,15 @@ describe("updateRecipeRow", () => {
     await updateRecipeRow("r1", { schema: { description: "Fresh blurb" } });
 
     const mergedSchema = { name: "Original", description: "Fresh blurb" };
-    expect(updates[0]).toMatchObject({ content: recipeToMarkdown(mergedSchema, [], []) });
+    expect(updates[0]).toMatchObject({
+      content: recipeToMarkdown({
+        ...markdownDoc(mergedSchema),
+        // The row's own count, untouched by this patch — the markdown always
+        // describes the recipe as saved.
+        servings_amount: existing.servings_amount,
+        servings_unit: existing.servings_unit,
+      }),
+    });
   });
 
   it("sets the embedding from the merged schema when generation succeeds", async () => {
@@ -1229,6 +1422,35 @@ describe("recipe ingredients hydration", () => {
 
     expect(recipe?.metadata.schema).not.toHaveProperty("recipeIngredient");
     expect(recipe?.ingredients[0].ingredients).toHaveLength(2);
+  });
+
+  // recipeYield and nutrition.servingSize are column-backed now, so the blob's
+  // copies are frozen artifacts. The read exit is what keeps them from reaching
+  // a consumer — the MCP server JSON-stringifies whole rows.
+  it("deletes the blob's dead recipeYield and nutrition.servingSize at the read exit", async () => {
+    makeSupabaseMock({
+      singleData: {
+        ...structuredClone(storedRow),
+        servings_amount: 4,
+        servings_unit: "servings",
+        metadata: {
+          schema: {
+            name: "Curry",
+            recipeYield: "99 portions",
+            nutrition: { calories: "300 kcal", servingSize: "1 frozen copy" },
+          },
+        },
+      },
+    });
+    mockGetRecipeIngredients.mockResolvedValue(rows);
+
+    const recipe = await getRecipeById("r1");
+
+    expect(recipe?.metadata.schema).not.toHaveProperty("recipeYield");
+    expect(recipe?.metadata.schema.nutrition).not.toHaveProperty("servingSize");
+    // Only those two keys go — the nutrients beside them are still stored data.
+    expect(recipe?.metadata.schema.nutrition?.calories).toBe("300 kcal");
+    expect(recipe?.servings_amount).toBe(4);
   });
 
   it("renders a recipe short rather than failing when an id has no row", async () => {

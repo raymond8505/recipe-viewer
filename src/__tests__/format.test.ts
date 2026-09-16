@@ -29,9 +29,8 @@ import {
   instructionsToEditable,
   toSchemaOrgRecipe,
   editableToInstructions,
-  getYieldLabel,
-  getYieldValueReference,
-  getYieldUnit,
+  formatServings,
+  singularServingUnit,
 } from "@/lib/format";
 import type {
   EditableIngredients,
@@ -44,7 +43,7 @@ import {
   makeInstructionGroup,
   makeStep,
   makeSteps,
-  quantitativeValueYield,
+  weighedYieldColumns,
 } from "@/fixtures";
 
 describe("formatDuration", () => {
@@ -181,65 +180,54 @@ describe("getFirstImage", () => {
   });
 });
 
-describe("getYieldLabel", () => {
-  it("returns a plain string as-is", () => {
-    expect(getYieldLabel("4 servings")).toBe("4 servings");
+describe("formatServings", () => {
+  it("joins the amount and the unit", () => {
+    expect(formatServings(4, "kebabs")).toBe("4 kebabs");
   });
 
-  it("returns the first element of an array", () => {
-    expect(getYieldLabel(["6 servings", "6"])).toBe("6 servings");
+  it("falls back to the generic unit when the source named none", () => {
+    expect(formatServings(4, null)).toBe("4 servings");
+    expect(formatServings(4, "   ")).toBe("4 servings");
   });
 
-  it("joins value and unitText for a QuantitativeValue", () => {
-    expect(
-      getYieldLabel({ "@type": "QuantitativeValue", value: 4, unitText: "kebabs" }),
-    ).toBe("4 kebabs");
+  it("returns null when there is no serving count", () => {
+    expect(formatServings(null, "kebabs")).toBeNull();
   });
 
-  it("returns just the value when a QuantitativeValue has no unit", () => {
-    expect(getYieldLabel({ value: 4 })).toBe("4");
+  // The unit is stored plural, so exactly one of them has to read singular.
+  it("singularizes the unit for a count of one", () => {
+    expect(formatServings(1, "servings")).toBe("1 serving");
+    expect(formatServings(1, "kebabs")).toBe("1 kebab");
+    expect(formatServings(1, null)).toBe("1 serving");
   });
 
-  it("returns null for a QuantitativeValue with nothing to show", () => {
-    expect(getYieldLabel({})).toBeNull();
+  it("keeps the plural for any other count", () => {
+    expect(formatServings(2, "kebabs")).toBe("2 kebabs");
+    expect(formatServings(0.5, "servings")).toBe("0.5 servings");
   });
 
-  it("returns null for undefined", () => {
-    expect(getYieldLabel(undefined)).toBeNull();
-  });
-});
-
-describe("getYieldValueReference", () => {
-  it("returns the valueReference of a QuantitativeValue", () => {
-    expect(getYieldValueReference(quantitativeValueYield)).toEqual(
-      quantitativeValueYield.valueReference,
-    );
-  });
-
-  it("returns null when a QuantitativeValue has no valueReference", () => {
-    expect(getYieldValueReference({ value: 4, unitText: "kebabs" })).toBeNull();
-  });
-
-  it("returns null for a string yield", () => {
-    expect(getYieldValueReference("4 servings")).toBeNull();
-  });
-
-  it("returns null for undefined", () => {
-    expect(getYieldValueReference(undefined)).toBeNull();
+  it("formats a fractional amount rather than printing its float", () => {
+    expect(formatServings(2.5, "servings")).toBe("2.5 servings");
   });
 });
 
-describe("getYieldUnit", () => {
-  it("returns the unitText of a QuantitativeValue", () => {
-    expect(getYieldUnit({ value: 4, unitText: "kebabs" })).toBe("kebabs");
+describe("singularServingUnit", () => {
+  it.each([
+    ["servings", "serving"],
+    ["kebabs", "kebab"],
+    ["wraps", "wrap"],
+  ])("drops the plural s: %j → %j", (plural, singular) => {
+    expect(singularServingUnit(plural)).toBe(singular);
   });
 
-  it("returns null when a QuantitativeValue has no unitText", () => {
-    expect(getYieldUnit({ value: 4 })).toBeNull();
+  it("falls back to 'serving' when the source named no unit", () => {
+    expect(singularServingUnit(null)).toBe("serving");
+    expect(singularServingUnit("  ")).toBe("serving");
   });
 
-  it("returns null for a string yield", () => {
-    expect(getYieldUnit("4 servings")).toBeNull();
+  it("leaves a word that is already singular alone", () => {
+    expect(singularServingUnit("tbsp")).toBe("tbsp");
+    expect(singularServingUnit("glass")).toBe("glass");
   });
 });
 
@@ -580,6 +568,10 @@ function doc(schema: SchemaRecipe, overrides: Partial<RecipeDocument> = {}): Rec
     prep_time: null,
     cook_time: null,
     total_time: null,
+    servings_amount: null,
+    servings_unit: null,
+    total_weight_amount: null,
+    total_weight_unit: null,
     ...overrides,
   };
 }
@@ -672,13 +664,43 @@ describe("toSchemaOrgJsonLd", () => {
     expect(result).not.toHaveProperty("recipeIngredient");
   });
 
-  it("passes a QuantitativeValue recipeYield through unchanged", () => {
-    // All keys (@type/value/unitText/valueReference) are standard Schema.org,
-    // so no sanitization is needed — the object survives verbatim.
+  it("builds recipeYield from the columns as a QuantitativeValue", () => {
     const result = toSchemaOrgJsonLd(
-      doc({ name: "Kebabs", recipeYield: quantitativeValueYield }),
+      doc({ name: "Kebabs" }, weighedYieldColumns),
     ) as Record<string, unknown>;
-    expect(result.recipeYield).toEqual(quantitativeValueYield);
+    expect(result.recipeYield).toEqual({
+      "@type": "QuantitativeValue",
+      value: 4,
+      unitText: "kebabs",
+      valueReference: { "@type": "QuantitativeValue", value: 454, unitText: "g" },
+    });
+  });
+
+  it("omits recipeYield when the recipe has no serving count", () => {
+    const result = toSchemaOrgJsonLd(doc({ name: "Kebabs" })) as Record<string, unknown>;
+    expect(result).not.toHaveProperty("recipeYield");
+  });
+
+  it("names the generic unit when the source named none", () => {
+    const result = toSchemaOrgJsonLd(
+      doc({ name: "Stew" }, { servings_amount: 6, servings_unit: null }),
+    ) as Record<string, unknown>;
+    expect(result.recipeYield).toEqual({
+      "@type": "QuantitativeValue",
+      value: 6,
+      unitText: "servings",
+    });
+  });
+
+  // The blob still carries a frozen pre-0022 copy on older rows. The columns are
+  // the source of truth, so a stale string must never reach the output — the
+  // same guarantee format.test pins for a stale cookTime.
+  it("lets the columns beat a stale recipeYield left in the blob", () => {
+    const stale = { name: "Kebabs", recipeYield: "99 portions" } as SchemaRecipe;
+    const result = toSchemaOrgJsonLd(
+      doc(stale, weighedYieldColumns),
+    ) as Record<string, unknown>;
+    expect(result.recipeYield).toMatchObject({ value: 4, unitText: "kebabs" });
   });
 
   it("emits the nutritionOverride, not the schema's own nutrition", () => {

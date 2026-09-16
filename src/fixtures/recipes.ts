@@ -9,6 +9,12 @@ import { makeInstructionGroup } from "./instructions";
 // therefore agree here, because hydrateTimes has notionally already run. A raw
 // post-0019 database row would carry the columns and NO schema time keys; only
 // repo-layer tests should model that.
+//
+// Servings are columns ONLY — there is no schema.recipeYield to agree with, and
+// no hydrate-back that would put one there. The first recipe's yield reads
+// "Enough for one 350g brick of tofu", which names no serving count parseYield
+// will accept, so its columns are null: that is the real shape of a recipe the
+// backfill reports rather than guesses at.
 export const recipeFixtures: RecipeRow[] = [
   {
     id: "7cd24839-e518-4c6b-92c4-62171165c332",
@@ -18,6 +24,10 @@ export const recipeFixtures: RecipeRow[] = [
     prep_time: 300,
     cook_time: null,
     total_time: 300,
+    servings_amount: null,
+    servings_unit: null,
+    total_weight_amount: null,
+    total_weight_unit: null,
     ingredients: [],
     instructions: [],
     metadata: {
@@ -29,7 +39,6 @@ export const recipeFixtures: RecipeRow[] = [
           "https://xonkmdhnjpjkapnsmltu.supabase.co/storage/v1/object/recipes/chorizo-crumbled-tofu.png",
         prepTime: "PT5M",
         totalTime: "PT5M",
-        recipeYield: "Enough for one 350g brick of tofu",
         recipeCuisine: "Mexican-Inspired",
         recipeCategory: "Marinade",
         nutrition: {
@@ -37,7 +46,6 @@ export const recipeFixtures: RecipeRow[] = [
           fatContent: "28.6g",
           proteinContent: "1.3g",
           carbohydrateContent: "6.1g",
-          servingSize: "full batch",
         },
       },
     },
@@ -50,6 +58,10 @@ export const recipeFixtures: RecipeRow[] = [
     prep_time: 1200,
     cook_time: 2100,
     total_time: 3300,
+    servings_amount: 3,
+    servings_unit: "servings",
+    total_weight_amount: null,
+    total_weight_unit: null,
     ingredients: [],
     instructions: [],
     metadata: {
@@ -62,7 +74,6 @@ export const recipeFixtures: RecipeRow[] = [
         prepTime: "PT20M",
         cookTime: "PT35M",
         totalTime: "PT55M",
-        recipeYield: "3 servings",
         recipeCuisine: "Mexican",
         recipeCategory: "Main",
         datePublished: "2026-04-20",
@@ -73,7 +84,6 @@ export const recipeFixtures: RecipeRow[] = [
           fatContent: "26g",
           fiberContent: "11g",
           sodiumContent: "510mg",
-          servingSize: "2 enchiladas",
         },
       },
     },
@@ -86,6 +96,10 @@ export const recipeFixtures: RecipeRow[] = [
     prep_time: 1200,
     cook_time: 1800,
     total_time: 3000,
+    servings_amount: 4,
+    servings_unit: "servings",
+    total_weight_amount: null,
+    total_weight_unit: null,
     ingredients: [
       makeIngredientGroup("Meatballs", [
         "1 lb ground chicken",
@@ -129,7 +143,6 @@ export const recipeFixtures: RecipeRow[] = [
         prepTime: "PT20M",
         cookTime: "PT30M",
         totalTime: "PT50M",
-        recipeYield: "4 servings",
         recipeCuisine: "Thai",
         recipeCategory: "Main Course",
         datePublished: "2026-01-09",
@@ -141,7 +154,6 @@ export const recipeFixtures: RecipeRow[] = [
           carbohydrateContent: "85.2g",
           fatContent: "36.2g",
           sodiumContent: "1200mg",
-          servingSize: "1 serving",
         },
       },
     },
@@ -154,6 +166,10 @@ export const recipeFixtures: RecipeRow[] = [
     prep_time: 2400,
     cook_time: 2100,
     total_time: 14400,
+    servings_amount: 16,
+    servings_unit: "bars",
+    total_weight_amount: null,
+    total_weight_unit: null,
     ingredients: [],
     instructions: [],
     metadata: {
@@ -166,7 +182,6 @@ export const recipeFixtures: RecipeRow[] = [
         prepTime: "PT40M",
         cookTime: "PT35M",
         totalTime: "PT4H",
-        recipeYield: "16 bars",
         recipeCuisine: "American",
         recipeCategory: "Breakfast",
         datePublished: "2026-02-12",
@@ -177,7 +192,6 @@ export const recipeFixtures: RecipeRow[] = [
           fatContent: "10.8g",
           fiberContent: "4.9g",
           sodiumContent: "73mg",
-          servingSize: "1 bar",
         },
       },
     },
@@ -190,6 +204,10 @@ export const recipeFixtures: RecipeRow[] = [
     prep_time: 300,
     cook_time: null,
     total_time: 300,
+    servings_amount: 2,
+    servings_unit: "servings",
+    total_weight_amount: null,
+    total_weight_unit: null,
     ingredients: [],
     instructions: [],
     metadata: {
@@ -201,7 +219,6 @@ export const recipeFixtures: RecipeRow[] = [
           "https://xonkmdhnjpjkapnsmltu.supabase.co/storage/v1/object/recipes/quick-yakisoba-sauce.png",
         prepTime: "PT5M",
         totalTime: "PT5M",
-        recipeYield: "2 servings",
         recipeCuisine: "Asian",
         recipeCategory: "Sauce",
         datePublished: "2026-02-25",
@@ -211,7 +228,6 @@ export const recipeFixtures: RecipeRow[] = [
           carbohydrateContent: "18g",
           fatContent: "0.5g",
           sodiumContent: "600mg",
-          servingSize: "1 serving",
         },
       },
     },
@@ -231,6 +247,10 @@ export function makeRecipe(
     prep_time: null,
     cook_time: null,
     total_time: null,
+    servings_amount: null,
+    servings_unit: null,
+    total_weight_amount: null,
+    total_weight_unit: null,
     ingredients: [],
     instructions: [],
     metadata: { schema: { name } },
@@ -245,7 +265,7 @@ export function makeRecipe(
  *
  * `total` is the WHOLE-RECIPE figure over `servings` portions, so 1400 kcal
  * across the default four reads "350 kcal". Pass `servings: null` for the
- * yield-less case, or add an unmatched line through `overrides.ingredients`
+ * count-less case, or add an unmatched line through `overrides.ingredients`
  * for the half-covered one; both are "no nutrition", and they are worth
  * telling apart in a test.
  */
@@ -257,13 +277,11 @@ export function makeNutritionRecipeRow(
 ): RecipeRow {
   return makeRecipe(id, name, {
     ingredients: makeNutritionLines(total, `1 portion ${name}`),
+    servings_amount: servings,
+    servings_unit: "servings",
     ...overrides,
     metadata: {
-      schema: {
-        name,
-        ...(servings == null ? {} : { recipeYield: `${servings} servings` }),
-        ...overrides.metadata?.schema,
-      },
+      schema: { name, ...overrides.metadata?.schema },
     },
   });
 }

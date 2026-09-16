@@ -6,7 +6,7 @@ import { ScalableRecipe } from "@/lib/ScalableRecipe";
 import {
   fullCatalogTotal,
   makeNutritionRecipe,
-  quantitativeValueYield,
+  weighedYieldColumns,
   sparseCatalogTotal,
 } from "@/fixtures";
 
@@ -60,7 +60,7 @@ export const FullData: Story = {
 export const PartialData: Story = {
   args: {
     initial: makeNutritionRecipe(sparseCatalogTotal, {
-      schema: { recipeYield: "2 servings" },
+      servings_amount: 2,
     }),
   },
 };
@@ -115,7 +115,7 @@ export const FullLabelSparse: Story = {
 export const WithYieldWeight: Story = {
   args: {
     initial: makeNutritionRecipe(fullCatalogTotal, {
-      schema: { recipeYield: quantitativeValueYield },
+      ...weighedYieldColumns,
     }),
   },
 };

@@ -557,22 +557,22 @@ describe("getRecipe", () => {
     const recipe = {
       ...base,
       ingredients: makeIngredientLines([makeMatchedIngredient("100 g flour", flour)]),
+      servings_amount: 4,
+      servings_unit: "servings",
       metadata: {
         ...base.metadata,
-        schema: {
-          ...base.metadata.schema,
-          recipeYield: "4 servings",
-          nutrition: { sodiumContent: "800 mg" },
-        },
+        schema: { ...base.metadata.schema, nutrition: { sodiumContent: "800 mg" } },
       },
     };
     vi.mocked(getRecipeById).mockResolvedValueOnce(recipe);
 
     const out = await getRecipe({ id: recipe.id });
     // All-or-nothing: sodium (recipe-only) does NOT fill the gap in the
-    // ingredients view.
+    // ingredients view. servingSize is the derived denominator for these
+    // numbers — one unit of what servings_unit counts.
     expect(out.metadata.schema.nutrition).toEqual({
       "@type": "NutritionInformation",
+      servingSize: "1 serving",
       calories: "500 kcal",
       proteinContent: "10 g",
     });
@@ -584,13 +584,11 @@ describe("getRecipe", () => {
     const recipe = {
       ...base,
       ingredients: makeIngredientLines(["2 cups flour"]),
+      servings_amount: 4,
+      servings_unit: "servings",
       metadata: {
         ...base.metadata,
-        schema: {
-          ...base.metadata.schema,
-          recipeYield: "4 servings",
-          nutrition: { calories: "123 kcal" },
-        },
+        schema: { ...base.metadata.schema, nutrition: { calories: "123 kcal" } },
       },
     };
     vi.mocked(getRecipeById).mockResolvedValueOnce(recipe);
@@ -874,6 +872,53 @@ describe("updateRecipe", () => {
       message: expect.stringContaining("instructions"),
     });
     expect(updateRecipeRow).not.toHaveBeenCalled();
+  });
+
+  // Rejected, not stripped: a silently dropped yield looks to the agent like a
+  // serving count it successfully set.
+  it("rejects schema.recipeYield with a ToolError naming the servings field", async () => {
+    const { updateRecipeRow } = await import("@/lib/recipes");
+
+    await expect(
+      updateRecipe({
+        id: "r1",
+        schema: { recipeYield: "12 servings" } as never,
+      }),
+    ).rejects.toMatchObject({
+      name: "ToolError",
+      code: "invalid_input",
+      message: expect.stringContaining("servings"),
+    });
+    expect(updateRecipeRow).not.toHaveBeenCalled();
+  });
+
+  it("passes servings and total_weight straight through to the repo patch", async () => {
+    const { updateRecipeRow } = await import("@/lib/recipes");
+
+    await updateRecipe({
+      id: "r1",
+      servings: { amount: 8 },
+      total_weight: { amount: 900, unit: "g" },
+    });
+    expect(updateRecipeRow).toHaveBeenCalledWith(
+      "r1",
+      expect.objectContaining({
+        servings: { amount: 8 },
+        totalWeight: { amount: 900, unit: "g" },
+      }),
+    );
+  });
+
+  // Absent means "leave the count alone"; null is the explicit clear. The two
+  // have to stay distinguishable all the way to the column.
+  it("forwards an explicit null amount as a clear", async () => {
+    const { updateRecipeRow } = await import("@/lib/recipes");
+
+    await updateRecipe({ id: "r1", servings: { amount: null } });
+    expect(updateRecipeRow).toHaveBeenCalledWith(
+      "r1",
+      expect.objectContaining({ servings: { amount: null } }),
+    );
   });
 
   // The stored schema has no recipeIngredient; silently stripping one an agent

@@ -98,6 +98,29 @@ export interface RecipeRowColumns {
   prep_time: number | null;
   cook_time: number | null;
   total_time: number | null;
+  /**
+   * How many servings the recipe makes at base scale, and what it counts them
+   * in. Source of truth for both (0022) — `metadata.schema.recipeYield` holds a
+   * pre-0022 copy on older rows that nothing may read, and unlike the times
+   * there is no hydrate-back: readers take the columns.
+   *
+   * `servings_amount` null means no serving count is known, which disables
+   * scaling and reports no per-serving nutrition; 1 would instead assert a
+   * one-serving recipe. `servings_unit` is PLURAL as the source wrote it
+   * ("servings", "kebabs"), and null means the source named none — callers fall
+   * back to `SERVINGS_UNIT_FALLBACK` (src/lib/format.ts) rather than a column
+   * default, so the fallback has one home.
+   */
+  servings_amount: number | null;
+  servings_unit: string | null;
+  /**
+   * Raw weight or volume of the WHOLE recipe at base servings, divided by the
+   * displayed portion count to label nutrition "per 114 g serving". Null in
+   * both columns together. The unit stays beside the amount because there is no
+   * honest ml→g without a density, and because it is rendered verbatim.
+   */
+  total_weight_amount: number | null;
+  total_weight_unit: string | null;
   ingredients: StoredIngredientGroup[];
   /** The stored shape IS the app shape — see RecipeInstructionGroup. */
   instructions: RecipeInstructionGroup[];
@@ -121,7 +144,25 @@ export interface RecipeDocument {
   prep_time: number | null;
   cook_time: number | null;
   total_time: number | null;
+  /** See RecipeRowColumns — same meaning, carried on the document. */
+  servings_amount: number | null;
+  servings_unit: string | null;
+  total_weight_amount: number | null;
+  total_weight_unit: string | null;
 }
+
+/**
+ * The row fields a `RecipeDocument` is built from — every document field except
+ * `schema`, which comes off `metadata`. Derived rather than listed so the two
+ * cannot drift: a field promoted to a column and added to `RecipeDocument`
+ * widens every builder's input with it, and the build fails to compile until
+ * the field is actually carried over. A caller that hands over a partial row
+ * gets that same compile error rather than a silently empty result.
+ */
+export type RecipeDocumentSource = Pick<
+  RecipeRow,
+  "metadata" | Exclude<keyof RecipeDocument, "schema">
+>;
 
 /**
  * A Schema.org/Recipe as served to the outside world: the stored fields plus
@@ -132,6 +173,14 @@ export interface RecipeDocument {
 export type SchemaOrgRecipe = SchemaRecipe & {
   recipeIngredient?: string[];
   recipeInstructions?: Array<HowToStep | HowToSection>;
+  /**
+   * The wire form of the `servings_amount` / `servings_unit` /
+   * `total_weight_*` columns. Outbound it is always the QuantitativeValue
+   * `schemaOrgYield` builds; inbound a scraper or agent may send any of the
+   * three shapes, which `parseYield` reduces to the columns exactly once.
+   */
+  recipeYield?: string | string[] | QuantitativeValue;
+  nutrition?: SchemaOrgNutrition;
 };
 
 /**
@@ -193,13 +242,13 @@ export interface HowToSection {
 }
 
 /**
- * Schema.org/QuantitativeValue — the structured form of `recipeYield`.
- * At the top level: `value` is the serving count (SSoT) and `unitText` its
- * label (e.g. 4 + "kebabs"). `valueReference` nests a second QuantitativeValue
- * holding the recipe's raw weight/volume (e.g. 454 + "g"), which drives the
- * per-serving basis shown in the nutrition panel (valueReference.value / value).
- * A plain-string `recipeYield` remains valid (legacy/deprecated); an object
- * signals the new system.
+ * Schema.org/QuantitativeValue — the structured form of `recipeYield`, and a
+ * WIRE type only: it is what the edges speak, never what the app carries.
+ * At the top level `value` + `unitText` are the `servings_amount` /
+ * `servings_unit` columns (4 + "kebabs"); the nested `valueReference` is
+ * `total_weight_amount` / `total_weight_unit` (454 + "g"), the whole recipe's
+ * raw weight. A plain-string `recipeYield` is still accepted inbound and
+ * parsed; nothing emits one.
  */
 export interface QuantitativeValue {
   "@type"?: "QuantitativeValue";
@@ -221,34 +270,49 @@ export interface SchemaRecipe {
   cookTime?: string | null;
   prepTime?: string | null;
   totalTime?: string | null;
-  recipeYield?: string | string[] | QuantitativeValue;
   recipeCuisine?: string;
   recipeCategory?: string | string[];
-  // No `recipeIngredient` and no `recipeInstructions`: a recipe's ingredients
-  // are `RecipeRow.ingredients` (RecipeIngredientGroup[]) and its instructions
-  // `RecipeRow.instructions` (RecipeInstructionGroup[]); the Schema.org forms
-  // exist only on SchemaOrgRecipe, at the edges. Both keys still sit in the
-  // stored blob of older rows, frozen at backfill time; the repo layer deletes
-  // them on read and strips them on write so nothing above it can see them.
+  // No `recipeIngredient`, `recipeInstructions` or `recipeYield`, and no
+  // `nutrition.servingSize`: a recipe's ingredients are `RecipeRow.ingredients`
+  // (RecipeIngredientGroup[]), its instructions `RecipeRow.instructions`
+  // (RecipeInstructionGroup[]), and its servings the `servings_amount` /
+  // `servings_unit` columns. The Schema.org forms exist only on SchemaOrgRecipe,
+  // at the edges. All four keys still sit in the stored blob of older rows,
+  // frozen at backfill time; the repo layer deletes them on read and strips them
+  // on write so nothing above it can see them.
   keywords?: string;
-  nutrition?: {
-    "@type"?: "NutritionInformation";
-    servingSize?: string;
-    calories?: string;
-    proteinContent?: string;
-    carbohydrateContent?: string;
-    fatContent?: string;
-    fiberContent?: string;
-    sodiumContent?: string;
-    sugarContent?: string;
-    saturatedFatContent?: string;
-    unsaturatedFatContent?: string;
-    cholesterolContent?: string;
-  };
+  nutrition?: SchemaNutrition;
   datePublished?: string;
   notes?: string;
   cookingNotes?: string;
 }
+
+/**
+ * The nutrition block as stored: nutrient strings only. `servingSize` is NOT
+ * here — it is one unit of what `servings_unit` counts, so it is regenerated at
+ * the wire boundaries (`SchemaOrgNutrition`) rather than stored as a second,
+ * free-text spelling of the same fact.
+ */
+export interface SchemaNutrition {
+  "@type"?: "NutritionInformation";
+  calories?: string;
+  proteinContent?: string;
+  carbohydrateContent?: string;
+  fatContent?: string;
+  fiberContent?: string;
+  sodiumContent?: string;
+  sugarContent?: string;
+  saturatedFatContent?: string;
+  unsaturatedFatContent?: string;
+  cholesterolContent?: string;
+}
+
+/**
+ * The nutrition block as published: the stored nutrients plus the derived
+ * `servingSize` ("1 serving", "1 kebab"). Outbound only — an inbound
+ * `servingSize` is dropped, since the columns say what a serving is.
+ */
+export type SchemaOrgNutrition = SchemaNutrition & { servingSize?: string };
 
 export interface RecipesResult {
   data: RecipeRow[];

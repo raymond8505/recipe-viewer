@@ -19,7 +19,20 @@ import {
   parseTimeInput,
   secondsToIso,
 } from "@/lib/format";
-import { applyServings, parseServings } from "@/lib/units";
+
+/**
+ * What a save sends: the schema to merge, the ingredient groups to replace the
+ * list with (each line naming its row), the instruction groups to replace the
+ * steps with, and the base servings. `servings` is ABSENT rather than null when
+ * the input is unusable — absent means "leave the count alone", where null
+ * would clear it.
+ */
+export interface RecipeEditPatch {
+  schema: SchemaRecipe;
+  ingredients: RecipeIngredientGroupInput[];
+  instructions: RecipeInstructionGroup[];
+  servings?: { amount: number; unit: string | null };
+}
 
 export type EditState = "idle" | "editing" | "saving" | "error";
 
@@ -38,6 +51,9 @@ export interface EditDraft {
   source: string;
   /** Base servings as raw input text; parsed (integer >= 1) on save. */
   servings: string;
+  /** What the servings count, as raw input text. Blank clears the unit, which
+   *  falls the display back to SERVINGS_UNIT_FALLBACK. */
+  servingsUnit: string;
   /** Persisted recipe times as raw input text in `H:MM`; parsed by
    *  `parseTimeInput` on save. Blank clears the time outright. */
   prepTime: string;
@@ -64,6 +80,7 @@ const EMPTY_DRAFT: EditDraft = {
   status: "",
   source: "",
   servings: "",
+  servingsUnit: "",
   prepTime: "",
   cookTime: "",
   totalTime: "",
@@ -88,16 +105,10 @@ export interface UseRecipeEditor {
   begin: (doc: RecipeDocument, row: EditRowFields) => void;
   /** Leave edit mode (does not touch the canonical document). */
   cancel: () => void;
-  /** Merge the current draft onto a base document to produce what to
-   *  persist: the schema to merge, the ingredient groups to replace the list
-   *  with (each line naming its row), and the instruction groups to replace
-   *  the steps with. `name` is required on SchemaRecipe, so a blank title
+  /** Merge the current draft onto a base document to produce what to persist —
+   *  see RecipeEditPatch. `name` is required on SchemaRecipe, so a blank title
    *  falls back to the base name rather than wiping it. */
-  buildPatch: (base: RecipeDocument) => {
-    schema: SchemaRecipe;
-    ingredients: RecipeIngredientGroupInput[];
-    instructions: RecipeInstructionGroup[];
-  };
+  buildPatch: (base: RecipeDocument) => RecipeEditPatch;
   /** Run an async persist, owning the saving → idle/error transition. A throw
    *  leaves the editor in "error" with the draft intact so the user can retry. */
   runSave: (persist: () => Promise<void>) => Promise<void>;
@@ -163,7 +174,8 @@ export function useRecipeEditor(): UseRecipeEditor {
         notes: schema.notes ?? "",
         status,
         source,
-        servings: parseServings(schema.recipeYield)?.toString() ?? "",
+        servings: doc.servings_amount?.toString() ?? "",
+        servingsUnit: doc.servings_unit ?? "",
         // The columns are the times; the schema's copies are not read.
         prepTime: formatTimeInput(doc.prep_time),
         cookTime: formatTimeInput(doc.cook_time),
@@ -177,30 +189,37 @@ export function useRecipeEditor(): UseRecipeEditor {
   const cancel = useCallback(() => setEditState("idle"), []);
 
   const buildPatch = useCallback(
-    (doc: RecipeDocument) => {
+    (doc: RecipeDocument): RecipeEditPatch => {
       const { schema: base } = doc;
-      // Only rewrite the yield when the parsed input is a valid count that
-      // differs from the base. The changed-check is load-bearing: a range
-      // like "6-8 servings" seeds the input with its midpoint ("7"), so an
-      // untouched save would otherwise silently collapse the range.
+      // Servings go to their own columns, not into the schema. Invalid input
+      // (blank, non-integer, < 1) omits the key entirely, which reads as "leave
+      // it alone" — a typo in the servings box must never block Save or clear a
+      // count. Re-sending an unchanged number is a no-op by definition now that
+      // the column holds one value rather than a string a write had to splice.
+      //
+      // The unit rides with the amount rather than patching separately: a unit
+      // with no count is not a state a recipe can be in, so the amount is what
+      // gates the write. A blank unit is an explicit CLEAR (null), not "leave it
+      // alone" — the field shows the fallback word as its placeholder, so a user
+      // who empties it is asking for that generic word back.
       const n = Number(draft.servings.trim());
-      const servingsChanged =
-        Number.isInteger(n) && n >= 1 && n !== parseServings(base.recipeYield);
+      const servings =
+        Number.isInteger(n) && n >= 1
+          ? { amount: n, unit: draft.servingsUnit.trim() || null }
+          : undefined;
       return {
         schema: {
           ...base,
           name: draft.name.trim() || base.name,
           description: draft.description || undefined,
           notes: draft.notes || undefined,
-          recipeYield: servingsChanged
-            ? applyServings(base.recipeYield, n)
-            : base.recipeYield,
           prepTime: buildTime(draft.prepTime, doc.prep_time),
           cookTime: buildTime(draft.cookTime, doc.cook_time),
           totalTime: buildTime(draft.totalTime, doc.total_time),
         },
         ingredients: editableToIngredientInput(draft.ingredients),
         instructions: editableToInstructions(draft.instructions),
+        ...(servings ? { servings } : {}),
       };
     },
     [draft],

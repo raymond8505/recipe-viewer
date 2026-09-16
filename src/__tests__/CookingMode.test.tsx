@@ -32,6 +32,8 @@ function makeRecipe(
   schema: Partial<SchemaRecipe> = {},
   ingredients: string[] = [],
   instructions: RecipeInstructionGroup[] = [],
+  /** Servings live in columns, so a scalable fixture sets them here. */
+  columns: Partial<RecipeRow> = {},
 ): RecipeRow {
   return {
     id: "1",
@@ -39,6 +41,11 @@ function makeRecipe(
     source: "example.com",
     ingredients: makeIngredientLines(ingredients),
     instructions,
+    servings_amount: null,
+    servings_unit: "servings",
+    total_weight_amount: null,
+    total_weight_unit: null,
+    ...columns,
     metadata: { schema: { name: "Test Recipe", ...schema } },
   };
 }
@@ -195,7 +202,10 @@ describe("CookingMode — shopping list", () => {
   });
 
   it("copies scaled amounts after the recipe is scaled", async () => {
-    const recipe = makeRecipe({ recipeYield: "1 serving" }, ["2 cups flour", "1 tsp salt"]);
+    const recipe = makeRecipe({}, ["2 cups flour", "1 tsp salt"], [], {
+      servings_amount: 1,
+      servings_unit: "serving",
+    });
     render(<CookingMode recipe={recipe} onClose={vi.fn()} />);
     // Selection is keyed by the line's id, so it survives the scale change.
     fireEvent.click(screen.getByRole("checkbox", { name: "2 cups flour" }));
@@ -217,7 +227,10 @@ describe("CookingMode — shopping list", () => {
       "fetch",
       vi.fn().mockResolvedValue({ json: async () => ({ data: [secondary] }) }),
     );
-    const recipe = makeRecipe({ recipeYield: "1 serving" }, ["2 cups flour"]);
+    const recipe = makeRecipe({}, ["2 cups flour"], [], {
+      servings_amount: 1,
+      servings_unit: "serving",
+    });
     render(<CookingMode recipe={recipe} onClose={vi.fn()} />);
 
     fireEvent.change(screen.getByPlaceholderText("Add recipe to meal…"), {
@@ -294,7 +307,7 @@ describe("CookingMode — nutrition panel", () => {
       <CookingMode
         recipe={makeRecipeRow("1", "Test Recipe", {
           ingredients: makeNutritionLines({ calories_kcal: 1400 }),
-          metadata: { schema: { name: "Test Recipe", recipeYield: "4 servings" } },
+          servings_amount: 4,
         })}
         onClose={vi.fn()}
       />,
@@ -308,9 +321,8 @@ describe("CookingMode — nutrition panel", () => {
     // disappears rather than rendering its shell.
     render(
       <CookingMode
-        recipe={makeRecipe({
-          recipeYield: "4 servings",
-          nutrition: { calories: "200 kcal" },
+        recipe={makeRecipe({ nutrition: { calories: "200 kcal" } }, [], [], {
+          servings_amount: 4,
         })}
         onClose={vi.fn()}
       />,

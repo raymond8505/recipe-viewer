@@ -121,16 +121,16 @@ export const schemaRecipeSchema = z
     cookTime: z.string().nullable().optional(),
     prepTime: z.string().nullable().optional(),
     totalTime: z.string().nullable().optional(),
-    recipeYield: z
-      .union([z.string(), z.array(z.string()), quantitativeValueSchema])
-      .optional(),
+    // No recipeYield and no nutrition.servingSize: both are column-backed, so
+    // they live on schemaOrgRecipeInputSchema below, at the inbound edge that
+    // parses them. This schema is `.passthrough()`, so a sender can still put
+    // either on the wire — the repo layer strips them from every write.
     recipeCuisine: z.string().optional(),
     recipeCategory: z.union([z.string(), z.array(z.string())]).optional(),
     keywords: z.string().optional(),
     nutrition: z
       .object({
         "@type": z.literal("NutritionInformation").optional(),
-        servingSize: z.string().optional(),
         calories: z.string().optional(),
         proteinContent: z.string().optional(),
         carbohydrateContent: z.string().optional(),
@@ -157,6 +157,29 @@ export const schemaRecipeSchema = z
 export const schemaOrgRecipeInputSchema = schemaRecipeSchema.extend({
   recipeIngredient: z.array(schemaOrgIngredientLineSchema).optional(),
   recipeInstructions: z.array(z.union([howToStepSchema, howToSectionSchema])).optional(),
+  // `parseYield` reduces this to the servings and total-weight columns exactly
+  // once, here. A `nutrition.servingSize` on the way in is dropped: the columns
+  // say what a serving is, and the outbound edges regenerate the string.
+  recipeYield: z
+    .union([z.string(), z.array(z.string()), quantitativeValueSchema])
+    .optional(),
+});
+
+/**
+ * The servings columns as a writer sets them. Three-way, like the times: the
+ * key absent leaves both alone, `amount: null` clears the count, a number sets
+ * it; `unit` absent leaves the unit alone and null clears it. Grouped rather
+ * than two loose scalars so a caller cannot pass them in the wrong order.
+ */
+export const servingsInputSchema = z.object({
+  amount: z.number().positive().nullable(),
+  unit: z.string().min(1).nullable().optional(),
+});
+
+/** The whole recipe's raw weight, metric only — same three-way semantics. */
+export const totalWeightInputSchema = z.object({
+  amount: z.number().positive().nullable(),
+  unit: z.enum(METRIC_YIELD_UNITS).nullable().optional(),
 });
 
 // Recipe row `status` column — used as a zod enum at boundaries (MCP tool
@@ -236,9 +259,9 @@ export const recipeCreateInputSchema = z
 
 // Update speaks the app's own shape: `ingredients` replaces the whole list
 // (lines keep their rows by id), `instructions` replaces the whole step list,
-// and `schema` is the stored recipe — it has neither recipeIngredient nor
-// recipeInstructions, and the tool rejects either rather than silently
-// ignoring it.
+// `servings` / `total_weight` set the columns, and `schema` is the stored
+// recipe — it has no recipeIngredient, recipeInstructions or recipeYield, and
+// the tool rejects any of the three rather than silently ignoring it.
 export const recipeUpdateInputSchema = z.object({
   id: z.string().min(1),
   url: z.string().url().optional(),
@@ -247,7 +270,26 @@ export const recipeUpdateInputSchema = z.object({
   schema: schemaRecipeSchema.partial().optional(),
   ingredients: recipeIngredientsInputSchema.optional(),
   instructions: recipeInstructionsInputSchema.optional(),
+  servings: servingsInputSchema.optional(),
+  total_weight: totalWeightInputSchema.optional(),
 });
+
+// RecipeRowColumns hand-mirrors the servings columns for the same reason it
+// mirrors `status`: @/types stays free of any runtime dependency. These pin the
+// two together in SOURCE — tsconfig excludes src/__tests__, so an assertion
+// written there checks nothing.
+export type _ServingsInputMatchesRow = Assert<
+  Assignable<
+    z.infer<typeof servingsInputSchema>["amount"],
+    RecipeRowColumns["servings_amount"]
+  >
+>;
+export type _RowServingsMatchesInput = Assert<
+  Assignable<
+    RecipeRowColumns["servings_amount"],
+    z.infer<typeof servingsInputSchema>["amount"]
+  >
+>;
 
 // The MCP tool only fetches images from a URL. Local files go through the
 // multipart endpoint (POST /api/recipes/{id}/upload-image) instead — base64 in

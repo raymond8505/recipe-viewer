@@ -28,8 +28,9 @@ export { makeTimer } from "./timers";
 export {
   scalableBaseSchema,
   scalableBaseIngredients,
-  quantitativeValueYield,
+  weighedYieldColumns,
   makeSchemaRecipe,
+  makeScalableDocument,
   makeScalableRecipe,
   makeNutritionRecipe,
   makeScaledIngredient,

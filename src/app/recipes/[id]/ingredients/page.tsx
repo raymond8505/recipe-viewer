@@ -64,7 +64,7 @@ export default async function RecipeIngredientsPage({
         className="flex min-h-0 flex-1 flex-col"
         recipeId={id}
         ingredients={recipe.ingredients}
-        recipeYield={schema.recipeYield}
+        servings={recipe.servings_amount}
       />
     </section>
   );

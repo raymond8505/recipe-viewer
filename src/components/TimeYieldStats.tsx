@@ -2,8 +2,7 @@ import ServingsControl from "@/components/ServingsControl";
 import ServingsInputCell from "@/components/ServingsInputCell";
 import Stat from "@/components/Stat";
 import TimeInputCell from "@/components/TimeInputCell";
-import type { SchemaRecipe } from "@/types/recipe";
-import { getYieldLabel, getYieldUnit } from "@/lib/format";
+import { formatServings } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
 interface TimeYieldStatsProps {
@@ -11,22 +10,30 @@ interface TimeYieldStatsProps {
   prepTime?: string | null;
   cookTime?: string | null;
   totalTime?: string | null;
-  recipeYield?: SchemaRecipe["recipeYield"];
+  /**
+   * The servings columns. `servingsAmount` null means the recipe has no serving
+   * count, and the cell is skipped; `servingsUnit` null means the source named
+   * none, and the generic fallback labels it.
+   */
+  servingsAmount?: number | null;
+  servingsUnit?: string | null;
   /**
    * When non-null (and `onServingsChange` is provided), the servings cell is a
-   * scalable stepper; otherwise it renders `recipeYield` as a static stat.
+   * scalable stepper; otherwise it renders the stored servings as a static stat.
    */
   currentServings?: number | null;
   onServingsChange?: (n: number) => void;
   /**
-   * When set, the servings cell becomes a base-servings editor (persisted
-   * `recipeYield`, not display scaling) and takes precedence over the stepper.
-   * The band renders even with no stats at all, so a recipe without a yield
+   * When set, the servings cell becomes a base-servings editor — both persisted
+   * columns, not display scaling — and takes precedence over the stepper. The
+   * band renders even with no stats at all, so a recipe with no serving count
    * can gain one while editing.
    */
   servingsEdit?: {
     value: string;
     onChange: (value: string) => void;
+    unit: string;
+    onUnitChange: (value: string) => void;
     disabled?: boolean;
   };
   /**
@@ -61,7 +68,8 @@ export default function TimeYieldStats({
   prepTime,
   cookTime,
   totalTime,
-  recipeYield,
+  servingsAmount,
+  servingsUnit,
   currentServings,
   onServingsChange,
   servingsEdit,
@@ -72,7 +80,7 @@ export default function TimeYieldStats({
     !prepTime &&
     !cookTime &&
     !totalTime &&
-    !recipeYield &&
+    servingsAmount == null &&
     !servingsEdit &&
     !timesEdit
   )
@@ -98,22 +106,20 @@ export default function TimeYieldStats({
           </>
         )}
         {servingsEdit ? (
-          <ServingsInputCell
-            label={getYieldUnit(recipeYield) ?? "Servings"}
-            value={servingsEdit.value}
-            onChange={servingsEdit.onChange}
-            disabled={servingsEdit.disabled}
-          />
+          <ServingsInputCell {...servingsEdit} />
         ) : (
-          recipeYield &&
+          servingsAmount != null &&
           (currentServings != null && onServingsChange ? (
             <ServingsControl
               servings={currentServings}
               onChange={onServingsChange}
-              unitLabel={getYieldUnit(recipeYield) ?? undefined}
+              unitLabel={servingsUnit?.trim() || undefined}
             />
           ) : (
-            <Stat label="Servings" value={getYieldLabel(recipeYield) ?? ""} />
+            <Stat
+              label="Servings"
+              value={formatServings(servingsAmount, servingsUnit ?? null) ?? ""}
+            />
           ))
         )}
       </div>

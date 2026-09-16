@@ -241,6 +241,7 @@ import { nanoid } from "nanoid";
 import type { NutrientValue } from "./nutritionMath";
 import { ingredientTexts } from "./recipeIngredients";
 import { canonicalizeInstructions } from "./recipeInstructions";
+import { formatAmount } from "./units";
 import type {
   HowToSection,
   HowToStep,
@@ -250,6 +251,7 @@ import type {
   RecipeIngredientGroupInput,
   RecipeInstructionGroup,
   RecipeStep,
+  SchemaOrgNutrition,
   SchemaOrgRecipe,
   SchemaRecipe,
 } from "@/types/recipe";
@@ -318,59 +320,43 @@ export function getFirstImage(
 }
 
 /**
- * Human-readable label for a `recipeYield` in any form: QuantitativeValue →
- * "value unitText" ("4 kebabs"); string → itself; array → its first element.
- * Returns null when there's nothing to show.
+ * What a recipe counts its servings in when the source named nothing. The one
+ * home for this word: the column takes no database default precisely so the
+ * fallback can't drift between SQL and the app.
  */
-export function getYieldLabel(
-  recipeYield: SchemaRecipe["recipeYield"],
+export const SERVINGS_UNIT_FALLBACK = "servings";
+
+/**
+ * Human-readable label for the servings columns: "4 kebabs", "8 servings".
+ * Null when the recipe has no serving count, which is what makes the stat
+ * disappear rather than render an empty one.
+ *
+ * The unit is stored plural, so a count of exactly one is singularized here —
+ * "1 serving", not "1 servings". This is the same rule `servingSizeLabel`
+ * applies, which is why both go through `singularServingUnit`.
+ */
+export function formatServings(
+  amount: number | null,
+  unit: string | null,
 ): string | null {
-  if (recipeYield == null) return null;
-  if (typeof recipeYield === "object" && !Array.isArray(recipeYield)) {
-    const parts = [recipeYield.value, recipeYield.unitText].filter(
-      (p) => p != null && p !== "",
-    );
-    return parts.length ? parts.join(" ") : null;
-  }
-  const raw = Array.isArray(recipeYield) ? recipeYield[0] : recipeYield;
-  return raw || null;
+  if (amount == null) return null;
+  const plural = unit?.trim() || SERVINGS_UNIT_FALLBACK;
+  const noun = amount === 1 ? singularServingUnit(plural) : plural;
+  return `${formatAmount(amount)} ${noun}`;
 }
 
 /**
- * The raw weight/volume reference on an object-form `recipeYield`, or null for
- * string/array/absent yields (which have no valueReference). Used to compute
- * the per-serving weight shown in the nutrition panel.
+ * One serving's worth of a plural servings unit: "servings" → "serving",
+ * "wraps" → "wrap". Both callers say "one of these", so a naive trailing-s
+ * strip suffices; an "ss" ending stays intact so "glass" survives. Irregular
+ * plurals (and non-English ones) come out slightly wrong, which is acceptable
+ * at the scale this renders: a stat cell and a wire field.
  */
-export function getYieldValueReference(
-  recipeYield: SchemaRecipe["recipeYield"],
-): QuantitativeValue | null {
-  if (
-    recipeYield != null &&
-    typeof recipeYield === "object" &&
-    !Array.isArray(recipeYield)
-  ) {
-    return recipeYield.valueReference ?? null;
-  }
-  return null;
-}
-
-/**
- * The serving-unit label for a `recipeYield` — a QuantitativeValue's `unitText`
- * (e.g. "kebabs"), used to label the servings stepper so the unit stays visible
- * while scaling. null for string/array/absent yields (the stepper falls back to
- * the generic "Servings").
- */
-export function getYieldUnit(
-  recipeYield: SchemaRecipe["recipeYield"],
-): string | null {
-  if (
-    recipeYield != null &&
-    typeof recipeYield === "object" &&
-    !Array.isArray(recipeYield)
-  ) {
-    return recipeYield.unitText?.trim() || null;
-  }
-  return null;
+export function singularServingUnit(unit: string | null): string {
+  const trimmed = unit?.trim();
+  if (!trimmed) return "serving";
+  if (/ss$/i.test(trimmed)) return trimmed;
+  return /s$/i.test(trimmed) ? trimmed.slice(0, -1) : trimmed;
 }
 
 // ---------------------------------------------------------------------------
@@ -409,11 +395,36 @@ function schemaOrgTimes(
 }
 
 /**
+ * The Schema.org yield a document's columns produce: always the structured
+ * QuantitativeValue, so an external reader never has to parse free text for the
+ * count. Absent when the recipe has no serving count. `valueReference` is the
+ * whole recipe's raw weight, which lets that reader derive a per-serving basis.
+ */
+function schemaOrgYield(
+  doc: RecipeDocument,
+): Partial<Pick<SchemaOrgRecipe, "recipeYield">> {
+  if (doc.servings_amount == null) return {};
+  const yld: QuantitativeValue = {
+    "@type": "QuantitativeValue",
+    value: doc.servings_amount,
+    unitText: doc.servings_unit?.trim() || SERVINGS_UNIT_FALLBACK,
+  };
+  if (doc.total_weight_amount != null && doc.total_weight_unit) {
+    yld.valueReference = {
+      "@type": "QuantitativeValue",
+      value: doc.total_weight_amount,
+      unitText: doc.total_weight_unit,
+    };
+  }
+  return { recipeYield: yld };
+}
+
+/**
  * The whole recipe as a Schema.org Recipe, custom fields included: the stored
- * schema, its three time keys replaced from the columns, `recipeIngredient`
- * flattened to the lines' text, and `recipeInstructions` as HowTo steps and
- * sections. For consumers that want the full document (the image webhook
- * reads `notes`). JSON-LD, which must be spec-clean, goes through
+ * schema, its three time keys and its yield replaced from the columns,
+ * `recipeIngredient` flattened to the lines' text, and `recipeInstructions` as
+ * HowTo steps and sections. For consumers that want the full document (the
+ * image webhook reads `notes`). JSON-LD, which must be spec-clean, goes through
  * `toSchemaOrgJsonLd` instead.
  */
 export function toSchemaOrgRecipe(doc: RecipeDocument): SchemaOrgRecipe {
@@ -426,6 +437,7 @@ export function toSchemaOrgRecipe(doc: RecipeDocument): SchemaOrgRecipe {
   return {
     ...rest,
     ...schemaOrgTimes(doc),
+    ...schemaOrgYield(doc),
     ...(texts.length > 0 ? { recipeIngredient: texts } : {}),
     ...(steps.length > 0 ? { recipeInstructions: steps } : {}),
   };
@@ -446,7 +458,7 @@ export function toSchemaOrgRecipe(doc: RecipeDocument): SchemaOrgRecipe {
  */
 export function toSchemaOrgJsonLd(
   doc: RecipeDocument,
-  options?: { nutritionOverride?: SchemaRecipe["nutrition"] },
+  options?: { nutritionOverride?: SchemaOrgNutrition },
 ): object {
   const { schema } = doc;
   const result: Record<string, unknown> = {
@@ -455,11 +467,13 @@ export function toSchemaOrgJsonLd(
     name: schema.name,
   };
   const nutrition = options?.nutritionOverride;
+  // `recipeYield` is deliberately NOT here: it is column-backed, so it joins
+  // the times below and is built from the document rather than read off the
+  // blob, which still carries a frozen pre-0022 copy on older rows.
   const optionalFields = [
     "description",
     "image",
     "author",
-    "recipeYield",
     "recipeCuisine",
     "recipeCategory",
     "keywords",
@@ -468,13 +482,49 @@ export function toSchemaOrgJsonLd(
   for (const key of optionalFields) {
     if (schema[key] != null) result[key] = schema[key];
   }
-  Object.assign(result, schemaOrgTimes(doc));
+  Object.assign(result, schemaOrgTimes(doc), schemaOrgYield(doc));
   if (nutrition != null) result.nutrition = nutrition;
   const texts = ingredientTexts(doc.ingredients);
   if (texts.length > 0) result.recipeIngredient = texts;
   const steps = toSchemaOrgInstructions(doc.instructions);
   if (steps.length > 0) result.recipeInstructions = steps;
   return result;
+}
+
+/**
+ * The Schema.org keys that exist only at the edges, every one of them backed by
+ * a column now. Older rows still carry them in `metadata.schema`, frozen at
+ * their backfill value, and the zod schema is `.passthrough()` so an agent can
+ * send them too — neither may reach a consumer or a stored blob.
+ */
+export const SCHEMA_ORG_ONLY_KEYS = [
+  "recipeIngredient",
+  "recipeInstructions",
+  "recipeYield",
+] as const;
+
+/**
+ * Remove every edge-only key from a schema, returning a copy. Shared by the
+ * client-side inbound edge (`draftRecipeDocument`) and the repo layer's write
+ * path so the two can't disagree about what counts as stored.
+ *
+ * `nutrition` is cloned before its `servingSize` is dropped: the top-level
+ * spread is shallow, so deleting in place would reach into the caller's own
+ * object — which at the MCP create edge is still the handler's payload.
+ */
+export function stripSchemaOrgKeys<T extends object>(schema: T): T {
+  const next = { ...schema } as T & {
+    nutrition?: SchemaOrgNutrition;
+  };
+  for (const key of SCHEMA_ORG_ONLY_KEYS) {
+    delete (next as Record<string, unknown>)[key];
+  }
+  if (next.nutrition && "servingSize" in next.nutrition) {
+    const { servingSize: _s, ...rest } = next.nutrition;
+    void _s;
+    next.nutrition = rest;
+  }
+  return next;
 }
 
 // ---------------------------------------------------------------------------
@@ -593,17 +643,14 @@ export function instructionsToMarkdown(
  * deterministic form. Custom/internal fields (notes, cookingNotes) are
  * intentionally excluded — they aren't part of the recipe's searchable body.
  */
-export function recipeToMarkdown(
-  schema: SchemaRecipe,
-  ingredients: readonly RecipeIngredientGroup[],
-  instructions: readonly RecipeInstructionGroup[],
-): string {
+export function recipeToMarkdown(doc: RecipeDocument): string {
+  const { schema, ingredients, instructions } = doc;
   const blocks: string[] = [`# ${schema.name}`];
 
   if (schema.description) blocks.push(schema.description);
 
   const meta: string[] = [];
-  const yieldValue = getYieldLabel(schema.recipeYield);
+  const yieldValue = formatServings(doc.servings_amount, doc.servings_unit);
   if (yieldValue) meta.push(`Yield: ${yieldValue}`);
   const prep = formatDuration(schema.prepTime);
   if (prep) meta.push(`Prep: ${prep}`);

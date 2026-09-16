@@ -1,21 +1,13 @@
 import { describe, it, expect } from "vitest";
 import { renderHook, act } from "@testing-library/react";
 import { useScalableRecipe } from "@/hooks/useScalableRecipe";
-import { makeIngredientLines } from "@/fixtures";
+import { makeIngredientLines, makeScalableDocument } from "@/fixtures";
 import type { RecipeDocument } from "@/types/recipe";
 
-const doc: RecipeDocument = {
-  schema: {
-    name: "Test",
-    recipeYield: "4 servings",
-    nutrition: { calories: "200 kcal" },
-  },
+const doc: RecipeDocument = makeScalableDocument({
+  schema: { name: "Test", nutrition: { calories: "200 kcal" } },
   ingredients: makeIngredientLines(["2 cups flour", "3-5 cloves garlic"]),
-  instructions: [],
-  prep_time: null,
-  cook_time: null,
-  total_time: null,
-};
+});
 
 describe("useScalableRecipe", () => {
   it("starts with a default-state recipe matching the document", () => {
@@ -70,11 +62,25 @@ describe("useScalableRecipe", () => {
 
     const other: RecipeDocument = {
       ...doc,
-      schema: { ...doc.schema, name: "Other", recipeYield: "6 servings" },
+      schema: { ...doc.schema, name: "Other" },
+      servings_amount: 6,
     };
     rerender({ d: other });
     expect(result.current.recipe.baseServings).toBe(6);
     expect(result.current.recipe.state.ingredientScale).toBe(1);
+  });
+
+  // The guard is on the DOCUMENT, not its fields: a servings-only save leaves
+  // `schema` and `ingredients` reference-equal, and only document identity
+  // distinguishes it from no change at all.
+  it("rebuilds when only the serving count changes", () => {
+    const { result, rerender } = renderHook(
+      ({ d }: { d: RecipeDocument }) => useScalableRecipe(d),
+      { initialProps: { d: doc } },
+    );
+    const servingsOnly: RecipeDocument = { ...doc, servings_amount: 8 };
+    rerender({ d: servingsOnly });
+    expect(result.current.recipe.baseServings).toBe(8);
   });
 
   it("rebuilds when only the ingredients change", () => {

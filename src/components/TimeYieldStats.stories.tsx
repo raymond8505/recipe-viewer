@@ -12,7 +12,8 @@ const meta: Meta<typeof TimeYieldStats> = {
     prepTime: "15 min",
     cookTime: "45 min",
     totalTime: "1 hr",
-    recipeYield: "4 servings",
+    servingsAmount: 4,
+    servingsUnit: "servings",
   },
 };
 
@@ -20,7 +21,7 @@ export default meta;
 
 type Story = StoryObj<typeof TimeYieldStats>;
 
-/** The full band: three times plus a static servings stat from recipeYield. */
+/** The full band: three times plus a static servings stat from the columns. */
 export const Default: Story = {};
 
 /**
@@ -40,7 +41,8 @@ export const WithServingsControl: Story = {
  */
 export const QuantitativeValueYield: Story = {
   args: {
-    recipeYield: { "@type": "QuantitativeValue", value: 4, unitText: "kebabs" },
+    servingsAmount: 4,
+    servingsUnit: "kebabs",
     currentServings: 4,
     onServingsChange: fn(),
   },
@@ -49,19 +51,24 @@ export const QuantitativeValueYield: Story = {
 /** Missing stats are skipped — the grid simply has fewer cells. */
 export const TimesOnly: Story = {
   args: {
-    recipeYield: undefined,
+    servingsAmount: null,
   },
 };
 
 /**
  * Edit mode, the shape RecipeDetail actually renders: all four cells become
  * inputs at once. The times are HH:MM over the persisted values, and the
- * servings cell edits BASE servings (the persisted recipeYield) — unlike the
+ * servings cell edits BASE servings — both the count and its unit — unlike the
  * stepper, which only scales the display.
  */
 export const Editing: Story = {
   args: {
-    servingsEdit: { value: "4", onChange: fn() },
+    servingsEdit: {
+      value: "4",
+      onChange: fn(),
+      unit: "servings",
+      onUnitChange: fn(),
+    },
     timesEdit: {
       prep: { value: "0:15", onChange: fn() },
       cook: { value: "0:45", onChange: fn() },
@@ -80,8 +87,8 @@ export const EditingEmptyRecipe: Story = {
     prepTime: undefined,
     cookTime: undefined,
     totalTime: undefined,
-    recipeYield: undefined,
-    servingsEdit: { value: "", onChange: fn() },
+    servingsAmount: null,
+    servingsEdit: { value: "", onChange: fn(), unit: "", onUnitChange: fn() },
     timesEdit: {
       prep: { value: "", onChange: fn() },
       cook: { value: "", onChange: fn() },
@@ -96,7 +103,13 @@ export const EditingEmptyRecipe: Story = {
  */
 export const EditingWhileSaving: Story = {
   args: {
-    servingsEdit: { value: "4", onChange: fn(), disabled: true },
+    servingsEdit: {
+      value: "4",
+      onChange: fn(),
+      unit: "servings",
+      onUnitChange: fn(),
+      disabled: true,
+    },
     timesEdit: {
       prep: { value: "0:15", onChange: fn(), disabled: true },
       cook: { value: "0:45", onChange: fn(), disabled: true },

@@ -84,7 +84,7 @@ export const Default: Story = {
         ),
       ]),
     ],
-    recipeYield: "4 servings",
+    servings: 4,
   },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
@@ -178,7 +178,7 @@ export const WithExclusions: Story = {
       makeMatchedIngredient("2 cumin pods", cumin),
       makeMatchedIngredient("kosher salt to taste", salt, { name_text: "kosher salt" }),
     ]),
-    recipeYield: "2 servings",
+    servings: 2,
   },
 };
 
@@ -201,7 +201,7 @@ export const EstimatedGrams: Story = {
       makeMatchedIngredient("1 cup diced yellow onion", onion, { name_text: "yellow onion" }),
       makeMatchedIngredient("125 g all-purpose flour", flour),
     ]),
-    recipeYield: "2 servings",
+    servings: 2,
   },
 };
 
@@ -228,7 +228,7 @@ export const NotCounted: Story = {
         grams_source: "manual",
       }),
     ]),
-    recipeYield: "2 servings",
+    servings: 2,
   },
 };
 
@@ -250,7 +250,7 @@ export const NeverNormalized: Story = {
       "1 pinch saffron",
       "1 tbsp olive oil, warmed",
     ]),
-    recipeYield: "2 servings",
+    servings: 2,
   },
 };
 
@@ -286,12 +286,12 @@ export const EditingLineText: Story = {
 };
 
 /**
- * recipeYield has no parseable number, so the per-portion row renders dashes
+ * The recipe has no serving count, so the per-portion row renders dashes
  * with a title explaining why; the recipe-total row still works.
  */
 export const NoServings: Story = {
   args: {
     ingredients: makeIngredientLines([makeMatchedIngredient("125 g all-purpose flour", flour)]),
-    recipeYield: undefined,
+    servings: null,
   },
 };
