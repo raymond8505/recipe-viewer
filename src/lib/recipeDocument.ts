@@ -3,6 +3,7 @@ import { draftIngredientGroups } from "./recipeIngredients";
 import { parseYield } from "./units";
 import type {
   RecipeDocument,
+  RecipeDocumentSource,
   RecipeIngredientGroupInput,
   RecipeInstructionGroup,
   RecipeRow,
@@ -13,21 +14,7 @@ import type {
 // RecipeDetail and CookingMode build documents, and neither may reach @/env.
 
 /** The row's content, columns and all — what a page hands its client component. */
-export function recipeDocument(
-  row: Pick<
-    RecipeRow,
-    | "metadata"
-    | "ingredients"
-    | "instructions"
-    | "prep_time"
-    | "cook_time"
-    | "total_time"
-    | "servings_amount"
-    | "servings_unit"
-    | "total_weight_amount"
-    | "total_weight_unit"
-  >,
-): RecipeDocument {
+export function recipeDocument(row: RecipeDocumentSource): RecipeDocument {
   return {
     schema: row.metadata.schema,
     ingredients: row.ingredients,

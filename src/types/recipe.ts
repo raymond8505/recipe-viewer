@@ -152,6 +152,19 @@ export interface RecipeDocument {
 }
 
 /**
+ * The row fields a `RecipeDocument` is built from — every document field except
+ * `schema`, which comes off `metadata`. Derived rather than listed so the two
+ * cannot drift: a field promoted to a column and added to `RecipeDocument`
+ * widens every builder's input with it, and the build fails to compile until
+ * the field is actually carried over. A caller that hands over a partial row
+ * gets that same compile error rather than a silently empty result.
+ */
+export type RecipeDocumentSource = Pick<
+  RecipeRow,
+  "metadata" | Exclude<keyof RecipeDocument, "schema">
+>;
+
+/**
  * A Schema.org/Recipe as served to the outside world: the stored fields plus
  * `recipeIngredient` flattened to plain strings and `recipeInstructions` as
  * the HowTo array. Produced only at the edges (JSON-LD, webhooks); nothing

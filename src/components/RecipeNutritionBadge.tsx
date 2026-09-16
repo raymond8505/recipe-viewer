@@ -9,7 +9,7 @@ import {
   type NutrientField,
   type NutrientValue,
 } from "@/lib/nutritionMath";
-import type { RecipeRow } from "@/types/recipe";
+import type { RecipeDocumentSource } from "@/types/recipe";
 
 // The word that names each nutrient on a badge. Calories is `null` because its
 // unit already names it — "350 kcal calories" reads as a stutter where "24 g
@@ -85,22 +85,11 @@ export function RecipeNutritionBadge({
  * that undercounts the lines it couldn't price.
  */
 export function recipeNutritionBadges(
-  // The exhaustive list IS the documentation of what a badge needs: the
-  // servings columns gate the per-serving math, so a caller handing over a
-  // partial row gets a compile error rather than a silently empty badge row.
-  recipe: Pick<
-    RecipeRow,
-    | "metadata"
-    | "ingredients"
-    | "instructions"
-    | "prep_time"
-    | "cook_time"
-    | "total_time"
-    | "servings_amount"
-    | "servings_unit"
-    | "total_weight_amount"
-    | "total_weight_unit"
-  >,
+  // Everything a document is built from, because the document is what the math
+  // runs on: the servings columns gate the per-serving amounts, so a caller
+  // handing over a partial row gets a compile error rather than a silently
+  // empty badge row.
+  recipe: RecipeDocumentSource,
   fields: readonly NutrientField[] = DEFAULT_CARD_NUTRIENTS,
 ): ReactElement[] {
   const nutrition = new ScalableRecipe(
