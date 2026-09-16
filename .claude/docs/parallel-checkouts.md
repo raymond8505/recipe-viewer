@@ -19,6 +19,11 @@ var consumed in `src/` must go through `src/env.ts` + deploy wiring, which these
   jar (login/logout state) even on different ports; a distinct host also separates localStorage
   (cook-mode timers). With `PORT` set explicitly, a port collision fails loudly instead of next dev
   silently sliding to a free port while pinned URLs point at the other checkout.
+- **`yarn stop` frees this checkout's ports** — it kills the process trees listening on `PORT` and
+  `SB_PORT` (extra ports as arguments: `yarn stop 4000`), reports one line per port, and exits 0
+  when they are free, whether or not anything was running. Port-scoped, so a sibling checkout's
+  servers and the MCP servers a Claude session spawns are untouched. An agent session runs it
+  before handing back.
 - After a fresh clone: `yarn install`, copy `.env.local` + create `.env.yarn` /
   `.claude/settings.local.json`, and run `npx next typegen` (typecheck needs the generated
   `RouteContext` types).
