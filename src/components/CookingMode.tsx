@@ -16,10 +16,6 @@ import { ScalableRecipe, formatScaledIngredient } from "@/lib/ScalableRecipe";
 import { recipeNormalizedNutrition } from "@/lib/nutritionMath";
 import { useWakeLock } from "@/hooks/useWakeLock";
 import { recipeDocument } from "@/lib/recipeDocument";
-import {
-  registerCookingModeRecipe,
-  unregisterCookingModeRecipe,
-} from "@/lib/windowApi";
 import TimerColumn from "@/components/cooking/TimerColumn";
 import TimerCard from "@/components/cooking/TimerCard";
 import AddTimerModal from "@/components/cooking/AddTimerModal";
@@ -92,10 +88,8 @@ export default function CookingMode({
   } = useTimers(recipe.url);
 
   // The primary recipe as one document (schema, ingredient groups, instruction
-  // groups, time columns), which the window API may replace wholesale.
-  // `initialDoc` is the document registered with the window API on mount.
-  const [initialDoc] = useState<RecipeDocument>(() => recipeDocument(recipe));
-  const [doc, setDoc] = useState(initialDoc);
+  // groups, time columns), built once for the session.
+  const [doc] = useState<RecipeDocument>(() => recipeDocument(recipe));
   const { schema } = doc;
   const [cookingNotes, setCookingNotes] = useState(
     () => recipe.metadata.schema.cookingNotes ?? "",
@@ -133,31 +127,10 @@ export default function CookingMode({
       ]),
   );
 
-  // When the primary document is swapped (e.g. window API
-  // setRecipeViewerRecipe), rebuild its ScalableRecipe at default state — the
-  // previous scale was anchored to a now-stale yield and would silently
-  // produce wrong numbers. Nutrition follows the swapped-in lines the same way.
-  useEffect(() => {
-    setScalables((prev) => {
-      const next = new Map(prev);
-      next.set(
-        recipe.id,
-        new ScalableRecipe(
-          doc.schema,
-          doc.ingredients,
-          undefined,
-          recipeNormalizedNutrition(doc),
-        ),
-      );
-      return next;
-    });
-  }, [doc, recipe.id]);
-
   const primaryScalable = scalables.get(recipe.id)!;
   const activeScalable = scalables.get(mealRecipes[activeIndex].id)!;
   const activeSchema = activeScalable.schema;
-  // The primary's steps come from the live `doc` so a window-API replacement
-  // wins; a secondary's come from its own row.
+  // The primary's steps come from its document; a secondary's from its own row.
   const activeInstructions =
     activeIndex === 0 ? doc.instructions : mealRecipes[activeIndex].instructions;
 
@@ -218,12 +191,6 @@ export default function CookingMode({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cookingNotes]);
 
-  useEffect(() => {
-    registerCookingModeRecipe(initialDoc, setDoc);
-    return () => unregisterCookingModeRecipe();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
   // Seed timers from the steps that declare one, but only if no timers are
   // already stored for this recipe.
   useEffect(() => {
@@ -253,9 +220,8 @@ export default function CookingMode({
   const copyShoppingList = async () => {
     const lines: string[] = [];
     // Read through `scalables`, not the rows: the copied line reflects the
-    // current scale (see formatScaledIngredient), and the primary's instance is
-    // rebuilt from the live `doc` above — so window-API overrides still win
-    // without branching on r.id here. Secondaries stay at 1× and copy verbatim.
+    // current scale (see formatScaledIngredient). Secondaries stay at 1× and
+    // copy verbatim.
     for (const r of mealRecipes) {
       for (const ing of scalables.get(r.id)?.ingredients ?? []) {
         if (selectedIngredients.has(`${r.id}::${ing.id}`)) {

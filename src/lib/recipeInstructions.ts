@@ -1,8 +1,8 @@
 import type { RecipeInstructionGroup, RecipeStep } from "@/types/recipe";
 
 // Pure helpers over a recipe's instruction groups. Client-safe on purpose: the
-// editor, cooking mode and the window API need them, and none of them may
-// reach @/env (the Supabase clients do). Nothing here imports ./format — that
+// editor and cooking mode need them, and neither may reach @/env (the
+// Supabase clients do). Nothing here imports ./format — that
 // module imports this one.
 
 /** The groups' steps in reading order: group by group, step by step. */

@@ -9,8 +9,8 @@ import type {
 } from "@/types/recipe";
 
 // Pure helpers over a recipe's ingredient groups. Client-safe on purpose: the
-// editor, cooking mode and the window API need them, and none of them may
-// reach @/env (the Supabase clients do).
+// editor and cooking mode need them, and neither may reach @/env (the
+// Supabase clients do).
 
 /** The groups' ingredients in reading order: group by group, line by line. */
 export function flattenIngredients(
@@ -53,9 +53,8 @@ export function newRecipeIngredient(
 }
 
 /**
- * Groups for input that has not been saved — a re-scrape under review, a
- * recipe pushed in through the window API. Every line becomes a fresh
- * `newRecipeIngredient`; an `id` on the input is kept so a preview built from
+ * Groups for input that has not been saved — a re-scrape under review. Every
+ * line becomes a fresh `newRecipeIngredient`; an `id` on the input is kept so a preview built from
  * a saved recipe still names its rows.
  */
 export function draftIngredientGroups(

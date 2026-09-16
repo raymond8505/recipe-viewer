@@ -11,8 +11,9 @@
 // rationale, never an omission.
 //
 // The guards in `./guard.ts` are how routes enforce the `session` /
-// `session-or-recipe-token` policies; `mcp-*`, `oauth-public`, and `public-auth`
-// routes carry their own protocol-specific checks (documented per entry).
+// `session-or-recipe-token` policies; `mcp-oauth`, `oauth-public`, and
+// `public-auth` routes carry their own protocol-specific checks (documented per
+// entry).
 
 export type RoutePolicy =
   // Browser session required (the `auth_session` cookie). Enforced via
@@ -31,8 +32,6 @@ export type RoutePolicy =
   | "session-or-recipe-token-or-dev"
   // OAuth 2.1 access token (audience "mcp"), verified by the handler.
   | "mcp-oauth"
-  // Static `MCP_API_TOKEN` bearer, verified by the handler.
-  | "mcp-static"
   // Intentionally anonymous READ. Object visibility is filtered server-side.
   | "public-read"
   // Intentionally anonymous per the OAuth 2.1 / MCP spec; protected by the
@@ -175,10 +174,6 @@ export const ROUTE_POLICY = {
   "/api/mcp/server": {
     policy: "mcp-oauth",
     rationale: "MCP JSON-RPC server; requires an OAuth 2.1 access token (audience \"mcp\"), verified per request.",
-  },
-  "/api/mcp": {
-    policy: "mcp-static",
-    rationale: "Browser-tool manifest endpoint; requires the static MCP_API_TOKEN bearer.",
   },
 
   // ── OAuth endpoints ─────────────────────────────────────────────────────

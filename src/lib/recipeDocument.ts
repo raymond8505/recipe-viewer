@@ -1,17 +1,15 @@
-import { fromSchemaOrgInstructions, parseDurationToSeconds } from "./format";
-import { draftIngredientGroups, fromSchemaOrgIngredients } from "./recipeIngredients";
+import { parseDurationToSeconds } from "./format";
+import { draftIngredientGroups } from "./recipeIngredients";
 import type {
   RecipeDocument,
   RecipeIngredientGroupInput,
   RecipeInstructionGroup,
   RecipeRow,
-  SchemaOrgRecipe,
   SchemaRecipe,
 } from "@/types/recipe";
 
-// The three ways a RecipeDocument comes to exist. Client-safe on purpose:
-// RecipeDetail, CookingMode and the window API build documents, and none of
-// them may reach @/env.
+// The two ways a RecipeDocument comes to exist. Client-safe on purpose:
+// RecipeDetail and CookingMode build documents, and neither may reach @/env.
 
 /** The row's content, columns and all — what a page hands its client component. */
 export function recipeDocument(
@@ -67,14 +65,4 @@ export function draftRecipeDocument(
     cook_time: parseDurationToSeconds(schema.cookTime),
     total_time: parseDurationToSeconds(schema.totalTime),
   };
-}
-
-/** The inbound Schema.org edge: a whole Schema.org Recipe → a draft document. */
-export function documentFromSchemaOrg(recipe: SchemaOrgRecipe): RecipeDocument {
-  const { recipeIngredient, recipeInstructions, ...schema } = recipe;
-  return draftRecipeDocument(
-    schema,
-    fromSchemaOrgIngredients(recipeIngredient ?? []),
-    fromSchemaOrgInstructions(recipeInstructions),
-  );
 }
