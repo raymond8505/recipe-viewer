@@ -4,12 +4,18 @@ import { TableCell, TableRow } from "@/components/ui/table";
 import { formatAmount } from "@/lib/units";
 import type { IngredientNutrition } from "@/types/ingredient";
 import { NUTRITION_DETAIL_COLUMNS } from "./nutritionColumns";
-import { STICKY_ALIASES_CELL, STICKY_NAME_CELL } from "./tableStyles";
+import { FOOTER_ALIASES_CELL, FOOTER_CELL, FOOTER_NAME_CELL } from "./tableStyles";
 
 /**
- * A pinned aggregate row at the bottom of the NutritionDetail table ("Recipe
+ * An aggregate row in the NutritionDetail table's pinned footer ("Recipe
  * total" / "Per portion"). `nutrition: null` renders all-dashes with
  * `missingTitle` explaining why (e.g. servings unknown).
+ *
+ * Belongs in a `<TableFooter>`, which owns the band's tint and pins it. The row
+ * drops the primitive's bottom border and translucent hover, both of which
+ * would open a gap onto the rows scrolling under the pinned band — a collapsed
+ * table border is painted by the `<table>`, which does not travel with the
+ * sticky footer, so it arrives there as a 1px transparent line.
  *
  * @summary totals row for the nutrition breakdown table
  */
@@ -23,18 +29,18 @@ export default function NutritionSummaryRow({
   missingTitle?: string;
 }) {
   return (
-    <TableRow className="border-t-2 bg-muted/50 font-medium hover:bg-muted/50">
+    <TableRow className="border-b-0 hover:bg-transparent">
       <TableCell
-        className={STICKY_NAME_CELL}
+        className={FOOTER_NAME_CELL}
         title={nutrition == null ? missingTitle : undefined}
       >
         {label}
       </TableCell>
-      <TableCell className={STICKY_ALIASES_CELL} />
+      <TableCell className={FOOTER_ALIASES_CELL} />
       {NUTRITION_DETAIL_COLUMNS.map((col) => {
         const value = nutrition?.[col.key];
         return (
-          <TableCell key={col.key} className="text-right tabular-nums">
+          <TableCell key={col.key} className={FOOTER_CELL}>
             {value != null ? formatAmount(value) : "—"}
           </TableCell>
         );

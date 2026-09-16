@@ -21,7 +21,7 @@ Unit tests follow the code: helpers moved into `format.ts` are tested in `format
 
 **UI fetches to `/api/recipes/*` go through `src/lib/api/recipes.ts`** (pattern: `src/lib/api/auth.ts`). No naked fetch in components. Known follow-up: RecipeDetail's `/rescrape` and `/regenerate-image` fetches are still naked, not yet wrapped.
 
-**A recipe's ingredients are `RecipeIngredientGroup[]` of `RecipeIngredient` entities, its instructions `RecipeInstructionGroup[]` of `RecipeStep`s, and its servings the `servings_amount` / `servings_unit` columns — never a Schema.org `recipeIngredient`, `recipeInstructions` or `recipeYield`** — those exist only at the four external edges (JSON-LD, the image webhook, the window API, scraped input). `SchemaRecipe` has none of them, and no `nutrition.servingSize` either; read them off `RecipeRow` / `RecipeDocument` (`.ingredients`, `.instructions`, `.servings_amount`).
+**A recipe's ingredients are `RecipeIngredientGroup[]` of `RecipeIngredient` entities, its instructions `RecipeInstructionGroup[]` of `RecipeStep`s, and its servings the `servings_amount` / `servings_unit` columns — never a Schema.org `recipeIngredient`, `recipeInstructions` or `recipeYield`** — those exist only at the three external edges (JSON-LD, the image webhook, scraped input). `SchemaRecipe` has none of them, and no `nutrition.servingSize` either; read them off `RecipeRow` / `RecipeDocument` (`.ingredients`, `.instructions`, `.servings_amount`).
 
 **Never import `@/env` in a client component** — t3-env throws on server-var access in the browser. Server components read it and thread the value down as a prop.
 

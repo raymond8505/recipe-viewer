@@ -96,6 +96,56 @@ export const Default: Story = {
 };
 
 /**
+ * How the recipe page composes this table. The caller has a height to give —
+ * `max-h-[24rem]` here stands in for the screenful the app shell hands the
+ * page — and the `className` arg passes it down, so the scroll box claims
+ * whatever is left below the Normalize row. The table is then the only thing
+ * that scrolls, and the "Recipe total" / "Per portion" rows stay pinned to the
+ * bottom of it while the lines they add up scroll past underneath.
+ */
+export const PinnedTotals: Story = {
+  args: {
+    className: "flex max-h-[24rem] flex-col",
+    ingredients: [
+      makeIngredientGroup("Spice rub", [
+        makeMatchedIngredient("2 tsp cumin seed", cumin),
+        makeMatchedIngredient("125 g all-purpose flour", flour),
+        makeMatchedIngredient("1 tsp kosher salt", salt, { name_text: "kosher salt" }),
+      ]),
+      makeIngredientGroup("Sauce", [
+        makeMatchedIngredient("1 tbsp olive oil", oliveOil),
+        makeMatchedIngredient("1 cup diced yellow onion", onion, { name_text: "yellow onion" }),
+        makeMatchedIngredient("1/2 tsp cumin seed, toasted", cumin),
+        makeMatchedIngredient("2 tbsp all-purpose flour", flour),
+      ]),
+      makeIngredientGroup("To finish", [
+        makeMatchedIngredient("1 tsp olive oil, to drizzle", oliveOil),
+        makeMatchedIngredient("1/4 tsp kosher salt, to finish", salt, {
+          name_text: "kosher salt",
+        }),
+        makeMatchedIngredient("2 tbsp minced yellow onion", onion, {
+          name_text: "yellow onion",
+        }),
+      ]),
+    ],
+    recipeYield: "4 servings",
+  },
+};
+
+/**
+ * The same table on a viewport too short to spend two rows on a pinned band.
+ * Below 500px tall (the `tall:` variant in globals.css) the totals go back to
+ * being the last rows of the table and scroll away with everything else, so
+ * the screen spends its height on the ingredients instead. The canvas is
+ * pinned to an exact height here because the threshold is the whole point.
+ */
+export const TotalsUnpinnedWhenShort: Story = {
+  ...PinnedTotals,
+  parameters: { layout: "fullscreen" },
+  globals: { viewport: { value: "760px-420px" } },
+};
+
+/**
  * The what-if lens: the "Sauce" group has been switched off, so its line is
  * faded and struck through while its numbers stay readable, the group toggle
  * reads unchecked, the recipe total and per-portion rows count only the

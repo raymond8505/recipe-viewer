@@ -1,7 +1,6 @@
 import { describe, it, expect } from "vitest";
 import {
   applyRecipeDocument,
-  documentFromSchemaOrg,
   draftRecipeDocument,
   recipeDocument,
 } from "@/lib/recipeDocument";
@@ -121,38 +120,5 @@ describe("draftRecipeDocument", () => {
   it("treats an unparseable or missing time as no time", () => {
     const doc = draftRecipeDocument({ name: "Cake", cookTime: "a while" }, [], []);
     expect(doc).toMatchObject({ prep_time: null, cook_time: null, total_time: null });
-  });
-});
-
-describe("documentFromSchemaOrg", () => {
-  it("splits recipeIngredient and recipeInstructions off the schema and groups both", () => {
-    const doc = documentFromSchemaOrg({
-      name: "Carbonara",
-      cookTime: "PT20M",
-      recipeIngredient: ["1 egg", { name: "50 g guanciale", group: "Sauce" }],
-      recipeInstructions: [
-        { "@type": "HowToStep", text: "Boil." },
-        {
-          "@type": "HowToSection",
-          name: "Sauce",
-          itemListElement: [{ "@type": "HowToStep", text: "Whisk.", name: "Whisk", timeRequired: "PT1M" }],
-        },
-      ],
-    });
-
-    expect(doc.schema).toEqual({ name: "Carbonara", cookTime: "PT20M" });
-    expect(doc.cook_time).toBe(1200);
-    expect(doc.ingredients.map((g) => g.name)).toEqual([undefined, "Sauce"]);
-    expect(doc.ingredients[1].ingredients[0].raw_text).toBe("50 g guanciale");
-    expect(doc.instructions).toEqual([
-      makeInstructionGroup(undefined, ["Boil."]),
-      makeInstructionGroup("Sauce", [makeStep("Whisk.", { name: "Whisk", seconds: 60 })]),
-    ]);
-  });
-
-  it("gives a recipe without either key no groups", () => {
-    const doc = documentFromSchemaOrg({ name: "Water" });
-    expect(doc.ingredients).toEqual([]);
-    expect(doc.instructions).toEqual([]);
   });
 });

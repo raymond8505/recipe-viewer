@@ -2,7 +2,7 @@ import type { IngredientRow, RecipeIngredientRow } from "./ingredient";
 
 /**
  * The object form of a Schema.org `recipeIngredient` entry as it arrives from
- * outside — a scrape, `create_recipe`, the window API — carrying this app's
+ * outside — a scrape, `create_recipe` — carrying this app's
  * `group` extension. Inbound only: `fromSchemaOrgIngredients` turns a list of
  * these (or bare strings) into write input, and nothing internal reads them.
  */
@@ -18,8 +18,8 @@ export interface SchemaOrgIngredientLine {
  * parse fields and the catalog association ride along.
  *
  * `recipe_id` is deliberately absent: inside a recipe it is redundant, and an
- * ingredient drafted client-side (a re-scrape under review, a recipe handed in
- * through the window API) has no recipe row yet.
+ * ingredient drafted client-side (a re-scrape under review) has no recipe row
+ * yet.
  */
 export interface RecipeIngredient extends Omit<RecipeIngredientRow, "recipe_id"> {
   /**
@@ -154,8 +154,8 @@ export interface RecipeDocument {
 /**
  * A Schema.org/Recipe as served to the outside world: the stored fields plus
  * `recipeIngredient` flattened to plain strings and `recipeInstructions` as
- * the HowTo array. Produced only at the edges (JSON-LD, webhooks, the window
- * API); nothing internal reads it.
+ * the HowTo array. Produced only at the edges (JSON-LD, webhooks); nothing
+ * internal reads it.
  */
 export type SchemaOrgRecipe = SchemaRecipe & {
   recipeIngredient?: string[];

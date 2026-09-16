@@ -1,9 +1,5 @@
-import {
-  fromSchemaOrgInstructions,
-  parseDurationToSeconds,
-  stripSchemaOrgKeys,
-} from "./format";
-import { draftIngredientGroups, fromSchemaOrgIngredients } from "./recipeIngredients";
+import { parseDurationToSeconds, stripSchemaOrgKeys } from "./format";
+import { draftIngredientGroups } from "./recipeIngredients";
 import { parseYield } from "./units";
 import type {
   RecipeDocument,
@@ -13,9 +9,8 @@ import type {
   SchemaOrgRecipe,
 } from "@/types/recipe";
 
-// The three ways a RecipeDocument comes to exist. Client-safe on purpose:
-// RecipeDetail, CookingMode and the window API build documents, and none of
-// them may reach @/env.
+// The two ways a RecipeDocument comes to exist. Client-safe on purpose:
+// RecipeDetail and CookingMode build documents, and neither may reach @/env.
 
 /** The row's content, columns and all — what a page hands its client component. */
 export function recipeDocument(
@@ -104,13 +99,4 @@ export function draftRecipeDocument(
     total_weight_amount: yld?.weight?.amount ?? null,
     total_weight_unit: yld?.weight?.unit ?? null,
   };
-}
-
-/** The inbound Schema.org edge: a whole Schema.org Recipe → a draft document. */
-export function documentFromSchemaOrg(recipe: SchemaOrgRecipe): RecipeDocument {
-  return draftRecipeDocument(
-    recipe,
-    fromSchemaOrgIngredients(recipe.recipeIngredient ?? []),
-    fromSchemaOrgInstructions(recipe.recipeInstructions),
-  );
 }

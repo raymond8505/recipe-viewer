@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/table";
 import { SpinnerIcon } from "@/components/icons";
 import { pluralize } from "@/lib/format";
+import { cn } from "@/lib/utils";
 import { useIngredientsTable } from "@/hooks/useIngredientsTable";
 import type { IngredientRow } from "@/types/ingredient";
 import IngredientCreateForm from "./IngredientCreateForm";
@@ -43,12 +44,19 @@ export default function IngredientsTable({
   initialIngredients,
   initialCount,
   initialQuery,
+  className,
 }: {
   initialIngredients: IngredientRow[];
   initialCount: number;
   /** Search term the server already filtered `initialIngredients` by (the
    *  page's ?q=), so a deep link lands with the box filled and the list ready. */
   initialQuery?: string;
+  /**
+   * Growth classes for the root. A caller with a height to give passes
+   * `flex min-h-0 flex-1 flex-col` so the scroll box below claims it;
+   * unstyled, the table caps itself at the viewport instead.
+   */
+  className?: string;
 }) {
   const {
     rows,
@@ -114,7 +122,7 @@ export default function IngredientsTable({
   }
 
   return (
-    <div className="space-y-4">
+    <div className={cn("space-y-4", className)}>
       <div className="flex flex-wrap items-end justify-between gap-4">
         <form onSubmit={handleSearch} className="flex items-end gap-2">
           <Input
@@ -163,15 +171,16 @@ export default function IngredientsTable({
         details. Density converts volume to weight (grams = ml × g/ml).
       </p>
 
-      {/* Single scroll box (both axes). Capped at ~73vh so the chrome, heading,
-          and search/add row above it fit without forcing a page-level (body)
-          scrollbar. The header sticks to the top and the Name/Aliases/Actions
+      {/* Single scroll box (both axes), claiming whatever height the caller
+          gives it so the page never grows a second scrollbar beside this one;
+          the viewport cap is what bounds it when no caller does (Storybook, a
+          test). The header sticks to the top and the Name/Aliases/Actions
           columns stick to the sides — so the shadcn Table's own overflow
           wrapper must be neutralized, or it would become the scrollport and
           break the sticky. */}
       <div
         ref={scrollRef}
-        className="max-h-[73vh] overflow-auto [&_[data-slot=table-container]]:overflow-visible"
+        className="max-h-[100dvh] min-h-0 flex-1 overflow-auto [&_[data-slot=table-container]]:overflow-visible"
       >
         <Table>
           <TableHeader>

@@ -121,7 +121,7 @@ export const WithYieldWeight: Story = {
 };
 
 /**
- * Logged-in view: the heading row gains the "Ingredient breakdown" link to
+ * Logged-in view: the heading row gains the "Nutrition breakdown" link to
  * the NutritionDetail screen, beside the portion stepper.
  */
 export const WithBreakdownLink: Story = {

@@ -37,7 +37,9 @@ export default async function IngredientsPage({
   const { data, count } = await getIngredients({ query: query || undefined });
 
   return (
-    <section className="space-y-6">
+    // Fills exactly what the shell leaves, so the table is the only thing that
+    // scrolls — see the nutrition breakdown at /recipes/[id]/ingredients.
+    <section className="flex min-h-0 flex-1 flex-col gap-6">
       <div>
         <h1 className="text-3xl">Ingredient Manager</h1>
         <p className="text-muted-foreground mt-1">
@@ -46,6 +48,7 @@ export default async function IngredientsPage({
         </p>
       </div>
       <IngredientsTable
+        className="flex min-h-0 flex-1 flex-col"
         initialIngredients={data}
         initialCount={count}
         initialQuery={query}
