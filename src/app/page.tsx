@@ -3,9 +3,8 @@ import type { Metadata } from "next";
 import { getRecipes, getStatusCounts, type SortOption } from "@/lib/recipes";
 import { getFeatures } from "@/lib/features";
 import { getIsLoggedIn } from "@/lib/auth";
-import RecipeGrid from "@/components/RecipeGrid";
+import RecipeGrid, { defaultTopBadges } from "@/components/RecipeGrid";
 import { recipeMatchBadges } from "@/components/RecipeMatchBadge";
-import { recipeNutritionBadges } from "@/components/RecipeNutritionBadge";
 import SearchBar from "@/components/SearchBar";
 import SortBar from "@/components/SortBar";
 import StatusFilter from "@/components/StatusFilter";
@@ -100,16 +99,16 @@ export default async function Home({ searchParams }: HomeProps) {
         showStatusBadge={isLoggedIn}
         // Search matches ingredients as well as names, so a card can be here
         // for a reason its title doesn't show. The match badge names that
-        // ingredient and leads the footer, because why a card is on screen
-        // matters more to someone reading results than its calories.
-        // Supplying `badges` replaces the grid's default outright, so this owes
-        // the nutrition badges too; with no query there is nothing to explain,
-        // and leaving it undefined keeps the default untouched.
-        badges={
+        // ingredient and leads the top row, where a reader looks before the
+        // title — prepended rather than assembled, so `defaultTopBadges` keeps
+        // sole ownership of the category/status pair and the status-last rule.
+        // With no query there is nothing to explain, and leaving this undefined
+        // keeps the grid's own default untouched.
+        topBadges={
           query
             ? (recipe) => [
                 ...recipeMatchBadges(recipe.ingredients, query),
-                ...recipeNutritionBadges(recipe),
+                ...defaultTopBadges(recipe, isLoggedIn),
               ]
             : undefined
         }

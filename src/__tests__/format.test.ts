@@ -1012,13 +1012,16 @@ describe("matchedCatalogIngredients", () => {
     expect(matchedCatalogIngredients(groups, "butter")).toEqual(["Butter, without salt"]);
   });
 
-  it("caps how many it reports, so a card footer cannot flood", () => {
+  // The top badge overlay shares a row with the category and the status, so
+  // one match is the default; the cap stays adjustable for other surfaces.
+  it("reports one match by default, however many hit", () => {
     const groups = makeIngredientLines([
       makeMatchedIngredient("butter", butter),
       makeMatchedIngredient("coriander", cilantro),
     ]);
 
-    expect(matchedCatalogIngredients(groups, "r", 1)).toHaveLength(1);
+    expect(matchedCatalogIngredients(groups, "r")).toHaveLength(1);
+    expect(matchedCatalogIngredients(groups, "r", 2)).toHaveLength(2);
   });
 
   it("ignores a line the catalog was loaded for but did not match", () => {

@@ -14,24 +14,27 @@ interface RecipeMatchBadgeProps {
 
 /**
  * Purpose-built pill naming the ingredient that put a recipe in a set of search
- * results. Neutral surface like `RecipeNutritionBadge`, so the brand accent
- * stays with the category badge and keeps meaning something.
+ * results. It rides in the card's TOP badge slot, beside the category and the
+ * status, where a reader looks before reading the title.
  *
  * It exists because recipe search matches ingredients as well as names: without
  * it, a search for "cilantro" returning a recipe called "Weeknight Tacos" reads
  * as a broken result rather than a useful one. The magnifier says "this is what
  * you searched for", which the name alone can't.
+ *
+ * Green is an explicit color class rather than a theme token, on the same
+ * grounds as `RecipeStatusBadge`'s per-status colors: this marks a search hit,
+ * not a surface, so it sits outside the neutral/brand palette. The icon
+ * inherits it — `SearchIcon` defaults to a muted grey that would read as
+ * disabled against the green text beside it.
  */
 export function RecipeMatchBadge({ name, className }: RecipeMatchBadgeProps) {
   return (
     <Badge
       title={`Matches your search for ${name}`}
-      className={cn(
-        "gap-1 rounded-full bg-muted text-muted-foreground",
-        className,
-      )}
+      className={cn("gap-1 rounded-full bg-green-100 text-green-700", className)}
     >
-      <SearchIcon size={12} className="text-muted-foreground" />
+      <SearchIcon size={12} className="text-green-700" />
       {name}
     </Badge>
   );

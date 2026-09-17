@@ -339,13 +339,16 @@ export function getFirstImage(
  * two — so a caller that skipped the catalog round trip shows no badges rather
  * than wrong ones. An empty query matches nothing, rather than everything.
  *
- * Capped, because this renders in a card footer: a query like "oil" can match
- * several catalog rows in one recipe, and a card is not a list.
+ * Capped, because this renders in the card's top badge overlay beside the
+ * category and the status: a query like "onion" matches both "Onions, raw" and
+ * "Spices, onion powder" in one recipe, and USDA names are long enough that a
+ * second pill wraps the overlay onto the image. One answers "why is this card
+ * here"; the rest is detail the recipe page carries.
  */
 export function matchedCatalogIngredients(
   groups: readonly RecipeIngredientGroup[],
   query: string,
-  limit = 2,
+  limit = 1,
 ): string[] {
   const needle = query.trim().toLowerCase();
   if (!needle) return [];

@@ -7,9 +7,11 @@ import { RecipeMatchBadge } from "./RecipeMatchBadge";
  * as well as names, so "Weeknight Tacos" can be the right answer to
  * "cilantro". Without the badge that card reads as a broken result.
  *
- * Neutral surface, like `RecipeNutritionBadge` and for the same reason: the
- * brand accent belongs to the category badge, and a card with two accents
- * makes two competing claims.
+ * It rides in the card's top badge slot, leftmost of the category and the
+ * status. Green marks it as a search hit rather than a surface, which is why
+ * it is an explicit color class rather than a theme token — the same grounds
+ * `RecipeStatusBadge` states for its per-status colors. Note that `published`
+ * wears the same green, so the two read as a pair on a published card.
  *
  * It names the ingredient by its CATALOG name even when an alias is what
  * matched, because the catalog name is the spelling that also identifies the
