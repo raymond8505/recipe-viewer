@@ -201,6 +201,9 @@ export default function IngredientAutocomplete({
         onClick={openEditor}
         disabled={disabled}
         aria-label={ariaLabel}
+        // min-h-9 is paired with the open editor's row below — opening swaps
+        // this whole button out, so the floor has to be stated on both or the
+        // cell changes height mid-interaction. Change the two together.
         className="w-full min-h-9 text-left text-sm disabled:opacity-50"
       >
         {value ? (
@@ -224,7 +227,14 @@ export default function IngredientAutocomplete({
 
   return (
     <div ref={containerRef} className="relative">
-      <div className="flex items-center gap-2">
+      {/* min-h-9 matches the closed trigger's floor (see above). The input
+          itself is unpadded and only as tall as its text, so without a floor
+          on this row the cell loses ~15px the moment the editor opens and
+          every row below it in the breakdown table jumps up. It belongs here
+          rather than on the input: `items-center` then centres the input and
+          the spinner in the same box the closed trigger occupied, where a tall
+          input would drag its underline down to the box's bottom edge. */}
+      <div className="flex min-h-9 items-center gap-2">
         <input
           ref={inputRef}
           type="text"

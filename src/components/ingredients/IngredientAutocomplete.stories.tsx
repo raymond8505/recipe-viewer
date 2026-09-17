@@ -81,6 +81,30 @@ export const OpenWithResults: Story = {
 };
 
 /**
+ * Open and closed occupy the same box. Opening the editor swaps the entire
+ * trigger out for an input, so the 36px floor has to be stated on both
+ * branches — the input is unpadded and only as tall as its text, and without
+ * the floor the cell lost ~15px the moment it opened, jumping every row below
+ * it in the breakdown table. The two dividers here should stay evenly spaced:
+ * the second row is open, the first is not.
+ */
+export const OpenAndClosedMatchHeights: Story = {
+  args: {
+    value: { id: ingredientFixtures[0].id, name: ingredientFixtures[0].name },
+  },
+  render: (args) => (
+    <div className="divide-y divide-border border-y border-border">
+      <IngredientAutocomplete {...args} ariaLabel="Change match for the closed row" />
+      <IngredientAutocomplete {...args} ariaLabel="Change match for the open row" />
+    </div>
+  ),
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await userEvent.click(canvas.getByLabelText("Change match for the open row"));
+  },
+};
+
+/**
  * Options open **upward** when the scrollport has no room below the trigger.
  * This is the shape the breakdown table puts them in: a scroll box with a
  * `sticky bottom-0` totals band, and the line near the bottom of it. Opening
