@@ -169,18 +169,53 @@ describe("getRecipes", () => {
     expect(builder.range).toHaveBeenCalledWith(10, 19);
   });
 
-  it("applies ilike filter when query is provided", async () => {
+  it("matches a query against the recipe name or its catalog ingredients", async () => {
     const { builder } = makeSupabaseMock();
     await getRecipes({ query: "pasta" });
 
-    expect(builder.ilike).toHaveBeenCalledWith("metadata->schema->>name", "%pasta%");
+    expect(builder.or).toHaveBeenCalledWith(
+      'metadata->schema->>name.ilike."%pasta%",ingredient_catalog_text.ilike."%pasta%"',
+    );
   });
 
-  it("does not apply ilike filter when query is absent", async () => {
+  it("does not filter by query when none is provided", async () => {
     const { builder } = makeSupabaseMock();
     await getRecipes();
 
-    expect(builder.ilike).not.toHaveBeenCalled();
+    // The status branch still emits its own `or`; none of them is the search.
+    const calls = builder.or.mock.calls.flat();
+    expect(calls.some((c: unknown) => typeof c === "string" && c.includes("ingredient_catalog_text"))).toBe(false);
+  });
+
+  // Unquoted, the comma would end the operand: PostgREST answers 400 PGRST100,
+  // and a crafted query could name columns the app never selects.
+  it("quotes a query so its commas cannot be read as filter syntax", async () => {
+    const { builder } = makeSupabaseMock();
+    await getRecipes({ query: "salt, table" });
+
+    expect(builder.or).toHaveBeenCalledWith(
+      'metadata->schema->>name.ilike."%salt, table%",ingredient_catalog_text.ilike."%salt, table%"',
+    );
+  });
+
+  it("escapes quotes and backslashes in a query", async () => {
+    // String.raw throughout, so what is written is what is compared: the query
+    // is the five characters a " b \ c, and each special picks up a backslash.
+    const { builder } = makeSupabaseMock();
+    await getRecipes({ query: String.raw`a"b\c` });
+
+    expect(builder.or).toHaveBeenCalledWith(
+      String.raw`metadata->schema->>name.ilike."%a\"b\\c%",ingredient_catalog_text.ilike."%a\"b\\c%"`,
+    );
+  });
+
+  it("truncates an overlong query before quoting it", async () => {
+    const { builder } = makeSupabaseMock();
+    await getRecipes({ query: "x".repeat(250) });
+
+    const [filter] = builder.or.mock.calls.at(-1) as [string];
+    expect(filter).toContain(`%${"x".repeat(200)}%`);
+    expect(filter).not.toContain("x".repeat(201));
   });
 
   it("applies status filter when filterByStatus is true", async () => {
@@ -312,11 +347,33 @@ describe("getStatusCounts", () => {
     expect(result).toEqual({ published: 2, draft: 1, archived: 1, __null: 2 });
   });
 
-  it("applies ilike filter when query is provided", async () => {
+  it("matches a query against the recipe name or its catalog ingredients", async () => {
     const { builder } = makeSupabaseMock({ data: [] });
     await getStatusCounts({ query: "pasta" });
 
-    expect(builder.ilike).toHaveBeenCalledWith("metadata->schema->>name", "%pasta%");
+    expect(builder.or).toHaveBeenCalledWith(
+      'metadata->schema->>name.ilike."%pasta%",ingredient_catalog_text.ilike."%pasta%"',
+    );
+  });
+
+  // The chips count what the grid lists. Two requests answer one screen, so a
+  // predicate differing by a character would have the chips claiming a total
+  // the grid cannot produce.
+  it("filters on exactly the same predicate getRecipes does", async () => {
+    const search = (b: { or: ReturnType<typeof vi.fn> }) =>
+      b.or.mock.calls.flat().find((arg: unknown): arg is string =>
+        typeof arg === "string" && arg.includes("ingredient_catalog_text"),
+      );
+
+    for (const query of ["pasta", "salt, table", 'a"b(c)']) {
+      const grid = makeSupabaseMock();
+      await getRecipes({ query });
+      const counts = makeSupabaseMock({ data: [] });
+      await getStatusCounts({ query });
+
+      expect(search(grid.builder)).toBeDefined();
+      expect(search(grid.builder)).toBe(search(counts.builder));
+    }
   });
 
   it("applies source eq filter when source is provided", async () => {

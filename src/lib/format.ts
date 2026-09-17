@@ -324,6 +324,51 @@ export function getFirstImage(
  * home for this word: the column takes no database default precisely so the
  * fallback can't drift between SQL and the app.
  */
+/**
+ * The catalog ingredients in `groups` that a search query matched — the names
+ * to show on a card that turned up for a query its title doesn't contain.
+ *
+ * This mirrors, client-side, the arm `recipeSearchFilter` adds to the query
+ * (src/lib/recipes.ts): the same catalog `name` + `aliases`, the same
+ * case-insensitive substring test. It reports the ingredient by its catalog
+ * `name` even when an ALIAS is what matched, because the name is the one
+ * spelling that also identifies the row in the ingredient manager.
+ *
+ * A line whose `ingredient` is undefined (read without `catalog: true`) or null
+ * (unmatched) contributes nothing, exactly as the nutrition math treats those
+ * two — so a caller that skipped the catalog round trip shows no badges rather
+ * than wrong ones. An empty query matches nothing, rather than everything.
+ *
+ * Capped, because this renders in a card footer: a query like "oil" can match
+ * several catalog rows in one recipe, and a card is not a list.
+ */
+export function matchedCatalogIngredients(
+  groups: readonly RecipeIngredientGroup[],
+  query: string,
+  limit = 2,
+): string[] {
+  const needle = query.trim().toLowerCase();
+  if (!needle) return [];
+
+  const names: string[] = [];
+  for (const group of groups) {
+    for (const line of group.ingredients) {
+      const catalog = line.ingredient;
+      if (!catalog) continue;
+      const matches = [catalog.name, ...catalog.aliases].some((text) =>
+        text.toLowerCase().includes(needle),
+      );
+      // Deduped by catalog name, not by row: two lines of the same recipe can
+      // resolve to one ingredient, and naming it twice reads as a bug.
+      if (matches && !names.includes(catalog.name)) {
+        names.push(catalog.name);
+        if (names.length === limit) return names;
+      }
+    }
+  }
+  return names;
+}
+
 export const SERVINGS_UNIT_FALLBACK = "servings";
 
 /**

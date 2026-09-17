@@ -82,7 +82,9 @@ const TOOL_IMPLS: {
   [K in ToolName]: Pick<ToolDefinition, "description" | "call">;
 } = {
   search_recipes: {
-    description: `Search recipes by name, source, or status. Returns a paginated list with total count; each result is trimmed to { ${RECIPE_SEARCH_RESULT_FIELDS.join(", ")} } — call ${TOOL.get_recipe} with an id for the full schema. Use this before ${TOOL.get_recipe} when you only have a name.`,
+    description: `Search recipes by name, by catalog ingredient, source, or status. Returns a paginated list with total count; each result is trimmed to { ${RECIPE_SEARCH_RESULT_FIELDS.join(", ")} } — call ${TOOL.get_recipe} with an id for the full schema. Use this before ${TOOL.get_recipe} when you only have a name.
+
+A query matches a recipe's NAME or its INGREDIENTS. An ingredient matches only through the catalog: the line must already be associated with a catalog ingredient whose name or one of whose aliases contains the query. Recipe wording that was never matched to the catalog is NOT searched, so a food the catalog doesn't cover yet returns name hits only — that is a gap in the catalog, not proof the recipes don't exist. Use ${TOOL.search_ingredients} to see what the catalog calls a food, and which spellings it answers to, before concluding a search came up empty.`,
     call: (args) => searchRecipes(recipeSearchInputSchema.parse(args)),
   },
   search_ingredients: {

@@ -4,6 +4,8 @@ import { getRecipes, getStatusCounts, type SortOption } from "@/lib/recipes";
 import { getFeatures } from "@/lib/features";
 import { getIsLoggedIn } from "@/lib/auth";
 import RecipeGrid from "@/components/RecipeGrid";
+import { recipeMatchBadges } from "@/components/RecipeMatchBadge";
+import { recipeNutritionBadges } from "@/components/RecipeNutritionBadge";
 import SearchBar from "@/components/SearchBar";
 import SortBar from "@/components/SortBar";
 import StatusFilter from "@/components/StatusFilter";
@@ -93,7 +95,25 @@ export default async function Home({ searchParams }: HomeProps) {
         )}
       </div>
 
-      <RecipeGrid recipes={recipes} showStatusBadge={isLoggedIn} />
+      <RecipeGrid
+        recipes={recipes}
+        showStatusBadge={isLoggedIn}
+        // Search matches ingredients as well as names, so a card can be here
+        // for a reason its title doesn't show. The match badge names that
+        // ingredient and leads the footer, because why a card is on screen
+        // matters more to someone reading results than its calories.
+        // Supplying `badges` replaces the grid's default outright, so this owes
+        // the nutrition badges too; with no query there is nothing to explain,
+        // and leaving it undefined keeps the default untouched.
+        badges={
+          query
+            ? (recipe) => [
+                ...recipeMatchBadges(recipe.ingredients, query),
+                ...recipeNutritionBadges(recipe),
+              ]
+            : undefined
+        }
+      />
 
       <Suspense>
         <Pagination page={page} total={count} pageSize={PAGE_SIZE} />

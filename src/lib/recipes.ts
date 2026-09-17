@@ -1,4 +1,9 @@
-import { getSupabaseClient, selectColumns, toVectorLiteral } from "./supabase";
+import {
+  getSupabaseClient,
+  orFilterValue,
+  selectColumns,
+  toVectorLiteral,
+} from "./supabase";
 import { getFeatures } from "./features";
 import {
   parseDurationToSeconds,
@@ -221,6 +226,36 @@ export interface UpdateRecipePatch {
 
 const PAGE_SIZE = 24;
 
+// A search query is capped before it reaches the filter — a recipe name is a
+// title, not a document, so anything past this is a pathological URL rather
+// than a search.
+const MAX_QUERY_LENGTH = 200;
+
+/**
+ * The two arms a search query matches on: the recipe's own name, and the
+ * catalog names and aliases of the ingredients its lines resolve to (the
+ * `ingredient_catalog_text` computed field, db/migrations/0023).
+ *
+ * Aliases are the reason the second arm exists — they are what lets "cilantro"
+ * find a recipe whose line reads "fresh coriander".
+ *
+ * Deliberately NOT the line text (`recipe_ingredients.raw_text` / `name_text`):
+ * matching the catalog and walking back to the recipes skips unmatched lines by
+ * construction, so search speaks the one vocabulary a person can also browse in
+ * the ingredient manager. The cost is that a line normalization hasn't matched
+ * yet is unsearchable; that shrinks on its own as the catalog fills, and no code
+ * changes when it does.
+ *
+ * `getRecipes` and `getStatusCounts` must both filter through this. They run the
+ * same search against the same corpus, so a predicate that lived in only one of
+ * them would show status-filter counts that disagree with the results beside
+ * them.
+ */
+function recipeSearchFilter(query: string): string {
+  const value = orFilterValue(`%${query.slice(0, MAX_QUERY_LENGTH)}%`);
+  return `metadata->schema->>name.ilike.${value},ingredient_catalog_text.ilike.${value}`;
+}
+
 export async function getStatusCounts(opts?: {
   query?: string;
   source?: string;
@@ -239,8 +274,7 @@ export async function getStatusCounts(opts?: {
   }
 
   if (opts?.query) {
-    const q = opts.query.slice(0, 200);
-    queryBuilder = queryBuilder.ilike("metadata->schema->>name", `%${q}%`);
+    queryBuilder = queryBuilder.or(recipeSearchFilter(opts.query));
   }
 
   const { data, error } = await queryBuilder;
@@ -309,8 +343,7 @@ export async function getRecipes(opts?: {
   }
 
   if (opts?.query) {
-    const q = opts.query.slice(0, 200);
-    queryBuilder = queryBuilder.ilike("metadata->schema->>name", `%${q}%`);
+    queryBuilder = queryBuilder.or(recipeSearchFilter(opts.query));
   }
 
   const { data, error, count } = await queryBuilder;

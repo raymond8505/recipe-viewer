@@ -10,6 +10,17 @@ A recipe's ingredients are `recipe_ingredients` rows (`RecipeIngredient` entitie
 
 **`match_ingredients` is hybrid keyword + semantic** (migration 0007): pg_trgm trigram similarity over `name` + each alias (best-of), fused with pgvector cosine via Reciprocal Rank Fusion (`rrf_k=50`, per-signal weights, all defaulted in SQL). Returns `semantic_similarity`, `keyword_similarity`, `score`. **Never threshold on `score`** — RRF is rank-only; threshold on the raw similarities (keyword ~1.0 = near-exact name/alias hit). Trigram was chosen over tsvector deliberately: ingredient names are 1–4 words where `ts_rank_cd` is meaningless and stemmed FTS misses typos. The single scored-CTE seq scan is intentional at catalog scale; the Supabase docs' two-limited-CTE + trgm/hnsw-index shape is the upgrade path if the catalog grows large.
 
+**Recipe search reaches only what the catalog covers.** Search matches a recipe's name OR the
+catalog `name`/`aliases` of the ingredients its lines resolve to (`ingredient_catalog_text`,
+db/migrations/0023 — see [supabase-data-layer.md](supabase-data-layer.md)). A line with no
+`ingredient_id` is not searched at all, so the feature's reach IS normalization's reach: at the time
+of writing 290 of 6,493 lines are associated, spread over **23 of 578 recipes**. A search for a food
+the catalog doesn't cover yet returns name hits only — that is a gap in the catalog, not a bug in
+search, and it closes as normalization runs without any code changing. Two consequences worth
+knowing: pick QA terms from the data (`select i.name, count(distinct ri.recipe_id) ... group by`),
+because an intuitive term like "butter" can add zero recipes; and the MCP `search_recipes`
+description says this outright, so an agent doesn't read an empty result as "no such recipes".
+
 ## Line identity, data layer, normalization
 
 **Line identity is the `recipe_ingredients` row's own primary key — never text or position.** `RecipeIngredient.id` IS the row (`db/migrations/0016`); `recipes.ingredients` points straight at it. Line text and array position are *display data* — people fix typos, reword and reorder, and none of that changes which food the line means. So:

@@ -14,6 +14,43 @@
 - Embeddings are stored **raw (un-normalized)**: they're queried with pgvector cosine distance (`<=>`), which is scale-invariant, so normalizing would be a no-op and would also split the column's scale from the older n8n-written rows.
 - Neither column is in `RECIPE_COLUMNS`, so both are **write-only** — not read back onto `RecipeRow`.
 
+## Search — the recipe's name OR its catalog ingredients
+
+**`recipeSearchFilter` (`src/lib/recipes.ts`) is the only place a query becomes a filter**, and
+`getRecipes` and `getStatusCounts` both go through it. They are two requests answering one screen —
+the grid lists the rows, the status chips count them — so a predicate living in only one of them
+would have the chips claiming a total the grid cannot produce. A test pins the two strings equal.
+
+The second arm is **`ingredient_catalog_text`**, a PostgREST **computed field** (0023): a
+`stable security definer` function over the `recipes` row returning the newline-joined catalog
+`name` + `aliases` of every line that resolves to a catalog ingredient. Being a filter-only
+pseudo-column, it is never selected — `RECIPE_COLUMNS` doesn't name it and `selectColumns<RecipeRowColumns>()`
+stays exhaustive — so no read path changes shape.
+
+- **A computed field, not an RPC, because ordering stays with the caller.** The user's sort
+  (`newest`/`oldest`/`name-asc`/`name-desc`), `count: exact`, `.range()` and the status/source
+  filters all keep working untouched, and search stays one query. An RPC returning the result set
+  would have to re-implement every one of those in SQL; an RPC returning ids would put a uuid list
+  in the URL, past the ~16 KB cliff `ID_CHUNK` exists for.
+- **Catalog `name` + `aliases` only — never `recipe_ingredients.raw_text` or `name_text`.**
+  Matching the catalog and walking back to the recipes skips unmatched lines by construction, so
+  search speaks the one vocabulary a person can also browse in the ingredient manager. Aliases are
+  the point: they are what lets "cilantro" find a recipe whose line reads "fresh coriander".
+- **Newline-separated, never spaces.** The arm is a plain `ilike '%q%'` over the whole aggregate, so
+  a space-joined blob lets a query straddle two ingredients — with "black pepper" beside
+  "Salt, table", `pepper salt` matched 3 recipes containing no such phrase. A newline cannot occur
+  in a search box value.
+- **`.or()` values go through `orFilterValue`** (`src/lib/supabase.ts`). A bare `.ilike(col, value)`
+  passes its value as its own parameter, but `.or()` takes one string in PostgREST's filter grammar
+  where `,` separates the arms: an unquoted query containing one is a **400 PGRST100**, and an
+  unquoted query could otherwise *construct* filter syntax against columns the app never selects.
+  `%` and `_` are deliberately left alone — they are `ilike` wildcards on either side of the move.
+- **The function is granted to `anon`**, unlike every other function here, because `getRecipes` runs
+  on the anon client and `GET /api/recipes` is public-read; `SECURITY DEFINER` is what lets it read
+  the RLS-locked ingredient tables. It returns text only — no ids, no nutrition — and only for
+  ingredients reachable through a recipe's own lines, so it cannot page the catalog itself.
+- **Reach is a function of normalization coverage** — see [nutrition.md](nutrition.md).
+
 ## Promoted ingredients — `recipes.ingredients` + `recipe_ingredients`
 
 **A recipe's ingredient list spans two tables** (0016). `recipes.ingredients` (jsonb, NOT NULL, default `[]`) is an ordered array of group objects holding bare `recipe_ingredients.id` values — `StoredIngredientGroup`:
@@ -84,7 +121,7 @@ Conversions live in `src/lib/format.ts` — never re-derive them. The ISO → co
 
 ## Migrations
 
-**Migration records in `db/migrations/` are applied out-of-band** via Supabase MCP `apply_migration` (project `xonkmdhnjpjkapnsmltu`); 0006+ show up in the project's migrations table, 0002–0005 predate that and don't — check `information_schema` for actual state, not the migrations list. 0016/0017 are applied (as `recipes_ingredients_instructions` / `recipe_ingredients_position_optional`); 0018 drops the dead `match_recipes` / `find_dinner` RPCs; 0021 is a column comment recording `recipes.instructions`' group shape — DDL only.
+**Migration records in `db/migrations/` are applied out-of-band** via Supabase MCP `apply_migration` (project `xonkmdhnjpjkapnsmltu`); 0006+ show up in the project's migrations table, 0002–0005 predate that and don't — check `information_schema` for actual state, not the migrations list. 0016/0017 are applied (as `recipes_ingredients_instructions` / `recipe_ingredients_position_optional`); 0018 drops the dead `match_recipes` / `find_dinner` RPCs; 0021 is a column comment recording `recipes.instructions`' group shape — DDL only; 0023 adds the `ingredient_catalog_text` computed field that recipe search's ingredient arm filters on (see Search above).
 
 **`yarn backfill:recipe-servings [--dry-run] [--limit=N]`** populates 0022's four columns from each row's `recipeYield`. It reports three buckets and guesses at none: yields it refused (columns left NULL), yields whose rendered label now differs (a collapsed range, a dropped parenthetical), and a `nutrition.servingSize` the columns cannot reconstruct. It does not refresh `content`.
 

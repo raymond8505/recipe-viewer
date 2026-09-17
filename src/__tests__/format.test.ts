@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import {
+  matchedCatalogIngredients,
   formatDuration,
   parseDurationToSeconds,
   formatMS,
@@ -38,8 +39,10 @@ import type {
 } from "@/types/editor";
 import type { HowToStep, RecipeDocument, SchemaRecipe } from "@/types/recipe";
 import {
+  makeIngredient,
   makeIngredientGroup,
   makeIngredientLines,
+  makeMatchedIngredient,
   makeInstructionGroup,
   makeStep,
   makeSteps,
@@ -973,5 +976,81 @@ describe("canonicalizeTimeInput", () => {
         parseTimeInput(raw),
       );
     }
+  });
+});
+
+describe("matchedCatalogIngredients", () => {
+  const cilantro = makeIngredient("cat-cilantro", "Coriander (cilantro) leaves, raw", {
+    aliases: ["fresh coriander", "cilantro leaves"],
+  });
+  const butter = makeIngredient("cat-butter", "Butter, without salt", {
+    aliases: ["unsalted butter"],
+  });
+
+  it("matches a catalog name, case-insensitively", () => {
+    const groups = makeIngredientLines([makeMatchedIngredient("2 tbsp butter", butter)]);
+
+    expect(matchedCatalogIngredients(groups, "BUTTER")).toEqual(["Butter, without salt"]);
+  });
+
+  // The point of the feature: the recipe says "fresh coriander" and the
+  // searcher typed "cilantro".
+  it("matches an alias but reports the catalog name", () => {
+    const groups = makeIngredientLines([makeMatchedIngredient("1 bunch fresh coriander", cilantro)]);
+
+    expect(matchedCatalogIngredients(groups, "cilantro")).toEqual([
+      "Coriander (cilantro) leaves, raw",
+    ]);
+  });
+
+  it("names an ingredient once however many lines resolve to it", () => {
+    const groups = [
+      makeIngredientGroup("Sauce", [makeMatchedIngredient("2 tbsp butter", butter)]),
+      makeIngredientGroup("Top", [makeMatchedIngredient("1 tsp butter", butter)]),
+    ];
+
+    expect(matchedCatalogIngredients(groups, "butter")).toEqual(["Butter, without salt"]);
+  });
+
+  it("caps how many it reports, so a card footer cannot flood", () => {
+    const groups = makeIngredientLines([
+      makeMatchedIngredient("butter", butter),
+      makeMatchedIngredient("coriander", cilantro),
+    ]);
+
+    expect(matchedCatalogIngredients(groups, "r", 1)).toHaveLength(1);
+  });
+
+  it("ignores a line the catalog was loaded for but did not match", () => {
+    const groups = makeIngredientLines([
+      makeMatchedIngredient("2 tbsp butter", butter, { ingredient: null }),
+    ]);
+
+    expect(matchedCatalogIngredients(groups, "butter")).toEqual([]);
+  });
+
+  // The /api/recipes shape: read without `catalog: true`, so `ingredient` is
+  // undefined on every line. No badge beats a wrong one.
+  it("ignores lines read without the catalog", () => {
+    const groups = makeIngredientLines(["2 tbsp butter"]);
+
+    expect(matchedCatalogIngredients(groups, "butter")).toEqual([]);
+  });
+
+  // Guards the scoping decision: search speaks the catalog's vocabulary, so a
+  // recipe's own line text is never itself a match.
+  it("does not match the recipe's own line text", () => {
+    const groups = makeIngredientLines([
+      makeMatchedIngredient("2 tbsp clarified ghee", butter),
+    ]);
+
+    expect(matchedCatalogIngredients(groups, "ghee")).toEqual([]);
+  });
+
+  it("matches nothing for an empty or blank query", () => {
+    const groups = makeIngredientLines([makeMatchedIngredient("2 tbsp butter", butter)]);
+
+    expect(matchedCatalogIngredients(groups, "")).toEqual([]);
+    expect(matchedCatalogIngredients(groups, "   ")).toEqual([]);
   });
 });
