@@ -249,6 +249,7 @@ import type {
   RecipeDocument,
   RecipeIngredientGroup,
   RecipeIngredientGroupInput,
+  SortOption,
   RecipeInstructionGroup,
   RecipeStep,
   SchemaOrgNutrition,
@@ -324,6 +325,36 @@ export function getFirstImage(
  * home for this word: the column takes no database default precisely so the
  * fallback can't drift between SQL and the app.
  */
+/** Every sort a reader can pick, in the order SortBar shows them. */
+export const SORT_OPTIONS: readonly SortOption[] = [
+  "relevance",
+  "newest",
+  "oldest",
+  "name-asc",
+  "name-desc",
+];
+
+/**
+ * The sort a listing uses when the reader has not picked one. Searching
+ * defaults to relevance — that is the question a search box asks — and
+ * browsing to the newest recipes.
+ *
+ * Shared by the page (which resolves the sort) and SortBar (which decides
+ * which option is the one that needs no `sort=` in the URL), so the two cannot
+ * disagree about what an absent parameter means.
+ */
+export function defaultSortFor(query: string | null | undefined): SortOption {
+  return query?.trim() ? "relevance" : "newest";
+}
+
+/** Whether a sort can be applied at all — relevance needs something to rank. */
+export function isSortAvailable(
+  sort: SortOption,
+  query: string | null | undefined,
+): boolean {
+  return sort !== "relevance" || Boolean(query?.trim());
+}
+
 /**
  * The catalog ingredients in `groups` that a search query matched — the names
  * to show on a card that turned up for a query its title doesn't contain.

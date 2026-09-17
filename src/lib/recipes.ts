@@ -289,6 +289,124 @@ export async function getStatusCounts(opts?: {
   return counts;
 }
 
+/** The four sorts that are a property of the recipe row, so PostgREST can order by them. */
+type ColumnSort = Exclude<SortOption, "relevance">;
+
+/**
+ * How equally-relevant recipes order among themselves. Every recipe that
+ * matched only on a name, and every one whose match has no weight, scores the
+ * same, so without this their order would be whatever the planner happened to
+ * produce — and would shift between pages of one result set.
+ */
+const RELEVANCE_TIEBREAK: ColumnSort = "newest";
+
+/** One row of `search_recipes_ranked` (db/migrations/0025). */
+interface RankedId {
+  id: string;
+  score: number;
+  total_count: number;
+}
+
+/**
+ * The relevance-ranked page: which recipes matched, in what order, and how
+ * many there are — answered by SQL, because the ranking depends on the query
+ * and PostgREST can only order by something the row already holds.
+ *
+ * Two round trips on purpose. The RPC returns **ids**, and the rows are then
+ * read back through the same `RECIPE_COLUMNS` select every other read uses, so
+ * the typed column list stays the single description of a recipe row and the
+ * function never needs editing when a column is added. The `.in()` carries one
+ * page of ids — two dozen — nowhere near the URL limit an unpaged id list
+ * would hit.
+ *
+ * The RPC filters on `ingredient_catalog_text`, the same computed field
+ * `getStatusCounts` filters on, so the ranked page and the status chips beside
+ * it always describe the same set of recipes.
+ */
+async function rankedRecipes(
+  opts: { query?: string; source?: string; status?: string; catalog?: boolean },
+  ctx: {
+    features: ReturnType<typeof getFeatures>;
+    limit: number;
+    offset: number;
+  },
+): Promise<RecipesResult> {
+  const supabase = getSupabaseClient();
+
+  const { data, error } = await supabase.rpc("search_recipes_ranked", {
+    p_query: (opts.query ?? "").slice(0, MAX_QUERY_LENGTH),
+    p_source: opts.source ?? null,
+    // The logged-out gate wins outright, exactly as the column query's status
+    // branch does: a status filter never widens what a reader may see.
+    p_status: ctx.features.filterByStatus ? null : (opts.status ?? null),
+    p_published_only: ctx.features.filterByStatus,
+    p_sort: RELEVANCE_TIEBREAK,
+    p_limit: ctx.limit,
+    p_offset: ctx.offset,
+  });
+
+  if (error) {
+    console.error("Supabase error ranking recipes:", error);
+    return { data: [], count: 0 };
+  }
+
+  const ranked = (data as RankedId[]) ?? [];
+  // No rows means no matches, so there is no window count to read off one.
+  if (ranked.length === 0) return { data: [], count: 0 };
+
+  const ids = ranked.map((row) => row.id);
+  const { data: rows, error: rowsError } = await supabase
+    .from("recipes")
+    .select(RECIPE_COLUMNS)
+    .in("id", ids);
+
+  if (rowsError) {
+    console.error("Supabase error fetching ranked recipes:", rowsError);
+    return { data: [], count: 0 };
+  }
+
+  // `.in()` answers in no particular order, so the ranking is re-applied here
+  // from the ids. A row the second read cannot find is dropped rather than
+  // rendered as a hole — it means the recipe was deleted between the two.
+  const byId = new Map(
+    ((rows as RecipeRowColumns[]) ?? []).map((row) => [row.id, row]),
+  );
+  const ordered = ids
+    .map((id) => byId.get(id))
+    .filter((row): row is RecipeRowColumns => row != null);
+
+  return {
+    data: await hydratePage(ordered, opts.catalog),
+    count: Number(ranked[0].total_count),
+  };
+}
+
+/**
+ * Join a page of recipe rows to their ingredient rows, and optionally to the
+ * catalog. One round trip each for the whole page rather than one per recipe.
+ *
+ * The ingredient rows are not optional: `/api/recipes` feeds MealSearch, whose
+ * rows go straight into a `ScalableRecipe` when a recipe joins a meal, and that
+ * needs the line text.
+ */
+async function hydratePage(
+  rows: RecipeRowColumns[],
+  catalog?: boolean,
+): Promise<RecipeRow[]> {
+  const rowsByRecipe = await getRecipeIngredientsByRecipeIds(
+    rows.map((row) => row.id),
+  );
+  // Likewise one round trip for the page, not one per recipe: the whole page's
+  // lines resolve against a single catalog fetch, deduped by ingredient id.
+  const catalogRows = catalog
+    ? await getCatalogForRows([...rowsByRecipe.values()].flat())
+    : undefined;
+
+  return rows.map((row) =>
+    hydrate(row, rowsByRecipe.get(row.id) ?? [], catalogRows),
+  );
+}
+
 export async function getRecipes(opts?: {
   query?: string;
   page?: number;
@@ -312,13 +430,21 @@ export async function getRecipes(opts?: {
   const from = (page - 1) * limit;
   const to = from + limit - 1;
 
-  const sortMap: Record<SortOption, { column: string; ascending: boolean }> = {
+  // Relevance is ranked in SQL and needs a query to rank against, so it is the
+  // one sort this query cannot express (see rankedRecipeIds).
+  if (opts?.sort === "relevance" && opts.query?.trim()) {
+    return rankedRecipes(opts, { features, limit, offset: from });
+  }
+
+  const sortMap: Record<ColumnSort, { column: string; ascending: boolean }> = {
     newest:    { column: "created_at", ascending: false },
     oldest:    { column: "created_at", ascending: true },
     "name-asc":  { column: "metadata->schema->>name", ascending: true },
     "name-desc": { column: "metadata->schema->>name", ascending: false },
   };
-  const { column, ascending } = sortMap[opts?.sort ?? "newest"];
+  const sort = opts?.sort ?? "newest";
+  const { column, ascending } =
+    sortMap[sort === "relevance" ? RELEVANCE_TIEBREAK : sort];
 
   let queryBuilder = supabase
     .from("recipes")
@@ -353,19 +479,8 @@ export async function getRecipes(opts?: {
     return { data: [], count: 0 };
   }
 
-  const rows = (data as RecipeRowColumns[]) ?? [];
-  // One round trip for the page rather than one per recipe, and not optional:
-  // /api/recipes feeds MealSearch, whose rows go straight into a
-  // ScalableRecipe when a recipe joins a meal, and that needs the line text.
-  const rowsByRecipe = await getRecipeIngredientsByRecipeIds(rows.map((r) => r.id));
-  // Likewise one round trip for the page, not one per recipe: the whole page's
-  // lines resolve against a single catalog fetch, deduped by ingredient id.
-  const catalog = opts?.catalog
-    ? await getCatalogForRows([...rowsByRecipe.values()].flat())
-    : undefined;
-
   return {
-    data: rows.map((row) => hydrate(row, rowsByRecipe.get(row.id) ?? [], catalog)),
+    data: await hydratePage((data as RecipeRowColumns[]) ?? [], opts?.catalog),
     count: count ?? 0,
   };
 }

@@ -101,8 +101,19 @@ function makeSupabaseMock(opts: {
   error?: object | null;
   singleData?: object | null;
   singleError?: object | null;
+  /** What search_recipes_ranked answers with, for the relevance path. */
+  ranked?: object[];
+  rankedError?: object | null;
 } = {}) {
-  const { data = [], count = 0, error = null, singleData = null, singleError = null } = opts;
+  const {
+    data = [],
+    count = 0,
+    error = null,
+    singleData = null,
+    singleError = null,
+    ranked = [],
+    rankedError = null,
+  } = opts;
 
   const builder: Record<string, ReturnType<typeof vi.fn> | ((resolve: (v: unknown) => void, reject: (r: unknown) => void) => unknown)> = {
     select: vi.fn(),
@@ -126,7 +137,10 @@ function makeSupabaseMock(opts: {
   builder.then = (resolve: (v: unknown) => void, reject: (r: unknown) => void) =>
     Promise.resolve({ data, error, count }).then(resolve, reject);
 
-  const client = { from: vi.fn().mockReturnValue(builder) };
+  const client = {
+    from: vi.fn().mockReturnValue(builder),
+    rpc: vi.fn().mockResolvedValue({ data: ranked, error: rankedError }),
+  };
   mockGetSupabaseClient.mockReturnValue(client);
 
   return { builder, client };
@@ -1517,5 +1531,132 @@ describe("recipe ingredients hydration", () => {
     const recipe = await getRecipeById("r1");
 
     expect(recipe?.ingredients[1].ingredients).toEqual([]);
+  });
+});
+
+// db/migrations/0025. Relevance ranks a match by how much of the recipe it is,
+// which depends on the query — so SQL owns the ordering, the paging and the
+// count, and the rows come back through the same typed select as every other
+// read.
+describe("getRecipes — relevance ranking", () => {
+  const row = (id: string) => ({
+    id,
+    url: `u/${id}`,
+    source: "s",
+    ingredients: [],
+    instructions: [],
+    metadata: { schema: { name: id } },
+  });
+
+  beforeEach(() => {
+    mockFeatures.filterByOwnSource = false;
+    mockFeatures.filterByStatus = false;
+  });
+
+  it("asks SQL to rank, and passes the page window through", async () => {
+    const { client } = makeSupabaseMock({
+      ranked: [{ id: "a", score: 1, total_count: 7 }],
+      data: [row("a")],
+    });
+
+    await getRecipes({ query: "onion", sort: "relevance", page: 2, limit: 10 });
+
+    expect(client.rpc).toHaveBeenCalledWith("search_recipes_ranked", {
+      p_query: "onion",
+      p_source: null,
+      p_status: null,
+      p_published_only: false,
+      p_sort: "newest",
+      p_limit: 10,
+      p_offset: 10,
+    });
+  });
+
+  // `.in()` answers in whatever order it likes, so the ranking has to be
+  // re-applied from the ids or the page arrives shuffled.
+  it("returns the rows in the order SQL ranked them", async () => {
+    makeSupabaseMock({
+      ranked: [
+        { id: "heavy", score: 0.6, total_count: 3 },
+        { id: "light", score: 0.01, total_count: 3 },
+      ],
+      // deliberately the other way round
+      data: [row("light"), row("heavy")],
+    });
+
+    const result = await getRecipes({ query: "beef", sort: "relevance" });
+
+    expect(result.data.map((r) => r.id)).toEqual(["heavy", "light"]);
+  });
+
+  it("takes the total from the window count SQL returned", async () => {
+    makeSupabaseMock({
+      ranked: [{ id: "a", score: 1, total_count: 42 }],
+      data: [row("a")],
+    });
+
+    const result = await getRecipes({ query: "onion", sort: "relevance" });
+
+    expect(result.count).toBe(42);
+  });
+
+  it("reports no matches without reading rows", async () => {
+    const { client } = makeSupabaseMock({ ranked: [] });
+
+    const result = await getRecipes({ query: "zzz", sort: "relevance" });
+
+    expect(result).toEqual({ data: [], count: 0 });
+    expect(client.from).not.toHaveBeenCalled();
+  });
+
+  it("hands the logged-out gate to SQL, and never a caller's status with it", async () => {
+    mockFeatures.filterByStatus = true;
+    const { client } = makeSupabaseMock({
+      ranked: [{ id: "a", score: 1, total_count: 1 }],
+      data: [row("a")],
+    });
+
+    await getRecipes({ query: "onion", sort: "relevance", status: "draft" });
+
+    expect(client.rpc).toHaveBeenCalledWith(
+      "search_recipes_ranked",
+      expect.objectContaining({ p_published_only: true, p_status: null }),
+    );
+  });
+
+  // Relevance has nothing to rank without a query, so the plain column query
+  // still answers — the RPC is never reached.
+  it("falls back to the column query when there is no query to rank", async () => {
+    const { client, builder } = makeSupabaseMock();
+
+    await getRecipes({ sort: "relevance" });
+
+    expect(client.rpc).not.toHaveBeenCalled();
+    expect(builder.order).toHaveBeenCalledWith("created_at", { ascending: false });
+  });
+
+  it("leaves an explicitly chosen sort alone", async () => {
+    const { client, builder } = makeSupabaseMock();
+
+    await getRecipes({ query: "onion", sort: "name-asc" });
+
+    expect(client.rpc).not.toHaveBeenCalled();
+    expect(builder.order).toHaveBeenCalledWith("metadata->schema->>name", {
+      ascending: true,
+    });
+  });
+
+  it("returns nothing when the ranking query fails", async () => {
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    makeSupabaseMock({ rankedError: { message: "boom" }, ranked: [] });
+
+    expect(await getRecipes({ query: "onion", sort: "relevance" })).toEqual({
+      data: [],
+      count: 0,
+    });
+    expect(errorSpy).toHaveBeenCalledWith("Supabase error ranking recipes:", {
+      message: "boom",
+    });
+    errorSpy.mockRestore();
   });
 });

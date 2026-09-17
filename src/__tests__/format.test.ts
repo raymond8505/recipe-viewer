@@ -1,5 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
+  defaultSortFor,
+  isSortAvailable,
   matchedCatalogIngredients,
   formatDuration,
   parseDurationToSeconds,
@@ -1055,5 +1057,30 @@ describe("matchedCatalogIngredients", () => {
 
     expect(matchedCatalogIngredients(groups, "")).toEqual([]);
     expect(matchedCatalogIngredients(groups, "   ")).toEqual([]);
+  });
+});
+
+describe("defaultSortFor / isSortAvailable", () => {
+  // A search box asks "what is most relevant", a browse asks "what is new".
+  it("defaults a search to relevance and a browse to newest", () => {
+    expect(defaultSortFor("onion")).toBe("relevance");
+    expect(defaultSortFor("")).toBe("newest");
+    expect(defaultSortFor(null)).toBe("newest");
+    expect(defaultSortFor("   ")).toBe("newest");
+  });
+
+  // Relevance ranks a match by how much of the recipe it is, so with nothing
+  // to rank it is not an order at all.
+  it("offers relevance only alongside a query", () => {
+    expect(isSortAvailable("relevance", "onion")).toBe(true);
+    expect(isSortAvailable("relevance", "")).toBe(false);
+    expect(isSortAvailable("relevance", "  ")).toBe(false);
+  });
+
+  it("offers every recipe-property sort either way", () => {
+    for (const sort of ["newest", "oldest", "name-asc", "name-desc"] as const) {
+      expect(isSortAvailable(sort, "onion")).toBe(true);
+      expect(isSortAvailable(sort, null)).toBe(true);
+    }
   });
 });

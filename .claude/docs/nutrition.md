@@ -10,6 +10,15 @@ A recipe's ingredients are `recipe_ingredients` rows (`RecipeIngredient` entitie
 
 **`match_ingredients` is hybrid keyword + semantic** (migration 0007): pg_trgm trigram similarity over `name` + each alias (best-of), fused with pgvector cosine via Reciprocal Rank Fusion (`rrf_k=50`, per-signal weights, all defaulted in SQL). Returns `semantic_similarity`, `keyword_similarity`, `score`. **Never threshold on `score`** — RRF is rank-only; threshold on the raw similarities (keyword ~1.0 = near-exact name/alias hit). Trigram was chosen over tsvector deliberately: ingredient names are 1–4 words where `ts_rank_cd` is meaningless and stemmed FTS misses typos. The single scored-CTE seq scan is intentional at catalog scale; the Supabase docs' two-limited-CTE + trgm/hnsw-index shape is the upgrade path if the catalog grows large.
 
+**`recipe_ingredients.resolved_grams` is the nutrition math's answer, persisted** (0024). The
+column is `resolveLineGrams` — now the single grams resolver, which `computeLineNutrition` also
+calls — stamped at `insertRecipeIngredientRows` / `updateRecipeIngredientRows`, so search ranks on
+exactly the weight nutrition counts. It is **write-only** (absent from `RecipeIngredientRow`, so
+`selectColumns` keeps it off every read): nothing above the repo layer reads a stored weight, and
+the math resolving its own from the hydrated line is what keeps a drafted line — a re-scrape under
+review, with no row yet — computing the same as a saved one. Improving a line's weight therefore
+improves search ranking for free, and the two can never drift apart.
+
 **Recipe search reaches only what the catalog covers.** Search matches a recipe's name OR the
 catalog `name`/`aliases` of the ingredients its lines resolve to (`ingredient_catalog_text`,
 db/migrations/0023 — see [supabase-data-layer.md](supabase-data-layer.md)). A line with no
