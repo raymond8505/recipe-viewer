@@ -1026,6 +1026,35 @@ describe("matchedCatalogIngredients", () => {
     expect(matchedCatalogIngredients(groups, "r", 2)).toHaveLength(2);
   });
 
+  // The card is RANKED on the heaviest match, so naming a lighter one would
+  // describe a different recipe than the one the position claims.
+  it("names the heaviest match first, not the first listed", () => {
+    const powder = makeIngredient("cat-onion-powder", "Spices, onion powder");
+    const onions = makeIngredient("cat-onion", "Onions, raw");
+    const groups = makeIngredientLines([
+      makeMatchedIngredient("2 g onion powder", powder),
+      makeMatchedIngredient("125 g onion", onions),
+    ]);
+
+    expect(matchedCatalogIngredients(groups, "onion")).toEqual(["Onions, raw"]);
+  });
+
+  it("sums an ingredient split across lines before comparing", () => {
+    const powder = makeIngredient("cat-onion-powder", "Spices, onion powder");
+    const onions = makeIngredient("cat-onion", "Onions, raw");
+    const groups = [
+      makeIngredientGroup("Rub", [
+        makeMatchedIngredient("60 g onion powder", powder),
+        makeMatchedIngredient("60 g onion powder", powder),
+      ]),
+      makeIngredientGroup("Base", [makeMatchedIngredient("100 g onion", onions)]),
+    ];
+
+    expect(matchedCatalogIngredients(groups, "onion")).toEqual([
+      "Spices, onion powder",
+    ]);
+  });
+
   it("ignores a line the catalog was loaded for but did not match", () => {
     const groups = makeIngredientLines([
       makeMatchedIngredient("2 tbsp butter", butter, { ingredient: null }),

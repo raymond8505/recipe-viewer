@@ -238,7 +238,7 @@ export function formatDate(iso: string | undefined | null): string | null {
 }
 
 import { nanoid } from "nanoid";
-import type { NutrientValue } from "./nutritionMath";
+import { resolveLineGrams, type NutrientValue } from "./nutritionMath";
 import { ingredientTexts } from "./recipeIngredients";
 import { canonicalizeInstructions } from "./recipeInstructions";
 import { formatAmount } from "./units";
@@ -370,11 +370,14 @@ export function isSortAvailable(
  * two — so a caller that skipped the catalog round trip shows no badges rather
  * than wrong ones. An empty query matches nothing, rather than everything.
  *
- * Capped, because this renders in the card's top badge overlay beside the
- * category and the status: a query like "onion" matches both "Onions, raw" and
- * "Spices, onion powder" in one recipe, and USDA names are long enough that a
- * second pill wraps the overlay onto the image. One answers "why is this card
- * here"; the rest is detail the recipe page carries.
+ * Ordered HEAVIEST FIRST, by the same weight the search ranking scores
+ * (`resolveLineGrams`), so the badge names the ingredient that actually put
+ * this recipe where it is. Capped, because this renders in the card's top
+ * badge overlay beside the category and the status: a query like "onion"
+ * matches both "Onions, raw" and "Spices, onion powder" in one recipe, and
+ * USDA names are long enough that a second pill wraps the overlay onto the
+ * image. One answers "why is this card here"; the rest is detail the recipe
+ * page carries.
  */
 export function matchedCatalogIngredients(
   groups: readonly RecipeIngredientGroup[],
@@ -384,7 +387,11 @@ export function matchedCatalogIngredients(
   const needle = query.trim().toLowerCase();
   if (!needle) return [];
 
-  const names: string[] = [];
+  // Summed per catalog ingredient, because that is what the ranking scores:
+  // two lines of onion really is more onion, and a recipe listing it twice
+  // should not be described by whichever line came first.
+  const grams = new Map<string, number>();
+  const order: string[] = [];
   for (const group of groups) {
     for (const line of group.ingredients) {
       const catalog = line.ingredient;
@@ -392,15 +399,20 @@ export function matchedCatalogIngredients(
       const matches = [catalog.name, ...catalog.aliases].some((text) =>
         text.toLowerCase().includes(needle),
       );
-      // Deduped by catalog name, not by row: two lines of the same recipe can
-      // resolve to one ingredient, and naming it twice reads as a bug.
-      if (matches && !names.includes(catalog.name)) {
-        names.push(catalog.name);
-        if (names.length === limit) return names;
-      }
+      if (!matches) continue;
+      if (!grams.has(catalog.name)) order.push(catalog.name);
+      const weight = resolveLineGrams(line, catalog.density_g_per_ml).grams;
+      grams.set(catalog.name, (grams.get(catalog.name) ?? 0) + (weight ?? 0));
     }
   }
-  return names;
+
+  // Heaviest first, so the badge names the ingredient that put this recipe
+  // where it is in a relevance-ranked list — a card ranked on its 220 g of
+  // onion that then says "onion powder" reads as a different recipe. Ties keep
+  // the recipe's own order, which is the only other thing a reader can see.
+  return order
+    .sort((a, b) => (grams.get(b) ?? 0) - (grams.get(a) ?? 0))
+    .slice(0, limit);
 }
 
 export const SERVINGS_UNIT_FALLBACK = "servings";
