@@ -13,7 +13,7 @@ import {
 import { cn } from "@/lib/utils";
 import { formatAmount } from "@/lib/units";
 import type { NutritionDetailLine } from "@/hooks/useNutritionDetail";
-import type { ExclusionReason } from "@/lib/nutritionMath";
+import type { ExclusionReason, ZeroableReason } from "@/lib/nutritionMath";
 import type { IngredientKeywordMatch } from "@/types/ingredient";
 import type { UsdaSearchFood } from "@/lib/usda";
 import type {
@@ -25,20 +25,33 @@ import NutritionGramsCell from "./NutritionGramsCell";
 import { NUTRITION_DETAIL_COLUMNS } from "./nutritionColumns";
 import { STICKY_ALIASES_CELL, STICKY_NAME_CELL } from "./tableStyles";
 
-// The three grams-less reasons all share one set of fixes, so they share one
-// tail — and it names entering 0 explicitly, because that is the only way out
-// for a line nobody can weigh ("salt to taste") and an empty numeric field is
-// not a discoverable place to learn it. `unmatched` and `no_nutrition` are
-// fixed elsewhere (the autocomplete, the catalog), so they must NOT offer it.
+// Every reason names entering 0 explicitly, because an empty numeric field is
+// not a discoverable place to learn that it is the way out. The two catalog
+// reasons have a better first fix (the autocomplete, the ingredient manager),
+// so they lead with that and offer 0 second — it is the answer for a line that
+// is never going to match at all.
 const GRAMS_FIXES =
   "Type a weight, use Estimate, or enter 0 to count this line as nothing.";
 
 const EXCLUSION_TITLES: Record<ExclusionReason, string> = {
-  unmatched: "Not matched to the catalog — pick an ingredient to include it",
-  no_nutrition: "Matched ingredient has no nutrition data",
+  unmatched:
+    "Not matched to the catalog — pick an ingredient, or enter 0 grams to count this line as nothing",
+  no_nutrition:
+    "Matched ingredient has no nutrition data — add it in the ingredient manager, or enter 0 grams to count this line as nothing",
   no_quantity: `No parsed amount — can't convert to grams. ${GRAMS_FIXES}`,
   no_unit: `No unit (count line) — can't convert to grams. ${GRAMS_FIXES}`,
   no_density: `Volume unit but the ingredient has no density. ${GRAMS_FIXES}`,
+};
+
+// A line whose 0 overrode one of the catalog blockers. It contributes nothing
+// and no longer holds the recipe's totals back, but the catalog question is
+// still open — so the flag stays, muted: amber is for something that needs
+// doing, and this doesn't.
+const ZEROED_TITLES: Record<ZeroableReason, string> = {
+  unmatched:
+    "Not matched to the catalog, but counted as nothing — it isn't holding the totals back",
+  no_nutrition:
+    "Matched ingredient has no nutrition data, but this line is counted as nothing",
 };
 
 // A line the user switched off. Deliberately applied to cell *contents* rather
@@ -86,9 +99,8 @@ export default function NutritionDetailRow({
 }) {
   const { row, ingredient, computation, enabled } = line;
   const excluded = computation.kind === "excluded";
-  // Grams only matter for a matched line: there is nothing to weigh an
-  // unmatched line against.
-  const showGrams = row.ingredient_id != null;
+  // The blocker a stored 0 overrode, if any — still worth flagging, quietly.
+  const zeroedOver = computation.kind === "ok" ? computation.zeroedOver : undefined;
   // The sticky cell is its own stacking context (z-10), so the dropdown's
   // internal z-index can't beat sibling rows' sticky cells — the whole cell
   // is raised above them (but below the z-30 header corners) while open.
@@ -160,6 +172,11 @@ export default function NutritionDetailRow({
                   <WarningIcon className="size-4 shrink-0 text-amber-500" />
                 </span>
               )}
+              {zeroedOver && (
+                <span title={ZEROED_TITLES[zeroedOver]}>
+                  <WarningIcon className="size-4 shrink-0 text-muted-foreground" />
+                </span>
+              )}
               <button
                 type="button"
                 onClick={() => setDraft(line.text)}
@@ -224,16 +241,18 @@ export default function NutritionDetailRow({
             )}
             {saving && <SpinnerIcon />}
           </span>
-          {showGrams && (
-            <NutritionGramsCell
-              row={row}
-              computation={computation}
-              saving={saving}
-              label={line.text}
-              onEstimate={onEstimateGrams}
-              onSetGrams={onSetGrams}
-            />
-          )}
+          {/* On every line, matched or not: 0 is how an unmatchable line stops
+              holding the recipe's totals back, and hiding the field is what
+              made that a dead end. "Estimate" reads the line's own text and
+              parse fields, so it needs no catalog row either. */}
+          <NutritionGramsCell
+            row={row}
+            computation={computation}
+            saving={saving}
+            label={line.text}
+            onEstimate={onEstimateGrams}
+            onSetGrams={onSetGrams}
+          />
         </span>
       </TableCell>
       {NUTRITION_DETAIL_COLUMNS.map((col) => {

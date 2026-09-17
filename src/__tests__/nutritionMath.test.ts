@@ -394,22 +394,69 @@ describe("computeLineNutrition", () => {
     expect(result).toMatchObject({ kind: "ok", grams: 0, gramsSource: "estimated" });
   });
 
-  // 0 says "don't count this", which is a claim only a matched line can make.
-  // An unmatched line is UNKNOWN — a real threat to an accurate total — so the
-  // unmatched check keeps running first and the flag stays up.
-  it("still reports 'unmatched' for a 0-gram line with no association", () => {
+  // Some lines are never going to match — a pinch of saffron, a garnish nobody
+  // stocks — and while unmatched blocked 0, one of them held the WHOLE recipe
+  // off its total with no way out. 0 answers the total ("this is nothing")
+  // without answering the catalog, so it counts and reports what it overrode.
+  it("counts a 0-gram line with no association, reporting what the 0 overrode", () => {
     expect(
       computeLineNutrition(
         {
           quantity: null,
           unit: null,
           ingredient_id: null,
-          raw_text: "salt to taste",
+          raw_text: "a pinch of saffron",
           estimated_grams: 0,
         },
         null,
       ),
-    ).toEqual({ kind: "excluded", reason: "unmatched" });
+    ).toEqual({
+      kind: "ok",
+      grams: 0,
+      gramsSource: "estimated",
+      // Empty, not zero-per-key: there is no catalog row to take key sparsity
+      // from, and a line contributing nothing must not mint a nutrient key.
+      nutrition: {},
+      zeroedOver: "unmatched",
+    });
+  });
+
+  it("counts a 0-gram line whose matched ingredient has no nutrition", () => {
+    expect(
+      computeLineNutrition(
+        {
+          quantity: 1,
+          unit: "tsp",
+          ingredient_id: "ing-1",
+          raw_text: "1 tsp mystery spice",
+          estimated_grams: 0,
+        },
+        { nutrition: null, density_g_per_ml: null },
+      ),
+    ).toEqual({
+      kind: "ok",
+      grams: 0,
+      gramsSource: "estimated",
+      nutrition: {},
+      zeroedOver: "no_nutrition",
+    });
+  });
+
+  // The flag is informational, not a blocker — so it must not appear on a line
+  // that had nothing to override.
+  it("reports no zeroedOver for a 0-gram line that was fully resolvable", () => {
+    const result = computeLineNutrition(
+      {
+        quantity: 100,
+        unit: "g",
+        ingredient_id: "ing-1",
+        raw_text: "100 g butter",
+        estimated_grams: 0,
+      },
+      catalogButter,
+    );
+    expect(result).toMatchObject({ kind: "ok" });
+    expect(result).not.toHaveProperty("zeroedOver");
   });
 });
 
@@ -455,6 +502,32 @@ describe("computeRecipeNutrition", () => {
       makeLine(1, { ingredient: catalog({ calories_kcal: 50 }) }),
     ]);
     expect(result.total).toEqual({ calories_kcal: 150, protein_g: 5 });
+    expect(result).toMatchObject({
+      lineCount: 2,
+      excludedCount: 0,
+      fullyCovered: true,
+    });
+  });
+
+  // The unmatched half of the same point: a line that will never match stops
+  // being the reason a whole recipe shows no nutrition. The total gains
+  // nothing from it — not even a zeroed key, since no catalog row says which
+  // nutrients it would have had.
+  it("is fully covered when an unmatched line is zeroed", () => {
+    const result = computeRecipeNutrition([
+      makeLine(0, { ingredient: catalog({ calories_kcal: 100 }) }),
+      makeLine(1, {
+        raw_text: "a pinch of saffron",
+        quantity: null,
+        unit: null,
+        ingredient_id: null,
+        match_status: "unmatched",
+        estimated_grams: 0,
+        grams_source: "manual",
+        ingredient: null,
+      }),
+    ]);
+    expect(result.total).toEqual({ calories_kcal: 100 });
     expect(result).toMatchObject({
       lineCount: 2,
       excludedCount: 0,

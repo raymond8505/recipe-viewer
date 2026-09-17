@@ -232,6 +232,32 @@ export const NotCounted: Story = {
   },
 };
 
+/**
+ * The *unmatchable* line, zeroed. "1 pinch saffron" is never going to find a
+ * catalog row, and while a match was a precondition for zeroing, that one line
+ * held the whole recipe off its total with no way out at all — the grams field
+ * wasn't even rendered on it. Now it is, and a typed 0 settles the total.
+ *
+ * The match question is still open, so the flag stays — but muted, not amber:
+ * amber means "this needs doing", and a line the curator has decided about
+ * doesn't. Hover both flags to compare — the unmatched "1/4 tsp ground mace"
+ * below is the same line undecided.
+ */
+export const NotCountedUnmatched: Story = {
+  args: {
+    ingredients: makeIngredientLines([
+      makeMatchedIngredient("125 g all-purpose flour", flour),
+      makeMatchedIngredient("1 tbsp olive oil", oliveOil),
+      makeRecipeIngredient("1 pinch saffron", {
+        estimated_grams: 0,
+        grams_source: "manual",
+      }),
+      makeRecipeIngredient("1/4 tsp ground mace"),
+    ]),
+    servings: 2,
+  },
+};
+
 /** A recipe with no ingredient groups renders flat, without heading rows. */
 export const Flat: Story = {
   args: matchedLinesScenario,
