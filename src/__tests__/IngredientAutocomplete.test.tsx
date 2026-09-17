@@ -403,4 +403,80 @@ describe("IngredientAutocomplete — USDA fallback", () => {
       screen.queryByRole("option", { name: /Search USDA/ }),
     ).not.toBeInTheDocument();
   });
+
+  // jsdom lays nothing out, so every rect is 0×0 and the placement measurement
+  // reads "unmeasurable" — which is exactly why the two cases below stub the
+  // geometry rather than relying on the DOM, and why every other test in this
+  // file still sees the unflipped default.
+  describe("option placement", () => {
+    const SCROLLPORT = { top: 0, bottom: 600 };
+
+    function rect(top: number, bottom: number): DOMRect {
+      return {
+        top,
+        bottom,
+        height: bottom - top,
+        left: 0,
+        right: 200,
+        width: 200,
+        x: 0,
+        y: top,
+        toJSON: () => ({}),
+      };
+    }
+
+    // The trigger is the `relative` wrapper the listbox is positioned against.
+    function stubLayout(triggerTop: number, triggerBottom: number) {
+      return vi
+        .spyOn(HTMLElement.prototype, "getBoundingClientRect")
+        .mockImplementation(function (this: HTMLElement) {
+          if (this.dataset.testid === "scrollport")
+            return rect(SCROLLPORT.top, SCROLLPORT.bottom);
+          if (this.classList.contains("relative"))
+            return rect(triggerTop, triggerBottom);
+          return rect(0, 0);
+        });
+    }
+
+    async function openInScrollport(user: ReturnType<typeof userEvent.setup>) {
+      render(
+        <div data-testid="scrollport" style={{ overflowY: "auto" }}>
+          <IngredientAutocomplete
+            value={null}
+            onSelect={onSelect}
+            ariaLabel="Change match for 1 tsp cumin"
+            search={search}
+          />
+        </div>,
+      );
+      await user.click(screen.getByLabelText("Change match for 1 tsp cumin"));
+      return screen.getByRole("listbox");
+    }
+
+    // The bug: on the last rows of the breakdown table the options opened under
+    // the pinned totals band and couldn't be reached.
+    it("opens the options above the trigger when the scrollport leaves no room below", async () => {
+      const user = userEvent.setup();
+      const spy = stubLayout(560, 590);
+      try {
+        const listbox = await openInScrollport(user);
+        expect(listbox).toHaveClass("bottom-full");
+        expect(listbox).not.toHaveClass("top-full");
+      } finally {
+        spy.mockRestore();
+      }
+    });
+
+    it("keeps the options below the trigger when there is room for them", async () => {
+      const user = userEvent.setup();
+      const spy = stubLayout(20, 50);
+      try {
+        const listbox = await openInScrollport(user);
+        expect(listbox).toHaveClass("top-full");
+        expect(listbox).not.toHaveClass("bottom-full");
+      } finally {
+        spy.mockRestore();
+      }
+    });
+  });
 });

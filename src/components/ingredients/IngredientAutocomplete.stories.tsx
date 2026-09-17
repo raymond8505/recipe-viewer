@@ -81,6 +81,38 @@ export const OpenWithResults: Story = {
 };
 
 /**
+ * Options open **upward** when the scrollport has no room below the trigger.
+ * This is the shape the breakdown table puts them in: a scroll box with a
+ * `sticky bottom-0` totals band, and the line near the bottom of it. Opening
+ * downward here would put every option under the band, where the pointer can't
+ * reach them — no z-index fixes that, because the box clips the panel too.
+ *
+ * The wrapper is the subject, not scaffolding: the placement is measured
+ * against exactly these two things (see `@/lib/dropdownPlacement`).
+ */
+export const FlipsAboveAPinnedFooter: Story = {
+  args: { value: null },
+  decorators: [
+    (Story) => (
+      <div className="h-64 overflow-auto border border-border">
+        <div className="h-40 bg-muted/30" />
+        <div className="px-2">
+          <Story />
+        </div>
+        <div className="sticky bottom-0 h-8 border-t border-border bg-muted px-2 text-xs leading-8">
+          Recipe total
+        </div>
+      </div>
+    ),
+  ],
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await userEvent.click(canvas.getByLabelText("Change match for 1 tsp cumin"));
+    await userEvent.type(canvas.getByRole("combobox"), "onion");
+  },
+};
+
+/**
  * The USDA fallback for an ingredient the catalog doesn't know: the query
  * finds no catalog matches, so the "Search USDA" action runs the FoodData
  * Central search and lists candidates with their data-type provenance

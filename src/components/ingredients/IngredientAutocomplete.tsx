@@ -10,6 +10,11 @@ import {
   type IngredientAutocompleteSearch,
   type UsdaFoodSearch,
 } from "@/hooks/useIngredientAutocomplete";
+import { useDropdownPlacement } from "@/hooks/useDropdownPlacement";
+
+// How tall the options list would like to be. Measured against the room around
+// the trigger, which may cut it shorter — see useDropdownPlacement.
+const PANEL_HEIGHT = 240;
 
 // One keyboard-navigable entry in the dropdown. Catalog matches, the
 // "Search USDA" action, USDA foods, and "Clear match" share a single
@@ -130,6 +135,18 @@ export default function IngredientAutocomplete({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
+  // The frozen cell this lives in sits above a `sticky bottom-0` totals band
+  // (tableStyles.ts), so on the last rows there is no usable room below the
+  // trigger however much page is left — the options open under the band and
+  // can't be reached. `options.length` re-measures when USDA results append to
+  // an already-open list.
+  const { placement, maxHeight } = useDropdownPlacement(
+    containerRef,
+    open,
+    PANEL_HEIGHT,
+    options.length,
+  );
+
   const openEditor = () => {
     setOpen(true);
     onOpenChange?.(true);
@@ -239,7 +256,14 @@ export default function IngredientAutocomplete({
         // viewport. `whitespace-nowrap` lets option text define that intrinsic
         // width (names beyond the cap still truncate); flex-col stacks the
         // option buttons regardless of white-space.
-        className="absolute left-0 top-full z-30 mt-1 flex max-h-60 w-max min-w-full max-w-[min(32rem,90vw)] flex-col overflow-y-auto whitespace-nowrap rounded-xl border border-border bg-popover shadow-lg"
+        // The vertical side is measured, not fixed: `maxHeight` is the room
+        // actually available on the chosen side, so a flipped list stops short
+        // of the sticky header instead of running under it.
+        className={cn(
+          "absolute left-0 z-30 flex w-max min-w-full max-w-[min(32rem,90vw)] flex-col overflow-y-auto whitespace-nowrap rounded-xl border border-border bg-popover shadow-lg",
+          placement === "above" ? "bottom-full mb-1" : "top-full mt-1",
+        )}
+        style={{ maxHeight }}
       >
         {error && (
           <p className="shrink-0 px-3 py-2 text-sm text-muted-foreground" role="status">
