@@ -194,6 +194,15 @@ export default function IngredientAutocomplete({
     }
   };
 
+  // The closed trigger's content. Rendered again while open as an invisible
+  // sizer (see the ghost below), so the two states must share this exactly —
+  // anything that changes how it wraps changes the open box's height too.
+  const label = value ? (
+    <span className="text-foreground">{value.name}</span>
+  ) : (
+    <span className="italic text-muted-foreground">unmatched</span>
+  );
+
   if (!open) {
     return (
       <button
@@ -206,11 +215,7 @@ export default function IngredientAutocomplete({
         // cell changes height mid-interaction. Change the two together.
         className="w-full min-h-9 text-left text-sm disabled:opacity-50"
       >
-        {value ? (
-          <span className="text-foreground">{value.name}</span>
-        ) : (
-          <span className="italic text-muted-foreground">unmatched</span>
-        )}
+        {label}
       </button>
     );
   }
@@ -227,33 +232,48 @@ export default function IngredientAutocomplete({
 
   return (
     <div ref={containerRef} className="relative">
-      {/* min-h-9 matches the closed trigger's floor (see above). The input
-          itself is unpadded and only as tall as its text, so without a floor
-          on this row the cell loses ~15px the moment the editor opens and
-          every row below it in the breakdown table jumps up. It belongs here
-          rather than on the input: `items-center` then centres the input and
-          the spinner in the same box the closed trigger occupied, where a tall
-          input would drag its underline down to the box's bottom edge. */}
-      <div className="flex min-h-9 items-center gap-2">
-        <input
-          ref={inputRef}
-          type="text"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          onKeyDown={handleKeyDown}
-          placeholder="Search ingredients…"
-          aria-label={ariaLabel}
-          role="combobox"
-          aria-autocomplete="list"
-          aria-haspopup="listbox"
-          aria-expanded={true}
-          aria-controls={listboxId}
-          aria-activedescendant={
-            options.length > 0 ? `${listboxId}-opt-${highlight}` : undefined
-          }
-          className="w-full min-w-0 bg-transparent text-sm rounded-none border-0 border-b border-border outline-hidden focus:border-orange-400"
-        />
-        {(loading || usdaLoading) && <SpinnerIcon />}
+      {/* The editor swaps the closed trigger for a single-line input, which
+          can't wrap — and the host column is a hard w-44 (tableStyles.ts), so
+          a catalog name routinely wraps to two or three lines there. Collapsing
+          that to one line on click shrank the cell and jumped every row below
+          it up the table.
+          So the closed label stays in the DOM while open, invisible, purely as
+          a sizer: the 1x1 grid takes its height and the input overlays the same
+          cell. This is the repo's `invisible`-not-conditional-render pattern —
+          declarative, so it can't drift from the closed state the way a
+          captured offsetHeight would go stale on a reflow while open.
+          min-h-9 stays as the floor for a name that fits on one line, where the
+          unpadded input is shorter than the closed button.
+          items-center centres the input in a tall box rather than letting it
+          stretch, which would drag its underline to the box's bottom edge. */}
+      <div className="grid min-h-9 items-center">
+        <span
+          aria-hidden="true"
+          className="invisible col-start-1 row-start-1 text-sm"
+        >
+          {label}
+        </span>
+        <div className="col-start-1 row-start-1 flex items-center gap-2">
+          <input
+            ref={inputRef}
+            type="text"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            onKeyDown={handleKeyDown}
+            placeholder="Search ingredients…"
+            aria-label={ariaLabel}
+            role="combobox"
+            aria-autocomplete="list"
+            aria-haspopup="listbox"
+            aria-expanded={true}
+            aria-controls={listboxId}
+            aria-activedescendant={
+              options.length > 0 ? `${listboxId}-opt-${highlight}` : undefined
+            }
+            className="w-full min-w-0 bg-transparent text-sm rounded-none border-0 border-b border-border outline-hidden focus:border-orange-400"
+          />
+          {(loading || usdaLoading) && <SpinnerIcon />}
+        </div>
       </div>
 
       <div

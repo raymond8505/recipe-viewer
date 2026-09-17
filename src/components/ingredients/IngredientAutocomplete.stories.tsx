@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from "@storybook/nextjs-vite";
 import { userEvent, fn, within } from "storybook/test";
-import { ingredientFixtures } from "@/fixtures";
+import { ingredientFixtures, makeIngredient } from "@/fixtures";
 import type { IngredientKeywordMatch } from "@/types/ingredient";
 import type { UsdaSearchFood } from "@/lib/usda";
 import IngredientAutocomplete from "./IngredientAutocomplete";
@@ -80,18 +80,29 @@ export const OpenWithResults: Story = {
   },
 };
 
+// A USDA-shaped catalog name, long enough to wrap in the frozen column. The
+// wrapping is the whole subject of the height-parity story below — the short
+// fixture names never wrap, which is exactly why this bug survived a story
+// that used one.
+const wrappingMatch = makeIngredient(
+  "ing-wrapping",
+  "yellow onion, sautéed, drained",
+);
+
 /**
- * Open and closed occupy the same box. Opening the editor swaps the entire
- * trigger out for an input, so the 36px floor has to be stated on both
- * branches — the input is unpadded and only as tall as its text, and without
- * the floor the cell lost ~15px the moment it opened, jumping every row below
- * it in the breakdown table. The two dividers here should stay evenly spaced:
- * the second row is open, the first is not.
+ * Open and closed occupy the same box, at the real column width — 176px, the
+ * `w-44` the breakdown table freezes these cells to, which is why the canvas
+ * is pinned to the exact number rather than a named surface.
+ *
+ * The editor replaces the trigger with a single-line input, and an input
+ * can't wrap. With a name that takes two lines closed, opening it used to
+ * collapse the cell to one and jump every row below it up the table. The
+ * closed label now stays in the DOM invisibly to hold the height, so the
+ * dividers here should not move when the second row opens.
  */
 export const OpenAndClosedMatchHeights: Story = {
-  args: {
-    value: { id: ingredientFixtures[0].id, name: ingredientFixtures[0].name },
-  },
+  args: { value: { id: wrappingMatch.id, name: wrappingMatch.name } },
+  globals: { viewport: { value: "176px-400px" } },
   render: (args) => (
     <div className="divide-y divide-border border-y border-border">
       <IngredientAutocomplete {...args} ariaLabel="Change match for the closed row" />
