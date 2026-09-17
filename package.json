@@ -22,7 +22,8 @@
     "backfill:normalization": "tsx --env-file-if-exists=.env --env-file-if-exists=.env.local scripts/backfill-normalization.ts",
     "sync:ingredient-columns": "tsx --env-file-if-exists=.env --env-file-if-exists=.env.local scripts/sync-ingredient-columns.ts",
     "backfill:recipe-times": "tsx --env-file-if-exists=.env --env-file-if-exists=.env.local scripts/backfill-recipe-times.ts",
-    "backfill:recipe-servings": "tsx --env-file-if-exists=.env --env-file-if-exists=.env.local scripts/backfill-recipe-servings.ts"
+    "backfill:recipe-servings": "tsx --env-file-if-exists=.env --env-file-if-exists=.env.local scripts/backfill-recipe-servings.ts",
+    "backfill:resolved-grams": "tsx --env-file-if-exists=.env --env-file-if-exists=.env.local scripts/backfill-resolved-grams.ts"
   },
   "lint-staged": {
     "*.{ts,tsx,js,jsx,mjs,cjs}": "eslint --max-warnings 0"

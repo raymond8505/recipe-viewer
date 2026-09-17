@@ -704,7 +704,62 @@ describe("insertRecipeIngredientRows", () => {
 
     await insertRecipeIngredientRows(rows);
 
-    expect(builderAt(0).insert).toHaveBeenCalledWith(rows);
+    // Every row carries what it weighs; these are unmatched, so no catalog
+    // density exists and a tsp of nothing weighs nothing knowable.
+    expect(builderAt(0).insert).toHaveBeenCalledWith(
+      rows.map((row) => ({ ...row, resolved_grams: null })),
+    );
+  });
+
+  // db/migrations/0024: the column is stamped here rather than at each caller,
+  // so a line's weight cannot drift from the line.
+  it("stamps resolved_grams from the line's own weight", async () => {
+    const row = makeRecipeIngredientRow("r-1", 0, {
+      ingredient_id: null,
+      raw_text: "8 oz cream cheese",
+      quantity: 8,
+      unit: "oz",
+    });
+    useQueue([{ error: null }]);
+
+    await insertRecipeIngredientRows([row]);
+
+    const [[sent]] = builderAt(0).insert.mock.calls as [[Array<{ resolved_grams: number }>]];
+    expect(sent[0].resolved_grams).toBeCloseTo(226.796, 2);
+  });
+
+  it("prefers a stored estimated_grams over the parsed quantity", async () => {
+    const row = makeRecipeIngredientRow("r-1", 0, {
+      ingredient_id: null,
+      raw_text: "8 oz cream cheese",
+      quantity: 8,
+      unit: "oz",
+      estimated_grams: 200,
+    });
+    useQueue([{ error: null }]);
+
+    await insertRecipeIngredientRows([row]);
+
+    const [[sent]] = builderAt(0).insert.mock.calls as [[Array<{ resolved_grams: number }>]];
+    expect(sent[0].resolved_grams).toBe(200);
+  });
+
+  // 0 g is a curator saying "don't count this line", not a missing weight, so
+  // it has to survive the round trip intact.
+  it("keeps a deliberate zero rather than falling through to the parse", async () => {
+    const row = makeRecipeIngredientRow("r-1", 0, {
+      ingredient_id: null,
+      raw_text: "2 tbsp oil for frying",
+      quantity: 2,
+      unit: "tbsp",
+      estimated_grams: 0,
+    });
+    useQueue([{ error: null }]);
+
+    await insertRecipeIngredientRows([row]);
+
+    const [[sent]] = builderAt(0).insert.mock.calls as [[Array<{ resolved_grams: number }>]];
+    expect(sent[0].resolved_grams).toBe(0);
   });
 
   it("issues no query for no rows", async () => {
