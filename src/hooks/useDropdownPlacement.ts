@@ -9,8 +9,7 @@ import {
 
 /**
  * Keep an open dropdown on the side of its trigger that has room for it, and
- * capped to that room. The geometry is in `@/lib/dropdownPlacement`; this is
- * the React glue — when to measure.
+ * capped to that room.
  *
  * Re-measures on open, on `revision` (pass whatever changes the panel's
  * content — an options count, say: USDA results append to a list that is
@@ -45,7 +44,8 @@ export function useDropdownPlacement(
     const measure = () =>
       setChoice((prev) => {
         const next = measurePlacement(anchor, desired);
-        return prev.placement === next.placement && prev.maxHeight === next.maxHeight
+        return prev.placement === next.placement &&
+          prev.maxHeight === next.maxHeight
           ? prev
           : next;
       });
