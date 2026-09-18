@@ -238,7 +238,7 @@ export function formatDate(iso: string | undefined | null): string | null {
 }
 
 import { nanoid } from "nanoid";
-import type { NutrientValue } from "./nutritionMath";
+import { resolveLineGrams, type NutrientValue } from "./nutritionMath";
 import { ingredientTexts } from "./recipeIngredients";
 import { canonicalizeInstructions } from "./recipeInstructions";
 import { formatAmount } from "./units";
@@ -249,6 +249,7 @@ import type {
   RecipeDocument,
   RecipeIngredientGroup,
   RecipeIngredientGroupInput,
+  SortOption,
   RecipeInstructionGroup,
   RecipeStep,
   SchemaOrgNutrition,
@@ -324,6 +325,96 @@ export function getFirstImage(
  * home for this word: the column takes no database default precisely so the
  * fallback can't drift between SQL and the app.
  */
+/** Every sort a reader can pick, in the order SortBar shows them. */
+export const SORT_OPTIONS: readonly SortOption[] = [
+  "relevance",
+  "newest",
+  "oldest",
+  "name-asc",
+  "name-desc",
+];
+
+/**
+ * The sort a listing uses when the reader has not picked one. Searching
+ * defaults to relevance — that is the question a search box asks — and
+ * browsing to the newest recipes.
+ *
+ * Shared by the page (which resolves the sort) and SortBar (which decides
+ * which option is the one that needs no `sort=` in the URL), so the two cannot
+ * disagree about what an absent parameter means.
+ */
+export function defaultSortFor(query: string | null | undefined): SortOption {
+  return query?.trim() ? "relevance" : "newest";
+}
+
+/** Whether a sort can be applied at all — relevance needs something to rank. */
+export function isSortAvailable(
+  sort: SortOption,
+  query: string | null | undefined,
+): boolean {
+  return sort !== "relevance" || Boolean(query?.trim());
+}
+
+/**
+ * The catalog ingredients in `groups` that a search query matched — the names
+ * to show on a card that turned up for a query its title doesn't contain.
+ *
+ * This mirrors, client-side, the arm `recipeSearchFilter` adds to the query
+ * (src/lib/recipes.ts): the same catalog `name` + `aliases`, the same
+ * case-insensitive substring test. It reports the ingredient by its catalog
+ * `name` even when an ALIAS is what matched, because the name is the one
+ * spelling that also identifies the row in the ingredient manager.
+ *
+ * A line whose `ingredient` is undefined (read without `catalog: true`) or null
+ * (unmatched) contributes nothing, exactly as the nutrition math treats those
+ * two — so a caller that skipped the catalog round trip shows no badges rather
+ * than wrong ones. An empty query matches nothing, rather than everything.
+ *
+ * Ordered HEAVIEST FIRST, by the same weight the search ranking scores
+ * (`resolveLineGrams`), so the badge names the ingredient that actually put
+ * this recipe where it is. Capped, because this renders in the card's top
+ * badge overlay beside the category and the status: a query like "onion"
+ * matches both "Onions, raw" and "Spices, onion powder" in one recipe, and
+ * USDA names are long enough that a second pill wraps the overlay onto the
+ * image. One answers "why is this card here"; the rest is detail the recipe
+ * page carries.
+ */
+export function matchedCatalogIngredients(
+  groups: readonly RecipeIngredientGroup[],
+  query: string,
+  limit = 1,
+): string[] {
+  const needle = query.trim().toLowerCase();
+  if (!needle) return [];
+
+  // Summed per catalog ingredient, because that is what the ranking scores:
+  // two lines of onion really is more onion, and a recipe listing it twice
+  // should not be described by whichever line came first.
+  const grams = new Map<string, number>();
+  const order: string[] = [];
+  for (const group of groups) {
+    for (const line of group.ingredients) {
+      const catalog = line.ingredient;
+      if (!catalog) continue;
+      const matches = [catalog.name, ...catalog.aliases].some((text) =>
+        text.toLowerCase().includes(needle),
+      );
+      if (!matches) continue;
+      if (!grams.has(catalog.name)) order.push(catalog.name);
+      const weight = resolveLineGrams(line, catalog.density_g_per_ml).grams;
+      grams.set(catalog.name, (grams.get(catalog.name) ?? 0) + (weight ?? 0));
+    }
+  }
+
+  // Heaviest first, so the badge names the ingredient that put this recipe
+  // where it is in a relevance-ranked list — a card ranked on its 220 g of
+  // onion that then says "onion powder" reads as a different recipe. Ties keep
+  // the recipe's own order, which is the only other thing a reader can see.
+  return order
+    .sort((a, b) => (grams.get(b) ?? 0) - (grams.get(a) ?? 0))
+    .slice(0, limit);
+}
+
 export const SERVINGS_UNIT_FALLBACK = "servings";
 
 /**

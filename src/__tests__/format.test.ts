@@ -1,5 +1,8 @@
 import { describe, it, expect } from "vitest";
 import {
+  defaultSortFor,
+  isSortAvailable,
+  matchedCatalogIngredients,
   formatDuration,
   parseDurationToSeconds,
   formatMS,
@@ -38,8 +41,10 @@ import type {
 } from "@/types/editor";
 import type { HowToStep, RecipeDocument, SchemaRecipe } from "@/types/recipe";
 import {
+  makeIngredient,
   makeIngredientGroup,
   makeIngredientLines,
+  makeMatchedIngredient,
   makeInstructionGroup,
   makeStep,
   makeSteps,
@@ -972,6 +977,139 @@ describe("canonicalizeTimeInput", () => {
       expect(parseTimeInput(canonicalizeTimeInput(raw) as string)).toBe(
         parseTimeInput(raw),
       );
+    }
+  });
+});
+
+describe("matchedCatalogIngredients", () => {
+  const cilantro = makeIngredient("cat-cilantro", "Coriander (cilantro) leaves, raw", {
+    aliases: ["fresh coriander", "cilantro leaves"],
+  });
+  const butter = makeIngredient("cat-butter", "Butter, without salt", {
+    aliases: ["unsalted butter"],
+  });
+
+  it("matches a catalog name, case-insensitively", () => {
+    const groups = makeIngredientLines([makeMatchedIngredient("2 tbsp butter", butter)]);
+
+    expect(matchedCatalogIngredients(groups, "BUTTER")).toEqual(["Butter, without salt"]);
+  });
+
+  // The point of the feature: the recipe says "fresh coriander" and the
+  // searcher typed "cilantro".
+  it("matches an alias but reports the catalog name", () => {
+    const groups = makeIngredientLines([makeMatchedIngredient("1 bunch fresh coriander", cilantro)]);
+
+    expect(matchedCatalogIngredients(groups, "cilantro")).toEqual([
+      "Coriander (cilantro) leaves, raw",
+    ]);
+  });
+
+  it("names an ingredient once however many lines resolve to it", () => {
+    const groups = [
+      makeIngredientGroup("Sauce", [makeMatchedIngredient("2 tbsp butter", butter)]),
+      makeIngredientGroup("Top", [makeMatchedIngredient("1 tsp butter", butter)]),
+    ];
+
+    expect(matchedCatalogIngredients(groups, "butter")).toEqual(["Butter, without salt"]);
+  });
+
+  // The top badge overlay shares a row with the category and the status, so
+  // one match is the default; the cap stays adjustable for other surfaces.
+  it("reports one match by default, however many hit", () => {
+    const groups = makeIngredientLines([
+      makeMatchedIngredient("butter", butter),
+      makeMatchedIngredient("coriander", cilantro),
+    ]);
+
+    expect(matchedCatalogIngredients(groups, "r")).toHaveLength(1);
+    expect(matchedCatalogIngredients(groups, "r", 2)).toHaveLength(2);
+  });
+
+  // The card is RANKED on the heaviest match, so naming a lighter one would
+  // describe a different recipe than the one the position claims.
+  it("names the heaviest match first, not the first listed", () => {
+    const powder = makeIngredient("cat-onion-powder", "Spices, onion powder");
+    const onions = makeIngredient("cat-onion", "Onions, raw");
+    const groups = makeIngredientLines([
+      makeMatchedIngredient("2 g onion powder", powder),
+      makeMatchedIngredient("125 g onion", onions),
+    ]);
+
+    expect(matchedCatalogIngredients(groups, "onion")).toEqual(["Onions, raw"]);
+  });
+
+  it("sums an ingredient split across lines before comparing", () => {
+    const powder = makeIngredient("cat-onion-powder", "Spices, onion powder");
+    const onions = makeIngredient("cat-onion", "Onions, raw");
+    const groups = [
+      makeIngredientGroup("Rub", [
+        makeMatchedIngredient("60 g onion powder", powder),
+        makeMatchedIngredient("60 g onion powder", powder),
+      ]),
+      makeIngredientGroup("Base", [makeMatchedIngredient("100 g onion", onions)]),
+    ];
+
+    expect(matchedCatalogIngredients(groups, "onion")).toEqual([
+      "Spices, onion powder",
+    ]);
+  });
+
+  it("ignores a line the catalog was loaded for but did not match", () => {
+    const groups = makeIngredientLines([
+      makeMatchedIngredient("2 tbsp butter", butter, { ingredient: null }),
+    ]);
+
+    expect(matchedCatalogIngredients(groups, "butter")).toEqual([]);
+  });
+
+  // The /api/recipes shape: read without `catalog: true`, so `ingredient` is
+  // undefined on every line. No badge beats a wrong one.
+  it("ignores lines read without the catalog", () => {
+    const groups = makeIngredientLines(["2 tbsp butter"]);
+
+    expect(matchedCatalogIngredients(groups, "butter")).toEqual([]);
+  });
+
+  // Guards the scoping decision: search speaks the catalog's vocabulary, so a
+  // recipe's own line text is never itself a match.
+  it("does not match the recipe's own line text", () => {
+    const groups = makeIngredientLines([
+      makeMatchedIngredient("2 tbsp clarified ghee", butter),
+    ]);
+
+    expect(matchedCatalogIngredients(groups, "ghee")).toEqual([]);
+  });
+
+  it("matches nothing for an empty or blank query", () => {
+    const groups = makeIngredientLines([makeMatchedIngredient("2 tbsp butter", butter)]);
+
+    expect(matchedCatalogIngredients(groups, "")).toEqual([]);
+    expect(matchedCatalogIngredients(groups, "   ")).toEqual([]);
+  });
+});
+
+describe("defaultSortFor / isSortAvailable", () => {
+  // A search box asks "what is most relevant", a browse asks "what is new".
+  it("defaults a search to relevance and a browse to newest", () => {
+    expect(defaultSortFor("onion")).toBe("relevance");
+    expect(defaultSortFor("")).toBe("newest");
+    expect(defaultSortFor(null)).toBe("newest");
+    expect(defaultSortFor("   ")).toBe("newest");
+  });
+
+  // Relevance ranks a match by how much of the recipe it is, so with nothing
+  // to rank it is not an order at all.
+  it("offers relevance only alongside a query", () => {
+    expect(isSortAvailable("relevance", "onion")).toBe(true);
+    expect(isSortAvailable("relevance", "")).toBe(false);
+    expect(isSortAvailable("relevance", "  ")).toBe(false);
+  });
+
+  it("offers every recipe-property sort either way", () => {
+    for (const sort of ["newest", "oldest", "name-asc", "name-desc"] as const) {
+      expect(isSortAvailable(sort, "onion")).toBe(true);
+      expect(isSortAvailable(sort, null)).toBe(true);
     }
   });
 });

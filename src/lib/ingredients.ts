@@ -1,4 +1,5 @@
 import { getSupabaseAdminClient, selectColumns, toVectorLiteral } from "./supabase";
+import { resolveLineGrams } from "./nutritionMath";
 import type {
   GramsSource,
   IngredientKeywordMatch,
@@ -580,6 +581,40 @@ export async function setRecipeIngredientGrams(
 }
 
 /**
+ * Stamp each row with what it weighs (db/migrations/0024), the number recipe
+ * search ranks an ingredient match by.
+ *
+ * Applied HERE, at the two row writers, rather than at each of their callers:
+ * the reconcile's inserts and rewords, normalization's persist and the grams
+ * PATCH all funnel through those two, so deriving it at the chokepoint is what
+ * keeps the column true of the line without every writer remembering. It is
+ * the same arrangement `createRecipeRow`/`updateRecipeRow` use for `content`
+ * and `embedding`.
+ *
+ * Costs one catalog read per write, because a volume line needs its
+ * ingredient's density — the same `getCatalogForRows` the read path uses, so
+ * unmatched lines and ids the catalog has no row for resolve to a null density
+ * and simply weigh whatever their text alone can say.
+ *
+ * `resolved_grams` is deliberately absent from `RecipeIngredientRow`: the type
+ * describes what callers may read, and this is write-only.
+ */
+async function withResolvedGrams(
+  rows: RecipeIngredientRow[],
+): Promise<Array<RecipeIngredientRow & { resolved_grams: number | null }>> {
+  const catalog = await getCatalogForRows(rows);
+  return rows.map((row) => ({
+    ...row,
+    resolved_grams: resolveLineGrams(
+      row,
+      row.ingredient_id
+        ? (catalog.get(row.ingredient_id)?.density_g_per_ml ?? null)
+        : null,
+    ).grams,
+  }));
+}
+
+/**
  * Write whole rows back, in ONE statement — an upsert on the primary key, so
  * callers pass complete rows with their changes already merged. Both writers
  * of parsed data go through here: the reconcile's reworded rows on a recipe
@@ -595,9 +630,10 @@ export async function updateRecipeIngredientRows(
   if (rows.length === 0) return;
   const supabase = getSupabaseAdminClient();
 
+  const weighed = await withResolvedGrams(rows);
   const { error } = await supabase
     .from("recipe_ingredients")
-    .upsert(rows.map((row) => ({ ...row, recipe_id: recipeId })));
+    .upsert(weighed.map((row) => ({ ...row, recipe_id: recipeId })));
 
   if (error) {
     throw new IngredientRepoError("update_failed", error.message);
@@ -616,7 +652,9 @@ export async function insertRecipeIngredientRows(
   if (rows.length === 0) return;
   const supabase = getSupabaseAdminClient();
 
-  const { error } = await supabase.from("recipe_ingredients").insert(rows);
+  const { error } = await supabase
+    .from("recipe_ingredients")
+    .insert(await withResolvedGrams(rows));
 
   if (error) {
     throw new IngredientRepoError("insert_failed", error.message);

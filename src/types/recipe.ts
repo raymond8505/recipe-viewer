@@ -71,8 +71,19 @@ export interface RecipeIngredientGroupInput {
  * `getRecipes` because SortBar (a client component) renders the options, and
  * `@/lib/recipes` reaches `@/env` at runtime — a client module must be able to
  * name this type without naming a server module to get it.
+ *
+ * `relevance` only means something alongside a search query — it ranks a
+ * recipe by how much of it the matched ingredient accounts for — so it is the
+ * default when one is present and unavailable when one is not. The other four
+ * are properties of a recipe and always apply. `defaultSortFor` (src/lib/format.ts)
+ * is the one place that choice is made.
  */
-export type SortOption = "newest" | "oldest" | "name-asc" | "name-desc";
+export type SortOption =
+  | "relevance"
+  | "newest"
+  | "oldest"
+  | "name-asc"
+  | "name-desc";
 
 /**
  * The `recipes` table, column for column — what `selectColumns<>` is checked

@@ -18,6 +18,21 @@ export function toVectorLiteral(values: number[]): string {
   return `[${values.join(",")}]`;
 }
 
+// Quote a value for use inside an `.or()` / `.and()` filter string.
+//
+// Every other filter builder (`.ilike(col, value)`) passes its value as its own
+// parameter, but `.or()` takes one string in PostgREST's filter grammar, where
+// `,` separates the arms: an unquoted user query containing one is a 400
+// (PGRST100), not a bad search result. Double quotes make the value opaque to
+// that grammar, and a `"` or `\` inside them has to be escaped in turn.
+//
+// This restores the parameterised form's semantics and nothing more — a `%` or
+// `_` reaching `ilike` is still a wildcard here exactly as it is there, so
+// moving a filter into an `.or()` doesn't quietly change what a query means.
+export function orFilterValue(value: string): string {
+  return `"${value.replace(/[\\"]/g, "\\$&")}"`;
+}
+
 type Join<Cols extends readonly string[]> = Cols extends readonly [
   infer First extends string,
   ...infer Rest extends readonly string[],
