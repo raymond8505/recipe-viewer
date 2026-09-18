@@ -33,6 +33,12 @@ export type ExclusionReason =
   | "no_density"
   | "no_nutrition";
 
+// The blockers a stored 0 can override. The grams-less reasons aren't here
+// because they can't arise on a zeroed line — 0 IS its grams. These two can:
+// they are facts about the catalog, and a curator saying "this line counts for
+// nothing" answers the recipe's total without answering them.
+export type ZeroableReason = Extract<ExclusionReason, "unmatched" | "no_nutrition">;
+
 // Where a line's grams came from. "estimated" = a stored per-line estimate
 // (LLM or user-typed), "measured" = parsed quantity+unit conversion (weight
 // direct, or volume × density), "annotation" = an explicit "(45g)"-style weight
@@ -45,6 +51,12 @@ export type LineComputation =
       grams: number;
       gramsSource: GramsProvenance;
       nutrition: IngredientNutrition;
+      /**
+       * Set only on a zeroed line that would otherwise have been excluded: the
+       * blocker the 0 overrode. The line counts (as nothing), but the catalog
+       * question is still open, so the UI keeps flagging it — quietly.
+       */
+      zeroedOver?: ZeroableReason;
     }
   | { kind: "excluded"; reason: ExclusionReason };
 
@@ -144,6 +156,15 @@ export function scalePortionNutritionToPer100g(
  * the flag names the primary blocker (an unmatched line is "unmatched" even
  * if it also lacks a unit).
  *
+ * A stored `estimated_grams` of 0 takes the other branch of both catalog
+ * checks. It is the curator's "this line is nothing", and that is an answer
+ * about the recipe's total even when nothing is known about the food — some
+ * lines ("a pinch of saffron", a garnish nobody stocks) are never going to
+ * match, and without this one of them holds the WHOLE recipe off its
+ * ingredient-derived nutrition via `fullyCovered`. The overridden blocker is
+ * reported as `zeroedOver` rather than dropped, so the open catalog question
+ * stays visible instead of being silently resolved to zero.
+ *
  * Grams precedence:
  *   1. a stored per-line `estimated_grams` (LLM or user-typed) — an explicit
  *      decision, so it beats the derived value (a manual override/re-estimate
@@ -161,11 +182,25 @@ export function computeLineNutrition(
   >,
   ingredient: Pick<IngredientRow, "nutrition" | "density_g_per_ml"> | null,
 ): LineComputation {
+  // `=== 0`, never a falsy check: null is "no estimate", 0 is a decision.
+  const zeroed = row.estimated_grams === 0;
+  // No catalog row to take key sparsity from, so the contribution is `{}` —
+  // a line that counts for nothing must not mint a nutrient key in the sum.
+  const zeroLine = (zeroedOver: ZeroableReason): LineComputation => ({
+    kind: "ok",
+    grams: 0,
+    gramsSource: "estimated",
+    nutrition: {},
+    zeroedOver,
+  });
+
   if (row.ingredient_id == null || ingredient == null) {
-    return { kind: "excluded", reason: "unmatched" };
+    return zeroed ? zeroLine("unmatched") : { kind: "excluded", reason: "unmatched" };
   }
   if (ingredient.nutrition == null) {
-    return { kind: "excluded", reason: "no_nutrition" };
+    return zeroed
+      ? zeroLine("no_nutrition")
+      : { kind: "excluded", reason: "no_nutrition" };
   }
 
   const parsedGrams =

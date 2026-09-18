@@ -404,3 +404,112 @@ describe("IngredientAutocomplete — USDA fallback", () => {
     ).not.toBeInTheDocument();
   });
 });
+
+// jsdom does no layout, so the heights themselves can't be asserted here —
+// the parity is a Storybook story. What IS assertable is the mechanism whose
+// absence caused the collapse: the closed label has to survive into the open
+// state as a sizer, because the input replacing it is single-line and the
+// host column is narrow enough (w-44) that a catalog name wraps.
+describe("height parity with the closed trigger", () => {
+  it("keeps the match name in the open editor as an aria-hidden sizer", async () => {
+    const user = userEvent.setup();
+    renderClosed({ id: "ing-1", name: "yellow onion, sautéed, drained" });
+
+    await user.click(screen.getByLabelText("Change match for 1 tsp cumin"));
+
+    // Not reachable as content — it exists only to occupy space.
+    const ghost = document.querySelector('[aria-hidden="true"].invisible');
+    expect(ghost).toHaveTextContent("yellow onion, sautéed, drained");
+    // And it must not become a second copy of the name for a screen reader.
+    expect(
+      screen.queryByText("yellow onion, sautéed, drained", { ignore: "[aria-hidden] *" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("sizes to the 'unmatched' trigger when there is no match", async () => {
+    const user = userEvent.setup();
+    renderClosed(null);
+
+    await user.click(screen.getByLabelText("Change match for 1 tsp cumin"));
+
+    expect(document.querySelector('[aria-hidden="true"].invisible')).toHaveTextContent(
+      "unmatched",
+    );
+  });
+});
+
+// jsdom lays nothing out, so every rect is 0×0 and the placement measurement
+// reads "unmeasurable" — which is exactly why the two cases below stub the
+// geometry rather than relying on the DOM, and why every other test in this
+// file still sees the unflipped default.
+describe("option placement", () => {
+  const SCROLLPORT = { top: 0, bottom: 600 };
+
+  function rect(top: number, bottom: number): DOMRect {
+    return {
+      top,
+      bottom,
+      height: bottom - top,
+      left: 0,
+      right: 200,
+      width: 200,
+      x: 0,
+      y: top,
+      toJSON: () => ({}),
+    };
+  }
+
+  // The trigger is the `relative` wrapper the listbox is positioned against.
+  function stubLayout(triggerTop: number, triggerBottom: number) {
+    return vi
+      .spyOn(HTMLElement.prototype, "getBoundingClientRect")
+      .mockImplementation(function (this: HTMLElement) {
+        if (this.dataset.testid === "scrollport")
+          return rect(SCROLLPORT.top, SCROLLPORT.bottom);
+        if (this.classList.contains("relative"))
+          return rect(triggerTop, triggerBottom);
+        return rect(0, 0);
+      });
+  }
+
+  async function openInScrollport(user: ReturnType<typeof userEvent.setup>) {
+    render(
+      <div data-testid="scrollport" style={{ overflowY: "auto" }}>
+        <IngredientAutocomplete
+          value={null}
+          onSelect={onSelect}
+          ariaLabel="Change match for 1 tsp cumin"
+          search={search}
+        />
+      </div>,
+    );
+    await user.click(screen.getByLabelText("Change match for 1 tsp cumin"));
+    return screen.getByRole("listbox");
+  }
+
+  // The bug: on the last rows of the breakdown table the options opened under
+  // the pinned totals band and couldn't be reached.
+  it("opens the options above the trigger when the scrollport leaves no room below", async () => {
+    const user = userEvent.setup();
+    const spy = stubLayout(560, 590);
+    try {
+      const listbox = await openInScrollport(user);
+      expect(listbox).toHaveClass("bottom-full");
+      expect(listbox).not.toHaveClass("top-full");
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it("keeps the options below the trigger when there is room for them", async () => {
+    const user = userEvent.setup();
+    const spy = stubLayout(20, 50);
+    try {
+      const listbox = await openInScrollport(user);
+      expect(listbox).toHaveClass("top-full");
+      expect(listbox).not.toHaveClass("bottom-full");
+    } finally {
+      spy.mockRestore();
+    }
+  });
+});

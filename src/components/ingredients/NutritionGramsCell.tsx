@@ -23,6 +23,10 @@ import type { RecipeIngredient } from "@/types/recipe";
  * both are stored estimates, but 0 is a decision about the line, not a guess
  * at its weight.
  *
+ * Rendered on unmatched lines too, where 0 is the only way out at all — the
+ * derived placeholder is simply empty there, since there is no catalog row to
+ * derive a weight from.
+ *
  * @summary editable grams override + LLM estimate trigger for one line
  */
 export default function NutritionGramsCell({

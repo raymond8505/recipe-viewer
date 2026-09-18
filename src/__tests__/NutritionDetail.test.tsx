@@ -169,10 +169,11 @@ describe("NutritionDetail", () => {
     ).toBeInTheDocument();
     expect(within(eggsRow).getAllByText("—").length).toBeGreaterThan(0);
 
-    // "5 g magic dust" has no catalog match.
+    // "5 g magic dust" has no catalog match. Prefix-matched for the same
+    // reason as the eggs row: the tooltip also offers the 0 escape hatch.
     expect(
       within(rowFor("5 g magic dust")).getByTitle(
-        "Not matched to the catalog — pick an ingredient to include it",
+        /^Not matched to the catalog — pick an ingredient/,
       ),
     ).toBeInTheDocument();
 
@@ -747,7 +748,7 @@ describe("NutritionDetail", () => {
     renderDetail();
 
     // Two lines start flagged: "2 eggs" (no unit) and "5 g magic dust"
-    // (unmatched, and NOT something 0 can fix).
+    // (unmatched). Only the eggs are zeroed here.
     expect(screen.getByText(/exclude 2 flagged lines/)).toBeInTheDocument();
 
     const input = within(rowFor("2 eggs")).getByLabelText("Grams for 2 eggs");
@@ -770,6 +771,48 @@ describe("NutritionDetail", () => {
     expect(within(eggsRow).getByText("0")).toBeInTheDocument();
     // Butter (717) + cumin (7.76) — unchanged, because 0 g of egg is 0 kcal.
     expect(rowFor("Recipe total")).toHaveTextContent("724.76");
+  });
+
+  // An unmatched line used to have no grams field at all, so a line nobody
+  // could match was a dead end that held the whole recipe off its total. It is
+  // zeroable now — and because the match is still an open question, the amber
+  // flag is replaced by a muted one rather than simply dropped.
+  it("zeroes an unmatched line, trading its amber flag for a muted one", async () => {
+    const user = userEvent.setup();
+    vi.mocked(setIngredientGrams).mockResolvedValue(
+      makeRecipeIngredientRow("r-1", 3, {
+        id: "ri-3",
+        raw_text: "5 g magic dust",
+        quantity: 5,
+        unit: "g",
+        ingredient_id: null,
+        match_status: "unmatched",
+        estimated_grams: 0,
+        grams_source: "manual",
+      }),
+    );
+    renderDetail();
+
+    const input = within(rowFor("5 g magic dust")).getByLabelText(
+      "Grams for 5 g magic dust",
+    );
+    await user.type(input, "0");
+    await user.tab(); // blur commits
+
+    expect(setIngredientGrams).toHaveBeenCalledWith("r-1", "ri-3", 0);
+    // Only "2 eggs" is still flagged as excluded.
+    await waitFor(() =>
+      expect(screen.getByText(/exclude 1 flagged line/)).toBeInTheDocument(),
+    );
+
+    const dustRow = rowFor("5 g magic dust");
+    expect(within(dustRow).getByText("not counted")).toBeInTheDocument();
+    expect(
+      within(dustRow).queryByTitle(/^Not matched to the catalog — pick an ingredient/),
+    ).not.toBeInTheDocument();
+    expect(
+      within(dustRow).getByTitle(/^Not matched to the catalog, but counted as nothing/),
+    ).toBeInTheDocument();
   });
 
   it("rejects a negative gram entry back to the stored value", async () => {
