@@ -48,8 +48,7 @@ const EXCLUSION_TITLES: Record<ExclusionReason, string> = {
 // still open — so the flag stays, muted: amber is for something that needs
 // doing, and this doesn't.
 const ZEROED_TITLES: Record<ZeroableReason, string> = {
-  unmatched:
-    "Not matched to the catalog, but counted as nothing — it isn't holding the totals back",
+  unmatched: "Not matched to the catalog, but counted as nothing",
   no_nutrition:
     "Matched ingredient has no nutrition data, but this line is counted as nothing",
 };
@@ -100,7 +99,8 @@ export default function NutritionDetailRow({
   const { row, ingredient, computation, enabled } = line;
   const excluded = computation.kind === "excluded";
   // The blocker a stored 0 overrode, if any — still worth flagging, quietly.
-  const zeroedOver = computation.kind === "ok" ? computation.zeroedOver : undefined;
+  const zeroedOver =
+    computation.kind === "ok" ? computation.zeroedOver : undefined;
   // The sticky cell is its own stacking context (z-10), so the dropdown's
   // internal z-index can't beat sibling rows' sticky cells — the whole cell
   // is raised above them (but below the z-30 header corners) while open.

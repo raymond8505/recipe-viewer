@@ -17,7 +17,7 @@ Unit tests follow the code: helpers moved into `format.ts` are tested in `format
 
 **All icon components live in `src/components/icons/`** — one file per icon, barrel at `src/components/icons/index.ts`. Import from `@/components/icons`. Do not define icon components inline in feature files.
 
-**`invisible` not conditional render** — the copy button is always in the DOM (using Tailwind `invisible` when disabled) so it never shifts the heading layout. Apply this pattern to any button that appears next to a heading.
+**`invisible` not conditional render — anything whose presence would move the layout stays in the DOM.** Two shapes: a control that comes and goes (the copy button beside a heading is always rendered, Tailwind `invisible` when disabled), and a control that *swaps* for another (`IngredientAutocomplete` keeps its closed label rendered-invisible as a sizer while the editor is open, both states from one shared node, so the cell can't collapse when a wrapped name becomes a single-line input). A `min-h-*` floor is not a substitute — the height to hold is whatever the content wrapped to.
 
 **UI fetches to `/api/recipes/*` go through `src/lib/api/recipes.ts`** (pattern: `src/lib/api/auth.ts`). No naked fetch in components. Known follow-up: RecipeDetail's `/rescrape` and `/regenerate-image` fetches are still naked, not yet wrapped.
 
