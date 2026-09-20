@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  resolveLineGrams,
   computeLineNutrition,
   computeRecipeNutrition,
   explicitWeightGrams,
@@ -720,3 +721,67 @@ describe("schemaNutritionToValues / nutrientValuesToSchema", () => {
   });
 });
 
+describe("resolveLineGrams", () => {
+  // Grams come from one of three sources, in a fixed precedence — the same
+  // resolver the `resolved_grams` column and recipe search's ranking use.
+  const line = (over: Partial<Parameters<typeof resolveLineGrams>[0]> = {}) => ({
+    raw_text: "",
+    quantity: null,
+    unit: null,
+    estimated_grams: null,
+    ...over,
+  });
+
+  it("converts a weight unit without needing a density", () => {
+    const { grams, gramsSource } = resolveLineGrams(
+      line({ quantity: 8, unit: "oz", raw_text: "8 oz cream cheese" }),
+      null,
+    );
+
+    expect(grams).toBeCloseTo(226.796, 2);
+    expect(gramsSource).toBe("measured");
+  });
+
+  it("converts a volume unit through the density", () => {
+    const { grams } = resolveLineGrams(
+      line({ quantity: 1, unit: "cup", raw_text: "1 cup milk" }),
+      1.03,
+    );
+
+    expect(grams).toBeCloseTo(236.588 * 1.03, 2);
+  });
+
+  it("cannot weigh a volume with no density", () => {
+    expect(resolveLineGrams(line({ quantity: 1, unit: "cup" }), null).grams).toBeNull();
+  });
+
+  it("prefers a stored estimate over the parsed quantity", () => {
+    const { grams, gramsSource } = resolveLineGrams(
+      line({ quantity: 8, unit: "oz", estimated_grams: 200 }),
+      null,
+    );
+
+    expect(grams).toBe(200);
+    expect(gramsSource).toBe("estimated");
+  });
+
+  // Zero is a decision about the line, not an absent weight, so it must beat
+  // the parse rather than read as falsy (see nutrition.md).
+  it("keeps a deliberate zero", () => {
+    expect(resolveLineGrams(line({ quantity: 2, unit: "tbsp", estimated_grams: 0 }), 0.9).grams).toBe(0);
+  });
+
+  it("falls back to a parenthetical weight in the text", () => {
+    const { grams, gramsSource } = resolveLineGrams(
+      line({ raw_text: "1 can (14 oz) diced tomatoes" }),
+      null,
+    );
+
+    expect(grams).toBeCloseTo(396.893, 2);
+    expect(gramsSource).toBe("annotation");
+  });
+
+  it("reports no weight for a line nothing can measure", () => {
+    expect(resolveLineGrams(line({ raw_text: "salt to taste" }), null).grams).toBeNull();
+  });
+});

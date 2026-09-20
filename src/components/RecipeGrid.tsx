@@ -30,8 +30,12 @@ interface RecipeGridProps {
  * overlay is `justify-end`, so the last badge is the one in the corner, and
  * the corner is where a reader's eye looks for "is this thing published?".
  * Everything else grows leftwards from it.
+ *
+ * Exported so a caller adding a badge of its own prepends to this rather than
+ * rebuilding the pair: the status-last rule lives here, and every listing that
+ * supplies `topBadges` inherits it by composing with this.
  */
-function defaultTopBadges(
+export function defaultTopBadges(
   recipe: RecipeRow,
   showStatusBadge?: boolean,
 ): ReactNode[] {

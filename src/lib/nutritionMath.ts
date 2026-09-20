@@ -150,11 +150,16 @@ export function scalePortionNutritionToPer100g(
   return per100g;
 }
 
+/** What a line weighs, and which of the three sources answered. */
+export interface ResolvedLineGrams {
+  grams: number | null;
+  gramsSource: GramsProvenance;
+}
+
 /**
- * Full line computation: grams conversion + nutrition scaling, or the
- * exclusion reason. Exclusion checks are ordered most-fundamental-first so
- * the flag names the primary blocker (an unmatched line is "unmatched" even
- * if it also lacks a unit).
+ * What one ingredient line weighs, in grams — the single resolver behind both
+ * the nutrition math and the `resolved_grams` column recipe search ranks on,
+ * so a line's weight cannot come to mean two different things.
  *
  * A stored `estimated_grams` of 0 takes the other branch of both catalog
  * checks. It is the curator's "this line is nothing", and that is an answer
@@ -168,12 +173,39 @@ export function scalePortionNutritionToPer100g(
  * Grams precedence:
  *   1. a stored per-line `estimated_grams` (LLM or user-typed) — an explicit
  *      decision, so it beats the derived value (a manual override/re-estimate
- *      wins);
+ *      wins). Ranked on `!= null`, never on truthiness: 0 g is a curator
+ *      saying "don't count this line" and has to win (see nutrition.md);
  *   2. the parsed quantity+unit conversion (weight direct, volume × density);
  *   3. an explicit "(45g)"-style weight annotation in the raw text — the
  *      fallback that rescues volume lines matched to density-less ingredients
  *      (e.g. Branded USDA imports carry no portions).
- * A grams-less line falls to the ordered exclusion reasons.
+ *
+ * Null grams leaves `gramsSource` naming the source that declined; only
+ * `computeLineNutrition`'s exclusion reasons read it in that state.
+ */
+export function resolveLineGrams(
+  row: Pick<
+    RecipeIngredientRow,
+    "quantity" | "unit" | "raw_text" | "estimated_grams"
+  >,
+  densityGPerMl: number | null,
+): ResolvedLineGrams {
+  if (row.estimated_grams != null) {
+    return { grams: row.estimated_grams, gramsSource: "estimated" };
+  }
+  const measured =
+    row.quantity != null && row.unit != null
+      ? gramsForLine(row.quantity, row.unit, densityGPerMl)
+      : null;
+  if (measured != null) return { grams: measured, gramsSource: "measured" };
+  return { grams: explicitWeightGrams(row.raw_text), gramsSource: "annotation" };
+}
+
+/**
+ * Full line computation: grams (via `resolveLineGrams`) + nutrition scaling,
+ * or the exclusion reason. Exclusion checks are ordered most-fundamental-first
+ * so the flag names the primary blocker (an unmatched line is "unmatched" even
+ * if it also lacks a unit).
  */
 export function computeLineNutrition(
   row: Pick<
@@ -203,23 +235,10 @@ export function computeLineNutrition(
       : { kind: "excluded", reason: "no_nutrition" };
   }
 
-  const parsedGrams =
-    row.quantity != null && row.unit != null
-      ? gramsForLine(row.quantity, row.unit, ingredient.density_g_per_ml)
-      : null;
-
-  let grams: number | null;
-  let gramsSource: GramsProvenance;
-  if (row.estimated_grams != null) {
-    grams = row.estimated_grams;
-    gramsSource = "estimated";
-  } else if (parsedGrams != null) {
-    grams = parsedGrams;
-    gramsSource = "measured";
-  } else {
-    grams = explicitWeightGrams(row.raw_text);
-    gramsSource = "annotation";
-  }
+  const { grams, gramsSource } = resolveLineGrams(
+    row,
+    ingredient.density_g_per_ml,
+  );
 
   if (grams == null) {
     if (row.quantity == null) return { kind: "excluded", reason: "no_quantity" };

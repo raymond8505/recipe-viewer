@@ -1,21 +1,18 @@
 import { Suspense } from "react";
 import type { Metadata } from "next";
 import { getRecipes, getStatusCounts, type SortOption } from "@/lib/recipes";
+import { defaultSortFor, isSortAvailable, SORT_OPTIONS } from "@/lib/format";
 import { getFeatures } from "@/lib/features";
 import { getIsLoggedIn } from "@/lib/auth";
-import RecipeGrid from "@/components/RecipeGrid";
+import RecipeGrid, { defaultTopBadges } from "@/components/RecipeGrid";
+import { recipeMatchBadges } from "@/components/RecipeMatchBadge";
 import SearchBar from "@/components/SearchBar";
 import SortBar from "@/components/SortBar";
 import StatusFilter from "@/components/StatusFilter";
 import Pagination from "@/components/Pagination";
 
 const PAGE_SIZE = 24;
-const VALID_SORTS = new Set<SortOption>([
-  "newest",
-  "oldest",
-  "name-asc",
-  "name-desc",
-]);
+const VALID_SORTS = new Set<SortOption>(SORT_OPTIONS);
 
 export const metadata: Metadata = {
   title: "Recipe Viewer",
@@ -41,9 +38,14 @@ export default async function Home({ searchParams }: HomeProps) {
   } = await searchParams;
   const query = q ?? "";
   const page = Math.max(1, Number(pageParam ?? 1));
-  const sort: SortOption = VALID_SORTS.has(sortParam as SortOption)
-    ? (sortParam as SortOption)
-    : "newest";
+  // Searching defaults to relevance, browsing to newest. A sort the URL asks
+  // for that this listing cannot apply — relevance with nothing to rank —
+  // falls back rather than 500ing on a hand-edited link.
+  const requested = sortParam as SortOption;
+  const sort: SortOption =
+    VALID_SORTS.has(requested) && isSortAvailable(requested, query)
+      ? requested
+      : defaultSortFor(query);
 
   const isLoggedIn = await getIsLoggedIn();
   const features = getFeatures(isLoggedIn);
@@ -93,7 +95,25 @@ export default async function Home({ searchParams }: HomeProps) {
         )}
       </div>
 
-      <RecipeGrid recipes={recipes} showStatusBadge={isLoggedIn} />
+      <RecipeGrid
+        recipes={recipes}
+        showStatusBadge={isLoggedIn}
+        // Search matches ingredients as well as names, so a card can be here
+        // for a reason its title doesn't show. The match badge names that
+        // ingredient and leads the top row, where a reader looks before the
+        // title — prepended rather than assembled, so `defaultTopBadges` keeps
+        // sole ownership of the category/status pair and the status-last rule.
+        // With no query there is nothing to explain, and leaving this undefined
+        // keeps the grid's own default untouched.
+        topBadges={
+          query
+            ? (recipe) => [
+                ...recipeMatchBadges(recipe.ingredients, query),
+                ...defaultTopBadges(recipe, isLoggedIn),
+              ]
+            : undefined
+        }
+      />
 
       <Suspense>
         <Pagination page={page} total={count} pageSize={PAGE_SIZE} />
