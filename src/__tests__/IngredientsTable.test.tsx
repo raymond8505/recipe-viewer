@@ -19,7 +19,13 @@ vi.mock("@/lib/api/ingredients", () => ({
   deleteIngredient: vi.fn(),
 }));
 
-const cumin = ingredientFixtures[0]; // "cumin seed"
+const cumin = ingredientFixtures[0]; // "cumin seed" — carries a last_checked
+const flour = ingredientFixtures[1]; // "all-purpose flour" — never checked
+
+/** The `<tr>` an ingredient's cells live in, by its Name input's label. */
+function rowFor(name: string): HTMLElement {
+  return screen.getByLabelText(`Name for ${name}`).closest("tr")!;
+}
 
 function renderTable(
   rows = ingredientFixtures.slice(0, 2),
@@ -261,6 +267,58 @@ describe("IngredientsTable", () => {
         }),
       );
     });
+  });
+
+  it("shows the last check date, or an em dash for a row never checked", () => {
+    renderTable();
+
+    // Scoped per row: the nutrition cells use the same em dash for a missing
+    // value, so an unscoped query would pass on the wrong cell.
+    expect(within(rowFor("cumin seed")).getByText("2026-09-12")).toBeInTheDocument();
+    expect(within(rowFor("all-purpose flour")).getByText("—")).toBeInTheDocument();
+  });
+
+  // The button is the only UI route to the stamp — a plain Save must never
+  // claim the row was verified, because people edit rows for other reasons.
+  it("stamps last_checked with the current time from the Mark checked button", async () => {
+    const before = Date.now();
+    vi.mocked(updateIngredient).mockResolvedValueOnce({
+      ...flour,
+      last_checked: "2026-09-22T14:03:00.000Z",
+      updated_at: "2026-09-22T14:03:00.000Z",
+    });
+    renderTable();
+
+    fireEvent.click(screen.getByLabelText("Mark all-purpose flour checked"));
+
+    await waitFor(() => expect(updateIngredient).toHaveBeenCalled());
+    const [id, patch] = vi.mocked(updateIngredient).mock.calls[0];
+    expect(id).toBe(flour.id);
+    expect(Object.keys(patch)).toEqual(["last_checked"]);
+    // "Now", not a value from the row: the assertion is the instant, not a
+    // literal, so it can't be satisfied by echoing back what was stored.
+    expect(Date.parse(patch.last_checked!)).toBeGreaterThanOrEqual(before);
+    expect(Date.parse(patch.last_checked!)).toBeLessThanOrEqual(Date.now());
+
+    expect(
+      within(rowFor("all-purpose flour")).getByText("2026-09-22"),
+    ).toBeInTheDocument();
+  });
+
+  it("disables Mark checked while the row has unsaved edits", () => {
+    renderTable();
+
+    const button = screen.getByLabelText("Mark cumin seed checked");
+    expect(button).toBeEnabled();
+
+    // The stamp's PATCH remounts the row, which would discard the draft —
+    // so the button waits for Save rather than silently eating the edit.
+    fireEvent.change(screen.getByLabelText("Name for cumin seed"), {
+      target: { value: "whole cumin seed" },
+    });
+
+    expect(button).toBeDisabled();
+    expect(updateIngredient).not.toHaveBeenCalled();
   });
 
   it("deletes only after confirmation and removes the row", async () => {

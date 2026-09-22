@@ -8,6 +8,28 @@ A recipe's ingredients are `recipe_ingredients` rows (`RecipeIngredient` entitie
 
 **`ingredients.embedding` is NOT NULL** (migration 0006): `CreateIngredientInput.embedding` is required and `UpdateIngredientPatch.embedding` can replace but never clear. Rationale: an embedding-less row is invisible to matching → every line resolving to it would be misclassified as novel.
 
+**`ingredients.last_checked` is asserted, never derived** (migration 0026). It records when a row's
+data was last *verified against a source* — USDA, a package label, an agent's consensus check —
+which `updated_at` cannot answer, because that moves on any write including a rename or an alias.
+Nothing computes it: MCP `create_ingredient`/`update_ingredient` take it as an explicit ISO
+timestamp (`z.iso.datetime({ offset: true }).nullish()` — null clears it), and the ingredient
+manager's **Mark checked** button PATCHes the current time. A plain row save deliberately does
+**not** stamp it, which is why it is absent from `useIngredientRowEditor`'s `Draft`: people edit
+rows for reasons that are not checks, so the assertion stays a separate act. The button is disabled
+while its row is dirty — the PATCH remounts the row (`${id}-${updated_at}` key) and would discard
+the draft. NULL means never checked, and no backfill invented one. The Last checked column is the
+ingredients table's alone; the nutrition breakdown does not show it.
+
+**A patch that changes a row's data demotes `source` to `manual`; one that only stamps
+`last_checked` does not.** A row carrying hand-edited values is `manual`: those values are the
+editor's, not USDA's. The `fdc_id` stays either way, and that is the provenance trail. A *check*,
+by contrast, confirms the stored values — a USDA row verified against USDA is still a USDA row. `updateIngredientRow` makes
+that call, at the chokepoint the HTTP route and the MCP tool both funnel through, so the two can
+never disagree; `last_checked` and `embedding` are the excluded keys (neither changes what the row
+says). This is why `ingredientUpdateInputSchema` must override `source` to a plain `.optional()`:
+`.partial()` keeps create's `.default()`, so without it every patch would rewrite the column and
+Mark checked would demote a row for confirming it was right.
+
 **`match_ingredients` is hybrid keyword + semantic** (migration 0007): pg_trgm trigram similarity over `name` + each alias (best-of), fused with pgvector cosine via Reciprocal Rank Fusion (`rrf_k=50`, per-signal weights, all defaulted in SQL). Returns `semantic_similarity`, `keyword_similarity`, `score`. **Never threshold on `score`** — RRF is rank-only; threshold on the raw similarities (keyword ~1.0 = near-exact name/alias hit). Trigram was chosen over tsvector deliberately: ingredient names are 1–4 words where `ts_rank_cd` is meaningless and stemmed FTS misses typos. The single scored-CTE seq scan is intentional at catalog scale; the Supabase docs' two-limited-CTE + trgm/hnsw-index shape is the upgrade path if the catalog grows large.
 
 **`recipe_ingredients.resolved_grams` is the nutrition math's answer, persisted** (0024). The

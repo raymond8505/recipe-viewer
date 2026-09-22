@@ -195,6 +195,22 @@ describe("createIngredient", () => {
     expect(out).toEqual(row);
   });
 
+  it("carries a last_checked stamp onto the new row", async () => {
+    // An agent that sourced the figures it is creating the row from has, by
+    // definition, just checked them.
+    const checkedAt = "2026-09-22T14:03:00.000Z";
+    vi.mocked(generateEmbedding).mockResolvedValueOnce([0.1]);
+    vi.mocked(createIngredientRow).mockResolvedValueOnce(
+      makeIngredient("ing-1", "smoked paprika", { last_checked: checkedAt }),
+    );
+
+    await createIngredient({ name: "smoked paprika", last_checked: checkedAt, source: "manual" });
+
+    expect(createIngredientRow).toHaveBeenCalledWith(
+      expect.objectContaining({ last_checked: checkedAt }),
+    );
+  });
+
   // The vector has to span name + aliases like every other write path, or
   // agent-made rows match worse than identical rows made through the manager
   // UI. Asserted WITH aliases on purpose: with none, ingredientEmbeddingText
@@ -294,6 +310,29 @@ describe("updateIngredient", () => {
     expect(getIngredientById).not.toHaveBeenCalled();
     expect(updateIngredientRow).toHaveBeenCalledWith("ing-1", { density_g_per_ml: 0.42 });
     expect(out).toEqual(row);
+  });
+
+  it("forwards the last_checked stamp an agent asserts", async () => {
+    const checkedAt = "2026-09-22T14:03:00.000Z";
+    const row = makeIngredient("ing-1", "cumin seed", { last_checked: checkedAt });
+    vi.mocked(updateIngredientRow).mockResolvedValueOnce(row);
+
+    const out = await updateIngredient({ id: "ing-1", last_checked: checkedAt });
+
+    expect(updateIngredientRow).toHaveBeenCalledWith("ing-1", {
+      last_checked: checkedAt,
+    });
+    expect(out.last_checked).toBe(checkedAt);
+  });
+
+  it("clears the stamp on an explicit null", async () => {
+    vi.mocked(updateIngredientRow).mockResolvedValueOnce(
+      makeIngredient("ing-1", "cumin seed"),
+    );
+
+    await updateIngredient({ id: "ing-1", last_checked: null });
+
+    expect(updateIngredientRow).toHaveBeenCalledWith("ing-1", { last_checked: null });
   });
 
   it("replaces stored nutrition with values scaled from the given portion", async () => {

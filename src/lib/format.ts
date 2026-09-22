@@ -237,6 +237,22 @@ export function formatDate(iso: string | undefined | null): string | null {
   });
 }
 
+/**
+ * Format an ISO 8601 timestamp as a bare UTC calendar date.
+ * e.g. "2026-09-12T15:20:00+00:00" → "2026-09-12"
+ *
+ * The narrow sibling of {@link formatDate}, for a column of dates read by
+ * scanning rather than by reading — the ingredients table's Last checked.
+ * UTC like formatDate, so the two never disagree about which day a timestamp
+ * falls on.
+ */
+export function formatIsoDate(iso: string | undefined | null): string | null {
+  if (!iso) return null;
+  const date = new Date(iso);
+  if (isNaN(date.getTime())) return null;
+  return date.toISOString().slice(0, 10);
+}
+
 import { nanoid } from "nanoid";
 import { resolveLineGrams, type NutrientValue } from "./nutritionMath";
 import { ingredientTexts } from "./recipeIngredients";

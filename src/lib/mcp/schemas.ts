@@ -317,6 +317,12 @@ const ingredientFieldsJsonSchema = {
     enum: INGREDIENT_SOURCES,
     description: `Provenance of the row. Defaults to "${DEFAULT_INGREDIENT_SOURCE}" for agent-created rows.`,
   },
+  last_checked: {
+    type: ["string", "null"],
+    format: "date-time",
+    description:
+      "ISO 8601 timestamp of when this row's values were last VERIFIED against a source — USDA, a package label, or a consensus check you just ran. Stamp it with the current time only when you actually checked the values in this same task: renaming the row, teaching it an alias, or writing a number you did not verify is NOT a check, and omitting the field leaves the stored date alone. This is deliberately not updated_at, which moves on every write — it is what tells a curator which rows have gone stale. Pass null to clear it back to never-checked.",
+  },
 } as const;
 
 export const TOOL_SCHEMAS = {

@@ -48,9 +48,23 @@ export const ingredientCreateInputSchema = z.object({
   // The UI creates hand-entered rows; the workflow's USDA rows go through the
   // repo layer directly.
   source: ingredientSourceSchema.default(DEFAULT_INGREDIENT_SOURCE),
+  // When the row was last verified against a source (db/migrations/0026).
+  // `offset: true` accepts "+00:00" as well as "Z": an agent's clock formats
+  // it either way, and both are the same instant. `.nullish()` gives the same
+  // three-way semantics the rest of this schema has — absent leaves the column
+  // alone, null clears the stamp, a string sets it.
+  last_checked: z.iso.datetime({ offset: true }).nullish(),
 });
 
-export const ingredientUpdateInputSchema = ingredientCreateInputSchema.partial();
+// `.partial()` makes every key optional but does NOT drop create's
+// `.default()`, so an absent `source` would still parse as
+// DEFAULT_INGREDIENT_SOURCE and every patch would rewrite the column — even
+// one that only stamps last_checked. Whether an update demotes a row to
+// "manual" is `updateIngredientRow`'s call, because only it can see whether
+// the patch changes any of the row's data.
+export const ingredientUpdateInputSchema = ingredientCreateInputSchema
+  .partial()
+  .extend({ source: ingredientSourceSchema.optional() });
 
 export const ingredientIdInputSchema = z.object({
   id: z.string().min(1),
