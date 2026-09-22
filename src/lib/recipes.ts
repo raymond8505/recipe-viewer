@@ -6,6 +6,7 @@ import {
 } from "./supabase";
 import { getFeatures } from "./features";
 import {
+  getFirstImage,
   parseDurationToSeconds,
   recipeToMarkdown,
   SCHEMA_ORG_ONLY_KEYS,
@@ -131,6 +132,15 @@ function hydrateTimes(row: RecipeRowColumns): RecipeRowColumns {
     else schema[key] = iso;
   }
   return row;
+}
+
+/**
+ * A text column's value from whatever a writer sent. Blank collapses to NULL so
+ * "" and "   " and absent all mean the one thing every reader branches on —
+ * this recipe has no description / no notes — rather than three spellings of it.
+ */
+function textOrNull(value: string | null | undefined): string | null {
+  return value?.trim() || null;
 }
 
 /** The blob-safe copy of a schema: times removed, so a write can never put a
@@ -522,6 +532,10 @@ export async function createRecipeRow(input: CreateRecipeInput): Promise<RecipeR
   // is read here and ONLY here. Before the strip, which deletes the key — parse
   // after it and every scraped recipe lands with null servings and no error.
   const yld = parseYield(input.schema.recipeYield);
+  // Same rule as the yield, for the same reason: read from the payload BEFORE
+  // the strip. `image` arrives in the Schema.org `string | string[]` form and
+  // is reduced to the one URL the column holds.
+  const image = getFirstImage(input.schema.image);
   const schema = stripSchemaOrgKeys(input.schema);
   // Every line becomes a row, and the row's id is its identity from the moment
   // it exists. The recipe id is minted here when the caller didn't, because
@@ -552,6 +566,10 @@ export async function createRecipeRow(input: CreateRecipeInput): Promise<RecipeR
     .insert({
       id: recipeId,
       name: schema.name,
+      image,
+      description: textOrNull(schema.description),
+      notes: textOrNull(schema.notes),
+      cooking_notes: textOrNull(schema.cookingNotes),
       content,
       ...(embedding ? { embedding: toVectorLiteral(embedding) } : {}),
       url: input.url,
@@ -638,6 +656,11 @@ export async function updateRecipeRow(
   const current = hydrate(existingRow, existingRows);
   const writePatch: Partial<{
     name: string;
+    image: string | null;
+    description: string | null;
+    notes: string | null;
+    cooking_notes: string | null;
+    updated_at: string;
     content: string;
     embedding: string;
     url: string;
@@ -658,6 +681,21 @@ export async function updateRecipeRow(
   if (patch.url !== undefined) writePatch.url = patch.url;
   if (patch.source !== undefined) writePatch.source = patch.source;
   if (patch.status !== undefined) writePatch.status = patch.status;
+  // The promoted scalars, keyed on presence in the schema patch so they keep
+  // the three-way semantics the times have: the key absent leaves the column
+  // alone, a blank clears it, a value sets it.
+  if (patch.schema?.image !== undefined) {
+    writePatch.image = getFirstImage(patch.schema.image);
+  }
+  if (patch.schema?.description !== undefined) {
+    writePatch.description = textOrNull(patch.schema.description);
+  }
+  if (patch.schema?.notes !== undefined) {
+    writePatch.notes = textOrNull(patch.schema.notes);
+  }
+  if (patch.schema?.cookingNotes !== undefined) {
+    writePatch.cooking_notes = textOrNull(patch.schema.cookingNotes);
+  }
   if (patch.instructions !== undefined) {
     writePatch.instructions = canonicalizeInstructions(patch.instructions);
   }
@@ -749,6 +787,11 @@ export async function updateRecipeRow(
 
   if (Object.keys(writePatch).length === 0) return current;
 
+  // The column has a now() DEFAULT but no trigger, so without this it records
+  // when the row was created and never moves again. Stamped after the empty
+  // check so a patch that changes nothing does not claim the recipe changed.
+  writePatch.updated_at = new Date().toISOString();
+
   if (reconcile) {
     await insertRecipeIngredientRows(reconcile.inserts);
     await updateRecipeIngredientRows(id, reconcile.updates);
@@ -797,7 +840,10 @@ export async function archiveRecipe(id: string): Promise<void> {
 
   const { error } = await supabase
     .from("recipes")
-    .update({ status: ARCHIVED_RECIPE_STATUS })
+    .update({
+      status: ARCHIVED_RECIPE_STATUS,
+      updated_at: new Date().toISOString(),
+    })
     .eq("id", id);
 
   if (error) {

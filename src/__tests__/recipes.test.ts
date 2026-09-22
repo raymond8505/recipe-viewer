@@ -522,6 +522,69 @@ describe("createRecipeRow", () => {
     });
   });
 
+  // The promoted scalars. Create is the inbound Schema.org edge, so `image`
+  // arrives in either wire shape and is reduced to the single URL the column
+  // holds — the same rule the yield follows two tests down.
+  it("promotes image, description and both notes to their columns", async () => {
+    const { inserts } = makeWriteSupabaseMock({
+      insertSingle: { data: { id: "x", ingredients: [], instructions: [] }, error: null },
+    });
+
+    await createRecipeRow({
+      url: "https://example.com",
+      source: "example.com",
+      schema: {
+        name: "Soup",
+        image: "https://cdn.example.com/soup.png",
+        description: "Hot broth.",
+        notes: "Salt at the end.",
+        cookingNotes: "Doubled the chili.",
+      },
+    });
+
+    expect(inserts[0]).toMatchObject({
+      image: "https://cdn.example.com/soup.png",
+      description: "Hot broth.",
+      notes: "Salt at the end.",
+      cooking_notes: "Doubled the chili.",
+    });
+  });
+
+  it("takes the first entry of an array image", async () => {
+    const { inserts } = makeWriteSupabaseMock({
+      insertSingle: { data: { id: "x", ingredients: [], instructions: [] }, error: null },
+    });
+
+    await createRecipeRow({
+      url: "https://example.com",
+      source: "example.com",
+      schema: { name: "Soup", image: ["https://cdn.example.com/a.png", "b.png"] },
+    });
+
+    expect(inserts[0].image).toBe("https://cdn.example.com/a.png");
+  });
+
+  // NULL is the one spelling of "this recipe has none" every reader branches
+  // on, so a blank string must not reach the column as a second one.
+  it("writes NULL for a blank or absent value", async () => {
+    const { inserts } = makeWriteSupabaseMock({
+      insertSingle: { data: { id: "x", ingredients: [], instructions: [] }, error: null },
+    });
+
+    await createRecipeRow({
+      url: "https://example.com",
+      source: "example.com",
+      schema: { name: "Soup", description: "   ", image: "" },
+    });
+
+    expect(inserts[0]).toMatchObject({
+      image: null,
+      description: null,
+      notes: null,
+      cooking_notes: null,
+    });
+  });
+
   it("includes the embedding as a pgvector literal when generation succeeds", async () => {
     mockGenerateEmbedding.mockResolvedValueOnce([0.1, 0.2, 0.3]);
     const { inserts } = makeWriteSupabaseMock({
@@ -812,6 +875,80 @@ describe("updateRecipeRow", () => {
       });
       const stored = (updates[0].metadata as { schema: object }).schema;
       expect(stored).not.toHaveProperty("recipeYield");
+    });
+  });
+
+  // Same three-way contract the servings have, one column at a time: absent
+  // leaves it, blank clears it, a value sets it.
+  describe("promoted scalars", () => {
+    it("mirrors a schema patch into the columns", async () => {
+      const { updates } = makeWriteSupabaseMock({
+        selectSingle: { data: existing, error: null },
+        updateSingle: { data: existing, error: null },
+      });
+
+      await updateRecipeRow("r1", {
+        schema: {
+          image: "https://cdn.example.com/new.png",
+          description: "Fresh blurb",
+          notes: "Rest it longer.",
+          cookingNotes: "Used Valentina.",
+        },
+      });
+
+      expect(updates[0]).toMatchObject({
+        image: "https://cdn.example.com/new.png",
+        description: "Fresh blurb",
+        notes: "Rest it longer.",
+        cooking_notes: "Used Valentina.",
+      });
+    });
+
+    it("clears a column on a blank value", async () => {
+      const { updates } = makeWriteSupabaseMock({
+        selectSingle: { data: existing, error: null },
+        updateSingle: { data: existing, error: null },
+      });
+
+      await updateRecipeRow("r1", { schema: { description: "", cookingNotes: "  " } });
+      expect(updates[0].description).toBeNull();
+      expect(updates[0].cooking_notes).toBeNull();
+    });
+
+    it("leaves a column alone when its key is absent", async () => {
+      const { updates } = makeWriteSupabaseMock({
+        selectSingle: { data: existing, error: null },
+        updateSingle: { data: existing, error: null },
+      });
+
+      await updateRecipeRow("r1", { schema: { description: "Fresh blurb" } });
+      expect(updates[0]).not.toHaveProperty("image");
+      expect(updates[0]).not.toHaveProperty("notes");
+      expect(updates[0]).not.toHaveProperty("cooking_notes");
+    });
+  });
+
+  // The column has a now() default and no trigger, so the repo layer is what
+  // keeps it moving — without this it would record creation time forever.
+  describe("updated_at", () => {
+    it("stamps the write", async () => {
+      const { updates } = makeWriteSupabaseMock({
+        selectSingle: { data: existing, error: null },
+        updateSingle: { data: existing, error: null },
+      });
+
+      await updateRecipeRow("r1", { schema: { description: "Fresh blurb" } });
+      expect(Date.parse(updates[0].updated_at as string)).not.toBeNaN();
+    });
+
+    it("does not stamp a patch that changes nothing", async () => {
+      const { updates } = makeWriteSupabaseMock({
+        selectSingle: { data: existing, error: null },
+        updateSingle: { data: existing, error: null },
+      });
+
+      await updateRecipeRow("r1", {});
+      expect(updates).toHaveLength(0);
     });
   });
 
