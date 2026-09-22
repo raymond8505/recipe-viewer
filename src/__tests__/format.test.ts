@@ -598,6 +598,24 @@ describe("toSchemaOrgJsonLd", () => {
     expect(result.cookingNotes).toBeUndefined();
   });
 
+  // Dropped rather than promoted: every recipe here is the user's own, nothing
+  // ever read the keywords, and created_at/updated_at carry the dates. Older
+  // rows still hold all three in the blob, so the allowlist omitting them is
+  // what keeps them out of published markup.
+  it("omits author, keywords and datePublished even when the blob holds them", () => {
+    const stale = {
+      author: { name: "Someone Else" },
+      keywords: "weeknight,pasta",
+      datePublished: "2020-01-01",
+    } as SchemaRecipe;
+    const result = toSchemaOrgJsonLd(
+      doc("Pasta", { schema: stale }),
+    ) as Record<string, unknown>;
+    expect(result).not.toHaveProperty("author");
+    expect(result).not.toHaveProperty("keywords");
+    expect(result).not.toHaveProperty("datePublished");
+  });
+
   it("includes standard fields in JSON-LD output", () => {
     const result = toSchemaOrgJsonLd(
       doc("Pasta", { description: "A classic dish" }),

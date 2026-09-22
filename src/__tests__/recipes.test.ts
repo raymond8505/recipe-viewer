@@ -594,6 +594,30 @@ describe("createRecipeRow", () => {
     });
   });
 
+  // The zod schema is .passthrough(), so a scraper or a stale agent can still
+  // send the three dropped keys. None may reach the stored blob.
+  it("strips author, keywords and datePublished from the blob", async () => {
+    const { inserts } = makeWriteSupabaseMock({
+      insertSingle: { data: { id: "x", ingredients: [], instructions: [] }, error: null },
+    });
+
+    await createRecipeRow({
+      url: "https://example.com",
+      source: "example.com",
+      schema: {
+        name: "Soup",
+        author: { name: "Someone Else" },
+        keywords: "weeknight",
+        datePublished: "2020-01-01",
+      } as never,
+    });
+
+    const blob = (inserts[0].metadata as { schema: object }).schema;
+    expect(blob).not.toHaveProperty("author");
+    expect(blob).not.toHaveProperty("keywords");
+    expect(blob).not.toHaveProperty("datePublished");
+  });
+
   it("includes the embedding as a pgvector literal when generation succeeds", async () => {
     mockGenerateEmbedding.mockResolvedValueOnce([0.1, 0.2, 0.3]);
     const { inserts } = makeWriteSupabaseMock({
@@ -1282,8 +1306,11 @@ describe("updateRecipeRow", () => {
 
     const blob = (updates[0].metadata as { schema: object }).schema;
     expect(blob).not.toHaveProperty("recipeIngredient");
-    // What the blob is still the source of survives the strip.
-    expect(blob).toMatchObject({ recipeCuisine: "Thai", keywords: "weeknight" });
+    // A dropped key is stripped on the same pass, though for the opposite
+    // reason: nothing rebuilds it at an edge because nothing wants it.
+    expect(blob).not.toHaveProperty("keywords");
+    // What the blob is still the source of survives.
+    expect(blob).toMatchObject({ recipeCuisine: "Thai" });
   });
 });
 

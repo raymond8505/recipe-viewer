@@ -110,12 +110,6 @@ export const schemaRecipeSchema = z
     name: z.string().min(1),
     description: z.string().optional(),
     image: z.union([z.string(), z.array(z.string())]).optional(),
-    author: z
-      .object({
-        "@type": z.literal("Person").optional(),
-        name: z.string(),
-      })
-      .optional(),
     // Nullable so a partial update can clear a time outright; omitted still
     // means "leave it alone". See RecipeRow's time columns.
     cookTime: z.string().nullable().optional(),
@@ -127,7 +121,6 @@ export const schemaRecipeSchema = z
     // either on the wire — the repo layer strips them from every write.
     recipeCuisine: z.string().optional(),
     recipeCategory: z.union([z.string(), z.array(z.string())]).optional(),
-    keywords: z.string().optional(),
     nutrition: z
       .object({
         "@type": z.literal("NutritionInformation").optional(),
@@ -143,7 +136,6 @@ export const schemaRecipeSchema = z
         cholesterolContent: z.string().optional(),
       })
       .optional(),
-    datePublished: z.string().optional(),
     notes: z.string().optional(),
     cookingNotes: z.string().optional(),
   })

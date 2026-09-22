@@ -451,8 +451,8 @@ export default function CookingMode({
               )}
 
               <div className="flex flex-wrap items-center gap-x-6 gap-y-2 mt-4 text-sm text-gray-500">
-                {schema.datePublished && (
-                  <span>{formatDate(schema.datePublished)}</span>
+                {formatDate(recipe.updated_at) && (
+                  <span>Updated {formatDate(recipe.updated_at)}</span>
                 )}
               </div>
             </header>

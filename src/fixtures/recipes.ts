@@ -88,7 +88,6 @@ export const recipeFixtures: RecipeRow[] = [
         totalTime: "PT55M",
         recipeCuisine: "Mexican",
         recipeCategory: "Main",
-        datePublished: "2026-04-20",
         nutrition: {
           calories: "558",
           proteinContent: "27g",
@@ -162,7 +161,6 @@ export const recipeFixtures: RecipeRow[] = [
         totalTime: "PT50M",
         recipeCuisine: "Thai",
         recipeCategory: "Main Course",
-        datePublished: "2026-01-09",
         nutrition: {
           calories: "828",
           proteinContent: "37.8g",
@@ -203,7 +201,6 @@ export const recipeFixtures: RecipeRow[] = [
         totalTime: "PT4H",
         recipeCuisine: "American",
         recipeCategory: "Breakfast",
-        datePublished: "2026-02-12",
         nutrition: {
           calories: "211",
           proteinContent: "6.1g",
@@ -244,7 +241,6 @@ export const recipeFixtures: RecipeRow[] = [
         totalTime: "PT5M",
         recipeCuisine: "Asian",
         recipeCategory: "Sauce",
-        datePublished: "2026-02-25",
         nutrition: {
           calories: "82",
           proteinContent: "1g",

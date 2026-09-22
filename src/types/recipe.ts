@@ -317,7 +317,6 @@ export interface QuantitativeValue {
 export interface SchemaRecipe {
   "@context"?: string;
   "@type"?: "Recipe";
-  author?: { "@type"?: "Person"; name: string };
   // ISO 8601 durations, backed by the recipes.{prep,cook,total}_time columns.
   // Explicitly nullable so a patch can CLEAR a time: `undefined` disappears in
   // JSON and would read as "field absent, leave it alone" after the round trip.
@@ -337,9 +336,7 @@ export interface SchemaRecipe {
   //
   // What remains is the residue: two fields awaiting the tagging system that
   // will replace them, and the two `@` constants the wire form needs.
-  keywords?: string;
   nutrition?: SchemaNutrition;
-  datePublished?: string;
 }
 
 /**

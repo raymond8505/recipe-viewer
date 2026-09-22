@@ -102,6 +102,7 @@ export const POST = requireSessionOrRecipeToken(
       total_weight_amount: saved.total_weight_amount,
       total_weight_unit: saved.total_weight_unit,
       status: saved.status,
+      updated_at: saved.updated_at,
       url: saved.url,
       source: saved.source,
     });

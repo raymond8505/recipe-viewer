@@ -571,13 +571,7 @@ export function toSchemaOrgJsonLd(
   // the yield. What is left on the list is what the blob is still the source of.
   if (doc.image) result.image = doc.image;
   if (doc.description) result.description = doc.description;
-  const optionalFields = [
-    "author",
-    "recipeCuisine",
-    "recipeCategory",
-    "keywords",
-    "datePublished",
-  ] as const;
+  const optionalFields = ["recipeCuisine", "recipeCategory"] as const;
   for (const key of optionalFields) {
     if (schema[key] != null) result[key] = schema[key];
   }
@@ -615,7 +609,15 @@ export const PROMOTED_KEYS = [
  * but backed by nothing — they are not rebuilt anywhere, because nothing asks
  * for them any more.
  */
-export const DROPPED_KEYS = [] as const;
+export const DROPPED_KEYS = [
+  // Every recipe here is the user's own, so a per-recipe author says nothing.
+  "author",
+  // Never read by anything, and never surfaced for editing.
+  "keywords",
+  // created_at / updated_at carry a recipe's dates; a scraped publication date
+  // described someone else's page rather than this copy of the recipe.
+  "datePublished",
+] as const;
 
 /** What the read exit deletes and every write strips: both lists together. */
 export const SCHEMA_ORG_ONLY_KEYS = [

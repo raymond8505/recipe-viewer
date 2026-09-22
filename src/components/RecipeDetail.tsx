@@ -76,6 +76,11 @@ export default function RecipeDetail({
   // it to the current location. Reading recipe.url instead made a saved URL edit
   // invisible until a refresh — the editor reopened on the pre-edit value.
   const [url, setUrl] = useState(recipe.url ?? "");
+  // The date the header shows. Held in state rather than read off the prop so a
+  // save updates it in place — the repo layer stamps the column on every write,
+  // and a header claiming the recipe last changed before the edit you just made
+  // is worse than no date at all.
+  const [updatedAt, setUpdatedAt] = useState(recipe.updated_at);
   // Cook mode takes a row, and the `recipe` prop is a server-render snapshot:
   // the row it opens with is the live document over the live row fields.
   const cookingRecipe = useMemo(
@@ -293,6 +298,7 @@ export default function RecipeDetail({
         total_weight_unit: result.total_weight_unit,
       });
       setStatus(result.status);
+      if (typeof result.updated_at === "string") setUpdatedAt(result.updated_at);
       // The url guard is a type check, not a truthiness one: url is persisted
       // verbatim, so a cleared field must survive as "" — only an absent key
       // (a malformed response) leaves the state alone.
@@ -387,8 +393,8 @@ export default function RecipeDetail({
           )}
 
           <div className="flex flex-wrap items-center gap-x-6 gap-y-2 mt-4 text-sm text-gray-500">
-            {schema.datePublished && (
-              <span>{formatDate(schema.datePublished)}</span>
+            {formatDate(updatedAt) && (
+              <span>Updated {formatDate(updatedAt)}</span>
             )}
           </div>
         </header>

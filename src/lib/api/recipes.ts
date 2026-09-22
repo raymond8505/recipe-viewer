@@ -57,6 +57,8 @@ export interface SavedRecipe {
   total_weight_amount: number | null;
   total_weight_unit: string | null;
   status: RecipeStatus;
+  /** Stamped by the repo layer on every write — the header renders it. */
+  updated_at: string;
   url: string;
   source: string;
 }
