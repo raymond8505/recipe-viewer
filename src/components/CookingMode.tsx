@@ -6,7 +6,6 @@ import type { RecipeRow, RecipeDocument } from "@/types/recipe";
 import {
   formatDuration,
   formatDate,
-  getFirstImage,
   toArray,
 } from "@/lib/format";
 import { stepKey, stepTimers } from "@/lib/recipeInstructions";
@@ -90,9 +89,9 @@ export default function CookingMode({
   // The primary recipe as one document (schema, ingredient groups, instruction
   // groups, time columns), built once for the session.
   const [doc] = useState<RecipeDocument>(() => recipeDocument(recipe));
-  const { schema } = doc;
+  const { schema, name, image, description } = doc;
   const [cookingNotes, setCookingNotes] = useState(
-    () => recipe.metadata.schema.cookingNotes ?? "",
+    () => recipe.cooking_notes ?? "",
   );
   const [notesSaveState, setNotesSaveState] = useState<NotesSaveState>("idle");
   const [showNotes, setShowNotes] = useState(false);
@@ -124,7 +123,6 @@ export default function CookingMode({
 
   const primaryScalable = scalables.get(recipe.id)!;
   const activeScalable = scalables.get(mealRecipes[activeIndex].id)!;
-  const activeSchema = activeScalable.schema;
   // The primary's steps come from its document; a secondary's from its own row.
   const activeInstructions =
     activeIndex === 0 ? doc.instructions : mealRecipes[activeIndex].instructions;
@@ -151,14 +149,14 @@ export default function CookingMode({
     const map = new Map<string, string>();
     for (const [recipeId, ids] of mealTimerIds) {
       const r = mealRecipes.find((r) => r.id === recipeId);
-      if (r) ids.forEach((id) => map.set(id, r.metadata.schema.name));
+      if (r) ids.forEach((id) => map.set(id, r.name));
     }
-    const primaryName = schema.name;
+    const primaryName = name;
     for (const t of timers) {
       if (!map.has(t.id)) map.set(t.id, primaryName);
     }
     return map;
-  }, [mealRecipes, mealTimerIds, timers, schema.name]);
+  }, [mealRecipes, mealTimerIds, timers, name]);
 
   useWakeLock();
 
@@ -344,7 +342,6 @@ export default function CookingMode({
     }
   };
 
-  const image = getFirstImage(schema.image);
   const prepTime = formatDuration(schema.prepTime);
   const cookTime = formatDuration(schema.cookTime);
   const totalTime = formatDuration(schema.totalTime);
@@ -444,12 +441,12 @@ export default function CookingMode({
               </div>
 
               <h1 className="text-3xl sm:text-4xl text-gray-900 leading-tight mb-4">
-                {schema.name}
+                {name}
               </h1>
 
-              {schema.description && (
+              {description && (
                 <p className="text-gray-600 text-lg leading-relaxed">
-                  {schema.description}
+                  {description}
                 </p>
               )}
 
@@ -465,7 +462,7 @@ export default function CookingMode({
               <div className="w-full rounded-2xl overflow-hidden mb-8 bg-gray-100">
                 <Image
                   src={image}
-                  alt={schema.name}
+                  alt={name}
                   width={0}
                   height={0}
                   sizes="(max-width: 768px) 100vw, 768px"
@@ -577,13 +574,13 @@ export default function CookingMode({
             </div>
 
             {/* Notes */}
-            {activeSchema.notes && (
+            {activeScalable.document.notes && (
               <div className="mt-8">
                 <h2 className="text-2xl sm:text-xl text-gray-900 mb-3">
                   Notes
                 </h2>
                 <p className="text-xl sm:text-base text-gray-700 leading-relaxed whitespace-pre-line">
-                  {activeSchema.notes}
+                  {activeScalable.document.notes}
                 </p>
               </div>
             )}

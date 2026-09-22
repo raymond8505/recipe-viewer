@@ -8,15 +8,15 @@ import {
   makeSteps,
   weighedYieldColumns,
 } from "@/fixtures";
-import type { RecipeDocument, SchemaRecipe } from "@/types/recipe";
+import type { RecipeDocument } from "@/types/recipe";
 
-/** A document with no lines, no steps, no times and no serving count. */
+/** A named document with no lines, no steps, no times and no serving count. */
 function doc(
-  schema: SchemaRecipe,
+  name: string,
   overrides: Partial<RecipeDocument> = {},
 ): RecipeDocument {
   return makeScalableDocument({
-    schema,
+    name,
     ingredients: [],
     servings_amount: null,
     servings_unit: null,
@@ -26,20 +26,17 @@ function doc(
 
 describe("recipeToMarkdown", () => {
   it("renders a minimal name-only recipe as a single heading", () => {
-    expect(recipeToMarkdown(doc({ name: "Toast" }))).toBe("# Toast");
+    expect(recipeToMarkdown(doc("Toast"))).toBe("# Toast");
   });
 
   it("includes the description and a metadata line", () => {
     const md = recipeToMarkdown(
-      doc(
-        {
-          name: "Stew",
-          description: "A hearty stew.",
-          totalTime: "PT1H",
-          recipeCuisine: "Irish",
-        },
-        { servings_amount: 4, servings_unit: "servings" },
-      ),
+      doc("Stew", {
+        description: "A hearty stew.",
+        schema: { totalTime: "PT1H", recipeCuisine: "Irish" },
+        servings_amount: 4,
+        servings_unit: "servings",
+      }),
     );
     expect(md).toContain("# Stew");
     expect(md).toContain("A hearty stew.");
@@ -49,17 +46,17 @@ describe("recipeToMarkdown", () => {
   });
 
   it("renders the yield from the servings columns, unit and all", () => {
-    const md = recipeToMarkdown(doc({ name: "Kebabs" }, weighedYieldColumns));
+    const md = recipeToMarkdown(doc("Kebabs", weighedYieldColumns));
     expect(md).toContain("Yield: 4 kebabs");
   });
 
   it("omits the yield line when the recipe has no serving count", () => {
-    expect(recipeToMarkdown(doc({ name: "Toast" }))).not.toContain("Yield:");
+    expect(recipeToMarkdown(doc("Toast"))).not.toContain("Yield:");
   });
 
   it("renders ungrouped ingredients as a flat bulleted list", () => {
     const md = recipeToMarkdown(
-      doc({ name: "Salad" }, {
+      doc("Salad", {
         ingredients: makeIngredientLines(["1 head lettuce", "2 tomatoes"]),
       }),
     );
@@ -71,7 +68,7 @@ describe("recipeToMarkdown", () => {
 
   it("renders grouped ingredients under group subheadings", () => {
     const md = recipeToMarkdown(
-      doc({ name: "Cake" }, {
+      doc("Cake", {
         ingredients: [
           makeIngredientGroup("Cake", ["2 cups flour", "1 cup sugar"]),
           makeIngredientGroup("Frosting", ["1 cup butter"]),
@@ -86,19 +83,19 @@ describe("recipeToMarkdown", () => {
 
   it("omits the ingredients section when every group is empty", () => {
     expect(
-      recipeToMarkdown(doc({ name: "Air" }, { ingredients: [{ ingredients: [] }] })),
+      recipeToMarkdown(doc("Air", { ingredients: [{ ingredients: [] }] })),
     ).toBe("# Air");
   });
 
   it("renders a nameless run of steps as a flat list and a named group under its heading", () => {
     const flat = recipeToMarkdown(
-      doc({ name: "Quick" }, { instructions: makeSteps(["Mix."]) }),
+      doc("Quick", { instructions: makeSteps(["Mix."]) }),
     );
     expect(flat).toContain("## Instructions");
     expect(flat).toContain("- Mix.");
 
     const sectioned = recipeToMarkdown(
-      doc({ name: "Layered" }, {
+      doc("Layered", {
         instructions: [
           makeInstructionGroup(undefined, ["Preheat."]),
           makeInstructionGroup("Prep", ["Chop onions."]),
@@ -112,7 +109,7 @@ describe("recipeToMarkdown", () => {
 
   it("omits the instructions section when every group is empty", () => {
     expect(
-      recipeToMarkdown(doc({ name: "Air" }, { instructions: [{ steps: [] }] })),
+      recipeToMarkdown(doc("Air", { instructions: [{ steps: [] }] })),
     ).toBe("# Air");
   });
 });

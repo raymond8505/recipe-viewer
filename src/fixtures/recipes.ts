@@ -10,6 +10,10 @@ import { makeInstructionGroup } from "./instructions";
 // post-0019 database row would carry the columns and NO schema time keys; only
 // repo-layer tests should model that.
 //
+// The name, image, description and both sets of notes are columns too (0026),
+// and like the servings they have no blob counterpart to agree with: the schema
+// block here holds only what the blob is still the source of.
+//
 // Servings are columns ONLY — there is no schema.recipeYield to agree with, and
 // no hydrate-back that would put one there. The first recipe's yield reads
 // "Enough for one 350g brick of tofu", which names no serving count parseYield
@@ -21,6 +25,8 @@ export const recipeFixtures: RecipeRow[] = [
     url: "https://new.raymonds.recipes/recipes/chorizo-tofu-marinade",
     source: "new.raymonds.recipes",
     status: "published",
+    created_at: "2026-01-02T09:00:00.000Z",
+    updated_at: "2026-01-02T09:00:00.000Z",
     prep_time: 300,
     cook_time: null,
     total_time: 300,
@@ -30,13 +36,15 @@ export const recipeFixtures: RecipeRow[] = [
     total_weight_unit: null,
     ingredients: [],
     instructions: [],
+    name: "Chorizo Tofu Marinade",
+    description:
+      "A thick chorizo-style marinade paste. Built around ancho chile, smoked paprika, and cumin, with tomato paste carrying colour and umami in place of pork fat.",
+    image:
+      "https://xonkmdhnjpjkapnsmltu.supabase.co/storage/v1/object/recipes/chorizo-crumbled-tofu.png",
+    notes: null,
+    cooking_notes: null,
     metadata: {
       schema: {
-        name: "Chorizo Tofu Marinade",
-        description:
-          "A thick chorizo-style marinade paste. Built around ancho chile, smoked paprika, and cumin, with tomato paste carrying colour and umami in place of pork fat.",
-        image:
-          "https://xonkmdhnjpjkapnsmltu.supabase.co/storage/v1/object/recipes/chorizo-crumbled-tofu.png",
         prepTime: "PT5M",
         totalTime: "PT5M",
         recipeCuisine: "Mexican-Inspired",
@@ -55,6 +63,8 @@ export const recipeFixtures: RecipeRow[] = [
     url: "https://new.raymonds.recipes/recipes/black-bean-mushroom-enchiladas-charred-tomatillo",
     source: "new.raymonds.recipes",
     status: "published",
+    created_at: "2026-01-02T09:00:00.000Z",
+    updated_at: "2026-01-02T09:00:00.000Z",
     prep_time: 1200,
     cook_time: 2100,
     total_time: 3300,
@@ -64,13 +74,15 @@ export const recipeFixtures: RecipeRow[] = [
     total_weight_unit: null,
     ingredients: [],
     instructions: [],
+    name: "Black Bean & Mushroom Enchiladas with Charred Tomatillo Sauce",
+    description:
+      "Six corn tortillas filled with golden cremini mushrooms and black beans, rolled and baked under a charred tomatillo sauce inspired by salsa cruda — bright and tangy with scotch bonnet heat.",
+    image:
+      "https://xonkmdhnjpjkapnsmltu.supabase.co/storage/v1/object/recipes/1776712239492.png",
+    notes: null,
+    cooking_notes: null,
     metadata: {
       schema: {
-        name: "Black Bean & Mushroom Enchiladas with Charred Tomatillo Sauce",
-        description:
-          "Six corn tortillas filled with golden cremini mushrooms and black beans, rolled and baked under a charred tomatillo sauce inspired by salsa cruda — bright and tangy with scotch bonnet heat.",
-        image:
-          "https://xonkmdhnjpjkapnsmltu.supabase.co/storage/v1/object/recipes/1776712239492.png",
         prepTime: "PT20M",
         cookTime: "PT35M",
         totalTime: "PT55M",
@@ -93,6 +105,8 @@ export const recipeFixtures: RecipeRow[] = [
     url: "https://new.raymonds.recipes/recipes/thai-curry-chicken-meatballs",
     source: "new.raymonds.recipes",
     status: "published",
+    created_at: "2026-01-02T09:00:00.000Z",
+    updated_at: "2026-01-02T09:00:00.000Z",
     prep_time: 1200,
     cook_time: 1800,
     total_time: 3000,
@@ -133,21 +147,22 @@ export const recipeFixtures: RecipeRow[] = [
         "Tear in the basil at the end. Serve over jasmine rice topped with crushed peanuts and cilantro.",
       ]),
     ],
+    name: "Thai Curry Chicken Meatballs",
+    description:
+      "Thai-spiced chicken meatballs simmered in a coconut red curry sauce. Coconut milk reduced to 300ml; brown sugar over honey; peanut butter swapped for crushed peanut garnish.",
+    image:
+      "https://xonkmdhnjpjkapnsmltu.supabase.co/storage/v1/object/recipes/thai-curry-chicken-meatballs-v2.png",
+    notes:
+      "Coconut milk brand matters: Aroy-D and Chaokoh emulsify cleanly. Lighter supermarket brands break the sauce. If your basil is wilting, save it for garnish instead of stirring in.",
+    cooking_notes: null,
     metadata: {
       schema: {
-        name: "Thai Curry Chicken Meatballs",
-        description:
-          "Thai-spiced chicken meatballs simmered in a coconut red curry sauce. Coconut milk reduced to 300ml; brown sugar over honey; peanut butter swapped for crushed peanut garnish.",
-        image:
-          "https://xonkmdhnjpjkapnsmltu.supabase.co/storage/v1/object/recipes/thai-curry-chicken-meatballs-v2.png",
         prepTime: "PT20M",
         cookTime: "PT30M",
         totalTime: "PT50M",
         recipeCuisine: "Thai",
         recipeCategory: "Main Course",
         datePublished: "2026-01-09",
-        notes:
-          "Coconut milk brand matters: Aroy-D and Chaokoh emulsify cleanly. Lighter supermarket brands break the sauce. If your basil is wilting, save it for garnish instead of stirring in.",
         nutrition: {
           calories: "828",
           proteinContent: "37.8g",
@@ -163,6 +178,8 @@ export const recipeFixtures: RecipeRow[] = [
     url: "https://new.raymonds.recipes/recipes/strawberry-oat-bars",
     source: "new.raymonds.recipes",
     status: "published",
+    created_at: "2026-01-02T09:00:00.000Z",
+    updated_at: "2026-01-02T09:00:00.000Z",
     prep_time: 2400,
     cook_time: 2100,
     total_time: 14400,
@@ -172,13 +189,15 @@ export const recipeFixtures: RecipeRow[] = [
     total_weight_unit: null,
     ingredients: [],
     instructions: [],
+    name: "Strawberry Oat Bars",
+    description:
+      "Modified oat bars with strawberry chia jam filling, optimized for structural integrity and caloric efficiency.",
+    image:
+      "https://xonkmdhnjpjkapnsmltu.supabase.co/storage/v1/object/recipes/strawberry-oat-bars.png",
+    notes: null,
+    cooking_notes: null,
     metadata: {
       schema: {
-        name: "Strawberry Oat Bars",
-        description:
-          "Modified oat bars with strawberry chia jam filling, optimized for structural integrity and caloric efficiency.",
-        image:
-          "https://xonkmdhnjpjkapnsmltu.supabase.co/storage/v1/object/recipes/strawberry-oat-bars.png",
         prepTime: "PT40M",
         cookTime: "PT35M",
         totalTime: "PT4H",
@@ -201,6 +220,8 @@ export const recipeFixtures: RecipeRow[] = [
     url: "https://new.raymonds.recipes/recipes/quick-yakisoba-sauce",
     source: "new.raymonds.recipes",
     status: "published",
+    created_at: "2026-01-02T09:00:00.000Z",
+    updated_at: "2026-01-02T09:00:00.000Z",
     prep_time: 300,
     cook_time: null,
     total_time: 300,
@@ -210,13 +231,15 @@ export const recipeFixtures: RecipeRow[] = [
     total_weight_unit: null,
     ingredients: [],
     instructions: [],
+    name: "Quick Yakisoba Sauce",
+    description:
+      "A versatile umami-forward sauce base. Layered flavors from soy, Worcestershire, hoisin, and garlic chili with a light sweetness from sugar and ketchup.",
+    image:
+      "https://xonkmdhnjpjkapnsmltu.supabase.co/storage/v1/object/recipes/quick-yakisoba-sauce.png",
+    notes: null,
+    cooking_notes: null,
     metadata: {
       schema: {
-        name: "Quick Yakisoba Sauce",
-        description:
-          "A versatile umami-forward sauce base. Layered flavors from soy, Worcestershire, hoisin, and garlic chili with a light sweetness from sugar and ketchup.",
-        image:
-          "https://xonkmdhnjpjkapnsmltu.supabase.co/storage/v1/object/recipes/quick-yakisoba-sauce.png",
         prepTime: "PT5M",
         totalTime: "PT5M",
         recipeCuisine: "Asian",
@@ -244,6 +267,8 @@ export function makeRecipe(
     url: `https://new.raymonds.recipes/recipes/${id}`,
     source: "new.raymonds.recipes",
     status: "published",
+    created_at: "2026-01-02T09:00:00.000Z",
+    updated_at: "2026-01-02T09:00:00.000Z",
     prep_time: null,
     cook_time: null,
     total_time: null,
@@ -253,7 +278,12 @@ export function makeRecipe(
     total_weight_unit: null,
     ingredients: [],
     instructions: [],
-    metadata: { schema: { name } },
+    name,
+    image: null,
+    description: null,
+    notes: null,
+    cooking_notes: null,
+    metadata: { schema: {} },
     ...overrides,
   };
 }
@@ -280,8 +310,5 @@ export function makeNutritionRecipeRow(
     servings_amount: servings,
     servings_unit: "servings",
     ...overrides,
-    metadata: {
-      schema: { name, ...overrides.metadata?.schema },
-    },
   });
 }

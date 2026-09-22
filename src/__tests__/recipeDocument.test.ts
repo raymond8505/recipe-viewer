@@ -28,6 +28,11 @@ describe("recipeDocument", () => {
 
     expect(recipeDocument(row)).toEqual({
       schema: row.metadata.schema,
+      name: "Cake",
+      image: null,
+      description: null,
+      notes: null,
+      cooking_notes: null,
       ingredients,
       instructions,
       prep_time: 600,
@@ -105,7 +110,10 @@ describe("draftRecipeDocument", () => {
     );
 
     expect(doc).toMatchObject({ prep_time: 900, cook_time: null, total_time: 3600 });
-    expect(doc.schema).toEqual({ name: "Cake", prepTime: "PT15M", totalTime: "PT1H" });
+    // The name is a document field now, and the strip takes it off the blob the
+    // draft keeps — the same treatment the yield gets.
+    expect(doc.name).toBe("Cake");
+    expect(doc.schema).toEqual({ prepTime: "PT15M", totalTime: "PT1H" });
     expect(doc.ingredients).toHaveLength(1);
     expect(doc.ingredients[0].ingredients[0]).toMatchObject({
       raw_text: "2 cups flour",

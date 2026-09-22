@@ -5,7 +5,6 @@ import type {
   RecipeDocument,
   RecipeInstructionGroup,
   SchemaOrgRecipe,
-  SchemaRecipe,
 } from "@/types/recipe";
 
 /** What the re-scrape webhook returns: a Schema.org Recipe, lines as strings, steps as HowToSteps. */
@@ -26,7 +25,9 @@ const { recipeIngredient, recipeInstructions, ...rescrapeSchema } = rescrapeFixt
 
 /** The same recipe as the /rescrape route hands it to the client: split at the edge. */
 export const rescrapeResponseFixture: {
-  schema: SchemaRecipe;
+  // The Schema.org form, not the stored one: the route splits the webhook's
+  // payload at the edge but the name and description are still on the wire.
+  schema: SchemaOrgRecipe;
   ingredients: ReturnType<typeof fromSchemaOrgIngredients>;
   instructions: RecipeInstructionGroup[];
 } = {

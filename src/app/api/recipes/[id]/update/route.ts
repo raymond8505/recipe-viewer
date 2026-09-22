@@ -23,6 +23,12 @@ export const POST = requireSessionOrRecipeToken(
 
     const body = (await req.json()) as {
       schema: SchemaRecipe;
+      // The column-backed scalars. `description`/`notes` are nullable: the
+      // editor sends null to clear one, and an absent key leaves it alone.
+      name?: string;
+      image?: string;
+      description?: string | null;
+      notes?: string | null;
       // The whole list; absent = leave the ingredients alone.
       ingredients?: RecipeIngredientGroupInput[];
       // Same contract for the steps.
@@ -56,6 +62,10 @@ export const POST = requireSessionOrRecipeToken(
         url: effectiveUrl,
         source: effectiveSource,
         schema: body.schema,
+        name: body.name,
+        image: body.image,
+        description: body.description,
+        notes: body.notes,
         ingredients: body.ingredients,
         instructions: body.instructions,
         servings: body.servings,
@@ -77,6 +87,11 @@ export const POST = requireSessionOrRecipeToken(
     // ingredient), or was parsed into a column (a time, the servings).
     return NextResponse.json({
       schema: saved.metadata.schema,
+      name: saved.name,
+      image: saved.image,
+      description: saved.description,
+      notes: saved.notes,
+      cooking_notes: saved.cooking_notes,
       ingredients: saved.ingredients,
       instructions: saved.instructions,
       prep_time: saved.prep_time,

@@ -101,8 +101,10 @@ export async function searchRecipes(
     data: data.map((row) => ({
       id: row.id,
       url: row.url,
-      name: row.metadata.schema.name,
-      description: row.metadata.schema.description,
+      name: row.name,
+      // The column says null; the wire omits the key, which is what the
+      // documented result shape promises and what an agent reads as "none".
+      description: row.description ?? undefined,
     })),
     count,
   };
@@ -391,7 +393,7 @@ export async function updateRecipe(
 // used when the user explicitly asks to clear notes (e.g. after applying them).
 export async function clearCookingNotes(args: RecipeIdInput): Promise<RecipeRow> {
   try {
-    return await updateRecipeRow(args.id, { schema: { cookingNotes: "" } });
+    return await updateRecipeRow(args.id, { cookingNotes: null });
   } catch (err) {
     throw toToolError(err, "update_failed");
   }
@@ -438,7 +440,7 @@ export async function uploadRecipeImage(
     throw new ToolError("upload_failed", err instanceof Error ? err.message : "Upload failed");
   }
   try {
-    return await updateRecipeRow(args.id, { schema: { image: imageUrl } });
+    return await updateRecipeRow(args.id, { image: imageUrl });
   } catch (err) {
     throw toToolError(err, "update_failed");
   }

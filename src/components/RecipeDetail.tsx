@@ -6,7 +6,6 @@ import type { RecipeRow, RecipeDocument } from "@/types/recipe";
 import {
   formatDuration,
   formatDate,
-  getFirstImage,
   toArray,
   isOwnRecipe,
   toSchemaOrgJsonLd,
@@ -83,7 +82,7 @@ export default function RecipeDetail({
     () => ({ ...applyRecipeDocument(recipe, doc), status, url, source }),
     [recipe, doc, status, url, source],
   );
-  const image = getFirstImage(schema.image);
+  const { name, image, description } = doc;
   const prepTime = formatDuration(schema.prepTime);
   const cookTime = formatDuration(schema.cookTime);
   const totalTime = formatDuration(schema.totalTime);
@@ -143,7 +142,7 @@ export default function RecipeDetail({
         const result = await res.json();
         if (!result.image || typeof result.image !== "string")
           throw new Error();
-        return { ...current, schema: { ...current.schema, image: result.image } };
+        return { ...current, image: result.image };
       },
       [recipe.id],
     ),
@@ -242,15 +241,24 @@ export default function RecipeDetail({
     editor.runSave(async () => {
       const {
         schema: updatedSchema,
+        name,
+        description,
+        notes,
         ingredients,
         instructions,
         servings,
       } = editor.buildPatch(doc);
-      if (imageUpload.isStaged) {
-        updatedSchema.image = await imageUpload.upload(recipe.id);
-      }
+      // A staged file is uploaded only once the rest of the save is going
+      // through, so an abandoned edit leaves no orphan in storage.
+      const image = imageUpload.isStaged
+        ? await imageUpload.upload(recipe.id)
+        : undefined;
       const result = await saveRecipe(recipe.id, {
         schema: updatedSchema,
+        name,
+        description,
+        notes,
+        ...(image !== undefined ? { image } : {}),
         ingredients,
         instructions,
         // Absent when the servings box holds something unusable, which the
@@ -269,6 +277,11 @@ export default function RecipeDetail({
       // spread, so a field left out here silently reverts to the pre-save value.
       setDoc({
         schema: result.schema,
+        name: result.name,
+        image: result.image,
+        description: result.description,
+        notes: result.notes,
+        cooking_notes: result.cooking_notes,
         ingredients: result.ingredients,
         instructions: result.instructions,
         prep_time: result.prep_time,
@@ -347,7 +360,7 @@ export default function RecipeDetail({
             ) : (
               <>
                 <h1 className="text-3xl sm:text-4xl text-gray-900 leading-tight">
-                  {schema.name}
+                  {name}
                 </h1>
                 <CookingModeButton
                   recipe={cookingRecipe}
@@ -366,9 +379,9 @@ export default function RecipeDetail({
               className="p-3 text-lg leading-relaxed min-h-[80px] resize-y md:text-lg"
             />
           ) : (
-            schema.description && (
+            description && (
               <p className="text-gray-600 text-lg leading-relaxed">
-                {schema.description}
+                {description}
               </p>
             )
           )}
@@ -385,7 +398,7 @@ export default function RecipeDetail({
           <div className="w-full rounded-2xl overflow-hidden mb-8 bg-gray-100">
             <Image
               src={previewUrl ?? (image as string)}
-              alt={schema.name}
+              alt={name}
               width={0}
               height={0}
               sizes="(max-width: 768px) 100vw, 768px"
@@ -533,7 +546,7 @@ export default function RecipeDetail({
         </div>
 
         {/* Notes */}
-        {(isEditing || schema.notes) && (
+        {(isEditing || doc.notes) && (
           <div className="mt-8">
             <h2 className="text-xl text-gray-900 mb-3">Notes</h2>
             {isEditing ? (
@@ -546,7 +559,7 @@ export default function RecipeDetail({
               />
             ) : (
               <p className="text-gray-700 leading-relaxed whitespace-pre-line">
-                {schema.notes}
+                {doc.notes}
               </p>
             )}
           </div>

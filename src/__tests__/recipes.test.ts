@@ -64,10 +64,18 @@ import {
 } from "@/fixtures";
 import type { RecipeDocument, SchemaRecipe } from "@/types/recipe";
 
-/** The document the repo builds for `content`, for a schema-only expectation. */
-function markdownDoc(schema: SchemaRecipe): RecipeDocument {
+/** The document the repo builds for `content`, for a scalar-only expectation. */
+function markdownDoc(
+  name: string,
+  overrides: Partial<RecipeDocument> = {},
+): RecipeDocument {
   return {
-    schema,
+    schema: {},
+    name,
+    image: null,
+    description: null,
+    notes: null,
+    cooking_notes: null,
     ingredients: [],
     instructions: [],
     prep_time: null,
@@ -77,6 +85,7 @@ function markdownDoc(schema: SchemaRecipe): RecipeDocument {
     servings_unit: null,
     total_weight_amount: null,
     total_weight_unit: null,
+    ...overrides,
   };
 }
 
@@ -188,7 +197,7 @@ describe("getRecipes", () => {
     await getRecipes({ query: "pasta" });
 
     expect(builder.or).toHaveBeenCalledWith(
-      'metadata->schema->>name.ilike."%pasta%",ingredient_catalog_text.ilike."%pasta%"',
+      'name.ilike."%pasta%",ingredient_catalog_text.ilike."%pasta%"',
     );
   });
 
@@ -208,7 +217,7 @@ describe("getRecipes", () => {
     await getRecipes({ query: "salt, table" });
 
     expect(builder.or).toHaveBeenCalledWith(
-      'metadata->schema->>name.ilike."%salt, table%",ingredient_catalog_text.ilike."%salt, table%"',
+      'name.ilike."%salt, table%",ingredient_catalog_text.ilike."%salt, table%"',
     );
   });
 
@@ -219,7 +228,7 @@ describe("getRecipes", () => {
     await getRecipes({ query: String.raw`a"b\c` });
 
     expect(builder.or).toHaveBeenCalledWith(
-      String.raw`metadata->schema->>name.ilike."%a\"b\\c%",ingredient_catalog_text.ilike."%a\"b\\c%"`,
+      String.raw`name.ilike."%a\"b\\c%",ingredient_catalog_text.ilike."%a\"b\\c%"`,
     );
   });
 
@@ -291,14 +300,14 @@ describe("getRecipes", () => {
     const { builder } = makeSupabaseMock();
     await getRecipes({ sort: "name-asc" });
 
-    expect(builder.order).toHaveBeenCalledWith("metadata->schema->>name", { ascending: true });
+    expect(builder.order).toHaveBeenCalledWith("name", { ascending: true });
   });
 
   it("sorts by name descending for 'name-desc'", async () => {
     const { builder } = makeSupabaseMock();
     await getRecipes({ sort: "name-desc" });
 
-    expect(builder.order).toHaveBeenCalledWith("metadata->schema->>name", { ascending: false });
+    expect(builder.order).toHaveBeenCalledWith("name", { ascending: false });
   });
 
   it("returns empty data and zero count on supabase error", async () => {
@@ -366,7 +375,7 @@ describe("getStatusCounts", () => {
     await getStatusCounts({ query: "pasta" });
 
     expect(builder.or).toHaveBeenCalledWith(
-      'metadata->schema->>name.ilike."%pasta%",ingredient_catalog_text.ilike."%pasta%"',
+      'name.ilike."%pasta%",ingredient_catalog_text.ilike."%pasta%"',
     );
   });
 
@@ -515,7 +524,9 @@ describe("createRecipeRow", () => {
 
     expect(inserts[0]).toMatchObject({
       name: "Soup",
-      content: recipeToMarkdown(markdownDoc(schema)),
+      content: recipeToMarkdown(
+        markdownDoc("Soup", { description: "Hot broth." }),
+      ),
       url: "https://example.com",
       source: "example.com",
       status: "draft",
@@ -524,8 +535,9 @@ describe("createRecipeRow", () => {
 
   // The promoted scalars. Create is the inbound Schema.org edge, so `image`
   // arrives in either wire shape and is reduced to the single URL the column
-  // holds — the same rule the yield follows two tests down.
-  it("promotes image, description and both notes to their columns", async () => {
+  // holds — the same rule the yield follows two tests down. `cookingNotes` is
+  // absent by design: it is authored in cooking mode, never on create.
+  it("promotes image, description and notes to their columns", async () => {
     const { inserts } = makeWriteSupabaseMock({
       insertSingle: { data: { id: "x", ingredients: [], instructions: [] }, error: null },
     });
@@ -538,7 +550,6 @@ describe("createRecipeRow", () => {
         image: "https://cdn.example.com/soup.png",
         description: "Hot broth.",
         notes: "Salt at the end.",
-        cookingNotes: "Doubled the chili.",
       },
     });
 
@@ -546,7 +557,6 @@ describe("createRecipeRow", () => {
       image: "https://cdn.example.com/soup.png",
       description: "Hot broth.",
       notes: "Salt at the end.",
-      cooking_notes: "Doubled the chili.",
     });
   });
 
@@ -581,7 +591,6 @@ describe("createRecipeRow", () => {
       image: null,
       description: null,
       notes: null,
-      cooking_notes: null,
     });
   });
 
@@ -801,7 +810,12 @@ describe("updateRecipeRow", () => {
     servings_unit: "kebabs",
     total_weight_amount: null,
     total_weight_unit: null,
-    metadata: { schema: { name: "Original", description: "Old blurb" } },
+    name: "Original",
+    image: null,
+    description: "Old blurb",
+    notes: null,
+    cooking_notes: null,
+    metadata: { schema: {} },
   };
 
   // Three-way, like the times: the key absent leaves both columns alone, an
@@ -888,12 +902,10 @@ describe("updateRecipeRow", () => {
       });
 
       await updateRecipeRow("r1", {
-        schema: {
-          image: "https://cdn.example.com/new.png",
-          description: "Fresh blurb",
-          notes: "Rest it longer.",
-          cookingNotes: "Used Valentina.",
-        },
+        image: "https://cdn.example.com/new.png",
+        description: "Fresh blurb",
+        notes: "Rest it longer.",
+        cookingNotes: "Used Valentina.",
       });
 
       expect(updates[0]).toMatchObject({
@@ -910,7 +922,7 @@ describe("updateRecipeRow", () => {
         updateSingle: { data: existing, error: null },
       });
 
-      await updateRecipeRow("r1", { schema: { description: "", cookingNotes: "  " } });
+      await updateRecipeRow("r1", { description: "", cookingNotes: "  " });
       expect(updates[0].description).toBeNull();
       expect(updates[0].cooking_notes).toBeNull();
     });
@@ -921,7 +933,7 @@ describe("updateRecipeRow", () => {
         updateSingle: { data: existing, error: null },
       });
 
-      await updateRecipeRow("r1", { schema: { description: "Fresh blurb" } });
+      await updateRecipeRow("r1", { description: "Fresh blurb" });
       expect(updates[0]).not.toHaveProperty("image");
       expect(updates[0]).not.toHaveProperty("notes");
       expect(updates[0]).not.toHaveProperty("cooking_notes");
@@ -937,7 +949,7 @@ describe("updateRecipeRow", () => {
         updateSingle: { data: existing, error: null },
       });
 
-      await updateRecipeRow("r1", { schema: { description: "Fresh blurb" } });
+      await updateRecipeRow("r1", { description: "Fresh blurb" });
       expect(Date.parse(updates[0].updated_at as string)).not.toBeNaN();
     });
 
@@ -956,17 +968,42 @@ describe("updateRecipeRow", () => {
     mockGenerateEmbedding.mockReset().mockResolvedValue(null);
   });
 
-  it("syncs the top-level name column when schema.name changes (bug fix)", async () => {
+  it("writes the name column and never a name back into the blob", async () => {
     const { updates } = makeWriteSupabaseMock({
       selectSingle: { data: existing, error: null },
       updateSingle: { data: existing, error: null },
     });
 
-    await updateRecipeRow("r1", { schema: { name: "Renamed" } });
+    await updateRecipeRow("r1", { name: "Renamed" });
 
     expect(updates[0]).toMatchObject({ name: "Renamed" });
-    // metadata.schema should still be merged
-    expect((updates[0].metadata as { schema: { name: string } }).schema.name).toBe("Renamed");
+    expect((updates[0].metadata as { schema: object }).schema).not.toHaveProperty(
+      "name",
+    );
+  });
+
+  // The column is NOT NULL and a listing has nothing else to show, so an empty
+  // title box has to degrade to "no change" rather than to a nameless row.
+  it("ignores a blank name rather than clearing the column", async () => {
+    const { updates } = makeWriteSupabaseMock({
+      selectSingle: { data: existing, error: null },
+      updateSingle: { data: existing, error: null },
+    });
+
+    await updateRecipeRow("r1", { name: "   ", description: "Fresh blurb" });
+    expect(updates[0]).not.toHaveProperty("name");
+  });
+
+  // The markdown's first two blocks are the title and the blurb, so either
+  // changing has to re-render `content` the way a servings change does.
+  it("recomputes content when only a promoted scalar changes", async () => {
+    const { updates } = makeWriteSupabaseMock({
+      selectSingle: { data: existing, error: null },
+      updateSingle: { data: existing, error: null },
+    });
+
+    await updateRecipeRow("r1", { name: "Renamed" });
+    expect(updates[0].content).toContain("# Renamed");
   });
 
   it("recomputes content as the markdown of the merged schema on any schema change", async () => {
@@ -975,12 +1012,11 @@ describe("updateRecipeRow", () => {
       updateSingle: { data: existing, error: null },
     });
 
-    await updateRecipeRow("r1", { schema: { description: "Fresh blurb" } });
+    await updateRecipeRow("r1", { description: "Fresh blurb" });
 
-    const mergedSchema = { name: "Original", description: "Fresh blurb" };
     expect(updates[0]).toMatchObject({
       content: recipeToMarkdown({
-        ...markdownDoc(mergedSchema),
+        ...markdownDoc("Original", { description: "Fresh blurb" }),
         // The row's own count, untouched by this patch — the markdown always
         // describes the recipe as saved.
         servings_amount: existing.servings_amount,
@@ -1233,7 +1269,7 @@ describe("updateRecipeRow", () => {
       selectSingle: {
         data: {
           ...existing,
-          metadata: { schema: { name: "Original", recipeIngredient: ["frozen"] } },
+          metadata: { schema: { recipeCuisine: "Thai", recipeIngredient: ["frozen"] } },
         },
         error: null,
       },
@@ -1241,12 +1277,13 @@ describe("updateRecipeRow", () => {
     });
 
     await updateRecipeRow("r1", {
-      schema: { description: "Fresh blurb", recipeIngredient: ["stray"] } as never,
+      schema: { keywords: "weeknight", recipeIngredient: ["stray"] } as never,
     });
 
     const blob = (updates[0].metadata as { schema: object }).schema;
     expect(blob).not.toHaveProperty("recipeIngredient");
-    expect(blob).toMatchObject({ description: "Fresh blurb" });
+    // What the blob is still the source of survives the strip.
+    expect(blob).toMatchObject({ recipeCuisine: "Thai", keywords: "weeknight" });
   });
 });
 
@@ -1778,7 +1815,7 @@ describe("getRecipes — relevance ranking", () => {
     await getRecipes({ query: "onion", sort: "name-asc" });
 
     expect(client.rpc).not.toHaveBeenCalled();
-    expect(builder.order).toHaveBeenCalledWith("metadata->schema->>name", {
+    expect(builder.order).toHaveBeenCalledWith("name", {
       ascending: true,
     });
   });

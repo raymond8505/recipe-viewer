@@ -527,6 +527,13 @@ export function toSchemaOrgRecipe(doc: RecipeDocument): SchemaOrgRecipe {
   const steps = toSchemaOrgInstructions(doc.instructions);
   return {
     ...rest,
+    // Built from the columns, never from the blob's frozen copies — the same
+    // rule the times and the yield follow below. A null column drops its key
+    // rather than publishing an explicit null.
+    name: doc.name,
+    ...(doc.image ? { image: doc.image } : {}),
+    ...(doc.description ? { description: doc.description } : {}),
+    ...(doc.notes ? { notes: doc.notes } : {}),
     ...schemaOrgTimes(doc),
     ...schemaOrgYield(doc),
     ...(texts.length > 0 ? { recipeIngredient: texts } : {}),
@@ -555,15 +562,16 @@ export function toSchemaOrgJsonLd(
   const result: Record<string, unknown> = {
     "@context": schema["@context"] ?? "https://schema.org",
     "@type": schema["@type"] ?? "Recipe",
-    name: schema.name,
+    name: doc.name,
   };
   const nutrition = options?.nutritionOverride;
-  // `recipeYield` is deliberately NOT here: it is column-backed, so it joins
-  // the times below and is built from the document rather than read off the
-  // blob, which still carries a frozen pre-0022 copy on older rows.
+  // Column-backed fields are deliberately NOT on the allowlist: a key listed
+  // there is read straight off the blob, where a frozen copy still sits on
+  // older rows. They are built from the document instead, beside the times and
+  // the yield. What is left on the list is what the blob is still the source of.
+  if (doc.image) result.image = doc.image;
+  if (doc.description) result.description = doc.description;
   const optionalFields = [
-    "description",
-    "image",
     "author",
     "recipeCuisine",
     "recipeCategory",
@@ -583,15 +591,36 @@ export function toSchemaOrgJsonLd(
 }
 
 /**
- * The Schema.org keys that exist only at the edges, every one of them backed by
- * a column now. Older rows still carry them in `metadata.schema`, frozen at
- * their backfill value, and the zod schema is `.passthrough()` so an agent can
- * send them too — neither may reach a consumer or a stored blob.
+ * The keys that may never reach a consumer or a stored blob. Older rows still
+ * carry every one of them in `metadata.schema`, frozen at its backfill value,
+ * and the zod schema is `.passthrough()` so an agent can send them too.
+ *
+ * Every key here is column-backed: it exists at the edges, in the Schema.org
+ * wire form, and is rebuilt there from the column it was promoted to. That is
+ * what makes deleting it from the blob safe rather than lossy.
  */
-export const SCHEMA_ORG_ONLY_KEYS = [
+export const PROMOTED_KEYS = [
+  "name",
+  "image",
+  "description",
+  "notes",
+  "cookingNotes",
   "recipeIngredient",
   "recipeInstructions",
   "recipeYield",
+] as const;
+
+/**
+ * Keys the app has stopped having a concept of, stripped for the same reasons
+ * but backed by nothing — they are not rebuilt anywhere, because nothing asks
+ * for them any more.
+ */
+export const DROPPED_KEYS = [] as const;
+
+/** What the read exit deletes and every write strips: both lists together. */
+export const SCHEMA_ORG_ONLY_KEYS = [
+  ...PROMOTED_KEYS,
+  ...DROPPED_KEYS,
 ] as const;
 
 /**
@@ -736,9 +765,9 @@ export function instructionsToMarkdown(
  */
 export function recipeToMarkdown(doc: RecipeDocument): string {
   const { schema, ingredients, instructions } = doc;
-  const blocks: string[] = [`# ${schema.name}`];
+  const blocks: string[] = [`# ${doc.name}`];
 
-  if (schema.description) blocks.push(schema.description);
+  if (doc.description) blocks.push(doc.description);
 
   const meta: string[] = [];
   const yieldValue = formatServings(doc.servings_amount, doc.servings_unit);

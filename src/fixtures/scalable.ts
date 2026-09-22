@@ -30,7 +30,6 @@ export const weighedYieldColumns = {
 /** The stored blob. Its `nutrition` block is inert — the catalog is the only
  *  source — and it is kept here precisely so tests can prove it is ignored. */
 export const scalableBaseSchema: SchemaRecipe = {
-  name: "Test Recipe",
   nutrition: {
     "@type": "NutritionInformation",
     calories: "200 kcal",
@@ -68,6 +67,11 @@ export function makeScalableDocument(
   const { schema, ...columns } = overrides;
   return {
     schema: makeSchemaRecipe(schema),
+    name: "Test Recipe",
+    image: null,
+    description: null,
+    notes: null,
+    cooking_notes: null,
     ingredients: scalableBaseIngredients,
     instructions: [],
     prep_time: null,
@@ -135,7 +139,7 @@ export function makeNutritionRecipe(
 export function makeScaledIngredient(text: string, scale = 1): ScaledIngredient {
   return new ScalableRecipe(
     makeScalableDocument({
-      schema: { name: "test" },
+      name: "test",
       ingredients: makeIngredientLines([text]),
       servings_amount: 1,
       servings_unit: "serving",

@@ -503,8 +503,8 @@ describe("searchRecipes", () => {
     expect(out.data[0]).toEqual({
       id: fixture.id,
       url: fixture.url,
-      name: fixture.metadata.schema.name,
-      description: fixture.metadata.schema.description,
+      name: fixture.name,
+      description: fixture.description,
     });
     // Full-schema fields must not leak through search.
     expect(out.data[0]).not.toHaveProperty("metadata");
@@ -951,7 +951,7 @@ describe("updateRecipe", () => {
 describe("clearCookingNotes", () => {
   beforeEach(() => vi.clearAllMocks());
 
-  it("sets cookingNotes to an empty string via updateRecipeRow", async () => {
+  it("clears the cooking notes column via updateRecipeRow", async () => {
     const { updateRecipeRow } = await import("@/lib/recipes");
     const existing = recipeFixtures[0];
     vi.mocked(updateRecipeRow).mockResolvedValueOnce(existing);
@@ -959,7 +959,7 @@ describe("clearCookingNotes", () => {
     await clearCookingNotes({ id: existing.id });
 
     expect(updateRecipeRow).toHaveBeenCalledWith(existing.id, {
-      schema: { cookingNotes: "" },
+      cookingNotes: null,
     });
   });
 
@@ -994,7 +994,7 @@ describe("deleteRecipe", () => {
 describe("uploadRecipeImage", () => {
   beforeEach(() => vi.clearAllMocks());
 
-  it("fetches via imageUrl, uploads, and writes the new URL into schema.image", async () => {
+  it("fetches via imageUrl, uploads, and writes the new URL into the image column", async () => {
     const storage = await import("@/lib/storage");
     const { updateRecipeRow } = await import("@/lib/recipes");
     vi.mocked(storage.fetchImageBytes).mockResolvedValueOnce({
@@ -1006,13 +1006,7 @@ describe("uploadRecipeImage", () => {
     );
     const updated = {
       ...recipeFixtures[0],
-      metadata: {
-        ...recipeFixtures[0].metadata,
-        schema: {
-          ...recipeFixtures[0].metadata.schema,
-          image: "https://cdn.example.com/r1-from-url.jpg",
-        },
-      },
+      image: "https://cdn.example.com/r1-from-url.jpg",
     };
     vi.mocked(updateRecipeRow).mockResolvedValueOnce(updated);
 
@@ -1028,11 +1022,9 @@ describe("uploadRecipeImage", () => {
       "image/jpeg",
     );
     expect(updateRecipeRow).toHaveBeenCalledWith("r1", {
-      schema: { image: "https://cdn.example.com/r1-from-url.jpg" },
+      image: "https://cdn.example.com/r1-from-url.jpg",
     });
-    expect(out.metadata.schema.image).toBe(
-      "https://cdn.example.com/r1-from-url.jpg",
-    );
+    expect(out.image).toBe("https://cdn.example.com/r1-from-url.jpg");
   });
 
   it("translates StorageUploadError(unsupported_type) to ToolError(unsupported_type)", async () => {

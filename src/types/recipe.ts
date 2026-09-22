@@ -96,6 +96,35 @@ export interface RecipeRowColumns {
   source: string;
   status: "published" | "archived" | "draft" | null;
   /**
+   * The recipe's title, and its identity in every listing — the column is what
+   * search filters, both name sorts and the two junk-name guards read (0026).
+   * `metadata.schema.name` holds a frozen copy on older rows that nothing may
+   * read; there is no hydrate-back.
+   */
+  name: string;
+  /**
+   * A single image URL, or null for a recipe with no image. Schema.org allows
+   * `image` to be an array and the inbound edges still accept one — it is
+   * reduced by `getFirstImage` at the boundary, so the column and everything
+   * above it carry one URL.
+   */
+  image: string | null;
+  description: string | null;
+  /**
+   * Recipe-level notes the author writes in the editor, and `cooking_notes`
+   * what a cook types in cooking mode. Both are app-internal: they reach the
+   * image webhook but never the published JSON-LD, whose allowlist omits them.
+   */
+  notes: string | null;
+  cooking_notes: string | null;
+  /**
+   * Row timestamps. `updated_at` is maintained by the repo layer, not by a
+   * trigger — see `updateRecipeRow`. Both are selected because the detail and
+   * cooking views render the recipe's date from `updated_at`.
+   */
+  created_at: string;
+  updated_at: string;
+  /**
    * Whole seconds; null means no time recorded. These three are the source of
    * truth for a recipe's times — `metadata.schema.{prepTime,cookTime,totalTime}`
    * still holds a pre-0019 copy on older rows, but the repo layer overwrites it
@@ -150,6 +179,12 @@ export interface RecipeRowColumns {
  */
 export interface RecipeDocument {
   schema: SchemaRecipe;
+  /** See RecipeRowColumns — same meaning, carried on the document. */
+  name: string;
+  image: string | null;
+  description: string | null;
+  notes: string | null;
+  cooking_notes: string | null;
   ingredients: RecipeIngredientGroup[];
   instructions: RecipeInstructionGroup[];
   prep_time: number | null;
@@ -182,6 +217,17 @@ export type RecipeDocumentSource = Pick<
  * internal reads it.
  */
 export type SchemaOrgRecipe = SchemaRecipe & {
+  /**
+   * The wire spellings of the column-backed scalars (0026). Outbound they are
+   * built from the document's columns; inbound a scrape or an agent sends them
+   * and the write path reduces them to columns exactly once — `image` through
+   * `getFirstImage`, since Schema.org allows an array and the column holds one.
+   */
+  name: string;
+  description?: string;
+  image?: string | string[];
+  /** App-internal, on this type only because the image webhook is handed it. */
+  notes?: string;
   recipeIngredient?: string[];
   recipeInstructions?: Array<HowToStep | HowToSection>;
   /**
@@ -271,9 +317,6 @@ export interface QuantitativeValue {
 export interface SchemaRecipe {
   "@context"?: string;
   "@type"?: "Recipe";
-  name: string;
-  description?: string;
-  image?: string | string[];
   author?: { "@type"?: "Person"; name: string };
   // ISO 8601 durations, backed by the recipes.{prep,cook,total}_time columns.
   // Explicitly nullable so a patch can CLEAR a time: `undefined` disappears in
@@ -283,19 +326,20 @@ export interface SchemaRecipe {
   totalTime?: string | null;
   recipeCuisine?: string;
   recipeCategory?: string | string[];
-  // No `recipeIngredient`, `recipeInstructions` or `recipeYield`, and no
-  // `nutrition.servingSize`: a recipe's ingredients are `RecipeRow.ingredients`
-  // (RecipeIngredientGroup[]), its instructions `RecipeRow.instructions`
-  // (RecipeInstructionGroup[]), and its servings the `servings_amount` /
-  // `servings_unit` columns. The Schema.org forms exist only on SchemaOrgRecipe,
-  // at the edges. All four keys still sit in the stored blob of older rows,
-  // frozen at backfill time; the repo layer deletes them on read and strips them
-  // on write so nothing above it can see them.
+  // What is NOT here, and where it lives instead: a recipe's name, image,
+  // description and both kinds of notes are columns (0026); its ingredients are
+  // `RecipeRow.ingredients`, its instructions `RecipeRow.instructions`, its
+  // times the three `*_time` columns and its servings the `servings_amount` /
+  // `servings_unit` pair. The Schema.org spellings of all of them exist only on
+  // `SchemaOrgRecipe`, at the edges. Every one of those keys still sits in the
+  // stored blob of older rows, frozen at backfill time; the repo layer deletes
+  // them on read and strips them on write, so nothing above it can see one.
+  //
+  // What remains is the residue: two fields awaiting the tagging system that
+  // will replace them, and the two `@` constants the wire form needs.
   keywords?: string;
   nutrition?: SchemaNutrition;
   datePublished?: string;
-  notes?: string;
-  cookingNotes?: string;
 }
 
 /**

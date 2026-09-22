@@ -79,6 +79,13 @@ const RECIPE_COLUMNS = selectColumns<RecipeRowColumns>()([
   "url",
   "source",
   "status",
+  "name",
+  "image",
+  "description",
+  "notes",
+  "cooking_notes",
+  "created_at",
+  "updated_at",
   "prep_time",
   "cook_time",
   "total_time",
@@ -92,23 +99,25 @@ const RECIPE_COLUMNS = selectColumns<RecipeRowColumns>()([
 ]);
 
 // ---------------------------------------------------------------------------
-// The blob's three dead regions, and the seams that keep them dead.
+// The blob's dead regions, and the seams that keep them dead.
 //
-// 0019 made `prep_time`/`cook_time`/`total_time` the source of truth for a
-// recipe's times, 0016 made `recipes.ingredients` + `recipe_ingredients` the
-// source of truth for its ingredient list, and 0021 made
-// `recipes.instructions` the source of truth for its steps. The copies still
-// sitting in `metadata.schema` — three time keys, a `recipeIngredient` array
-// and a `recipeInstructions` array, both frozen at backfill time — are
-// artifacts of the blob-only shape. This module is the ONLY code that knows
-// that: `hydrate` runs at every read exit below and the strip functions at
-// every write, so everything above (JSON-LD, the markdown, the MCP tools,
-// RecipeCard, RecipeDetail, CookingMode) never observes a stale value or a
-// dead key.
+// Each promotion left a frozen copy behind: 0016 the `recipeIngredient` array,
+// 0019 the three time keys, 0021 the `recipeInstructions` array, 0022 the
+// `recipeYield` and `nutrition.servingSize`, and 0026 the name, image,
+// description and both sets of notes. No migration strips any of them. This
+// module is the ONLY code that knows that — `hydrate` runs at every read exit
+// below and the strip functions at every write — so everything above it
+// (JSON-LD, the markdown, the MCP tools, RecipeCard, RecipeDetail, CookingMode)
+// never observes a stale value or a dead key.
+//
+// The times are the one region with a hydrate-BACK, because `schema.prepTime`
+// still has readers above this module. Everything promoted since is read off
+// its column and merely deleted here; 0026's fields follow that rule, which is
+// why nothing below writes a name or an image into the blob it strips.
 //
 // The corollary is the thing to protect: a reader that queries `recipes`
-// without coming through here gets a pre-0019 answer, no ingredients and the
-// frozen steps, silently.
+// without coming through here gets a pre-0019 answer, no ingredients, the
+// frozen steps and a name that may never have existed, silently.
 // ---------------------------------------------------------------------------
 
 const TIME_FIELDS = [
@@ -214,6 +223,20 @@ export interface UpdateRecipePatch {
   url?: string;
   source?: string;
   status?: RecipeStatus;
+  /**
+   * The column-backed scalars (0026), each three-way like the times: the key
+   * absent leaves the column alone, a blank string or null clears it, a value
+   * sets it. `name` has no clear — a recipe without one is not a state the
+   * column allows.
+   *
+   * `image` takes the single URL the column holds; the Schema.org array form is
+   * reduced at the inbound edges, never here.
+   */
+  name?: string;
+  image?: string | null;
+  description?: string | null;
+  notes?: string | null;
+  cookingNotes?: string | null;
   /** Merged into the stored schema — only the keys given change. */
   schema?: Partial<SchemaRecipe>;
   /** Replaces the whole ingredient list; a line keeps its row by naming its id. */
@@ -263,7 +286,7 @@ const MAX_QUERY_LENGTH = 200;
  */
 function recipeSearchFilter(query: string): string {
   const value = orFilterValue(`%${query.slice(0, MAX_QUERY_LENGTH)}%`);
-  return `metadata->schema->>name.ilike.${value},ingredient_catalog_text.ilike.${value}`;
+  return `name.ilike.${value},ingredient_catalog_text.ilike.${value}`;
 }
 
 export async function getStatusCounts(opts?: {
@@ -276,8 +299,8 @@ export async function getStatusCounts(opts?: {
   let queryBuilder = supabase
     .from("recipes")
     .select("status")
-    .not("metadata->schema->>name", "ilike", "%(NEEDS RE-SCRAPE)%")
-    .not("metadata->schema->>name", "ilike", "%null%");
+    .not("name", "ilike", "%(NEEDS RE-SCRAPE)%")
+    .not("name", "ilike", "%null%");
 
   if (opts?.source) {
     queryBuilder = queryBuilder.eq("source", opts.source);
@@ -449,8 +472,8 @@ export async function getRecipes(opts?: {
   const sortMap: Record<ColumnSort, { column: string; ascending: boolean }> = {
     newest:    { column: "created_at", ascending: false },
     oldest:    { column: "created_at", ascending: true },
-    "name-asc":  { column: "metadata->schema->>name", ascending: true },
-    "name-desc": { column: "metadata->schema->>name", ascending: false },
+    "name-asc":  { column: "name", ascending: true },
+    "name-desc": { column: "name", ascending: false },
   };
   const sort = opts?.sort ?? "newest";
   const { column, ascending } =
@@ -459,8 +482,8 @@ export async function getRecipes(opts?: {
   let queryBuilder = supabase
     .from("recipes")
     .select(RECIPE_COLUMNS, { count: "exact" })
-    .not("metadata->schema->>name", "ilike", "%(NEEDS RE-SCRAPE)%")
-    .not("metadata->schema->>name", "ilike", "%null%")
+    .not("name", "ilike", "%(NEEDS RE-SCRAPE)%")
+    .not("name", "ilike", "%null%")
     .range(from, to)
     .order(column, { ascending });
 
@@ -532,10 +555,17 @@ export async function createRecipeRow(input: CreateRecipeInput): Promise<RecipeR
   // is read here and ONLY here. Before the strip, which deletes the key — parse
   // after it and every scraped recipe lands with null servings and no error.
   const yld = parseYield(input.schema.recipeYield);
-  // Same rule as the yield, for the same reason: read from the payload BEFORE
-  // the strip. `image` arrives in the Schema.org `string | string[]` form and
-  // is reduced to the one URL the column holds.
-  const image = getFirstImage(input.schema.image);
+  // Same rule as the yield, and for the same reason: every promoted scalar is
+  // read from the payload BEFORE the strip removes it. `image` arrives in the
+  // Schema.org `string | string[]` form and is reduced to the one URL the
+  // column holds. `cookingNotes` is absent on purpose — it is authored in
+  // cooking mode, never by whatever is creating the recipe.
+  const columns = {
+    name: input.schema.name,
+    image: getFirstImage(input.schema.image),
+    description: textOrNull(input.schema.description),
+    notes: textOrNull(input.schema.notes),
+  };
   const schema = stripSchemaOrgKeys(input.schema);
   // Every line becomes a row, and the row's id is its identity from the moment
   // it exists. The recipe id is minted here when the caller didn't, because
@@ -550,6 +580,8 @@ export async function createRecipeRow(input: CreateRecipeInput): Promise<RecipeR
   // LAND, not a reason for the searchable text to stop mentioning them.
   const content = recipeToMarkdown({
     schema,
+    ...columns,
+    cooking_notes: null,
     ingredients,
     instructions,
     prep_time: parseDurationToSeconds(schema.prepTime),
@@ -565,11 +597,7 @@ export async function createRecipeRow(input: CreateRecipeInput): Promise<RecipeR
     .from("recipes")
     .insert({
       id: recipeId,
-      name: schema.name,
-      image,
-      description: textOrNull(schema.description),
-      notes: textOrNull(schema.notes),
-      cooking_notes: textOrNull(schema.cookingNotes),
+      ...columns,
       content,
       ...(embedding ? { embedding: toVectorLiteral(embedding) } : {}),
       url: input.url,
@@ -681,20 +709,18 @@ export async function updateRecipeRow(
   if (patch.url !== undefined) writePatch.url = patch.url;
   if (patch.source !== undefined) writePatch.source = patch.source;
   if (patch.status !== undefined) writePatch.status = patch.status;
-  // The promoted scalars, keyed on presence in the schema patch so they keep
-  // the three-way semantics the times have: the key absent leaves the column
-  // alone, a blank clears it, a value sets it.
-  if (patch.schema?.image !== undefined) {
-    writePatch.image = getFirstImage(patch.schema.image);
+  // The promoted scalars, keyed on presence so they keep the three-way
+  // semantics the times have. A blank name is dropped rather than written:
+  // the column is NOT NULL, and an edit that submits an empty title is a
+  // mistake to ignore, not an instruction to break the row.
+  if (textOrNull(patch.name)) writePatch.name = patch.name!.trim();
+  if (patch.image !== undefined) writePatch.image = textOrNull(patch.image);
+  if (patch.description !== undefined) {
+    writePatch.description = textOrNull(patch.description);
   }
-  if (patch.schema?.description !== undefined) {
-    writePatch.description = textOrNull(patch.schema.description);
-  }
-  if (patch.schema?.notes !== undefined) {
-    writePatch.notes = textOrNull(patch.schema.notes);
-  }
-  if (patch.schema?.cookingNotes !== undefined) {
-    writePatch.cooking_notes = textOrNull(patch.schema.cookingNotes);
+  if (patch.notes !== undefined) writePatch.notes = textOrNull(patch.notes);
+  if (patch.cookingNotes !== undefined) {
+    writePatch.cooking_notes = textOrNull(patch.cookingNotes);
   }
   if (patch.instructions !== undefined) {
     writePatch.instructions = canonicalizeInstructions(patch.instructions);
@@ -746,7 +772,11 @@ export async function updateRecipeRow(
     patch.schema !== undefined ||
     reconcile ||
     writePatch.instructions ||
-    patch.servings !== undefined
+    patch.servings !== undefined ||
+    // The title and the blurb are the markdown's first two blocks, so a change
+    // to either has to re-render it for the same reason a servings change does.
+    "name" in writePatch ||
+    "description" in writePatch
   ) {
     const mergedSchema = stripSchemaOrgKeys({
       ...current.metadata.schema,
@@ -758,15 +788,23 @@ export async function updateRecipeRow(
     writePatch.prep_time = parseDurationToSeconds(mergedSchema.prepTime);
     writePatch.cook_time = parseDurationToSeconds(mergedSchema.cookTime);
     writePatch.total_time = parseDurationToSeconds(mergedSchema.totalTime);
-    // Keep the top-level name in sync when the schema patch touches it —
-    // otherwise list/search views keep showing the old value.
-    if (patch.schema?.name !== undefined) writePatch.name = patch.schema.name;
     // `content` (markdown) and `embedding` are always recomputed from the
     // merged schema on any schema, ingredient or instruction change. Embedding
     // is best-effort: on failure we leave the existing embedding untouched
     // rather than nulling it.
     const content = recipeToMarkdown({
       schema: mergedSchema,
+      // Keyed on presence for the same reason the servings are: the markdown
+      // has to describe the row this write leaves behind, and a cleared
+      // description writes null, which `??` would read as "nothing given".
+      name: "name" in writePatch ? writePatch.name! : current.name,
+      description:
+        "description" in writePatch
+          ? (writePatch.description ?? null)
+          : current.description,
+      image: current.image,
+      notes: current.notes,
+      cooking_notes: current.cooking_notes,
       ingredients: hydrateIngredientGroups(
         reconcile?.stored ?? existingStored,
         finalRows,

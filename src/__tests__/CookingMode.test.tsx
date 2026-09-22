@@ -45,8 +45,16 @@ function makeRecipe(
     servings_unit: "servings",
     total_weight_amount: null,
     total_weight_unit: null,
+    status: null,
+    name: "Test Recipe",
+    image: null,
+    description: null,
+    notes: null,
+    cooking_notes: null,
+    created_at: "2026-01-02T09:00:00.000Z",
+    updated_at: "2026-01-02T09:00:00.000Z",
     ...columns,
-    metadata: { schema: { name: "Test Recipe", ...schema } },
+    metadata: { schema: { ...schema } },
   };
 }
 
@@ -221,7 +229,7 @@ describe("CookingMode — shopping list", () => {
     // Scaling is primary-only, and the copy now reads through `scalables`
     // rather than each recipe's schema — a secondary must still contribute its
     // selected lines, unscaled.
-    const secondary = makeRecipe({ name: "Side Salad" }, ["1 cup rice"]);
+    const secondary = makeRecipe({}, ["1 cup rice"], [], { id: "2", name: "Side Salad" });
     secondary.id = "2";
     vi.stubGlobal(
       "fetch",
@@ -259,14 +267,14 @@ describe("CookingMode — cooking notes", () => {
     screen.getByPlaceholderText(/note changes for next time/i) as HTMLTextAreaElement;
 
   it("offers no Notes button when logged out", () => {
-    const recipe = makeRecipe({ cookingNotes: "less salt next time" });
+    const recipe = makeRecipe({}, [], [], { cooking_notes: "less salt next time" });
     render(<CookingMode recipe={recipe} onClose={vi.fn()} />);
     expect(screen.queryByRole("button", { name: "Notes" })).toBeNull();
     expect(screen.queryByPlaceholderText(/note changes for next time/i)).toBeNull();
   });
 
   it("renders a Notes button in both timer views and no inline textarea when logged in", () => {
-    const recipe = makeRecipe({ cookingNotes: "less salt next time" });
+    const recipe = makeRecipe({}, [], [], { cooking_notes: "less salt next time" });
     render(<CookingMode recipe={recipe} onClose={vi.fn()} isLoggedIn />);
     // The portrait ribbon and the desktop column both render; CSS hides one.
     expect(screen.getAllByRole("button", { name: "Notes" })).toHaveLength(2);
@@ -274,7 +282,7 @@ describe("CookingMode — cooking notes", () => {
   });
 
   it("opens the notes modal holding the recipe's saved notes", () => {
-    const recipe = makeRecipe({ cookingNotes: "less salt next time" });
+    const recipe = makeRecipe({}, [], [], { cooking_notes: "less salt next time" });
     render(<CookingMode recipe={recipe} onClose={vi.fn()} isLoggedIn />);
     fireEvent.click(screen.getAllByRole("button", { name: "Notes" })[0]);
     const dialog = screen.getByRole("dialog", { name: "Cooking notes" });

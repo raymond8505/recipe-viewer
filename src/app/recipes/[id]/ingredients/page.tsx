@@ -16,7 +16,7 @@ export async function generateMetadata({
   const { id } = await params;
   const recipe = await getRecipeById(id);
   if (!recipe) return { title: "Recipe Not Found" };
-  return { title: `${recipe.metadata.schema.name} — Nutrition Breakdown` };
+  return { title: `${recipe.name} — Nutrition Breakdown` };
 }
 
 // Login-gated curation surface for a recipe's normalized ingredient layer,
@@ -55,7 +55,7 @@ export default async function RecipeIngredientsPage({
       <div>
         <p className="text-sm">
           <Link href={`/recipes/${id}`} className="text-brand hover:underline">
-            ← {schema.name}
+            ← {recipe.name}
           </Link>
         </p>
         <h1 className="text-3xl mt-1">Nutrition Breakdown</h1>

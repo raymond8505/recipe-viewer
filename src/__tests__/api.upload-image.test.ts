@@ -126,7 +126,7 @@ describe("POST /api/recipes/[id]/upload-image", () => {
     );
   });
 
-  it("updates schema.image by default (no updateSchema field)", async () => {
+  it("updates the image column by default (no updateSchema field)", async () => {
     const storage = await import("@/lib/storage");
     const recipes = await import("@/lib/recipes");
     vi.mocked(storage.uploadRecipeImage).mockResolvedValueOnce(
@@ -140,7 +140,7 @@ describe("POST /api/recipes/[id]/upload-image", () => {
 
     expect(res.status).toBe(200);
     expect(recipes.updateRecipeRow).toHaveBeenCalledWith("recipe-1", {
-      schema: { image: "https://cdn.example.com/recipe-1-123.png" },
+      image: "https://cdn.example.com/recipe-1-123.png",
     });
   });
 
@@ -163,7 +163,7 @@ describe("POST /api/recipes/[id]/upload-image", () => {
     },
   );
 
-  it("updates schema.image when updateSchema=true", async () => {
+  it("updates the image column when updateSchema=true", async () => {
     const storage = await import("@/lib/storage");
     const recipes = await import("@/lib/recipes");
     vi.mocked(storage.uploadRecipeImage).mockResolvedValueOnce(
@@ -180,7 +180,7 @@ describe("POST /api/recipes/[id]/upload-image", () => {
     const body = await res.json();
     expect(body.image).toBe("https://cdn.example.com/recipe-1-123.png");
     expect(recipes.updateRecipeRow).toHaveBeenCalledWith("recipe-1", {
-      schema: { image: "https://cdn.example.com/recipe-1-123.png" },
+      image: "https://cdn.example.com/recipe-1-123.png",
     });
   });
 

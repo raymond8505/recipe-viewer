@@ -13,6 +13,15 @@ import type { RecipeStatus } from "@/lib/schemas/recipe";
 
 export interface SaveRecipeBody {
   schema: SchemaRecipe;
+  /**
+   * The column-backed scalars. `description` and `notes` are nullable because
+   * emptying either field is a CLEAR — an omitted key means "leave it alone".
+   * `image` is omitted unless a newly uploaded file replaced it.
+   */
+  name: string;
+  description: string | null;
+  notes: string | null;
+  image?: string;
   /** The whole list; the editor always sends it. Lines keep their rows by id. */
   ingredients: RecipeIngredientGroupInput[];
   /** The whole step list; the editor always sends it. */
@@ -29,6 +38,12 @@ export interface SaveRecipeBody {
 
 export interface SavedRecipe {
   schema: SchemaRecipe;
+  /** The column-backed scalars as stored. */
+  name: string;
+  image: string | null;
+  description: string | null;
+  notes: string | null;
+  cooking_notes: string | null;
   ingredients: RecipeIngredientGroup[];
   /** The steps as stored — canonical form, which may differ from what was sent. */
   instructions: RecipeInstructionGroup[];
@@ -68,6 +83,7 @@ export async function saveRecipe(
   const saved = await res.json();
   if (
     !saved.schema ||
+    typeof saved.name !== "string" ||
     !Array.isArray(saved.ingredients) ||
     !Array.isArray(saved.instructions)
   ) {

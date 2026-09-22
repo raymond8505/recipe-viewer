@@ -6,11 +6,12 @@ import { makeIngredientLines, makeSteps } from "@/fixtures";
 import type { RecipeDocument, SchemaRecipe } from "@/types/recipe";
 
 const doc: RecipeDocument = {
-  schema: {
-    name: "Pancakes",
-    description: "Fluffy.",
-    notes: "Use buttermilk.",
-  },
+  schema: {},
+  name: "Pancakes",
+  image: null,
+  description: "Fluffy.",
+  notes: "Use buttermilk.",
+  cooking_notes: null,
   ingredients: makeIngredientLines(["2 cups flour", "1 egg"]),
   instructions: makeSteps(["Mix"]),
   prep_time: null,
@@ -83,13 +84,23 @@ describe("useRecipeEditor", () => {
     expect(result.current.isEditing).toBe(false);
   });
 
-  it("buildPatch merges the draft and falls back to base name when blank", () => {
+  // A blank title is a mistake to ignore — the column is NOT NULL. A blank
+  // description is the opposite: an explicit clear, which has to reach the
+  // column as null rather than vanish as an omitted key.
+  it("buildPatch falls back to the stored name when blank, and clears a blank description", () => {
     const { result } = renderHook(() => useRecipeEditor());
     act(() => result.current.begin(doc, ROW));
     act(() => result.current.patch({ name: "   ", description: "" }));
-    const built = result.current.buildPatch(doc).schema;
+    const built = result.current.buildPatch(doc);
     expect(built.name).toBe("Pancakes");
-    expect(built.description).toBeUndefined();
+    expect(built.description).toBeNull();
+  });
+
+  it("buildPatch clears a blank note rather than leaving the stored one", () => {
+    const { result } = renderHook(() => useRecipeEditor());
+    act(() => result.current.begin(doc, ROW));
+    act(() => result.current.patch({ notes: "  " }));
+    expect(result.current.buildPatch(doc).notes).toBeNull();
   });
 
   it("buildPatch produces the ingredient groups and the instruction groups beside the schema", () => {
@@ -353,7 +364,8 @@ describe("useRecipeEditor", () => {
     // copies (a different prep, a total the column has cleared) so a read
     // that consults the blob rather than the column fails visibly.
     const timed: RecipeDocument = {
-      schema: { name: "Pancakes", prepTime: "PT5M", cookTime: "PT1H30M", totalTime: "PT2H" },
+      ...doc,
+      schema: { prepTime: "PT5M", cookTime: "PT1H30M", totalTime: "PT2H" },
       ingredients: [],
       instructions: [],
       prep_time: 900,

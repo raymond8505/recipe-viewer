@@ -29,6 +29,14 @@ import {
  */
 export interface RecipeEditPatch {
   schema: SchemaRecipe;
+  /**
+   * The column-backed scalars the editor edits. `description` and `notes` are
+   * `string | null` rather than optional: emptying either field is a CLEAR, and
+   * an omitted key would read as "leave it alone" after the JSON round trip.
+   */
+  name: string;
+  description: string | null;
+  notes: string | null;
   ingredients: RecipeIngredientGroupInput[];
   instructions: RecipeInstructionGroup[];
   servings?: { amount: number; unit: string | null };
@@ -166,12 +174,12 @@ export function useRecipeEditor(): UseRecipeEditor {
     (doc: RecipeDocument, { status, url, source }: EditRowFields) => {
       const { schema, ingredients, instructions } = doc;
       setDraft({
-        name: schema.name,
+        name: doc.name,
         url,
-        description: schema.description ?? "",
+        description: doc.description ?? "",
         ingredients: ingredientsToEditable(ingredients),
         instructions: instructionsToEditable(instructions),
-        notes: schema.notes ?? "",
+        notes: doc.notes ?? "",
         status,
         source,
         servings: doc.servings_amount?.toString() ?? "",
@@ -210,13 +218,17 @@ export function useRecipeEditor(): UseRecipeEditor {
       return {
         schema: {
           ...base,
-          name: draft.name.trim() || base.name,
-          description: draft.description || undefined,
-          notes: draft.notes || undefined,
           prepTime: buildTime(draft.prepTime, doc.prep_time),
           cookTime: buildTime(draft.cookTime, doc.cook_time),
           totalTime: buildTime(draft.totalTime, doc.total_time),
         },
+        // A blank title falls back to the stored one — the column is NOT NULL,
+        // and an empty title box is a mistake, not an instruction. A blank
+        // description or note is the opposite: an explicit clear, which is why
+        // they send null rather than dropping the key.
+        name: draft.name.trim() || doc.name,
+        description: draft.description.trim() || null,
+        notes: draft.notes.trim() || null,
         ingredients: editableToIngredientInput(draft.ingredients),
         instructions: editableToInstructions(draft.instructions),
         ...(servings ? { servings } : {}),
