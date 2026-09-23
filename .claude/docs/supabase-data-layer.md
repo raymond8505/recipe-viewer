@@ -6,7 +6,7 @@
 
 ## Repo layer, not raw table access
 
-**Data access.** Route handlers must **not** call `getSupabaseClient().from("recipes")` directly — go through `src/lib/recipes.ts` (`getRecipeById`, `updateRecipeRow`, `archiveRecipe`, `createRecipeRow`) and map `RecipeRepoError` → 404 (`not_found`) / 500. `updateRecipeRow` **merges** the schema patch into `metadata.schema` (not replace), **replaces** the ingredient list when `ingredients` is given (see below), and syncs the top-level `name` column — relying on this is what keeps list/search columns from going stale. In tests, mock `@/lib/recipes` at the module boundary with `importOriginal` so `RecipeRepoError` stays real for `instanceof`. (OAuth routes still use raw `oauth_*` Supabase calls — there is no repo layer for those yet.)
+**Data access.** Route handlers must **not** call `getSupabaseClient().from("recipes")` directly — go through `src/lib/recipes.ts` (`getRecipeById`, `updateRecipeRow`, `archiveRecipe`, `createRecipeRow`) and map `RecipeRepoError` → 404 (`not_found`) / 500. `updateRecipeRow` takes the column-backed scalars as top-level patch fields (`name`, `image`, `description`, `notes`, `cookingNotes`, `servings`, `totalWeight`), **merges** any `schema` patch into `metadata.schema` (not replace), and **replaces** the ingredient list when `ingredients` is given (see below). In tests, mock `@/lib/recipes` at the module boundary with `importOriginal` so `RecipeRepoError` stays real for `instanceof`. (OAuth routes still use raw `oauth_*` Supabase calls — there is no repo layer for those yet.)
 
 **Derived `content` + `embedding` columns.** Both write helpers (`createRecipeRow`, `updateRecipeRow`) derive two columns from the recipe so the MCP and UI paths produce them identically:
 - **`content`** (NOT NULL) is the full markdown rendering of the recipe via `recipeToMarkdown(schema, ingredients)` — recomputed on every create and on any update that touches the schema or the ingredients. (This is also the exact text that gets embedded.)
@@ -17,6 +17,10 @@
 ## Search — the recipe's name OR its catalog ingredients
 
 **`recipeSearchFilter` (`src/lib/recipes.ts`) is the only place a query becomes a filter**, and
+its first arm is the `recipes.name` column — as are both name sorts and the two junk-name guards
+beside it. The blob's frozen `name` is read by nothing.
+
+
 `getRecipes` and `getStatusCounts` both go through it. They are two requests answering one screen —
 the grid lists the rows, the status chips count them — so a predicate living in only one of them
 would have the chips claiming a total the grid cannot produce. A test pins the two strings equal.
@@ -64,7 +68,7 @@ the reader picked an explicit sort.
   the one description of a recipe row and the function needs no edit when a column is added. `.in()`
   carries one page of ids, nowhere near the URL limit. `.in()` does not preserve order, so the
   ranking is re-applied from the id list.
-- **A name hit scores 1.0**; anything else scores the matched lines' summed `resolved_grams` over a
+- **A name hit scores 1.0** (on the `name` column, as do both junk-name guards); anything else scores the matched lines' summed `resolved_grams` over a
   denominator — the recipe's stated `total_weight_amount` when it has one, else what its lines add
   up to. That second denominator undercounts wherever a line could not be weighed, which inflates
   the share; accepted, because the alternative is refusing to rank two thirds of the matches, and it
@@ -103,7 +107,7 @@ A line's **position is its index** in those arrays and its **identity is the row
 
 **Normalization only updates rows** (`updateRecipeIngredientRows`, an upsert on the primary key): it never creates or prunes, because the reconcile owns the row set. A row the reconcile dropped mid-run is simply absent from the ids the run carries.
 
-**Nothing outside the app reads the blob.** The RPCs that once handed `metadata->'schema'` to n8n are dropped (0018) — agent search goes through the MCP `search_recipes` tool. Anything that queries the blob directly gets the frozen copy, so don't add such a reader.
+**Nothing reads the blob but the repo layer.** The RPCs that once handed `metadata->'schema'` to n8n are dropped (0018) — agent search goes through the MCP `search_recipes` tool — and `search_recipes_ranked` (0027) reads the `name` column. Anything that queries the blob directly gets a frozen copy, so don't add such a reader.
 
 ## Promoted instructions — `recipes.instructions`
 
@@ -117,7 +121,7 @@ A line's **position is its index** in those arrays and its **identity is the row
 A step has no identity and nothing joins to it, so unlike ingredients there is no second table, no id array, no reconcile and no hydrate step: `hydrate` passes the column through, and a write replaces the whole list. `RECIPE_COLUMNS` selects it on the list query too — MealSearch hands a secondary recipe straight to cooking mode, which renders its steps and seeds its timers.
 
 - **Every write stores canonical form** (`canonicalizeInstructions`, `src/lib/recipeInstructions.ts`): text and names trimmed, blank steps and empty groups dropped, `seconds` kept only as a positive whole number beside a `name`, adjacent nameless groups merged. `createRecipeRow` and `updateRecipeRow` both apply it, so an agent's payload and the editor's draft land identically; `/update` echoes the stored list because it can differ from what was sent.
-- **The blob's `recipeInstructions` is a dead key**, frozen at its pre-0021 value in older rows, exactly like `recipeIngredient`. `SCHEMA_ORG_ONLY_KEYS` in `src/lib/format.ts` names those two and `recipeYield`; `deleteDeadKeys` (`src/lib/recipes.ts`) runs in `hydrate` at every read exit and `stripSchemaOrgKeys` on every blob write (the zod schema is `.passthrough()`, so an agent can still send any of them). `nutrition.servingSize` is nested, so both functions handle it as a special case — and the copying one **clones `nutrition` before deleting**, because its top-level spread is shallow and a careless delete reaches into the caller's own payload (at the MCP create edge, the handler still owns it). The stripper lives in `format.ts` so the client-side inbound edge (`draftRecipeDocument`) and the server write path run the same one.
+- **The blob's `recipeInstructions` is a dead key**, frozen at its pre-0021 value in older rows, exactly like `recipeIngredient`. Every dead key is named in `src/lib/format.ts`, split by *why* it is dead: `PROMOTED_KEYS` are column-backed and rebuilt at the edges from their columns; `DROPPED_KEYS` (`author`, `keywords`, `datePublished`, `nutrition`) are rebuilt nowhere, because nothing wants them. `SCHEMA_ORG_ONLY_KEYS` is the union, and both halves are top level — `deleteDeadKeys` (`src/lib/recipes.ts`) runs in `hydrate` at every read exit, `stripSchemaOrgKeys` on every blob write (the zod schema is `.passthrough()`, so an agent can still send any of them). The stripper lives in `format.ts` so the client-side inbound edge (`draftRecipeDocument`) and the server write path run the same one.
 - `recipeToMarkdown(doc)` takes the whole `RecipeDocument` — one argument rather than a growing positional list — and renders the steps from the column into `content` — `## Instructions`, then `## <name>` per named group and `- text` per step — on every create and on any update that touches the schema, the ingredients or the instructions.
 
 ## Promoted time columns — the hydrate/extract seam
@@ -130,11 +134,35 @@ What makes that safe is one seam in `src/lib/recipes.ts`:
 
 So `row.metadata.schema.prepTime` is a **hydrated view**, not the stored blob, and every consumer above the repo layer (JSON-LD, MCP tools, `RecipeCard`, `RecipeDetail`, `CookingMode`) keeps speaking `SchemaRecipe` unchanged. **The corollary is the thing to protect: a reader that queries `recipes` without coming through the repo layer gets a pre-0019 answer and no ingredients, silently.**
 
+## Promoted scalar columns — `name`, `image`, `description`, `notes`, `cooking_notes`
+
+**`recipes.name` (text, NOT NULL) is the recipe's title and its identity in every listing** (0026,
+constrained in 0027), and `image` / `description` / `notes` / `cooking_notes` (text, nullable) are
+the rest of what a card, a detail page and cooking mode render. All five ride on `RecipeDocument`,
+and `metadata.schema`'s copies are dead artifacts — no hydrate-back, for the reason the servings
+have none.
+
+- **`image` is one URL, not Schema.org's `string | string[]`.** The array is a wire shape, reduced
+  by `getFirstImage` at the two inbound edges (`createRecipeRow`, `draftRecipeDocument`) exactly
+  where `parseYield` reduces the yield — **before** `stripSchemaOrgKeys` takes the key off, or the
+  column lands NULL with nothing to report it.
+- **Blank collapses to NULL on every write** (`textOrNull`, `src/lib/recipes.ts`). Readers branch on
+  presence, so `""`, `"   "` and absent have to arrive as one value. `name` is the exception: a
+  blank name is dropped from the patch rather than written, because the column is NOT NULL and an
+  empty title box is a mistake, not an instruction.
+- **`notes` is the author's, `cooking_notes` is the cook's.** Both are app-internal: `notes` reaches
+  the image webhook via `toSchemaOrgRecipe`, neither reaches JSON-LD. `cooking_notes` is read-only
+  to agents — MCP create/update ignore it with a warning and `clear_cooking_notes` is the only
+  agent-writable path.
+- **`updated_at` is maintained by the repo layer, not a trigger.** The column has a `now()` default
+  and nothing else, so `updateRecipeRow` and `archiveRecipe` stamp it; the detail and cooking
+  headers render it. Any new writer that bypasses those has to stamp it too.
+
 ## Promoted servings columns — no hydrate-back
 
-**`recipes.servings_amount` / `servings_unit` / `total_weight_amount` / `total_weight_unit` (0022) are the source of truth for a recipe's serving count, what it counts, and the whole recipe's raw weight.** The copies in `metadata.schema.recipeYield` and `metadata.schema.nutrition.servingSize` are **dead artifacts** — no migration strips them, and nothing may read or write them again.
+**`recipes.servings_amount` / `servings_unit` / `total_weight_amount` / `total_weight_unit` (0022) are the source of truth for a recipe's serving count, what it counts, and the whole recipe's raw weight.** The copies in `metadata.schema.recipeYield` and `metadata.schema.nutrition` are **dead artifacts** — no migration strips them, and nothing may read or write them again.
 
-**Unlike the times, there is NO hydrate-back, and that asymmetry is the point.** `hydrateTimes` exists because `schema.prepTime` still has live readers above the repo layer; after 0022 **zero** readers of `schema.recipeYield` or `schema.nutrition.servingSize` remain, so writing them back at the read exit would recreate exactly the free-text round trip the columns replaced. Instead both keys join `SCHEMA_ORG_ONLY_KEYS` and are deleted on read / stripped on write, and the outbound Schema.org edges rebuild `recipeYield` from the columns via `schemaOrgYield`.
+**Unlike the times, there is NO hydrate-back, and that asymmetry is the point.** `hydrateTimes` exists because `schema.prepTime` still has live readers above the repo layer; no reader of `schema.recipeYield` remains, so writing it back at the read exit would recreate exactly the free-text round trip the columns replaced. It joins the dead keys instead — deleted on read, stripped on write — and the outbound Schema.org edges rebuild `recipeYield` from the columns via `schemaOrgYield`. Every promotion since has followed that rule rather than the times'.
 
 Conversions live in `src/lib/units.ts` and `src/lib/format.ts` — never re-derive them. Inbound is `parseYield`, which runs at exactly two edges (`draftRecipeDocument`, `createRecipeRow`) and returns null for anything it cannot read, so the columns stay NULL rather than holding a guess. Outbound are `formatServings` (display) and `schemaOrgYield` (the wire). Full rules → [recipe-schema.md](recipe-schema.md).
 
@@ -148,7 +176,7 @@ Conversions live in `src/lib/format.ts` — never re-derive them. The ISO → co
 
 ## Migrations
 
-**Migration records in `db/migrations/` are applied out-of-band** via Supabase MCP `apply_migration` (project `xonkmdhnjpjkapnsmltu`); 0006+ show up in the project's migrations table, 0002–0005 predate that and don't — check `information_schema` for actual state, not the migrations list. 0016/0017 are applied (as `recipes_ingredients_instructions` / `recipe_ingredients_position_optional`); 0018 drops the dead `match_recipes` / `find_dinner` RPCs; 0021 is a column comment recording `recipes.instructions`' group shape — DDL only; 0023 adds the `ingredient_catalog_text` computed field that recipe search's ingredient arm filters on, 0024 the derived `recipe_ingredients.resolved_grams` it ranks by, and 0025 the `search_recipes_ranked` RPC that does the ranking (see Search above).
+**Migration records in `db/migrations/` are applied out-of-band** via Supabase MCP `apply_migration` (project `xonkmdhnjpjkapnsmltu`); 0006+ show up in the project's migrations table, 0002–0005 predate that and don't — check `information_schema` for actual state, not the migrations list. 0016/0017 are applied (as `recipes_ingredients_instructions` / `recipe_ingredients_position_optional`); 0018 drops the dead `match_recipes` / `find_dinner` RPCs; 0021 is a column comment recording `recipes.instructions`' group shape — DDL only; 0023 adds the `ingredient_catalog_text` computed field that recipe search's ingredient arm filters on, 0024 the derived `recipe_ingredients.resolved_grams` it ranks by, and 0025 the `search_recipes_ranked` RPC that does the ranking (see Search above); 0026 adds the promoted scalar columns and 0027 re-points that RPC at `recipes.name` and makes the column NOT NULL.
 
 **`yarn backfill:recipe-servings [--dry-run] [--limit=N]`** populates 0022's four columns from each row's `recipeYield`. It reports three buckets and guesses at none: yields it refused (columns left NULL), yields whose rendered label now differs (a collapsed range, a dropped parenthetical), and a `nutrition.servingSize` the columns cannot reconstruct. It does not refresh `content`.
 
@@ -157,6 +185,12 @@ predate it, using `resolveLineGrams` — the same resolver the write path and th
 so the backfill cannot disagree with the runtime about what a line weighs. It guesses at nothing: a
 line it cannot weigh is written NULL, and a deliberate 0 round-trips unchanged. Idempotent, so a
 second pass writes nothing.
+
+**`yarn backfill:recipe-blob-fields [--dry-run] [--limit=N]`** fills 0026's four columns from the
+blob. Fill-only: a column that already holds something is never overwritten, which is what makes it
+safe to run at any point rather than only in one window. It writes no name — every row has one —
+and instead reports any row whose column and blob disagree, and any with a name in neither (which
+0027's NOT NULL would reject).
 
 **`yarn sync:ingredient-columns [--dry-run] [--limit=N] [--id=<uuid>]`** brings a recipe's column and rows up to its blob's `recipeIngredient` — the one-shot for recipes edited through a blob-writing build after the 0016 backfill, and the last reader of the dead key. Deterministic only: new rows land unmatched; the matcher is never invoked.
 
