@@ -30,6 +30,25 @@ says). This is why `ingredientUpdateInputSchema` must override `source` to a pla
 `.partial()` keeps create's `.default()`, so without it every patch would rewrite the column and
 Mark checked would demote a row for confirming it was right.
 
+**The nutrition basis and the portion list are different kinds of thing, and the field shapes say so.**
+`nutrition_basis_g` (MCP create/update) is a plain number of grams: the weight the `nutrition` values
+are measured against, which the tool divides by to reach the per-100g storage form
+(`scalePortionNutritionToPer100g`). It writes nothing. `food_portions` is the stored column — the
+named weights a food is commonly measured in ("1/4 package" at 85 g) — and it is the **only** field
+that reaches that column, on create exactly as on update. The shapes carry that distinction: a
+number and a list of objects cannot be swapped for one another, and nothing copies the basis into
+the list, so a caller sending the same weight in both fields stores one portion. Uniqueness is
+enforced on input by `normalizeFoodPortions` (`src/lib/foodPortions.ts`):
+an exactly repeated portion collapses, one label at two weights is **rejected** naming the label,
+and one weight under two labels is fine. Labelled portions key on label + amount; unlabelled ones
+key on their weight, since "100 g" and "85 g" read as distinct servings with no name to contradict.
+The rule sits on the zod schema, **not** the repo chokepoint, because `ingredientImport.ts` writes
+USDA's own `foodPortions` straight through `createIngredientRow` and USDA legitimately ships one
+label at several weights — that payload is an audit trail recorded verbatim, while this rule governs
+what a caller may assert. `FOOD_PORTION_UNIQUE_RULE` and `NUTRITION_BASIS_REQUIRED` are each one
+constant behind the raised error and both model-facing descriptions, pinned by
+`mcp.descriptions.test.ts`.
+
 **`match_ingredients` is hybrid keyword + semantic** (migration 0007): pg_trgm trigram similarity over `name` + each alias (best-of), fused with pgvector cosine via Reciprocal Rank Fusion (`rrf_k=50`, per-signal weights, all defaulted in SQL). Returns `semantic_similarity`, `keyword_similarity`, `score`. **Never threshold on `score`** — RRF is rank-only; threshold on the raw similarities (keyword ~1.0 = near-exact name/alias hit). Trigram was chosen over tsvector deliberately: ingredient names are 1–4 words where `ts_rank_cd` is meaningless and stemmed FTS misses typos. The single scored-CTE seq scan is intentional at catalog scale; the Supabase docs' two-limited-CTE + trgm/hnsw-index shape is the upgrade path if the catalog grows large.
 
 **`recipe_ingredients.resolved_grams` is the nutrition math's answer, persisted** (0024). The

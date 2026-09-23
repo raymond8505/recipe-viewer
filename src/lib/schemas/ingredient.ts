@@ -1,5 +1,9 @@
 import { z } from "zod";
 import { nutritionSchema } from "./nutrition";
+import {
+  normalizeFoodPortions,
+  portionConflictMessage,
+} from "@/lib/foodPortions";
 import type { Assert, Assignable } from "@/lib/exhaustive";
 import type { IngredientSource } from "@/types/ingredient";
 
@@ -7,10 +11,11 @@ import type { IngredientSource } from "@/types/ingredient";
 // routes and the MCP search tool so both agree on the allowed shapes.
 //
 // Deliberately NOT client-settable: `embedding` (server-derived from the name).
-// `food_portions` IS client-settable — the manager lets users add/edit/delete
-// portions (the seed row is a 100 g portion), and the create form enters
-// nutrition against a chosen portion. Matches the UsdaFoodPortion shape so the
-// USDA-import path and hand-entered rows share one column + serving-size render.
+// `food_portions` IS client-settable, and is the ONLY thing that writes that
+// column — the manager lets users add/edit/delete portions (the seed row is a
+// 100 g portion). Matches the UsdaFoodPortion shape so the USDA-import path and
+// hand-entered rows share one column + serving-size render. The nutrition basis
+// is a separate plain number (`nutrition_basis_g`) that writes nothing.
 
 const foodPortionSchema = z.object({
   gramWeight: z.number().positive(),
@@ -20,6 +25,25 @@ const foodPortionSchema = z.object({
   modifier: z.string().max(100).optional(),
   measureUnit: z.object({ name: z.string().max(100).optional() }).optional(),
 });
+
+// Repeats collapse and contradictions are rejected at the input boundary, so a
+// caller cannot mint "1 cup" twice at two weights. Deliberately NOT at the repo
+// chokepoint: src/lib/ingredientImport.ts writes USDA's own foodPortions
+// straight through createIngredientRow, and USDA legitimately ships one label
+// at several weights. That payload is an audit trail recorded verbatim; this
+// rule governs what a CALLER may assert.
+const foodPortionsSchema = z
+  .array(foodPortionSchema)
+  .max(50)
+  .superRefine((portions, ctx) => {
+    const { conflicts } = normalizeFoodPortions(portions);
+    if (conflicts.length > 0) {
+      // No `path` here: zod prefixes the issue with the field this schema sits
+      // on, so naming it again would report ["food_portions","food_portions"].
+      ctx.addIssue({ code: "custom", message: portionConflictMessage(conflicts) });
+    }
+  })
+  .transform((portions) => normalizeFoodPortions(portions).portions);
 
 // The catalog's provenance enum. Mirrors the CHECK in
 // db/migrations/0002_ingredients.sql; this is the app-side source the JSON
@@ -44,7 +68,7 @@ export const ingredientCreateInputSchema = z.object({
   fdc_data_type: z.string().max(50).nullish(),
   nutrition: nutritionSchema.nullish(),
   density_g_per_ml: z.number().positive().nullish(),
-  food_portions: z.array(foodPortionSchema).max(50).nullish(),
+  food_portions: foodPortionsSchema.nullish(),
   // The UI creates hand-entered rows; the workflow's USDA rows go through the
   // repo layer directly.
   source: ingredientSourceSchema.default(DEFAULT_INGREDIENT_SOURCE),
@@ -70,37 +94,39 @@ export const ingredientIdInputSchema = z.object({
   id: z.string().min(1),
 });
 
-// MCP tool inputs. Unlike the HTTP routes (whose UI does the conversion
-// client-side), agents pass nutrition AS MEASURED for an accompanying
-// `nutrition_portion`; the tool scales to the per-100g storage form
-// deterministically. Setting nutrition therefore requires a nutrition_portion;
-// clearing (null) does not.
+// MCP tool inputs. Unlike the HTTP routes (whose UI converts client-side),
+// agents pass nutrition AS MEASURED against `nutrition_basis_g` and the tool
+// scales to the per-100g storage form deterministically. Setting nutrition
+// therefore requires a basis; clearing it (null) does not.
 //
-// The field is named nutrition_portion (not `portion`) and the error names it
-// explicitly with a path: an agent conflated the bare word "portion" with
-// food_portions and burned 13 calls varying that field's shape before giving
-// up. The message must be a recovery instruction, not a description.
-const nutritionRequiresPortion = (d: {
+// The basis is a PLAIN NUMBER OF GRAMS, which is the whole point: it is the
+// only thing the conversion ever reads, and a number cannot be mistaken for
+// food_portions' list of objects the way a portion-shaped field was.
+export const NUTRITION_BASIS_REQUIRED =
+  'Pass nutrition_basis_g: the gram weight the nutrition values are measured against — 30 for a label reading "per 30 g", or 2 tbsp weighed at 28 g. The server converts to its per-100g storage form.';
+
+const nutritionRequiresBasis = (d: {
   nutrition?: unknown;
-  nutrition_portion?: unknown;
-}) => d.nutrition == null || d.nutrition_portion != null;
-const NUTRITION_REQUIRES_PORTION_ISSUE = {
-  message:
-    "Pass nutrition_portion ({ gramWeight, amount?, modifier? }) describing what the nutrition values are measured for. This is a separate field from food_portions — food_portions does not satisfy it.",
-  path: ["nutrition_portion"],
+  nutrition_basis_g?: unknown;
+}) => d.nutrition == null || d.nutrition_basis_g != null;
+const NUTRITION_REQUIRES_BASIS_ISSUE = {
+  message: NUTRITION_BASIS_REQUIRED,
+  path: ["nutrition_basis_g"],
 };
 
+const nutritionBasisGrams = z.number().positive().optional();
+
 export const ingredientCreateToolInputSchema = ingredientCreateInputSchema
-  .extend({ nutrition_portion: foodPortionSchema.optional() })
-  .refine(nutritionRequiresPortion, NUTRITION_REQUIRES_PORTION_ISSUE);
+  .extend({ nutrition_basis_g: nutritionBasisGrams })
+  .refine(nutritionRequiresBasis, NUTRITION_REQUIRES_BASIS_ISSUE);
 
 // MCP update_ingredient — flat { id, ...patch }, matching update_recipe's shape.
 export const ingredientUpdateToolInputSchema = ingredientUpdateInputSchema
   .extend({
     id: z.string().min(1),
-    nutrition_portion: foodPortionSchema.optional(),
+    nutrition_basis_g: nutritionBasisGrams,
   })
-  .refine(nutritionRequiresPortion, NUTRITION_REQUIRES_PORTION_ISSUE);
+  .refine(nutritionRequiresBasis, NUTRITION_REQUIRES_BASIS_ISSUE);
 
 export const ingredientListQuerySchema = z.object({
   q: z.string().max(200).optional(),

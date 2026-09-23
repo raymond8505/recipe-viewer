@@ -33,6 +33,7 @@ vi.mock("@/lib/supabase", () => ({
 import { POST, GET, DELETE } from "@/app/api/mcp/server/route";
 import { signAccessToken } from "@/lib/mcp/oauth";
 import { JsonRpcErrorCode, JsonRpcMethod } from "@/lib/mcp/types";
+import { NUTRITION_BASIS_REQUIRED } from "@/lib/schemas/ingredient";
 
 function rpc(body: object, headers: Record<string, string> = {}) {
   return new Request("http://localhost/api/mcp/server", {
@@ -185,9 +186,11 @@ describe("/api/mcp/server", () => {
     });
 
     it("formats argument-validation failures with tool name and field paths", async () => {
-      // Regression for the food_portions spiral: nutrition without
-      // nutrition_portion must fail with a message that names the tool and
-      // the missing field — not a raw zod issues array with path [].
+      // Nutrition without a basis fails with a message that names the tool
+      // and the missing field — never a raw zod issues array with path [].
+      // The payload is the one an agent reaches for when it mistakes
+      // food_portions for the basis; the two are different TYPES, so the
+      // schema can say which it wants.
       const res = await POST(
         rpc(
           {
@@ -210,8 +213,8 @@ describe("/api/mcp/server", () => {
       expect(body.result.isError).toBe(true);
       const text = body.result.content[0].text as string;
       expect(text).toMatch(/^invalid_arguments: create_ingredient/);
-      expect(text).toMatch(/nutrition_portion:/);
-      expect(text).toMatch(/food_portions does not satisfy/);
+      expect(text).toMatch(/nutrition_basis_g:/);
+      expect(text).toContain(NUTRITION_BASIS_REQUIRED);
     });
 
     it("returns isError result when the tool throws", async () => {

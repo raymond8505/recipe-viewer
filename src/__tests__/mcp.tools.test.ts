@@ -88,6 +88,7 @@ import { generateEmbedding } from "@/lib/embedding";
 import {
   ingredientCreateToolInputSchema,
   ingredientUpdateToolInputSchema,
+  NUTRITION_BASIS_REQUIRED,
 } from "@/lib/schemas/ingredient";
 
 describe("searchIngredients", () => {
@@ -171,7 +172,7 @@ describe("getIngredient", () => {
 describe("createIngredient", () => {
   beforeEach(() => vi.clearAllMocks());
 
-  it("scales portion-measured nutrition to per-100g and stores the portion", async () => {
+  it("scales nutrition measured against the basis to per-100g", async () => {
     const row = makeIngredient("ing-1", "smoked paprika", { source: "manual" });
     vi.mocked(generateEmbedding).mockResolvedValueOnce([0.1, 0.2]);
     vi.mocked(createIngredientRow).mockResolvedValueOnce(row);
@@ -179,16 +180,18 @@ describe("createIngredient", () => {
     const out = await createIngredient({
       name: "smoked paprika",
       nutrition: { calories_kcal: 120, protein_g: 6 },
-      nutrition_portion: { gramWeight: 30, amount: 2, modifier: "tbsp" },
+      nutrition_basis_g: 30,
       source: "manual",
     });
 
     expect(generateEmbedding).toHaveBeenCalledWith("smoked paprika");
+    // The basis is arithmetic and nothing else: no food_portions key appears,
+    // which is what stops a caller passing the same weight in both fields from
+    // minting the portion twice.
     expect(createIngredientRow).toHaveBeenCalledWith({
       name: "smoked paprika",
       // 120 kcal / 6 g protein per 30 g → per-100g storage form
       nutrition: { calories_kcal: 400, protein_g: 20 },
-      food_portions: [{ gramWeight: 30, amount: 2, modifier: "tbsp" }],
       source: "manual",
       embedding: [0.1, 0.2],
     });
@@ -231,7 +234,11 @@ describe("createIngredient", () => {
     );
   });
 
-  it("prepends the nutrition-basis portion to caller-passed food_portions", async () => {
+  // A basis and a portion at the SAME weight store ONE entry: food_portions
+  // is the column's only writer, so what the caller sends is exactly what is
+  // stored, and a caller who names the same weight twice is not punished for
+  // it.
+  it("stores food_portions verbatim, never echoing the basis into it", async () => {
     const row = makeIngredient("ing-1", "smoked paprika", { source: "manual" });
     vi.mocked(generateEmbedding).mockResolvedValueOnce([0.1]);
     vi.mocked(createIngredientRow).mockResolvedValueOnce(row);
@@ -239,17 +246,14 @@ describe("createIngredient", () => {
     await createIngredient({
       name: "smoked paprika",
       nutrition: { calories_kcal: 100 },
-      nutrition_portion: { gramWeight: 25, modifier: "tbsp" },
-      food_portions: [{ gramWeight: 240, modifier: "cup" }],
+      nutrition_basis_g: 25,
+      food_portions: [{ gramWeight: 25, modifier: "tbsp" }],
       source: "manual",
     });
 
     expect(createIngredientRow).toHaveBeenCalledWith(
       expect.objectContaining({
-        food_portions: [
-          { gramWeight: 25, modifier: "tbsp" },
-          { gramWeight: 240, modifier: "cup" },
-        ],
+        food_portions: [{ gramWeight: 25, modifier: "tbsp" }],
       }),
     );
   });
@@ -335,18 +339,18 @@ describe("updateIngredient", () => {
     expect(updateIngredientRow).toHaveBeenCalledWith("ing-1", { last_checked: null });
   });
 
-  it("replaces stored nutrition with values scaled from the given portion", async () => {
+  it("replaces stored nutrition with values scaled from the basis", async () => {
     const row = makeIngredient("ing-1", "oat milk");
     vi.mocked(updateIngredientRow).mockResolvedValueOnce(row);
 
     await updateIngredient({
       id: "ing-1",
       nutrition: { calories_kcal: 60 },
-      nutrition_portion: { gramWeight: 240, amount: 1, modifier: "cup" },
+      nutrition_basis_g: 240,
     });
 
-    // 60 kcal per 240 g cup → 25 per 100 g; the portion is only the math
-    // basis on update — food_portions must not appear in the patch.
+    // 60 kcal per 240 g → 25 per 100 g, and the basis itself writes nothing:
+    // food_portions must not appear in the patch. Create behaves identically.
     expect(updateIngredientRow).toHaveBeenCalledWith("ing-1", {
       nutrition: { calories_kcal: 25 },
     });
@@ -440,27 +444,29 @@ describe("updateIngredient", () => {
 });
 
 // Parse-time contract enforced in server.ts's `call` before the handlers run:
-// nutrition values are meaningless without the portion they were measured for.
-describe("ingredient tool input schemas — nutrition requires nutrition_portion", () => {
-  it("create: rejects nutrition without a nutrition_portion, accepts it with one", () => {
-    const noPortion = ingredientCreateToolInputSchema.safeParse({
+// nutrition values are meaningless without the weight they were measured
+// against.
+describe("ingredient tool input schemas — nutrition requires a basis", () => {
+  it("create: rejects nutrition without a basis, accepts it with one", () => {
+    const noBasis = ingredientCreateToolInputSchema.safeParse({
       name: "smoked paprika",
       nutrition: { calories_kcal: 282 },
     });
-    expect(noPortion.success).toBe(false);
+    expect(noBasis.success).toBe(false);
 
-    const withPortion = ingredientCreateToolInputSchema.safeParse({
+    const withBasis = ingredientCreateToolInputSchema.safeParse({
       name: "smoked paprika",
       nutrition: { calories_kcal: 282 },
-      nutrition_portion: { gramWeight: 100 },
+      nutrition_basis_g: 100,
     });
-    expect(withPortion.success).toBe(true);
+    expect(withBasis.success).toBe(true);
   });
 
-  it("the refine issue names the field and disambiguates from food_portions", () => {
+  it("the refine issue points at the field and is the documented sentence", () => {
     // An agent once spiraled retrying food_portions shapes against a path-less
-    // "requires a portion" error — the issue must point at nutrition_portion
-    // and say food_portions won't do.
+    // "requires a portion" error. Sending food_portions still cannot satisfy
+    // the basis — but the basis is now a number, so the two are not
+    // substitutable by shape, and the issue names the field it wants.
     const result = ingredientCreateToolInputSchema.safeParse({
       name: "smoked paprika",
       nutrition: { calories_kcal: 282 },
@@ -469,24 +475,37 @@ describe("ingredient tool input schemas — nutrition requires nutrition_portion
     expect(result.success).toBe(false);
     if (!result.success) {
       const issue = result.error.issues[0];
-      expect(issue.path).toEqual(["nutrition_portion"]);
-      expect(issue.message).toMatch(/nutrition_portion/);
-      expect(issue.message).toMatch(/food_portions does not satisfy/);
+      expect(issue.path).toEqual(["nutrition_basis_g"]);
+      // One constant behind the thrown error and both model-facing
+      // descriptions, so reading the docs and failing the call teach the same
+      // sentence (see mcp.descriptions.test.ts).
+      expect(issue.message).toBe(NUTRITION_BASIS_REQUIRED);
     }
   });
 
-  it("create: nutrition_portion is not required without nutrition", () => {
+  it("create: a basis is not required without nutrition", () => {
     expect(ingredientCreateToolInputSchema.safeParse({ name: "bay leaf" }).success).toBe(true);
   });
 
-  it("update: rejects nutrition without a nutrition_portion, allows clearing with null", () => {
-    const noPortion = ingredientUpdateToolInputSchema.safeParse({
+  it("rejects a basis that is not a positive weight", () => {
+    for (const basis of [0, -30]) {
+      const result = ingredientCreateToolInputSchema.safeParse({
+        name: "smoked paprika",
+        nutrition: { calories_kcal: 282 },
+        nutrition_basis_g: basis,
+      });
+      expect(result.success, `${basis} g should be rejected`).toBe(false);
+    }
+  });
+
+  it("update: rejects nutrition without a basis, allows clearing with null", () => {
+    const noBasis = ingredientUpdateToolInputSchema.safeParse({
       id: "ing-1",
       nutrition: { calories_kcal: 10 },
     });
-    expect(noPortion.success).toBe(false);
+    expect(noBasis.success).toBe(false);
 
-    // null clears stored nutrition — no measurement involved, no portion needed
+    // null clears stored nutrition — no measurement involved, no basis needed
     const clearing = ingredientUpdateToolInputSchema.safeParse({
       id: "ing-1",
       nutrition: null,

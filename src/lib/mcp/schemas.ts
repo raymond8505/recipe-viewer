@@ -11,7 +11,9 @@
 import {
   DEFAULT_INGREDIENT_SOURCE,
   INGREDIENT_SOURCES,
+  NUTRITION_BASIS_REQUIRED,
 } from "@/lib/schemas/ingredient";
+import { FOOD_PORTION_UNIQUE_RULE } from "@/lib/foodPortions";
 import { CUSTOM_RECIPE_SOURCE } from "@/lib/format";
 import { ARCHIVED_RECIPE_STATUS, RECIPE_STATUSES } from "@/lib/schemas/recipe";
 import { NUTRITION_FIELDS, type NutritionField } from "@/lib/nutritionFields";
@@ -237,7 +239,7 @@ const statusEnum = { type: "string", enum: RECIPE_STATUSES } as const;
 const ingredientNutritionJsonSchema = {
   type: "object",
   description:
-    "Nutrition values AS MEASURED for the accompanying `nutrition_portion`. Passing this makes `nutrition_portion` REQUIRED — the call is rejected without it, and food_portions does NOT satisfy it (exception: nutrition null on update, which clears stored values and needs no nutrition_portion). The server converts to its storage form deterministically. All fields optional non-negative numbers; omit what you don't know.",
+    `Nutrition values AS MEASURED against \`nutrition_basis_g\` — read them straight off a label or a source without converting. ${NUTRITION_BASIS_REQUIRED} Passing nutrition therefore REQUIRES nutrition_basis_g and the call is rejected without it, the one exception being nutrition null on update, which clears the stored values. All fields optional non-negative numbers; omit what you don't know.`,
   // Derived from NUTRITION_FIELDS so the wire schema can't omit a nutrient the
   // zod validator accepts. (This object loses `as const` as a result — nothing
   // indexes these property names at the type level, so that's free.)
@@ -274,20 +276,10 @@ const ingredientFieldsJsonSchema = {
     description: 'USDA data type of fdc_id (e.g. "Foundation", "SR Legacy").',
   },
   nutrition: ingredientNutritionJsonSchema,
-  nutrition_portion: {
-    type: "object",
-    required: ["gramWeight"],
-    description:
-      'The portion the nutrition values are measured for — REQUIRED whenever nutrition is passed, unnecessary otherwise (e.g. 1 tbsp: { gramWeight: 14, amount: 1, modifier: "tbsp" }). Distinct from food_portions, which never satisfies this. On create it is also saved as a named portion of the ingredient.',
-    properties: {
-      gramWeight: { type: "number", exclusiveMinimum: 0, description: "Total gram weight of the portion" },
-      amount: { type: "number", exclusiveMinimum: 0 },
-      modifier: { type: "string", description: 'Portion label/unit, e.g. "tbsp" or "cup, whole"' },
-      measureUnit: {
-        type: "object",
-        properties: { name: { type: "string" } },
-      },
-    },
+  nutrition_basis_g: {
+    type: "number",
+    exclusiveMinimum: 0,
+    description: `${NUTRITION_BASIS_REQUIRED} Required whenever nutrition is passed, meaningless otherwise. It is a measurement basis only and stores nothing — to ALSO list that weight as a named serving, add it to food_portions.`,
   },
   density_g_per_ml: {
     type: ["number", "null"],
@@ -296,8 +288,7 @@ const ingredientFieldsJsonSchema = {
   food_portions: {
     type: "array",
     maxItems: 50,
-    description:
-      "Named DISPLAY portions with gram weights (USDA foodPortions shape); drives serving-size rendering only. NOT the nutrition basis — nutrition values are measured against `nutrition_portion`, and this field does not satisfy that requirement.",
+    description: `The named weights this food is commonly measured in — "1/4 package" at 85 g, "1 cup" at 120 g (USDA foodPortions shape). Drives serving-size rendering only, and is the only field that writes them. ${FOOD_PORTION_UNIQUE_RULE} Replaces the whole list on update; omit it to leave the stored portions alone.`,
     items: {
       type: "object",
       required: ["gramWeight"],
@@ -357,16 +348,16 @@ export const TOOL_SCHEMAS = {
   create_ingredient: {
     type: "object",
     required: ["name"],
-    // Machine-readable form of "nutrition needs nutrition_portion" for
+    // Machine-readable form of "nutrition needs nutrition_basis_g" for
     // clients that validate arguments against the schema.
-    dependentRequired: { nutrition: ["nutrition_portion"] },
+    dependentRequired: { nutrition: ["nutrition_basis_g"] },
     properties: ingredientFieldsJsonSchema,
   },
   update_ingredient: {
     type: "object",
     required: ["id"],
     // No dependentRequired here: it keys on property PRESENCE, and
-    // `nutrition: null` (clearing) is legal without a nutrition_portion.
+    // `nutrition: null` (clearing) is legal without a nutrition_basis_g.
     properties: {
       id: { type: "string", description: "Ingredient UUID" },
       ...ingredientFieldsJsonSchema,

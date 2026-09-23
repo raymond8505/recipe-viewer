@@ -5,6 +5,7 @@ import {
   ingredientCreateInputSchema,
   ingredientUpdateInputSchema,
 } from "@/lib/schemas/ingredient";
+import { FOOD_PORTION_UNIQUE_RULE } from "@/lib/foodPortions";
 import { NUTRITION_FIELDS } from "@/lib/nutritionFields";
 import { nutritionSchema } from "@/lib/schemas/nutrition";
 
@@ -133,4 +134,70 @@ describe("last_checked", () => {
       ).toBe(false);
     },
   );
+});
+
+// The uniqueness rule lives on the shared validator, so the HTTP routes and
+// both MCP tools inherit it from one declaration. USDA imports deliberately
+// bypass it — ingredientImport writes createIngredientRow directly, and USDA
+// really does ship one label at several weights.
+describe("food_portions uniqueness", () => {
+  function parse(food_portions: unknown) {
+    return ingredientCreateInputSchema.safeParse({ name: "test", food_portions });
+  }
+
+  it("collapses an exactly repeated portion", () => {
+    const result = parse([
+      { gramWeight: 85, modifier: "1/4 package" },
+      { gramWeight: 85, modifier: "1/4 package" },
+    ]);
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.food_portions).toEqual([
+        { gramWeight: 85, modifier: "1/4 package" },
+      ]);
+    }
+  });
+
+  it("rejects one label at two weights, naming it on the field", () => {
+    const result = parse([
+      { gramWeight: 85, modifier: "cup" },
+      { gramWeight: 90, modifier: "cup" },
+    ]);
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      const issue = result.error.issues[0];
+      expect(issue.path).toEqual(["food_portions"]);
+      expect(issue.message).toContain('"cup"');
+      expect(issue.message).toContain(FOOD_PORTION_UNIQUE_RULE);
+    }
+  });
+
+  it("accepts one weight under two labels", () => {
+    const result = parse([
+      { gramWeight: 85, modifier: "1/4 package" },
+      { gramWeight: 85, modifier: "about 1 cup" },
+    ]);
+    expect(result.success).toBe(true);
+    if (result.success) expect(result.data.food_portions).toHaveLength(2);
+  });
+
+  it("applies on update too", () => {
+    const result = ingredientUpdateInputSchema.safeParse({
+      food_portions: [
+        { gramWeight: 85, modifier: "cup" },
+        { gramWeight: 90, modifier: "cup" },
+      ],
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it("leaves an absent list absent and a null list null", () => {
+    const absent = ingredientCreateInputSchema.parse({ name: "test" });
+    expect(absent).not.toHaveProperty("food_portions");
+    const cleared = ingredientCreateInputSchema.parse({
+      name: "test",
+      food_portions: null,
+    });
+    expect(cleared.food_portions).toBeNull();
+  });
 });

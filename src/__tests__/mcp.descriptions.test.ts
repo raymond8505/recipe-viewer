@@ -35,6 +35,11 @@ import { TOOLS } from "@/lib/mcp/server";
 import { TOOL_SCHEMAS } from "@/lib/mcp/schemas";
 import { TOOL_NAMES } from "@/lib/mcp/toolNames";
 import {
+  ingredientCreateInputSchema,
+  NUTRITION_BASIS_REQUIRED,
+} from "@/lib/schemas/ingredient";
+import { FOOD_PORTION_UNIQUE_RULE } from "@/lib/foodPortions";
+import {
   IMAGE_FORMAT_LIST,
   METRIC_UNIT_OR_LIST,
   METRIC_UNIT_SLASHES,
@@ -230,5 +235,81 @@ describe("update_recipe's instruction contract", () => {
     await expect(
       updateRecipe({ id: "r1", schema: { recipeInstructions: [{ text: "Mix." }] } as never }),
     ).rejects.toMatchObject({ message: RECIPE_INSTRUCTIONS_ON_UPDATE_ERROR });
+  });
+});
+
+// The two fields agents kept conflating. Both contracts are single constants
+// interpolated into every model-facing surface AND raised as the failure, so
+// an agent that reads the docs and one that learns by failing are told the
+// same thing in the same words.
+describe("the nutrition basis contract", () => {
+  for (const tool of ["create_ingredient", "update_ingredient"] as const) {
+    it(`states the rule in ${tool}'s description`, () => {
+      expect(descriptionOf(tool)).toContain(NUTRITION_BASIS_REQUIRED);
+    });
+  }
+
+  it("states the rule on the nutrition field it constrains", () => {
+    expect(
+      TOOL_SCHEMAS.create_ingredient.properties.nutrition.description,
+    ).toContain(NUTRITION_BASIS_REQUIRED);
+  });
+
+  it("states the rule on the basis field itself", () => {
+    expect(
+      TOOL_SCHEMAS.create_ingredient.properties.nutrition_basis_g.description,
+    ).toContain(NUTRITION_BASIS_REQUIRED);
+  });
+
+  // A number, not a portion object — the shape difference is what makes the
+  // field unconfusable with food_portions, so it is worth pinning.
+  it("offers the basis as a plain positive number on both tools", () => {
+    for (const tool of ["create_ingredient", "update_ingredient"] as const) {
+      const field = TOOL_SCHEMAS[tool].properties.nutrition_basis_g;
+      expect(field.type).toBe("number");
+      expect(field.exclusiveMinimum).toBe(0);
+    }
+  });
+
+  it("declares the dependency machine-readably on create", () => {
+    expect(TOOL_SCHEMAS.create_ingredient.dependentRequired).toEqual({
+      nutrition: ["nutrition_basis_g"],
+    });
+  });
+
+  // The field that caused two separate agent spirals must be gone, not merely
+  // de-emphasised — a stale mention would send an agent looking for it.
+  it("names no nutrition_portion anywhere on the wire", () => {
+    const wire =
+      JSON.stringify(TOOLS.map((t) => t.description)) + JSON.stringify(TOOL_SCHEMAS);
+    expect(wire).not.toMatch(/nutrition_portion/);
+  });
+});
+
+describe("the food_portions uniqueness contract", () => {
+  it("states the rule on the field it constrains", () => {
+    expect(
+      TOOL_SCHEMAS.create_ingredient.properties.food_portions.description,
+    ).toContain(FOOD_PORTION_UNIQUE_RULE);
+  });
+
+  for (const tool of ["create_ingredient", "update_ingredient"] as const) {
+    it(`states the rule in ${tool}'s description`, () => {
+      expect(descriptionOf(tool)).toContain(FOOD_PORTION_UNIQUE_RULE);
+    });
+  }
+
+  it("is the wording the validator raises", () => {
+    const result = ingredientCreateInputSchema.safeParse({
+      name: "test",
+      food_portions: [
+        { gramWeight: 85, modifier: "cup" },
+        { gramWeight: 90, modifier: "cup" },
+      ],
+    });
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error.issues[0].message).toContain(FOOD_PORTION_UNIQUE_RULE);
+    }
   });
 });
