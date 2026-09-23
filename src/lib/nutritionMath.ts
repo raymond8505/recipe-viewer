@@ -12,10 +12,15 @@ import type {
   IngredientRow,
   RecipeIngredientRow,
 } from "@/types/ingredient";
-import type { RecipeIngredient, RecipeRow, SchemaRecipe } from "@/types/recipe";
+import type {
+  RecipeIngredient,
+  RecipeRow,
+  SchemaNutrition,
+} from "@/types/recipe";
 
-/** The Schema.org NutritionInformation shape carried on SchemaRecipe. */
-export type SchemaNutrition = NonNullable<SchemaRecipe["nutrition"]>;
+/** The Schema.org NutritionInformation shape. A wire type: nothing stores one
+ *  — see its declaration. Re-exported because the math is its only consumer. */
+export type { SchemaNutrition };
 
 /** A catalog row reduced to what the line math needs. */
 export type CatalogNutritionSource = Pick<

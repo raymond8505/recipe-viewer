@@ -196,10 +196,32 @@ describe("schemaRecipeSchema — the column-backed keys", () => {
   // The schema is `.passthrough()`, so a sender CAN still put these on the
   // wire; what matters is that it neither declares nor validates them, which is
   // why the repo layer strips them from every write instead.
-  it("declares neither recipeYield nor nutrition.servingSize", () => {
-    expect(Object.keys(schemaRecipeSchema.shape)).not.toContain("recipeYield");
-    const nutrition = schemaRecipeSchema.shape.nutrition;
-    expect(Object.keys(nutrition.unwrap().shape)).not.toContain("servingSize");
+  it("declares none of the keys the repo layer strips", () => {
+    const declared = Object.keys(schemaRecipeSchema.shape);
+    for (const key of [
+      "name",
+      "image",
+      "description",
+      "notes",
+      "cookingNotes",
+      "recipeIngredient",
+      "recipeInstructions",
+      "recipeYield",
+      "author",
+      "keywords",
+      "datePublished",
+      "nutrition",
+    ]) {
+      expect(declared).not.toContain(key);
+    }
+  });
+
+  // Two fields await the tagging system that will replace them; until then the
+  // blob is still where they live, so the schema has to keep validating them.
+  it("still declares what the blob is the source of", () => {
+    expect(Object.keys(schemaRecipeSchema.shape)).toEqual(
+      expect.arrayContaining(["recipeCuisine", "recipeCategory"]),
+    );
   });
 });
 

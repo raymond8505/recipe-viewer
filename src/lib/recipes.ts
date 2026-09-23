@@ -103,7 +103,7 @@ const RECIPE_COLUMNS = selectColumns<RecipeRowColumns>()([
 //
 // Each promotion left a frozen copy behind: 0016 the `recipeIngredient` array,
 // 0019 the three time keys, 0021 the `recipeInstructions` array, 0022 the
-// `recipeYield` and `nutrition.servingSize`, and 0026 the name, image,
+// `recipeYield` and the whole `nutrition` block, and 0026 the name, image,
 // description and both sets of notes. No migration strips any of them. This
 // module is the ONLY code that knows that — `hydrate` runs at every read exit
 // below and the strip functions at every write — so everything above it
@@ -170,11 +170,8 @@ function stripTimes(schema: SchemaRecipe): SchemaRecipe {
 /** The mutating half, for the read exit: the MCP server stringifies whole rows,
  *  so a dead key has to be gone from the object itself, not from a copy. */
 function deleteDeadKeys(schema: SchemaRecipe): void {
-  const blob = schema as unknown as Record<string, unknown> & {
-    nutrition?: Record<string, unknown>;
-  };
+  const blob = schema as unknown as Record<string, unknown>;
   for (const key of SCHEMA_ORG_ONLY_KEYS) delete blob[key];
-  if (blob.nutrition) delete blob.nutrition.servingSize;
 }
 
 /**

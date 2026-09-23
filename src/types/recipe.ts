@@ -336,14 +336,18 @@ export interface SchemaRecipe {
   //
   // What remains is the residue: two fields awaiting the tagging system that
   // will replace them, and the two `@` constants the wire form needs.
-  nutrition?: SchemaNutrition;
 }
 
 /**
- * The nutrition block as stored: nutrient strings only. `servingSize` is NOT
- * here — it is one unit of what `servings_unit` counts, so it is regenerated at
- * the wire boundaries (`SchemaOrgNutrition`) rather than stored as a second,
- * free-text spelling of the same fact.
+ * A recipe's nutrients in Schema.org's spelling — a WIRE type only, and never
+ * stored. Every figure the app publishes is derived from the ingredient
+ * catalog by `ScalableRecipe.nutrition()` at the moment it is asked for, so
+ * there is no stored block to disagree with the lines it was computed from.
+ * Older rows still carry one, frozen; the repo layer strips it.
+ *
+ * `servingSize` is not here either — it is one unit of what `servings_unit`
+ * counts, regenerated at the boundary (`SchemaOrgNutrition`) rather than stored
+ * as a second, free-text spelling of the same fact.
  */
 export interface SchemaNutrition {
   "@type"?: "NutritionInformation";
@@ -360,7 +364,7 @@ export interface SchemaNutrition {
 }
 
 /**
- * The nutrition block as published: the stored nutrients plus the derived
+ * The nutrition block as published: the derived nutrients plus the derived
  * `servingSize` ("1 serving", "1 kebab"). Outbound only — an inbound
  * `servingSize` is dropped, since the columns say what a serving is.
  */

@@ -329,7 +329,7 @@ describe("CookingMode — nutrition panel", () => {
     // disappears rather than rendering its shell.
     render(
       <CookingMode
-        recipe={makeRecipe({ nutrition: { calories: "200 kcal" } }, [], [], {
+        recipe={makeRecipe({ nutrition: { calories: "200 kcal" } } as SchemaRecipe, [], [], {
           servings_amount: 4,
         })}
         onClose={vi.fn()}

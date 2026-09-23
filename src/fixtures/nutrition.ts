@@ -1,8 +1,6 @@
 import { schemaNutritionToValues } from "@/lib/nutritionMath";
 import type { IngredientNutrition } from "@/types/ingredient";
-import type { SchemaRecipe } from "@/types/recipe";
-
-type SchemaNutrition = NonNullable<SchemaRecipe["nutrition"]>;
+import type { SchemaNutrition } from "@/types/recipe";
 
 /**
  * Every Schema.org nutrient the app models, at one serving of a 4-serving

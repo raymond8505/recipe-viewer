@@ -27,16 +27,10 @@ export const weighedYieldColumns = {
   "servings_amount" | "servings_unit" | "total_weight_amount" | "total_weight_unit"
 >;
 
-/** The stored blob. Its `nutrition` block is inert — the catalog is the only
- *  source — and it is kept here precisely so tests can prove it is ignored. */
-export const scalableBaseSchema: SchemaRecipe = {
-  nutrition: {
-    "@type": "NutritionInformation",
-    calories: "200 kcal",
-    proteinContent: "10 g",
-    fatContent: "5 g",
-  },
-};
+/** The stored blob, which for a scaling fixture holds nothing: every field the
+ *  scaling and nutrition math reads is a column on the document. A test that
+ *  needs a blob carrying a dead key supplies it itself. */
+export const scalableBaseSchema: SchemaRecipe = {};
 
 /** Four ungrouped lines (a single, a fraction, a range, an unparseable) and a
  *  named "Wet" group — the scaling tests' fixture list. */

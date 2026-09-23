@@ -43,7 +43,6 @@ const storedRecipeJsonSchema = {
     totalTime: { type: "string", description: "ISO 8601 duration" },
     recipeCuisine: { type: "string" },
     recipeCategory: { oneOf: [{ type: "string" }, { type: "array", items: { type: "string" } }] },
-    nutrition: { type: "object" },
     notes: { type: "string", description: "App-internal notes (not part of Schema.org/Recipe)" },
     cookingNotes: {
       type: "string",

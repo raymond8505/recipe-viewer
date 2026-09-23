@@ -617,6 +617,9 @@ export const DROPPED_KEYS = [
   // created_at / updated_at carry a recipe's dates; a scraped publication date
   // described someone else's page rather than this copy of the recipe.
   "datePublished",
+  // Derived from the ingredient catalog on every read, so a stored block could
+  // only ever disagree with the lines it claims to describe.
+  "nutrition",
 ] as const;
 
 /** What the read exit deletes and every write strips: both lists together. */
@@ -630,21 +633,14 @@ export const SCHEMA_ORG_ONLY_KEYS = [
  * client-side inbound edge (`draftRecipeDocument`) and the repo layer's write
  * path so the two can't disagree about what counts as stored.
  *
- * `nutrition` is cloned before its `servingSize` is dropped: the top-level
- * spread is shallow, so deleting in place would reach into the caller's own
- * object — which at the MCP create edge is still the handler's payload.
+ * Every key is top level, so the shallow spread is enough: nothing here reaches
+ * into an object the caller still owns (at the MCP create edge, the handler's
+ * own payload).
  */
 export function stripSchemaOrgKeys<T extends object>(schema: T): T {
-  const next = { ...schema } as T & {
-    nutrition?: SchemaOrgNutrition;
-  };
+  const next = { ...schema };
   for (const key of SCHEMA_ORG_ONLY_KEYS) {
     delete (next as Record<string, unknown>)[key];
-  }
-  if (next.nutrition && "servingSize" in next.nutrition) {
-    const { servingSize: _s, ...rest } = next.nutrition;
-    void _s;
-    next.nutrition = rest;
   }
   return next;
 }

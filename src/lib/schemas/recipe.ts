@@ -103,55 +103,39 @@ export type _InstructionGroupsMatchInput = Assert<
   Assignable<RecipeInstructionGroup[], z.infer<typeof recipeInstructionsInputSchema>>
 >;
 
+// The STORED blob, and nothing more — the validator counterpart of
+// `SchemaRecipe`. Everything a recipe is made of has a column; what is left is
+// the two fields awaiting the tagging system and the wire form's two constants.
+// It stays `.passthrough()` because a sender can still put a promoted or
+// dropped key on the wire, and the repo layer strips every one from the write.
 export const schemaRecipeSchema = z
   .object({
     "@context": z.string().optional(),
     "@type": z.literal("Recipe").optional(),
-    name: z.string().min(1),
-    description: z.string().optional(),
-    image: z.union([z.string(), z.array(z.string())]).optional(),
     // Nullable so a partial update can clear a time outright; omitted still
     // means "leave it alone". See RecipeRow's time columns.
     cookTime: z.string().nullable().optional(),
     prepTime: z.string().nullable().optional(),
     totalTime: z.string().nullable().optional(),
-    // No recipeYield and no nutrition.servingSize: both are column-backed, so
-    // they live on schemaOrgRecipeInputSchema below, at the inbound edge that
-    // parses them. This schema is `.passthrough()`, so a sender can still put
-    // either on the wire — the repo layer strips them from every write.
     recipeCuisine: z.string().optional(),
     recipeCategory: z.union([z.string(), z.array(z.string())]).optional(),
-    nutrition: z
-      .object({
-        "@type": z.literal("NutritionInformation").optional(),
-        calories: z.string().optional(),
-        proteinContent: z.string().optional(),
-        carbohydrateContent: z.string().optional(),
-        fatContent: z.string().optional(),
-        fiberContent: z.string().optional(),
-        sodiumContent: z.string().optional(),
-        sugarContent: z.string().optional(),
-        saturatedFatContent: z.string().optional(),
-        unsaturatedFatContent: z.string().optional(),
-        cholesterolContent: z.string().optional(),
-      })
-      .optional(),
-    notes: z.string().optional(),
-    cookingNotes: z.string().optional(),
   })
   .passthrough();
 
-// The inbound Schema.org edge: the stored recipe plus `recipeIngredient` and
-// `recipeInstructions`, for writers that speak Schema.org because their source
-// does (a scrape landing through create_recipe or the re-scrape webhook).
-// `fromSchemaOrgIngredients` / `fromSchemaOrgInstructions` turn them into
-// groups at the boundary; the stored schema never carries either.
+// The inbound Schema.org edge: the stored blob plus every column-backed field
+// in its wire spelling, for writers that speak Schema.org because their source
+// does (a scrape landing through create_recipe or the re-scrape webhook). Each
+// is reduced to its column exactly once, here — `getFirstImage` for the image,
+// `parseYield` for the yield, `fromSchemaOrgIngredients` /
+// `fromSchemaOrgInstructions` for the lines and steps — and stripped from the
+// blob that is stored.
 export const schemaOrgRecipeInputSchema = schemaRecipeSchema.extend({
+  name: z.string().min(1),
+  description: z.string().optional(),
+  image: z.union([z.string(), z.array(z.string())]).optional(),
+  notes: z.string().optional(),
   recipeIngredient: z.array(schemaOrgIngredientLineSchema).optional(),
   recipeInstructions: z.array(z.union([howToStepSchema, howToSectionSchema])).optional(),
-  // `parseYield` reduces this to the servings and total-weight columns exactly
-  // once, here. A `nutrition.servingSize` on the way in is dropped: the columns
-  // say what a serving is, and the outbound edges regenerate the string.
   recipeYield: z
     .union([z.string(), z.array(z.string()), quantitativeValueSchema])
     .optional(),

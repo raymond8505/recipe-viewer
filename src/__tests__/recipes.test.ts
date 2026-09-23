@@ -706,21 +706,24 @@ describe("createRecipeRow", () => {
     });
   });
 
-  it("strips a nutrition.servingSize without mutating the caller's object", async () => {
+  // Nutrition is derived from the ingredient catalog on every read, so the
+  // whole block goes rather than just its servingSize — a stored one could
+  // only ever contradict the lines it claims to describe.
+  it("strips the whole nutrition block, leaving the caller's object alone", async () => {
     const { inserts } = makeWriteSupabaseMock({
       insertSingle: { data: { id: "x", ingredients: [], instructions: [] }, error: null },
     });
-    const nutrition = { calories: "300 kcal", servingSize: "1 cup" };
-    const schema = { name: "Soup", nutrition };
+    const schema = {
+      name: "Soup",
+      nutrition: { calories: "300 kcal", servingSize: "1 cup" },
+    } as never;
 
     await createRecipeRow({ url: "https://example.com", source: "example.com", schema });
 
-    const stored = (inserts[0].metadata as { schema: { nutrition: object } }).schema;
-    expect(stored.nutrition).not.toHaveProperty("servingSize");
-    expect(stored.nutrition).toMatchObject({ calories: "300 kcal" });
-    // The spread is shallow, so a careless delete would reach into the payload
-    // the MCP handler still owns.
-    expect(nutrition.servingSize).toBe("1 cup");
+    const stored = (inserts[0].metadata as { schema: object }).schema;
+    expect(stored).not.toHaveProperty("nutrition");
+    // The strip copies; the payload the MCP handler still owns is untouched.
+    expect(schema).toHaveProperty("nutrition");
   });
 
   it("omits the embedding column when generation fails (null)", async () => {
@@ -1696,10 +1699,10 @@ describe("recipe ingredients hydration", () => {
     expect(recipe?.ingredients[0].ingredients).toHaveLength(2);
   });
 
-  // recipeYield and nutrition.servingSize are column-backed now, so the blob's
-  // copies are frozen artifacts. The read exit is what keeps them from reaching
-  // a consumer — the MCP server JSON-stringifies whole rows.
-  it("deletes the blob's dead recipeYield and nutrition.servingSize at the read exit", async () => {
+  // The yield is column-backed and the nutrition is derived from the catalog,
+  // so both of the blob's copies are frozen artifacts. The read exit is what
+  // keeps them from reaching a consumer — the MCP server stringifies whole rows.
+  it("deletes the blob's dead recipeYield and nutrition at the read exit", async () => {
     makeSupabaseMock({
       singleData: {
         ...structuredClone(storedRow),
@@ -1707,7 +1710,7 @@ describe("recipe ingredients hydration", () => {
         servings_unit: "servings",
         metadata: {
           schema: {
-            name: "Curry",
+            recipeCuisine: "Thai",
             recipeYield: "99 portions",
             nutrition: { calories: "300 kcal", servingSize: "1 frozen copy" },
           },
@@ -1719,9 +1722,9 @@ describe("recipe ingredients hydration", () => {
     const recipe = await getRecipeById("r1");
 
     expect(recipe?.metadata.schema).not.toHaveProperty("recipeYield");
-    expect(recipe?.metadata.schema.nutrition).not.toHaveProperty("servingSize");
-    // Only those two keys go — the nutrients beside them are still stored data.
-    expect(recipe?.metadata.schema.nutrition?.calories).toBe("300 kcal");
+    expect(recipe?.metadata.schema).not.toHaveProperty("nutrition");
+    // What the blob is still the source of survives the same pass.
+    expect(recipe?.metadata.schema.recipeCuisine).toBe("Thai");
     expect(recipe?.servings_amount).toBe(4);
   });
 
