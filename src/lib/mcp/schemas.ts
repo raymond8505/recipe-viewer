@@ -21,45 +21,59 @@ import {
   METRIC_UNIT_SLASHES,
   RECIPE_INGREDIENT_ON_UPDATE_ERROR,
   RECIPE_INSTRUCTIONS_ON_UPDATE_ERROR,
+  RECIPE_SCALARS_ON_UPDATE_ERROR,
   RECIPE_YIELD_ON_UPDATE_ERROR,
   TBSP_ML_EXAMPLE,
 } from "./copy";
 import { TOOL, type ToolName } from "./toolNames";
 
-// The stored recipe: everything but the ingredients and instructions, which
-// live on the row as `ingredients` / `instructions` (see
-// recipeIngredientsJsonSchema / recipeInstructionsJsonSchema). create_recipe
-// takes the Schema.org form below, with `recipeIngredient` and
-// `recipeInstructions` added back for scrapes.
+// The stored blob — what `update_recipe`'s `schema` still merges into. Down to
+// the times (hydrated back from their columns) and the two fields the tagging
+// system will replace; a recipe's name, image, description and notes are
+// columns, reached through the top-level arguments of that tool, and its
+// ingredients, instructions and servings through theirs.
 const storedRecipeJsonSchema = {
   type: "object",
-  required: ["name"],
+  required: [],
   properties: {
-    name: { type: "string" },
-    description: { type: "string" },
-    image: { oneOf: [{ type: "string" }, { type: "array", items: { type: "string" } }] },
     cookTime: { type: "string", description: "ISO 8601 duration (e.g. PT30M)" },
     prepTime: { type: "string", description: "ISO 8601 duration" },
     totalTime: { type: "string", description: "ISO 8601 duration" },
     recipeCuisine: { type: "string" },
     recipeCategory: { oneOf: [{ type: "string" }, { type: "array", items: { type: "string" } }] },
-    notes: { type: "string", description: "App-internal notes (not part of Schema.org/Recipe)" },
-    cookingNotes: {
-      type: "string",
-      description: `App-internal cooking notes — READ-ONLY for agents. Ignored by ${TOOL.create_recipe}/${TOOL.update_recipe} (the call still succeeds with a warning). Authored by users in cooking mode; clear it via the ${TOOL.clear_cooking_notes} tool.`,
-    },
   },
   additionalProperties: true,
 } as const;
 
-// A Schema.org Recipe as a scraper produces it: the stored fields plus
+// The column-backed scalars in their Schema.org spelling. On create they ride
+// inside `schema`, because a scrape hands over one Schema.org object and this
+// is the edge that takes it apart; on update they are top-level arguments.
+const promotedScalarsJsonSchema = {
+  name: { type: "string" },
+  description: { type: "string" },
+  image: {
+    oneOf: [{ type: "string" }, { type: "array", items: { type: "string" } }],
+    description:
+      "One image URL. An array is accepted (Schema.org allows one) and its first entry is kept.",
+  },
+  notes: { type: "string", description: "App-internal notes (not part of Schema.org/Recipe)" },
+  cookingNotes: {
+    type: "string",
+    description: `App-internal cooking notes — READ-ONLY for agents. Ignored by ${TOOL.create_recipe}/${TOOL.update_recipe} (the call still succeeds with a warning). Authored by users in cooking mode; clear it via the ${TOOL.clear_cooking_notes} tool.`,
+  },
+} as const;
+
+// A Schema.org Recipe as a scraper produces it: the stored blob plus every
+// column-backed field in its wire spelling — the scalars above, plus
 // `recipeIngredient`, whose `group` objects are this app's extension, and
-// `recipeInstructions`. Only create_recipe takes it; both become groups
-// server-side.
+// `recipeInstructions`. Only create_recipe takes it; each is reduced to its
+// column server-side.
 const schemaOrgRecipeJsonSchema = {
   ...storedRecipeJsonSchema,
+  required: ["name"],
   properties: {
     ...storedRecipeJsonSchema.properties,
+    ...promotedScalarsJsonSchema,
     recipeYield: {
       description: `Recipe yield. PREFERRED: a QuantitativeValue object — value = serving count, unitText = its label (e.g. 4 / "kebabs"); optional valueReference = the recipe's raw weight/volume in METRIC units (value + unitText, e.g. 454 / "g"; unitText must be ${METRIC_UNIT_SLASHES}), which drives the per-serving nutrition basis shown in the app. A plain string like "4 servings" is still accepted but DEPRECATED — prefer the structured object. ACCEPTED ON CREATE ONLY: the server parses this once into the servings_amount / servings_unit / total_weight_amount / total_weight_unit columns, which is what ${TOOL.get_recipe} returns and what ${TOOL.update_recipe} edits through its "servings" / "total_weight" fields.`,
       oneOf: [
@@ -411,10 +425,22 @@ export const TOOL_SCHEMAS = {
       url: { type: "string", format: "uri" },
       source: { type: "string" },
       status: statusEnum,
+      name: { type: "string", description: "The recipe's title. Cannot be cleared." },
+      description: {
+        type: ["string", "null"],
+        description: "The recipe blurb; null clears it.",
+      },
+      notes: {
+        type: ["string", "null"],
+        description: `App-internal notes (not part of Schema.org/Recipe); null clears them. Distinct from cookingNotes, which is read-only for agents — clear that via ${TOOL.clear_cooking_notes}.`,
+      },
+      image: {
+        type: ["string", "null"],
+        description: `One image URL; null clears it. To upload an image file rather than point at one, use ${TOOL.upload_recipe_image}.`,
+      },
       schema: {
         ...storedRecipeJsonSchema,
-        required: [],
-        description: `Partial recipe fields, merged into what is stored — only the keys you pass change. ${RECIPE_INGREDIENT_ON_UPDATE_ERROR} ${RECIPE_INSTRUCTIONS_ON_UPDATE_ERROR} ${RECIPE_YIELD_ON_UPDATE_ERROR}`,
+        description: `The remaining stored fields, merged into what is stored — only the keys you pass change. ${RECIPE_SCALARS_ON_UPDATE_ERROR} ${RECIPE_INGREDIENT_ON_UPDATE_ERROR} ${RECIPE_INSTRUCTIONS_ON_UPDATE_ERROR} ${RECIPE_YIELD_ON_UPDATE_ERROR}`,
       },
       ingredients: recipeIngredientsJsonSchema,
       instructions: recipeInstructionsJsonSchema,

@@ -30,7 +30,9 @@ import { CUSTOM_RECIPE_SOURCE, fromSchemaOrgInstructions } from "@/lib/format";
 import {
   RECIPE_INGREDIENT_ON_UPDATE_ERROR,
   RECIPE_INSTRUCTIONS_ON_UPDATE_ERROR,
+  RECIPE_SCALARS_ON_UPDATE_ERROR,
   RECIPE_YIELD_ON_UPDATE_ERROR,
+  PROMOTED_UPDATE_ARGS,
 } from "./copy";
 import { ARCHIVED_RECIPE_STATUS } from "@/lib/schemas/recipe";
 import { RECIPE_TOKEN_TTL_SECONDS, signRecipeToken } from "./recipeToken";
@@ -370,11 +372,22 @@ export async function updateRecipe(
   if ("recipeYield" in schema) {
     throw new ToolError("invalid_input", RECIPE_YIELD_ON_UPDATE_ERROR);
   }
+  // Same rule for the scalars 0026 promoted: rejected rather than stripped,
+  // because a silently dropped rename looks to the agent like a rename.
+  for (const key of Object.keys(PROMOTED_UPDATE_ARGS)) {
+    if (key in schema) {
+      throw new ToolError("invalid_input", RECIPE_SCALARS_ON_UPDATE_ERROR);
+    }
+  }
   try {
     const row = await updateRecipeRow(args.id, {
       url: args.url,
       source: args.source,
       status: args.status,
+      name: args.name,
+      description: args.description,
+      notes: args.notes,
+      image: args.image,
       schema: args.schema !== undefined ? schema : undefined,
       ingredients: args.ingredients,
       instructions: args.instructions,

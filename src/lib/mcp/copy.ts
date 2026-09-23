@@ -39,6 +39,33 @@ export const RECIPE_INSTRUCTIONS_ON_UPDATE_ERROR = `schema.recipeInstructions is
 export const RECIPE_YIELD_ON_UPDATE_ERROR = `schema.recipeYield is not accepted on update — the call FAILS if you send one, it is not ignored. A recipe's serving count is column-backed: send \`servings\` ({ amount, unit? }) instead, where amount is the number of servings and unit is what they are counted in ("servings", "kebabs"). Omit \`servings\` to leave the count alone; send { "amount": null } to clear it. The whole recipe's raw weight goes through \`total_weight\` ({ amount, unit }), NOT a valueReference. ${TOOL.get_recipe} returns all four as servings_amount / servings_unit / total_weight_amount / total_weight_unit.`;
 
 /**
+ * The column-backed scalars, keyed by the `schema.` spelling an agent might
+ * still reach for, valued by the top-level argument that sets each one. The
+ * handler looks a rejected key up here and the prose below renders it, so the
+ * list an agent is told about is the list the handler checks.
+ */
+export const PROMOTED_UPDATE_ARGS = {
+  name: "name",
+  description: "description",
+  notes: "notes",
+  image: "image",
+} as const;
+
+export type PromotedUpdateKey = keyof typeof PROMOTED_UPDATE_ARGS;
+
+const PROMOTED_KEY_LIST = Object.keys(PROMOTED_UPDATE_ARGS)
+  .map((k) => `schema.${k}`)
+  .join(", ");
+
+/**
+ * The scalars twin of the three rules above, and rejected for the same reason
+ * the yield is: an agent that sends `schema.name` and gets a 200 has every
+ * reason to believe it renamed the recipe. These are columns now, so the blob
+ * they landed in is read by nothing.
+ */
+export const RECIPE_SCALARS_ON_UPDATE_ERROR = `${PROMOTED_KEY_LIST} are not accepted on update — the call FAILS if you send one, it is not ignored. Each is a top-level argument now: send \`name\`, \`description\`, \`notes\` or \`image\` beside \`id\`. Omit one to leave it alone; send null to clear \`description\`, \`notes\` or \`image\` (\`name\` cannot be cleared). ${TOOL.get_recipe} returns all four at the top level of the row.`;
+
+/**
  * "a, b, or c". Hand-rolled rather than Intl.ListFormat, whose output varies
  * with the runtime's ICU build — these strings are asserted in tests and read
  * by agents, so they must be identical everywhere.

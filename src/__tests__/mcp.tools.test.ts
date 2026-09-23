@@ -794,22 +794,50 @@ describe("createRecipe", () => {
 describe("updateRecipe", () => {
   beforeEach(() => vi.clearAllMocks());
 
-  it("delegates to updateRecipeRow with the patch", async () => {
+  it("delegates the promoted scalars to updateRecipeRow as top-level fields", async () => {
     const { updateRecipeRow } = await import("@/lib/recipes");
     const existing = recipeFixtures[0];
-    const updated = {
+    vi.mocked(updateRecipeRow).mockResolvedValueOnce({
       ...existing,
-      metadata: { schema: { ...existing.metadata.schema, description: "patched" } },
-    };
-    vi.mocked(updateRecipeRow).mockResolvedValueOnce(updated);
+      description: "patched",
+    });
 
-    const out = await updateRecipe({ id: existing.id, schema: { description: "patched" } });
-    expect(out.metadata.schema.description).toBe("patched");
+    const out = await updateRecipe({ id: existing.id, description: "patched" });
+    expect(out.description).toBe("patched");
     expect(updateRecipeRow).toHaveBeenCalledWith(
       existing.id,
-      expect.objectContaining({ schema: { description: "patched" } }),
+      expect.objectContaining({ description: "patched" }),
     );
   });
+
+  it("still merges what the blob is the source of", async () => {
+    const { updateRecipeRow } = await import("@/lib/recipes");
+    const existing = recipeFixtures[0];
+    vi.mocked(updateRecipeRow).mockResolvedValueOnce(existing);
+
+    await updateRecipe({ id: existing.id, schema: { recipeCuisine: "Thai" } });
+    expect(updateRecipeRow).toHaveBeenCalledWith(
+      existing.id,
+      expect.objectContaining({ schema: { recipeCuisine: "Thai" } }),
+    );
+  });
+
+  // Rejected rather than stripped, for the reason the yield is: an agent that
+  // sends schema.name and gets a 200 has every reason to think it renamed the
+  // recipe. The thrown message is the same constant the description renders.
+  it.each(["name", "description", "notes", "image"])(
+    "rejects schema.%s rather than silently dropping it",
+    async (key) => {
+      const { updateRecipeRow } = await import("@/lib/recipes");
+      await expect(
+        updateRecipe({
+          id: recipeFixtures[0].id,
+          schema: { [key]: "sent the old way" },
+        } as never),
+      ).rejects.toThrow(/not accepted on update/);
+      expect(updateRecipeRow).not.toHaveBeenCalled();
+    },
+  );
 
   it("ignores cookingNotes in the patch and returns a warning", async () => {
     const { updateRecipeRow } = await import("@/lib/recipes");
@@ -818,12 +846,13 @@ describe("updateRecipe", () => {
 
     const out = await updateRecipe({
       id: existing.id,
-      schema: { description: "patched", cookingNotes: "should be stripped" },
+      description: "patched",
+      schema: { cookingNotes: "should be stripped" },
     });
 
     expect(updateRecipeRow).toHaveBeenCalledWith(
       existing.id,
-      expect.objectContaining({ schema: { description: "patched" } }),
+      expect.objectContaining({ description: "patched", schema: {} }),
     );
     expect(out.warnings?.[0]).toMatch(/cookingNotes is read-only/);
   });

@@ -9,6 +9,7 @@ import {
   NUTRITION_FIELD_LIST,
   RECIPE_INGREDIENT_ON_UPDATE_ERROR,
   RECIPE_INSTRUCTIONS_ON_UPDATE_ERROR,
+  RECIPE_SCALARS_ON_UPDATE_ERROR,
   RECIPE_YIELD_ON_UPDATE_ERROR,
   TBSP_ML_EXAMPLE,
 } from "./copy";
@@ -120,12 +121,12 @@ A query matches a recipe's NAME or its INGREDIENTS. An ingredient matches only t
     call: (args) => createRecipe(recipeCreateInputSchema.parse(args)),
   },
   update_recipe: {
-    description: `Patch fields on an existing recipe — only the fields you pass change. \`schema\` is merged into what is stored (not replaced). ${RECIPE_INGREDIENT_ON_UPDATE_ERROR} ${RECIPE_INSTRUCTIONS_ON_UPDATE_ERROR} ${RECIPE_YIELD_ON_UPDATE_ERROR} \`total_weight.unit\` must be one of ${METRIC_UNIT_SLASHES}. cookingNotes is read-only for agents: if present it is ignored (the call still succeeds) and the response carries a 'warnings' note. Use ${TOOL.clear_cooking_notes} to clear it.`,
+    description: `Patch fields on an existing recipe — only the fields you pass change. The recipe's own scalars are top-level arguments: \`name\`, \`description\`, \`notes\`, \`image\`. \`schema\` carries what is left of the stored Schema.org blob (the times, recipeCuisine, recipeCategory) and is merged into it, not replaced. ${RECIPE_SCALARS_ON_UPDATE_ERROR} ${RECIPE_INGREDIENT_ON_UPDATE_ERROR} ${RECIPE_INSTRUCTIONS_ON_UPDATE_ERROR} ${RECIPE_YIELD_ON_UPDATE_ERROR} \`total_weight.unit\` must be one of ${METRIC_UNIT_SLASHES}. cookingNotes is read-only for agents: if present it is ignored (the call still succeeds) and the response carries a 'warnings' note. Use ${TOOL.clear_cooking_notes} to clear it.`,
     call: (args) => updateRecipe(recipeUpdateInputSchema.parse(args)),
   },
   clear_cooking_notes: {
     description:
-      "Clear a recipe's cooking notes (sets cookingNotes to empty). This is the ONLY agent-writable path for cookingNotes — use it only when the user explicitly asks to clear the notes, e.g. after you've applied them.",
+      "Clear a recipe's cooking notes. This is the ONLY agent-writable path for cookingNotes — use it only when the user explicitly asks to clear the notes, e.g. after you've applied them.",
     call: (args) => clearCookingNotes(recipeIdInputSchema.parse(args)),
   },
   delete_recipe: {

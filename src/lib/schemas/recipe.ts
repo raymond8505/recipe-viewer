@@ -243,6 +243,14 @@ export const recipeUpdateInputSchema = z.object({
   url: z.string().url().optional(),
   source: z.string().min(1).optional(),
   status: recipeStatusSchema.optional(),
+  // The column-backed scalars, top level beside `servings` / `total_weight`
+  // rather than inside `schema`: `schema` is the stored blob, and none of these
+  // is in it. Nullable where clearing is a state a recipe can be in — a recipe
+  // always has a name, so that one is not.
+  name: z.string().min(1).optional(),
+  description: z.string().nullable().optional(),
+  notes: z.string().nullable().optional(),
+  image: z.string().nullable().optional(),
   schema: schemaRecipeSchema.partial().optional(),
   ingredients: recipeIngredientsInputSchema.optional(),
   instructions: recipeInstructionsInputSchema.optional(),
