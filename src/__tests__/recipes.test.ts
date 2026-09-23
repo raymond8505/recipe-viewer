@@ -1699,6 +1699,38 @@ describe("recipe ingredients hydration", () => {
     expect(recipe?.ingredients[0].ingredients).toHaveLength(2);
   });
 
+  // `metadata` is nullable and holds whatever was written: a failed scrape
+  // stores its diagnosis there and no `schema` at all. RecipeRow promises
+  // consumers a `metadata.schema` they can read without a guard, so the read
+  // exit is what makes that true. One such row exists; without this the detail
+  // page throws on `schema.prepTime` before rendering anything.
+  it("gives a row whose blob has no schema an empty one, keeping what is there", async () => {
+    makeSupabaseMock({
+      singleData: {
+        ...structuredClone(storedRow),
+        metadata: { error: "Behind paywall", is_complete: false },
+      },
+    });
+    mockGetRecipeIngredients.mockResolvedValue(rows);
+
+    const recipe = await getRecipeById("r1");
+
+    expect(recipe?.metadata.schema).toEqual({});
+    // The diagnosis is data someone wrote; nothing here is entitled to drop it.
+    expect(recipe?.metadata).toMatchObject({ error: "Behind paywall" });
+  });
+
+  it("survives a null metadata column", async () => {
+    makeSupabaseMock({
+      singleData: { ...structuredClone(storedRow), metadata: null },
+    });
+    mockGetRecipeIngredients.mockResolvedValue(rows);
+
+    await expect(getRecipeById("r1")).resolves.toMatchObject({
+      metadata: { schema: {} },
+    });
+  });
+
   // The yield is column-backed and the nutrition is derived from the catalog,
   // so both of the blob's copies are frozen artifacts. The read exit is what
   // keeps them from reaching a consumer — the MCP server stringifies whole rows.

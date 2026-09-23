@@ -184,15 +184,24 @@ function deleteDeadKeys(schema: SchemaRecipe): void {
  * is left off, and nutrition math treats "not loaded" as "no data" — so a
  * caller that skips that round trip gets rows that report no nutrition rather
  * than an undercounted total.
+ *
+ * It is also where `metadata` is made to match its type. The column is nullable
+ * and holds whatever was written: a failed scrape stores its diagnosis there
+ * (`{ error, is_complete, ... }`) and no `schema` at all. `RecipeRow` promises
+ * consumers a `metadata.schema` they may read without a guard, and this is the
+ * one place that promise can be kept — so an absent blob becomes an empty one
+ * rather than a crash several components downstream.
  */
 function hydrate(
   row: RecipeRowColumns,
   rows: readonly RecipeIngredientRow[],
   catalog?: ReadonlyMap<string, IngredientRow>,
 ): RecipeRow {
-  if (row.metadata?.schema) deleteDeadKeys(row.metadata.schema);
+  const schema = row.metadata?.schema;
+  if (schema) deleteDeadKeys(schema);
   return {
     ...hydrateTimes(row),
+    metadata: { ...row.metadata, schema: schema ?? {} },
     ingredients: hydrateIngredientGroups(row.ingredients, rows, catalog),
   };
 }
