@@ -17,11 +17,13 @@ import {
   NUTRITION_BASIS_REQUIRED,
 } from "@/lib/schemas/ingredient";
 import { FOOD_PORTION_UNIQUE_RULE } from "@/lib/foodPortions";
+import { CUSTOM_RECIPE_SOURCE } from "@/lib/format";
 import {
   ARCHIVED_RECIPE_STATUS,
   DEFAULT_RECIPE_STATUS,
 } from "@/lib/schemas/recipe";
 import {
+  recipeCreateFromSchemaInputSchema,
   recipeCreateInputSchema,
   recipeIdInputSchema,
   recipeImageUploadInputSchema,
@@ -38,6 +40,7 @@ import {
   clearCookingNotes,
   createIngredient,
   createRecipe,
+  createRecipeFromSchema,
   deleteIngredient,
   deleteRecipe,
   getIngredient,
@@ -118,8 +121,18 @@ A query matches a recipe's NAME or its INGREDIENTS. An ingredient matches only t
     call: (args) => getToken(recipeIdInputSchema.parse(args)),
   },
   create_recipe: {
-    description: `Insert a new recipe row. Requires source and a Schema.org Recipe object (schema.recipeIngredient as plain strings, or { name, group } objects to place lines under named groups; schema.recipeInstructions as an array of HowToStep / HowToSection objects — the server turns them into ingredient and instruction groups; read them back as \`ingredients\` and \`instructions\` via ${TOOL.get_recipe}); defaults status to '${DEFAULT_RECIPE_STATUS}'. url is OPTIONAL — when omitted it defaults to the recipe's own canonical page on this instance (<base-url>/recipes/<new-uuid>). Set recipeYield as a structured QuantitativeValue — value = serving count, unitText = its label, and valueReference = the recipe's raw weight/volume in metric units (value + unitText; unitText must be one of ${METRIC_UNIT_SLASHES}) when known, since it drives the per-serving nutrition; a plain-string yield is accepted but deprecated. The server parses it once into the servings and total-weight columns, which is what ${TOOL.get_recipe} returns and ${TOOL.update_recipe} edits. cookingNotes is read-only for agents: if present it is ignored (the call still succeeds) and the response carries a 'warnings' note explaining why.`,
+    description: `For a plain Schema.org Recipe from a web page, use ${TOOL.create_recipe_from_schema} instead — it takes the ingredient lines and the steps as flat arrays of strings. Reach for THIS tool only for what that one cannot express: named ingredient groups, HowToSection instructions or step timers, a structured recipeYield carrying the recipe's total weight, an explicit status, or a source that is not the url's host.
+
+Insert a new recipe row. Requires source and a Schema.org Recipe object (schema.recipeIngredient as plain strings, or { name, group } objects to place lines under named groups; schema.recipeInstructions as an array of HowToStep / HowToSection objects — the server turns them into ingredient and instruction groups; read them back as \`ingredients\` and \`instructions\` via ${TOOL.get_recipe}); defaults status to '${DEFAULT_RECIPE_STATUS}'. url is OPTIONAL — when omitted it defaults to the recipe's own canonical page on this instance (<base-url>/recipes/<new-uuid>). Set recipeYield as a structured QuantitativeValue — value = serving count, unitText = its label, and valueReference = the recipe's raw weight/volume in metric units (value + unitText; unitText must be one of ${METRIC_UNIT_SLASHES}) when known, since it drives the per-serving nutrition; a plain-string yield is accepted but deprecated. The server parses it once into the servings and total-weight columns, which is what ${TOOL.get_recipe} returns and ${TOOL.update_recipe} edits. cookingNotes is read-only for agents: if present it is ignored (the call still succeeds) and the response carries a 'warnings' note explaining why.`,
     call: (args) => createRecipe(recipeCreateInputSchema.parse(args)),
+  },
+  create_recipe_from_schema: {
+    description: `Create a recipe from a Schema.org Recipe object — the simple path, and the one to use for anything taken off a web page. Find the page's JSON-LD Recipe and pass ITS fields as this tool's arguments; if the page publishes none, write the same shape yourself from what the page says. Keys this app has no use for are ignored rather than rejected, so a whole JSON-LD blob can go in as-is.
+
+recipeIngredient and recipeInstructions are plain arrays of STRINGS — one string per ingredient line and one per step, in order, worded the way the recipe words them. Most pages publish their steps as HowToStep objects and group them into HowToSections: take each step's "text" and flatten the sections into one ordered list of strings. A step object where a string belongs is the common way this call fails. Do NOT parse a line into quantity and name, and do not look anything up first: the server parses every line and matches it against the ingredient catalog itself, then leaves whatever it cannot match unmatched for a person to fix in the app. That happens after this call returns, so the response cannot tell you which lines matched — open the returned url, or call ${TOOL.get_recipe}, to see.
+
+Pass url when the recipe has an upstream page, and its host becomes the recipe's source; omit it for a recipe you are authoring here, which gets its own page on this instance and a source of "${CUSTOM_RECIPE_SOURCE}". The recipe defaults status to '${DEFAULT_RECIPE_STATUS}', and no image is stored from the page — set one afterwards with ${TOOL.upload_recipe_image}. Returns the new recipe's id and url, and nothing else.`,
+    call: (args) => createRecipeFromSchema(recipeCreateFromSchemaInputSchema.parse(args)),
   },
   update_recipe: {
     description: `Patch fields on an existing recipe — only the fields you pass change. \`schema\` is merged into what is stored (not replaced). ${RECIPE_INGREDIENT_ON_UPDATE_ERROR} ${RECIPE_INSTRUCTIONS_ON_UPDATE_ERROR} ${RECIPE_YIELD_ON_UPDATE_ERROR} \`total_weight.unit\` must be one of ${METRIC_UNIT_SLASHES}. cookingNotes is read-only for agents: if present it is ignored (the call still succeeds) and the response carries a 'warnings' note. Use ${TOOL.clear_cooking_notes} to clear it.`,

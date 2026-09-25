@@ -25,6 +25,7 @@ export const TOOL_NAMES = [
   "get_recipe",
   "get_token",
   "create_recipe",
+  "create_recipe_from_schema",
   "update_recipe",
   "clear_cooking_notes",
   "delete_recipe",

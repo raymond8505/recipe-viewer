@@ -17,6 +17,7 @@ import {
   isOwnRecipe,
   isBrowsableUrl,
   canonicalizeRecipeSource,
+  recipeSourceForUrl,
   CUSTOM_RECIPE_SOURCE,
   fromSchemaOrgInstructions,
   toSchemaOrgInstructions,
@@ -323,6 +324,58 @@ describe("canonicalizeRecipeSource", () => {
     );
     expect(canonicalizeRecipeSource("seriouseats.com")).toBe("seriouseats.com");
     expect(canonicalizeRecipeSource("")).toBe("");
+  });
+});
+
+describe("recipeSourceForUrl", () => {
+  const INSTANCE = "https://new.raymonds.recipes";
+
+  it("names the site a scraped recipe came from", () => {
+    expect(recipeSourceForUrl("https://seriouseats.com/mapo-tofu", INSTANCE)).toBe(
+      "seriouseats.com",
+    );
+  });
+
+  it("collapses the www subdomain onto the bare host", () => {
+    expect(recipeSourceForUrl("https://www.seriouseats.com/mapo-tofu", INSTANCE)).toBe(
+      "seriouseats.com",
+    );
+  });
+
+  // The pair isOwnRecipe reads: no upstream page is what "custom" means, and a
+  // recipe with no url of its own has none.
+  it("marks a recipe with no url as the user's own", () => {
+    expect(recipeSourceForUrl(undefined, INSTANCE)).toBe(CUSTOM_RECIPE_SOURCE);
+  });
+
+  // The failure migration 0015 had to repair: this instance's host is deploy
+  // config, not provenance, so a page here is the user's own recipe.
+  it("marks a url on this instance as the user's own", () => {
+    expect(recipeSourceForUrl(`${INSTANCE}/recipes/abc`, INSTANCE)).toBe(
+      CUSTOM_RECIPE_SOURCE,
+    );
+  });
+
+  // Staging and dev hosts differ from production's, and each is its own
+  // instance — the comparison is against the base URL it is given, not a literal.
+  it("reads this instance from the base url it is given", () => {
+    expect(recipeSourceForUrl("http://localhost:3001/recipes/abc", "http://localhost:3001")).toBe(
+      CUSTOM_RECIPE_SOURCE,
+    );
+    expect(recipeSourceForUrl("http://localhost:3001/recipes/abc", INSTANCE)).toBe(
+      "localhost",
+    );
+  });
+
+  it("falls back to the own-recipe value when the url is not one", () => {
+    expect(recipeSourceForUrl("not a url", INSTANCE)).toBe(CUSTOM_RECIPE_SOURCE);
+    expect(recipeSourceForUrl("", INSTANCE)).toBe(CUSTOM_RECIPE_SOURCE);
+  });
+
+  // A base URL the deploy never set must not silently relabel every scrape as
+  // the user's own work.
+  it("still names the host when the instance base url is unusable", () => {
+    expect(recipeSourceForUrl("https://seriouseats.com/x", "")).toBe("seriouseats.com");
   });
 });
 

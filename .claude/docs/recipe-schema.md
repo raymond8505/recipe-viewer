@@ -31,7 +31,7 @@ Schema.org is a wire format for the outside world, produced and consumed in exac
 | --- | --- | --- |
 | JSON-LD `<script>` in `RecipeDetail` | out | `toSchemaOrgJsonLd(doc, options?)` — explicit allowlist of standard fields; lines flattened to strings; steps as HowTo objects |
 | Image-generation webhook (`/regenerate-image`) | out | `toSchemaOrgRecipe(doc)` — the whole document, custom fields included, lines flattened, steps as HowTo objects |
-| Scraped input — MCP `create_recipe`, the `/rescrape` webhook response | in | `fromSchemaOrgIngredients(lines)` → `RecipeIngredientGroupInput[]`; groups by first appearance, ungrouped lines join the one nameless group. `fromSchemaOrgInstructions(raw)` → `RecipeInstructionGroup[]`; takes the array `schemaOrgRecipeInputSchema` validates — `HowToStep` objects (`@type` optional) and `HowToSection`s whose `itemListElement` is an array of them — and reads anything but an array as no steps; top-level steps group **by run** around sections; a duration survives only beside a name |
+| Scraped input — MCP `create_recipe` and `create_recipe_from_schema`, the `/rescrape` webhook response | in | `fromSchemaOrgIngredients(lines)` → `RecipeIngredientGroupInput[]`; groups by first appearance, ungrouped lines join the one nameless group. `fromSchemaOrgInstructions(raw)` → `RecipeInstructionGroup[]`; takes the array `schemaOrgRecipeInputSchema` validates — `HowToStep` objects (`@type` optional) and `HowToSection`s whose `itemListElement` is an array of them — and reads anything but an array as no steps; top-level steps group **by run** around sections; a duration survives only beside a name. `create_recipe_from_schema` reaches both through plain strings: its lines go in as they are, and each step string is wrapped as a `{ text }` HowToStep first, which is what makes a flat list exactly one nameless group |
 
 The types: `SchemaOrgRecipe = SchemaRecipe & { recipeIngredient?: string[]; recipeInstructions?: Array<HowToStep | HowToSection>; recipeYield?: string | string[] | QuantitativeValue; nutrition?: SchemaOrgNutrition }` (outbound; `recipeInstructions` and `recipeYield` are the same inbound, and `SchemaOrgNutrition` is `SchemaNutrition` plus the derived `servingSize`) and `SchemaOrgIngredientLine` (`{ name, group? }`, accepted alongside bare strings inbound). MCP `update_recipe` speaks the internal shape — `ingredients` and `instructions` groups, `servings` and `total_weight` — and rejects `schema.recipeIngredient` / `schema.recipeInstructions` / `schema.recipeYield` outright rather than silently stripping them.
 
@@ -79,8 +79,10 @@ the read exit, stripped from every write.
   `YieldEditor` was removed in 7e81735, and this is deliberately not that: two columns, two text
   inputs, no editor-only type and no converters.
 - **MCP:** `create_recipe` accepts `schema.recipeYield` (a scrape speaks Schema.org) and parses it
-  once; `update_recipe` **rejects** it with `RECIPE_YIELD_ON_UPDATE_ERROR` and takes `servings` /
-  `total_weight` instead — the same call the ingredient and instruction rules make.
+  once, as does `create_recipe_from_schema` — which takes the yield flat, as a string or the bare
+  number JSON-LD often spells it; `update_recipe` **rejects** it with
+  `RECIPE_YIELD_ON_UPDATE_ERROR` and takes `servings` / `total_weight` instead — the same call the
+  ingredient and instruction rules make.
 
 ## Recipe Times
 

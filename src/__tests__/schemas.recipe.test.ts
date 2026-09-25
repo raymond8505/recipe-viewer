@@ -1,6 +1,7 @@
 // @vitest-environment node
 import { describe, it, expect } from "vitest";
 import {
+  recipeCreateFromSchemaInputSchema,
   recipeCreateInputSchema,
   recipeImageUploadInputSchema,
   recipeInstructionsInputSchema,
@@ -241,6 +242,88 @@ describe("totalWeightInputSchema", () => {
     }
     expect(
       totalWeightInputSchema.safeParse({ amount: 454, unit: "cups" }).success,
+    ).toBe(false);
+  });
+});
+
+describe("recipeCreateFromSchemaInputSchema", () => {
+  // JSON-LD spells a yield either way, and parseYield reads only the string.
+  it("accepts a yield as a number or a string, and stores the string", () => {
+    expect(
+      recipeCreateFromSchemaInputSchema.parse({ name: "X", recipeYield: 4 }).recipeYield,
+    ).toBe("4");
+    expect(
+      recipeCreateFromSchemaInputSchema.parse({ name: "X", recipeYield: "Makes 12 cookies" })
+        .recipeYield,
+    ).toBe("Makes 12 cookies");
+  });
+
+  // Every spelling a page uses, including the array a co-authored piece carries.
+  it("accepts an author as a name, a Person, or an array of either", () => {
+    const expected = { "@type": "Person", name: "Kenji" };
+    for (const author of ["Kenji", { name: "Kenji" }, [{ name: "Kenji" }], ["Kenji"]]) {
+      expect(recipeCreateFromSchemaInputSchema.parse({ name: "X", author }).author).toEqual(
+        expected,
+      );
+    }
+  });
+
+  it("keeps the first of several authors, having nowhere to put a second", () => {
+    expect(
+      recipeCreateFromSchemaInputSchema.parse({
+        name: "X",
+        author: [{ name: "Diana Henry" }, { name: "Kenji" }],
+      }).author,
+    ).toEqual({ "@type": "Person", name: "Diana Henry" });
+  });
+
+  // The tool's premise: a caller pastes a page's whole JSON-LD, and the keys
+  // this app has no use for neither reach storage nor fail the call.
+  it("drops the keys the app does not store rather than rejecting them", () => {
+    const result = recipeCreateFromSchemaInputSchema.safeParse({
+      "@context": "https://schema.org",
+      "@type": "Recipe",
+      name: "X",
+      image: "https://example.com/x.jpg",
+      nutrition: { calories: "200 kcal" },
+      aggregateRating: { ratingValue: 5 },
+      video: { contentUrl: "https://example.com/v.mp4" },
+    });
+    expect(result.success).toBe(true);
+    expect(result.data).toEqual({ name: "X" });
+  });
+
+  // A short list would be read as the recipe's own, with no sign a line was lost.
+  it("rejects a blank line or step rather than dropping it", () => {
+    expect(
+      recipeCreateFromSchemaInputSchema.safeParse({
+        name: "X",
+        recipeIngredient: ["1 egg", "   "],
+      }).success,
+    ).toBe(false);
+    expect(
+      recipeCreateFromSchemaInputSchema.safeParse({ name: "X", recipeInstructions: [""] })
+        .success,
+    ).toBe(false);
+  });
+
+  it("requires a name and rejects a url that is not one", () => {
+    expect(recipeCreateFromSchemaInputSchema.safeParse({}).success).toBe(false);
+    expect(recipeCreateFromSchemaInputSchema.safeParse({ name: "  " }).success).toBe(false);
+    expect(
+      recipeCreateFromSchemaInputSchema.safeParse({ name: "X", url: "seriouseats.com" })
+        .success,
+    ).toBe(false);
+  });
+
+  // The cap recipe_ingredients.raw_text is written under, applied at this edge
+  // too so an over-long line fails here rather than at the insert.
+  it("rejects an ingredient line past the raw_text cap", () => {
+    expect(
+      recipeCreateFromSchemaInputSchema.safeParse({
+        name: "X",
+        recipeIngredient: ["a".repeat(501)],
+      }).success,
     ).toBe(false);
   });
 });

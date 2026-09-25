@@ -26,7 +26,11 @@ import { fromSchemaOrgIngredients } from "@/lib/recipeIngredients";
 import { generateEmbedding } from "@/lib/embedding";
 import { exhaustiveKeys } from "@/lib/exhaustive";
 import { ingredientEmbeddingText, ingredientQueryText } from "@/lib/ingredientAliases";
-import { CUSTOM_RECIPE_SOURCE, fromSchemaOrgInstructions } from "@/lib/format";
+import {
+  CUSTOM_RECIPE_SOURCE,
+  fromSchemaOrgInstructions,
+  recipeSourceForUrl,
+} from "@/lib/format";
 import {
   RECIPE_INGREDIENT_ON_UPDATE_ERROR,
   RECIPE_INSTRUCTIONS_ON_UPDATE_ERROR,
@@ -46,6 +50,7 @@ import type {
   SchemaRecipe,
 } from "@/types/recipe";
 import type {
+  RecipeCreateFromSchemaInput,
   RecipeCreateInput,
   RecipeIdInput,
   RecipeImageUploadInput,
@@ -341,6 +346,44 @@ export async function createRecipe(
     return cookingNotes !== undefined
       ? { ...row, warnings: [COOKING_NOTES_IGNORED_WARNING] }
       : row;
+  } catch (err) {
+    throw toToolError(err, "create_failed");
+  }
+}
+
+/**
+ * `create_recipe`'s flat twin, for a caller holding a page's JSON-LD: the
+ * Schema.org Recipe IS the argument object, its lines and steps are string
+ * arrays, and the response says only that the row exists and where.
+ *
+ * The catalog matching this promises is `createRecipeRow`'s — it mints a
+ * `recipe_ingredients` row per line and schedules the normalization run that
+ * matches them, leaving whatever it cannot resolve unmatched. Nothing is
+ * awaited here, so the response cannot report what matched.
+ */
+export async function createRecipeFromSchema(
+  args: RecipeCreateFromSchemaInput,
+): Promise<{ created: true; id: string; url: string }> {
+  const { url: pageUrl, recipeIngredient, recipeInstructions, ...schema } = args;
+  const id = crypto.randomUUID();
+  const url = pageUrl ?? `${env.MCP_PUBLIC_URL}/recipes/${id}`;
+  try {
+    const row = await createRecipeRow({
+      id,
+      url,
+      // The url's host, or CUSTOM_RECIPE_SOURCE when there is no upstream page.
+      source: recipeSourceForUrl(pageUrl, env.MCP_PUBLIC_URL),
+      // No status, so the repo's default applies: nothing arriving this way has
+      // had a human eye on it yet.
+      schema,
+      ingredients: fromSchemaOrgIngredients(recipeIngredient ?? []),
+      // A step is its text and nothing else, which is what a flat list of
+      // strings means: one nameless group, no sections, no cook-mode timers.
+      instructions: fromSchemaOrgInstructions(
+        (recipeInstructions ?? []).map((text) => ({ text })),
+      ),
+    });
+    return { created: true, id: row.id, url: row.url };
   } catch (err) {
     throw toToolError(err, "create_failed");
   }

@@ -4,6 +4,7 @@ import {
   makeIngredient,
   makeIngredientLines,
   makeMatchedIngredient,
+  makeRecipe,
   makeSteps,
   recipeFixtures,
 } from "@/fixtures";
@@ -61,6 +62,7 @@ import {
   clearCookingNotes,
   createIngredient,
   createRecipe,
+  createRecipeFromSchema,
   deleteIngredient,
   deleteRecipe,
   getIngredient,
@@ -90,6 +92,7 @@ import {
   ingredientUpdateToolInputSchema,
   NUTRITION_BASIS_REQUIRED,
 } from "@/lib/schemas/ingredient";
+import { recipeCreateFromSchemaInputSchema } from "@/lib/schemas/recipe";
 
 describe("searchIngredients", () => {
   beforeEach(() => vi.clearAllMocks());
@@ -846,6 +849,127 @@ describe("createRecipe", () => {
     await expect(
       createRecipe({ url: "https://example.com/r", source: "x", schema: { name: "X" } }),
     ).rejects.toMatchObject({ code: "create_failed" });
+  });
+});
+
+describe("createRecipeFromSchema", () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  // A flat list of strings is exactly one nameless group on both sides — the
+  // shape that carries no group headings, no sections and no step timers.
+  it("turns the string arrays into one nameless group each", async () => {
+    const { createRecipeRow } = await import("@/lib/recipes");
+    vi.mocked(createRecipeRow).mockResolvedValueOnce(makeRecipe("r1", "Mapo Tofu"));
+
+    await createRecipeFromSchema({
+      name: "Mapo Tofu",
+      recipeIngredient: ["1 block tofu", "1 tbsp doubanjiang"],
+      recipeInstructions: ["Fry the paste.", "Add the tofu."],
+    });
+
+    const arg = vi.mocked(createRecipeRow).mock.calls[0][0];
+    expect(arg.ingredients).toEqual([
+      { ingredients: [{ raw_text: "1 block tofu" }, { raw_text: "1 tbsp doubanjiang" }] },
+    ]);
+    expect(arg.instructions).toEqual([
+      { steps: [{ text: "Fry the paste." }, { text: "Add the tofu." }] },
+    ]);
+  });
+
+  it("derives source from the url's host, without the www", async () => {
+    const { createRecipeRow } = await import("@/lib/recipes");
+    vi.mocked(createRecipeRow).mockResolvedValueOnce(makeRecipe("r1", "X"));
+
+    await createRecipeFromSchema({ name: "X", url: "https://www.seriouseats.com/mapo" });
+
+    const arg = vi.mocked(createRecipeRow).mock.calls[0][0];
+    expect(arg.source).toBe("seriouseats.com");
+    expect(arg.url).toBe("https://www.seriouseats.com/mapo");
+  });
+
+  it("gives a recipe with no url its own page on this instance, sourced custom", async () => {
+    const { createRecipeRow } = await import("@/lib/recipes");
+    vi.mocked(createRecipeRow).mockResolvedValueOnce(makeRecipe("r1", "X"));
+
+    await createRecipeFromSchema({ name: "X" });
+
+    const arg = vi.mocked(createRecipeRow).mock.calls[0][0];
+    expect(arg.url).toBe(`http://localhost:3000/recipes/${arg.id}`);
+    expect(arg.source).toBe("custom");
+  });
+
+  // A url on this instance is this app's own page, not a site to re-scrape.
+  // Storing the host there is what migration 0015 had to undo.
+  it("treats a url on this instance as the user's own recipe", async () => {
+    const { createRecipeRow } = await import("@/lib/recipes");
+    vi.mocked(createRecipeRow).mockResolvedValueOnce(makeRecipe("r1", "X"));
+
+    await createRecipeFromSchema({ name: "X", url: "http://localhost:3000/recipes/abc" });
+
+    expect(vi.mocked(createRecipeRow).mock.calls[0][0].source).toBe("custom");
+  });
+
+  it("leaves status to the repo's default", async () => {
+    const { createRecipeRow } = await import("@/lib/recipes");
+    vi.mocked(createRecipeRow).mockResolvedValueOnce(makeRecipe("r1", "X"));
+
+    await createRecipeFromSchema({ name: "X" });
+
+    expect(vi.mocked(createRecipeRow).mock.calls[0][0].status).toBeUndefined();
+  });
+
+  // Through the validator, because the coercion is the point: JSON-LD spells a
+  // yield as a bare number and parseYield reads the string form.
+  it("hands a numeric yield to the repo as a string", async () => {
+    const { createRecipeRow } = await import("@/lib/recipes");
+    vi.mocked(createRecipeRow).mockResolvedValueOnce(makeRecipe("r1", "X"));
+
+    await createRecipeFromSchema(
+      recipeCreateFromSchemaInputSchema.parse({ name: "X", recipeYield: 4 }),
+    );
+
+    expect(vi.mocked(createRecipeRow).mock.calls[0][0].schema.recipeYield).toBe("4");
+  });
+
+  // The whole point of pasting a page's JSON-LD: the keys the app has no use
+  // for are dropped, not stored and not rejected.
+  it("keeps a scrape's image, nutrition and unknown keys out of the stored schema", async () => {
+    const { createRecipeRow } = await import("@/lib/recipes");
+    vi.mocked(createRecipeRow).mockResolvedValueOnce(makeRecipe("r1", "X"));
+
+    await createRecipeFromSchema(
+      recipeCreateFromSchemaInputSchema.parse({
+        name: "X",
+        image: "https://example.com/x.jpg",
+        nutrition: { calories: "200 kcal" },
+        aggregateRating: { ratingValue: 5 },
+      }),
+    );
+
+    const { schema } = vi.mocked(createRecipeRow).mock.calls[0][0];
+    expect(schema).not.toHaveProperty("image");
+    expect(schema).not.toHaveProperty("nutrition");
+    expect(schema).not.toHaveProperty("aggregateRating");
+    expect(schema.name).toBe("X");
+  });
+
+  it("answers with the row's id and url and nothing else", async () => {
+    const { createRecipeRow } = await import("@/lib/recipes");
+    vi.mocked(createRecipeRow).mockResolvedValueOnce(makeRecipe("new-id", "X"));
+
+    await expect(createRecipeFromSchema({ name: "X" })).resolves.toEqual({
+      created: true,
+      id: "new-id",
+      url: "https://new.raymonds.recipes/recipes/new-id",
+    });
+  });
+
+  it("translates RecipeRepoError to ToolError(create_failed)", async () => {
+    const { createRecipeRow } = await import("@/lib/recipes");
+    vi.mocked(createRecipeRow).mockRejectedValueOnce(new RecipeRepoError("insert_failed", "RLS"));
+    await expect(createRecipeFromSchema({ name: "X" })).rejects.toMatchObject({
+      code: "create_failed",
+    });
   });
 });
 
