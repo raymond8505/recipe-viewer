@@ -145,11 +145,12 @@ export async function searchIngredients(
 // (manager UI, USDA import, normalization accretion), so agent-created rows
 // would match worse than identical rows made anywhere else.
 //
-// Nutrition arrives AS MEASURED for the accompanying `nutrition_portion`
-// (agents think in "1 tbsp = 14 g", not storage units) and is scaled to the
-// per-100g storage form here — the same deterministic conversion the manager
-// UI's create form does client-side (IngredientCreateForm →
-// scalePortionNutritionToPer100g).
+// Nutrition arrives AS MEASURED against `nutrition_basis_g` (agents think in
+// "120 kcal per 30 g", not storage units) and is scaled to the per-100g storage
+// form here — the same deterministic conversion the manager UI's create form
+// does client-side (IngredientCreateForm → scalePortionNutritionToPer100g).
+// The basis writes nothing: `food_portions` is the only field that reaches
+// that column, on create exactly as on update.
 
 export async function getIngredient(args: IngredientIdInput): Promise<IngredientRow> {
   const row = await getIngredientById(args.id);
@@ -177,15 +178,10 @@ export async function createIngredient(
     );
   }
 
-  const { nutrition_portion: portion, ...fields } = args;
+  const { nutrition_basis_g: basis, ...fields } = args;
   const input = { ...fields, embedding };
-  if (portion) {
-    // The portion is real data, not just a math basis — persist it (first, as
-    // the nutrition-entry basis) like the UI stores its portion list.
-    input.food_portions = [portion, ...(fields.food_portions ?? [])];
-    if (fields.nutrition) {
-      input.nutrition = scalePortionNutritionToPer100g(fields.nutrition, portion.gramWeight);
-    }
+  if (fields.nutrition && basis) {
+    input.nutrition = scalePortionNutritionToPer100g(fields.nutrition, basis);
   }
 
   try {
@@ -198,12 +194,10 @@ export async function createIngredient(
 export async function updateIngredient(
   args: IngredientUpdateToolInput,
 ): Promise<IngredientRow> {
-  const { id, nutrition_portion: portion, ...fields } = args;
+  const { id, nutrition_basis_g: basis, ...fields } = args;
   const patch: UpdateIngredientPatch = { ...fields };
-  // Unlike create, the portion here is only the math basis for the new
-  // nutrition values — food_portions changes only when passed explicitly.
-  if (fields.nutrition && portion) {
-    patch.nutrition = scalePortionNutritionToPer100g(fields.nutrition, portion.gramWeight);
+  if (fields.nutrition && basis) {
+    patch.nutrition = scalePortionNutritionToPer100g(fields.nutrition, basis);
   }
   // The embedding spans name + aliases (that's what matching searches), so
   // EITHER field moving invalidates it. A one-sided patch needs the other

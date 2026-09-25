@@ -88,6 +88,34 @@ describe("PATCH /api/ingredients/[id]", () => {
     );
   });
 
+  it("stamps last_checked without spending an embedding call", async () => {
+    // The Mark checked button's whole request. Verifying a row says nothing
+    // about its name or aliases, so re-embedding it would be pure cost.
+    const checkedAt = "2026-09-22T14:03:00.000Z";
+    const res = await PATCH(
+      makeJsonRequest({ last_checked: checkedAt }, { method: "PATCH" }),
+      makeParams(),
+    );
+
+    expect(res.status).toBe(200);
+    expect(generateEmbedding).not.toHaveBeenCalled();
+    // Exactly that key and nothing else — in particular no `source`, which
+    // would demote a verified USDA row for confirming it was right.
+    expect(updateIngredientRow).toHaveBeenCalledWith("ing-1", {
+      last_checked: checkedAt,
+    });
+  });
+
+  it("rejects a last_checked that isn't an instant with 400", async () => {
+    const res = await PATCH(
+      makeJsonRequest({ last_checked: "yesterday" }, { method: "PATCH" }),
+      makeParams(),
+    );
+
+    expect(res.status).toBe(400);
+    expect(updateIngredientRow).not.toHaveBeenCalled();
+  });
+
   it("rejects an invalid patch with 400", async () => {
     const res = await PATCH(
       makeJsonRequest({ name: "" }, { method: "PATCH" }),

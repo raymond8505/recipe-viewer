@@ -11,6 +11,7 @@ import {
   parseNumeric,
   pluralize,
   formatDate,
+  formatIsoDate,
   getFirstImage,
   toArray,
   isOwnRecipe,
@@ -160,6 +161,29 @@ describe("formatDate", () => {
 
   it("returns null for invalid date", () => {
     expect(formatDate("not-a-date")).toBeNull();
+  });
+});
+
+describe("formatIsoDate", () => {
+  it("keeps a bare ISO date as it stands", () => {
+    expect(formatIsoDate("2026-02-25")).toBe("2026-02-25");
+  });
+
+  // What PostgREST returns for a timestamptz — the shape last_checked arrives
+  // in, offset and all.
+  it("reduces a timestamp with an offset to its UTC day", () => {
+    expect(formatIsoDate("2026-09-12T15:20:00+00:00")).toBe("2026-09-12");
+  });
+
+  // UTC, not local: a late-evening stamp must not read as the next day for a
+  // reader east of Greenwich, or two rows checked together would show
+  // different dates.
+  it("resolves a non-UTC instant on its UTC day", () => {
+    expect(formatIsoDate("2026-09-12T22:30:00-04:00")).toBe("2026-09-13");
+  });
+
+  it.each([undefined, null, "not-a-date", ""])("returns null for %j", (value) => {
+    expect(formatIsoDate(value)).toBeNull();
   });
 });
 

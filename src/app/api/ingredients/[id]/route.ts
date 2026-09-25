@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireSessionOrDev } from "@/lib/api/guard";
 import { generateEmbedding } from "@/lib/embedding";
+import { portionConflictIssue } from "@/lib/foodPortions";
 import { ingredientEmbeddingText } from "@/lib/ingredientAliases";
 import {
   IngredientRepoError,
@@ -32,7 +33,13 @@ export const PATCH = requireSessionOrDev(
     const body = await req.json().catch(() => null);
     const parsed = ingredientUpdateInputSchema.safeParse(body);
     if (!parsed.success) {
-      return NextResponse.json({ error: "Invalid ingredient patch" }, { status: 400 });
+      // A portion contradiction names the label the caller gave two weights, so
+      // it can be acted on; everything else stays generic.
+      const conflict = portionConflictIssue(parsed.error.issues);
+      return NextResponse.json(
+        { error: conflict ?? "Invalid ingredient patch" },
+        { status: 400 },
+      );
     }
 
     const patch: UpdateIngredientPatch = { ...parsed.data };

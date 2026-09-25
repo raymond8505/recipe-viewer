@@ -80,6 +80,14 @@ type IngredientDetailOnlyField = Exclude<keyof IngredientRow, keyof IngredientMa
 
 export const INGREDIENT_DETAIL_ONLY_FIELDS = exhaustiveKeys<
   Pick<IngredientRow, IngredientDetailOnlyField>
->()(["fdc_id", "fdc_data_type", "food_portions", "source", "created_at", "updated_at"]);
+>()([
+  "fdc_id",
+  "fdc_data_type",
+  "food_portions",
+  "source",
+  "created_at",
+  "updated_at",
+  "last_checked",
+]);
 
 export const INGREDIENT_DETAIL_ONLY_LIST = INGREDIENT_DETAIL_ONLY_FIELDS.join(", ");
