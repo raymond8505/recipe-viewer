@@ -257,6 +257,56 @@ export const recipeCreateInputSchema = z
   })
   .refine(sourceRequiredWithUrl, SOURCE_REQUIRED_WITH_URL_ISSUE);
 
+// The plain-Schema.org edge, for a caller holding a page's JSON-LD and nothing
+// else: the arguments ARE the Recipe, its lines and steps are string arrays,
+// and `source` is derived from `url` rather than asked for.
+//
+// A fresh object rather than an extension of schemaOrgRecipeInputSchema, and
+// deliberately not `.passthrough()`. The unions that schema accepts on
+// recipeIngredient / recipeInstructions / recipeYield are the complexity this
+// exists to avoid, and listing only the fields the app reads keeps the rest of
+// a scraped blob — image, nutrition, aggregateRating, video — out of storage.
+// One author, however the page spells it.
+const authorNameSchema = z
+  .union([z.string().trim().min(1), z.object({ name: z.string().trim().min(1) })])
+  .transform((author) => (typeof author === "string" ? author : author.name));
+
+export const recipeCreateFromSchemaInputSchema = z.object({
+  name: z.string().trim().min(1),
+  description: z.string().optional(),
+  // Pages spell an author every way the vocabulary allows — a bare string, a
+  // Person, or an array of them for a co-authored piece. All of them reduce to
+  // the one name the app stores; a list takes the first, since there is nowhere
+  // to put a second.
+  author: z
+    .union([authorNameSchema, z.array(authorNameSchema).nonempty()])
+    .transform((author) => ({
+      "@type": "Person" as const,
+      name: Array.isArray(author) ? author[0] : author,
+    }))
+    .optional(),
+  prepTime: z.string().optional(),
+  cookTime: z.string().optional(),
+  totalTime: z.string().optional(),
+  recipeCuisine: z.string().optional(),
+  recipeCategory: z.union([z.string(), z.array(z.string())]).optional(),
+  keywords: z.string().optional(),
+  datePublished: z.string().optional(),
+  // A bare number is legal JSON-LD ("recipeYield": 4) and `parseYield` reads the
+  // string form, so the coercion belongs here rather than at the parse site.
+  recipeYield: z.union([z.string(), z.number()]).transform(String).optional(),
+  // One entry per line and per step. A blank entry fails the call: dropping it
+  // would leave a short list that reads as the recipe's own, with nothing to
+  // show a line went missing. The 500 cap is `raw_text`'s, shared with
+  // recipeIngredientLineInputSchema.
+  recipeIngredient: z.array(z.string().trim().min(1).max(500)).optional(),
+  recipeInstructions: z.array(z.string().trim().min(1)).optional(),
+  // Optional for the same reason as on create: no url of its own is what
+  // "authored on this instance" means. `source` follows from it — see
+  // recipeSourceForUrl — so there is no second field to keep consistent.
+  url: z.string().url().optional(),
+});
+
 // Update speaks the app's own shape: `ingredients` replaces the whole list
 // (lines keep their rows by id), `instructions` replaces the whole step list,
 // `servings` / `total_weight` set the columns, and `schema` is the stored
@@ -303,5 +353,8 @@ export const recipeImageUploadInputSchema = z.object({
 export type RecipeSearchInput = z.infer<typeof recipeSearchInputSchema>;
 export type RecipeIdInput = z.infer<typeof recipeIdInputSchema>;
 export type RecipeCreateInput = z.infer<typeof recipeCreateInputSchema>;
+export type RecipeCreateFromSchemaInput = z.infer<
+  typeof recipeCreateFromSchemaInputSchema
+>;
 export type RecipeUpdateInput = z.infer<typeof recipeUpdateInputSchema>;
 export type RecipeImageUploadInput = z.infer<typeof recipeImageUploadInputSchema>;

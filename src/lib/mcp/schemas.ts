@@ -408,6 +408,71 @@ export const TOOL_SCHEMAS = {
       schema: schemaOrgRecipeJsonSchema,
     },
   },
+  // The flat twin of create_recipe: the properties ARE a Schema.org Recipe's,
+  // with no wrapper object and no status. `additionalProperties` is open on
+  // purpose — a caller pastes a page's whole JSON-LD, and the extra keys it
+  // carries are dropped by the validator rather than rejected by the client.
+  create_recipe_from_schema: {
+    type: "object",
+    required: ["name"],
+    additionalProperties: true,
+    properties: {
+      name: { type: "string", description: "The recipe's title." },
+      description: { type: "string" },
+      author: {
+        description:
+          "The author's name — a plain string, Schema.org's { name } object, or an array of either (only the first is kept).",
+        oneOf: [
+          { type: "string" },
+          { type: "object", required: ["name"], properties: { name: { type: "string" } } },
+          {
+            type: "array",
+            items: {
+              oneOf: [
+                { type: "string" },
+                { type: "object", required: ["name"], properties: { name: { type: "string" } } },
+              ],
+            },
+          },
+        ],
+      },
+      prepTime: { type: "string", description: "ISO 8601 duration (e.g. PT30M)" },
+      cookTime: { type: "string", description: "ISO 8601 duration" },
+      totalTime: {
+        type: "string",
+        description:
+          "ISO 8601 duration. Not derived from prepTime + cookTime — a recipe can rest or marinate.",
+      },
+      recipeCuisine: { type: "string" },
+      recipeCategory: {
+        oneOf: [{ type: "string" }, { type: "array", items: { type: "string" } }],
+      },
+      keywords: { type: "string" },
+      datePublished: { type: "string" },
+      recipeYield: {
+        description:
+          'How many servings the recipe makes: 4, "4 servings", or "Makes 12 cookies". A yield stating a QUANTITY rather than a count ("300 ml", "1 lb") is not a serving count and is ignored.',
+        oneOf: [{ type: "number" }, { type: "string" }],
+      },
+      recipeIngredient: {
+        type: "array",
+        description:
+          'The ingredient lines, one string per line, exactly as the recipe writes them ("2 tsp cumin seed"). Do not split off the quantity or the unit — the server parses each line and matches it to the catalog.',
+        items: { type: "string", maxLength: 500 },
+      },
+      recipeInstructions: {
+        type: "array",
+        description:
+          "The steps, one STRING per step, in order. A page that publishes HowToStep objects or HowToSections gives you objects — pass each step's `text`, flattening the sections into this one ordered list.",
+        items: { type: "string" },
+      },
+      url: {
+        type: "string",
+        format: "uri",
+        description: `The page this recipe came from; its host becomes the recipe's source. Omit it for a recipe authored here — the recipe then gets its own page on this instance and a source of "${CUSTOM_RECIPE_SOURCE}".`,
+      },
+    },
+  },
   update_recipe: {
     type: "object",
     required: ["id"],

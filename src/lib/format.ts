@@ -309,6 +309,38 @@ export function canonicalizeRecipeSource(source: string): string {
   return isOwnRecipe({ source }) ? CUSTOM_RECIPE_SOURCE : source;
 }
 
+/** The host a URL names, or null when the string isn't a URL. */
+function hostnameOf(url: string): string | null {
+  try {
+    return new URL(url).hostname || null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * The `source` to store for a recipe whose page is at `url` — the bare host
+ * ("seriouseats.com"), or `CUSTOM_RECIPE_SOURCE` when there is no upstream page
+ * to name.
+ *
+ * A url on this instance's own host counts as no upstream page. `source` is
+ * what `isOwnRecipe` reads, so storing the host there would answer "is this
+ * mine?" from deploy config, and a recipe authored here would offer a Re-scrape
+ * aimed at its own page. `instanceBaseUrl` is a parameter rather than an
+ * `@/env` read because this module is client-safe.
+ */
+export function recipeSourceForUrl(
+  url: string | undefined,
+  instanceBaseUrl: string,
+): string {
+  if (!url) return CUSTOM_RECIPE_SOURCE;
+  const host = hostnameOf(url);
+  if (!host || host === hostnameOf(instanceBaseUrl)) return CUSTOM_RECIPE_SOURCE;
+  // One site, one source: "www.seriouseats.com" and "seriouseats.com" are the
+  // same provenance, and `source` is what the search filter groups by.
+  return host.replace(/^www\./, "");
+}
+
 /**
  * Whether a string can be handed to an `<a href>` we open in a new tab: an
  * absolute http(s) URL. Two jobs — it hides the "open source" affordance while

@@ -33,7 +33,7 @@ vi.mock("@/lib/supabase", () => ({
 
 import { TOOLS } from "@/lib/mcp/server";
 import { TOOL_SCHEMAS } from "@/lib/mcp/schemas";
-import { TOOL_NAMES } from "@/lib/mcp/toolNames";
+import { TOOL, TOOL_NAMES } from "@/lib/mcp/toolNames";
 import {
   ingredientCreateInputSchema,
   NUTRITION_BASIS_REQUIRED,
@@ -175,12 +175,44 @@ describe("enum defaults", () => {
   });
 
   it("documents the statuses the repo writes", () => {
-    expect(descriptionOf("create_recipe")).toContain(
-      `defaults status to '${DEFAULT_RECIPE_STATUS}'`,
-    );
+    for (const tool of ["create_recipe", "create_recipe_from_schema"] as const) {
+      expect(descriptionOf(tool)).toContain(
+        `defaults status to '${DEFAULT_RECIPE_STATUS}'`,
+      );
+    }
     expect(descriptionOf("delete_recipe")).toContain(
       `status to '${ARCHIVED_RECIPE_STATUS}'`,
     );
+  });
+});
+
+// Two create tools is a choice an agent has to make before it has read either
+// one, so the harder tool has to hand the easy case over. These pin the shape
+// difference that choice turns on.
+describe("the two recipe-create tools", () => {
+  it("points create_recipe at the simpler tool for a plain Schema.org recipe", () => {
+    expect(descriptionOf("create_recipe")).toContain(TOOL.create_recipe_from_schema);
+  });
+
+  it("takes the Schema.org fields flat, with no wrapper and no status", () => {
+    const { properties } = TOOL_SCHEMAS.create_recipe_from_schema;
+    expect(properties).toHaveProperty("recipeIngredient");
+    expect(properties).toHaveProperty("recipeInstructions");
+    expect(properties).not.toHaveProperty("schema");
+    expect(properties).not.toHaveProperty("status");
+    expect(properties).not.toHaveProperty("source");
+  });
+
+  // A pasted JSON-LD blob carries keys this app has no use for; a client that
+  // validates arguments against the schema must not reject the call for them.
+  it("lets a whole JSON-LD blob through for the validator to trim", () => {
+    expect(TOOL_SCHEMAS.create_recipe_from_schema.additionalProperties).toBe(true);
+  });
+
+  it("asks for lines and steps as plain strings", () => {
+    const { properties } = TOOL_SCHEMAS.create_recipe_from_schema;
+    expect(properties.recipeIngredient.items.type).toBe("string");
+    expect(properties.recipeInstructions.items.type).toBe("string");
   });
 });
 
