@@ -856,16 +856,20 @@ describe("createRecipeFromSchema", () => {
   beforeEach(() => vi.clearAllMocks());
 
   // A flat list of strings is exactly one nameless group on both sides — the
-  // shape that carries no group headings, no sections and no step timers.
+  // shape that carries no group headings, no sections and no step timers. Goes
+  // through the validator because that is where a step string becomes the
+  // `{ text }` HowToStep the grouping reads.
   it("turns the string arrays into one nameless group each", async () => {
     const { createRecipeRow } = await import("@/lib/recipes");
     vi.mocked(createRecipeRow).mockResolvedValueOnce(makeRecipe("r1", "Mapo Tofu"));
 
-    await createRecipeFromSchema({
-      name: "Mapo Tofu",
-      recipeIngredient: ["1 block tofu", "1 tbsp doubanjiang"],
-      recipeInstructions: ["Fry the paste.", "Add the tofu."],
-    });
+    await createRecipeFromSchema(
+      recipeCreateFromSchemaInputSchema.parse({
+        name: "Mapo Tofu",
+        recipeIngredient: ["1 block tofu", "1 tbsp doubanjiang"],
+        recipeInstructions: ["Fry the paste.", "Add the tofu."],
+      }),
+    );
 
     const arg = vi.mocked(createRecipeRow).mock.calls[0][0];
     expect(arg.ingredients).toEqual([
@@ -873,6 +877,97 @@ describe("createRecipeFromSchema", () => {
     ]);
     expect(arg.instructions).toEqual([
       { steps: [{ text: "Fry the paste." }, { text: "Add the tofu." }] },
+    ]);
+  });
+
+  // The `group` extension is how a page's own ingredient headings reach the
+  // stored groups. Groups come out in first-appearance order and every bare
+  // string joins the one nameless group, wherever in the array it sits.
+  it("builds the named groups a page's { name, group } lines ask for", async () => {
+    const { createRecipeRow } = await import("@/lib/recipes");
+    vi.mocked(createRecipeRow).mockResolvedValueOnce(makeRecipe("r1", "Mapo Tofu"));
+
+    await createRecipeFromSchema(
+      recipeCreateFromSchemaInputSchema.parse({
+        name: "Mapo Tofu",
+        recipeIngredient: [
+          "1 block tofu",
+          { name: "1 tbsp doubanjiang", group: "Sauce" },
+          { name: "2 tsp cornstarch", group: "Slurry" },
+          { name: "1 tsp soy sauce", group: "Sauce" },
+          "2 scallions",
+        ],
+      }),
+    );
+
+    expect(vi.mocked(createRecipeRow).mock.calls[0][0].ingredients).toEqual([
+      { ingredients: [{ raw_text: "1 block tofu" }, { raw_text: "2 scallions" }] },
+      {
+        name: "Sauce",
+        ingredients: [{ raw_text: "1 tbsp doubanjiang" }, { raw_text: "1 tsp soy sauce" }],
+      },
+      { name: "Slurry", ingredients: [{ raw_text: "2 tsp cornstarch" }] },
+    ]);
+  });
+
+  // Steps group BY RUN, so the two top-level stretches stay on either side of
+  // the section rather than merging — and a bare string sits in a run beside a
+  // HowToStep, since the validator has already wrapped it as one.
+  it("keeps a page's HowToSections as named runs between the top-level steps", async () => {
+    const { createRecipeRow } = await import("@/lib/recipes");
+    vi.mocked(createRecipeRow).mockResolvedValueOnce(makeRecipe("r1", "Mapo Tofu"));
+
+    await createRecipeFromSchema(
+      recipeCreateFromSchemaInputSchema.parse({
+        name: "Mapo Tofu",
+        recipeInstructions: [
+          "Press the tofu.",
+          { "@type": "HowToStep", text: "Mince the garlic." },
+          {
+            "@type": "HowToSection",
+            name: "Sauce",
+            itemListElement: [{ "@type": "HowToStep", text: "Fry the paste." }],
+          },
+          { "@type": "HowToStep", text: "Serve." },
+        ],
+      }),
+    );
+
+    expect(vi.mocked(createRecipeRow).mock.calls[0][0].instructions).toEqual([
+      { steps: [{ text: "Press the tofu." }, { text: "Mince the garlic." }] },
+      { name: "Sauce", steps: [{ text: "Fry the paste." }] },
+      { steps: [{ text: "Serve." }] },
+    ]);
+  });
+
+  // A timer needs both halves: the duration is dropped from a step with no
+  // name, because there would be nothing to label the timer with.
+  it("turns a labelled step's timeRequired into the timer's seconds", async () => {
+    const { createRecipeRow } = await import("@/lib/recipes");
+    vi.mocked(createRecipeRow).mockResolvedValueOnce(makeRecipe("r1", "X"));
+
+    await createRecipeFromSchema(
+      recipeCreateFromSchemaInputSchema.parse({
+        name: "X",
+        recipeInstructions: [
+          {
+            "@type": "HowToStep",
+            name: "Simmer",
+            text: "Simmer until thick.",
+            timeRequired: "PT10M",
+          },
+          { "@type": "HowToStep", text: "Serve.", timeRequired: "PT5M" },
+        ],
+      }),
+    );
+
+    expect(vi.mocked(createRecipeRow).mock.calls[0][0].instructions).toEqual([
+      {
+        steps: [
+          { text: "Simmer until thick.", name: "Simmer", seconds: 600 },
+          { text: "Serve." },
+        ],
+      },
     ]);
   });
 

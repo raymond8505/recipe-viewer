@@ -1,6 +1,7 @@
 // @vitest-environment node
 import { describe, it, expect } from "vitest";
 import {
+  INGREDIENT_LINE_MAX_LENGTH,
   recipeCreateFromSchemaInputSchema,
   recipeCreateInputSchema,
   recipeImageUploadInputSchema,
@@ -293,18 +294,52 @@ describe("recipeCreateFromSchemaInputSchema", () => {
     expect(result.data).toEqual({ name: "X" });
   });
 
-  // A short list would be read as the recipe's own, with no sign a line was lost.
-  it("rejects a blank line or step rather than dropping it", () => {
+  // A short list would be read as the recipe's own, with no sign a line was
+  // lost — so a blank fails the call in every spelling, object forms included.
+  it.each([
+    ["ingredient string", { recipeIngredient: ["1 egg", "   "] }],
+    ["ingredient object's name", { recipeIngredient: [{ name: "  ", group: "Sauce" }] }],
+    ["step string", { recipeInstructions: [""] }],
+    ["HowToStep's text", { recipeInstructions: [{ text: "  " }] }],
+    [
+      "step inside a HowToSection",
+      {
+        recipeInstructions: [
+          { "@type": "HowToSection", name: "Sauce", itemListElement: [{ text: "" }] },
+        ],
+      },
+    ],
+  ])("rejects a blank %s rather than dropping it", (_spelling, blank) => {
     expect(
-      recipeCreateFromSchemaInputSchema.safeParse({
+      recipeCreateFromSchemaInputSchema.safeParse({ name: "X", ...blank }).success,
+    ).toBe(false);
+  });
+
+  // A bare step string is wrapped here, not at the parse site, which is what
+  // lets fromSchemaOrgInstructions read a flat list as one nameless group.
+  it("wraps a bare step string as a HowToStep and leaves the objects alone", () => {
+    const section = {
+      "@type": "HowToSection",
+      name: "Sauce",
+      itemListElement: [{ text: "Fry the paste." }],
+    };
+    expect(
+      recipeCreateFromSchemaInputSchema.parse({
         name: "X",
-        recipeIngredient: ["1 egg", "   "],
-      }).success,
-    ).toBe(false);
+        recipeInstructions: ["Press the tofu.", { text: "Mince." }, section],
+      }).recipeInstructions,
+    ).toEqual([{ text: "Press the tofu." }, { text: "Mince." }, section]);
+  });
+
+  // The group extension rides through untouched; the grouping itself is
+  // fromSchemaOrgIngredients' job, not the validator's.
+  it("accepts a line as a string or as { name, group }", () => {
     expect(
-      recipeCreateFromSchemaInputSchema.safeParse({ name: "X", recipeInstructions: [""] })
-        .success,
-    ).toBe(false);
+      recipeCreateFromSchemaInputSchema.parse({
+        name: "X",
+        recipeIngredient: ["1 egg", { name: "1 tbsp doubanjiang", group: "Sauce" }],
+      }).recipeIngredient,
+    ).toEqual(["1 egg", { name: "1 tbsp doubanjiang", group: "Sauce" }]);
   });
 
   it("requires a name and rejects a url that is not one", () => {
@@ -316,13 +351,18 @@ describe("recipeCreateFromSchemaInputSchema", () => {
     ).toBe(false);
   });
 
-  // The cap recipe_ingredients.raw_text is written under, applied at this edge
-  // too so an over-long line fails here rather than at the insert.
-  it("rejects an ingredient line past the raw_text cap", () => {
+  // One cap for both spellings, so a line cannot slip past it by arriving as an
+  // object — and it bites here rather than at the insert.
+  it("rejects an over-long ingredient line in either spelling", () => {
+    const tooLong = "a".repeat(INGREDIENT_LINE_MAX_LENGTH + 1);
+    expect(
+      recipeCreateFromSchemaInputSchema.safeParse({ name: "X", recipeIngredient: [tooLong] })
+        .success,
+    ).toBe(false);
     expect(
       recipeCreateFromSchemaInputSchema.safeParse({
         name: "X",
-        recipeIngredient: ["a".repeat(501)],
+        recipeIngredient: [{ name: tooLong }],
       }).success,
     ).toBe(false);
   });

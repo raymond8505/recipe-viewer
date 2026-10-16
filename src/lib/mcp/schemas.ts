@@ -15,7 +15,11 @@ import {
 } from "@/lib/schemas/ingredient";
 import { FOOD_PORTION_UNIQUE_RULE } from "@/lib/foodPortions";
 import { CUSTOM_RECIPE_SOURCE } from "@/lib/format";
-import { ARCHIVED_RECIPE_STATUS, RECIPE_STATUSES } from "@/lib/schemas/recipe";
+import {
+  ARCHIVED_RECIPE_STATUS,
+  INGREDIENT_LINE_MAX_LENGTH,
+  RECIPE_STATUSES,
+} from "@/lib/schemas/recipe";
 import { NUTRITION_FIELDS, type NutritionField } from "@/lib/nutritionFields";
 import { METRIC_YIELD_UNITS } from "@/lib/units";
 import {
@@ -124,6 +128,30 @@ const schemaOrgRecipeJsonSchema = {
       description:
         "The steps as a scraper produces them: an array of HowToStep ({ text, name?, timeRequired? }) and HowToSection ({ name, itemListElement: HowToStep[] }) objects. The server turns these into instruction groups; read them back as `instructions`.",
       items: { type: "object" },
+    },
+  },
+} as const;
+
+// Schema.org/HowToStep, as a page publishes one. Named here because a
+// HowToSection's itemListElement is an array of exactly this.
+const howToStepJsonSchema = {
+  type: "object",
+  required: ["text"],
+  description: "Schema.org/HowToStep.",
+  properties: {
+    "@type": {
+      type: "string",
+      description: 'Optional — "HowToStep" where the page spells it out.',
+    },
+    text: { type: "string", description: "The step as the recipe says it." },
+    name: {
+      type: "string",
+      description: 'Short label, e.g. "Simmer" — also the label on its cook-mode timer.',
+    },
+    timeRequired: {
+      type: "string",
+      description:
+        "ISO 8601 duration (e.g. PT10M). Becomes a cook-mode timer, which needs a name to label it.",
     },
   },
 } as const;
@@ -457,14 +485,48 @@ export const TOOL_SCHEMAS = {
       recipeIngredient: {
         type: "array",
         description:
-          'The ingredient lines, one string per line, exactly as the recipe writes them ("2 tsp cumin seed"). Do not split off the quantity or the unit — the server parses each line and matches it to the catalog.',
-        items: { type: "string", maxLength: 500 },
+          'The ingredient lines, one entry per line, exactly as the recipe writes them ("2 tsp cumin seed"). A plain string is the whole of it for an ungrouped list; use { name, group } for a line the recipe files under a heading ("For the sauce"), and the server builds those groups in first-appearance order. Do not split off the quantity or the unit — the server parses each line and matches it to the catalog.',
+        items: {
+          oneOf: [
+            { type: "string", maxLength: INGREDIENT_LINE_MAX_LENGTH },
+            {
+              type: "object",
+              required: ["name"],
+              properties: {
+                name: {
+                  type: "string",
+                  maxLength: INGREDIENT_LINE_MAX_LENGTH,
+                  description: "The line itself, as the recipe writes it.",
+                },
+                group: {
+                  type: "string",
+                  description: "The heading this line sits under; omit it for the ungrouped list.",
+                },
+              },
+            },
+          ],
+        },
       },
       recipeInstructions: {
         type: "array",
         description:
-          "The steps, one STRING per step, in order. A page that publishes HowToStep objects or HowToSections gives you objects — pass each step's `text`, flattening the sections into this one ordered list.",
-        items: { type: "string" },
+          "The steps, in order, one entry per step. A plain string is enough for a step that is only its text; pass a page's HowToStep objects and HowToSections through as they stand when it publishes them, and the sections become the recipe's instruction sections and a timeRequired becomes a cook-mode timer.",
+        items: {
+          oneOf: [
+            { type: "string", description: "A step that is only its text." },
+            howToStepJsonSchema,
+            {
+              type: "object",
+              required: ["@type", "name", "itemListElement"],
+              description: "Schema.org/HowToSection — a named run of steps.",
+              properties: {
+                "@type": { type: "string", enum: ["HowToSection"] },
+                name: { type: "string", description: "Section heading." },
+                itemListElement: { type: "array", items: howToStepJsonSchema },
+              },
+            },
+          ],
+        },
       },
       url: {
         type: "string",

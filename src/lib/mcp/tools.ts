@@ -353,8 +353,9 @@ export async function createRecipe(
 
 /**
  * `create_recipe`'s flat twin, for a caller holding a page's JSON-LD: the
- * Schema.org Recipe IS the argument object, its lines and steps are string
- * arrays, and the response says only that the row exists and where.
+ * Schema.org Recipe IS the argument object, `source` follows from the url
+ * rather than being asked for, and the response says only that the row exists
+ * and where.
  *
  * The catalog matching this promises is `createRecipeRow`'s — it mints a
  * `recipe_ingredients` row per line and schedules the normalization run that
@@ -377,11 +378,7 @@ export async function createRecipeFromSchema(
       // had a human eye on it yet.
       schema,
       ingredients: fromSchemaOrgIngredients(recipeIngredient ?? []),
-      // A step is its text and nothing else, which is what a flat list of
-      // strings means: one nameless group, no sections, no cook-mode timers.
-      instructions: fromSchemaOrgInstructions(
-        (recipeInstructions ?? []).map((text) => ({ text })),
-      ),
+      instructions: fromSchemaOrgInstructions(recipeInstructions),
     });
     return { created: true, id: row.id, url: row.url };
   } catch (err) {

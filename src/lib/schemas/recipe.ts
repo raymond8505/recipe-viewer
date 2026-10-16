@@ -23,11 +23,18 @@ export const schemaOrgIngredientLineSchema = z.union([
   }),
 ]);
 
+/**
+ * The cap on one ingredient line's text, at every edge that accepts a line.
+ * `recipe_ingredients.raw_text` is unbounded `text`, so this is a sanity bound
+ * on what a writer may send rather than a storage limit.
+ */
+export const INGREDIENT_LINE_MAX_LENGTH = 500;
+
 // What a writer sends for a recipe's ingredients: groups of lines, each line
 // naming the row it already is (`id`) or arriving as text alone (a new row).
 export const recipeIngredientLineInputSchema = z.object({
   id: z.string().min(1).optional(),
-  raw_text: z.string().trim().min(1).max(500),
+  raw_text: z.string().trim().min(1).max(INGREDIENT_LINE_MAX_LENGTH),
 });
 
 export const recipeIngredientGroupInputSchema = z.object({
@@ -257,20 +264,62 @@ export const recipeCreateInputSchema = z
   })
   .refine(sourceRequiredWithUrl, SOURCE_REQUIRED_WITH_URL_ISSUE);
 
-// The plain-Schema.org edge, for a caller holding a page's JSON-LD and nothing
-// else: the arguments ARE the Recipe, its lines and steps are string arrays,
-// and `source` is derived from `url` rather than asked for.
-//
-// A fresh object rather than an extension of schemaOrgRecipeInputSchema, and
-// deliberately not `.passthrough()`. The unions that schema accepts on
-// recipeIngredient / recipeInstructions / recipeYield are the complexity this
-// exists to avoid, and listing only the fields the app reads keeps the rest of
-// a scraped blob — image, nutrition, aggregateRating, video — out of storage.
-// One author, however the page spells it.
+// The three pieces the plain-Schema.org edge below is assembled from: one
+// author name, one ingredient line, one step.
 const authorNameSchema = z
   .union([z.string().trim().min(1), z.object({ name: z.string().trim().min(1) })])
   .transform((author) => (typeof author === "string" ? author : author.name));
 
+// One ingredient line: the plain string a flat JSON-LD list gives you, or the
+// object form a page uses to put the line under a named group. Stricter about
+// blanks than the schemaOrgIngredientLineSchema create_recipe shares — a blank
+// entry fails the call, because dropping it would leave a short list that reads
+// as the recipe's own, with nothing to show a line went missing.
+const ingredientLineTextSchema = z
+  .string()
+  .trim()
+  .min(1)
+  .max(INGREDIENT_LINE_MAX_LENGTH);
+
+const createFromSchemaLineSchema = z.union([
+  ingredientLineTextSchema,
+  // `group` is not held to that: fromSchemaOrgIngredients reads a blank one as
+  // "ungrouped", so rejecting the whole paste over an empty heading would throw
+  // the lines away to protect a heading nobody needs.
+  z.object({ name: ingredientLineTextSchema, group: z.string().optional() }),
+]);
+
+/** A HowToStep held to the same no-blanks rule as a line. */
+const nonBlankHowToStepSchema = howToStepSchema.extend({
+  text: z.string().trim().min(1),
+});
+
+// One step, in all three spellings a page offers: a bare string, a HowToStep, or
+// a HowToSection carrying its own run. The bare string is wrapped as a
+// `{ text }` HowToStep here rather than at the parse site — beside the author
+// and the numeric yield, for the same reason — and that wrap is what makes a
+// flat list of strings exactly one nameless group.
+const createFromSchemaStepSchema = z.union([
+  z
+    .string()
+    .trim()
+    .min(1)
+    .transform((text) => ({ text })),
+  nonBlankHowToStepSchema,
+  howToSectionSchema.extend({ itemListElement: z.array(nonBlankHowToStepSchema) }),
+]);
+
+// The plain-Schema.org edge, for a caller holding a page's JSON-LD and nothing
+// else: the arguments ARE the Recipe, and `source` is derived from `url` rather
+// than asked for.
+//
+// A fresh object rather than an extension of schemaOrgRecipeInputSchema, and
+// deliberately not `.passthrough()`: listing only the fields the app reads keeps
+// the rest of a scraped blob — image, nutrition, aggregateRating, video — out of
+// storage. Lines and steps arrive in either spelling the vocabulary allows, so a
+// page's named ingredient groups, HowToSections and step timers all survive this
+// edge. `recipeYield` is the one shape it still narrows (flat, no
+// QuantitativeValue) — and the author, however the page spells it.
 export const recipeCreateFromSchemaInputSchema = z.object({
   name: z.string().trim().min(1),
   description: z.string().optional(),
@@ -295,12 +344,9 @@ export const recipeCreateFromSchemaInputSchema = z.object({
   // A bare number is legal JSON-LD ("recipeYield": 4) and `parseYield` reads the
   // string form, so the coercion belongs here rather than at the parse site.
   recipeYield: z.union([z.string(), z.number()]).transform(String).optional(),
-  // One entry per line and per step. A blank entry fails the call: dropping it
-  // would leave a short list that reads as the recipe's own, with nothing to
-  // show a line went missing. The 500 cap is `raw_text`'s, shared with
-  // recipeIngredientLineInputSchema.
-  recipeIngredient: z.array(z.string().trim().min(1).max(500)).optional(),
-  recipeInstructions: z.array(z.string().trim().min(1)).optional(),
+  // One entry per line and per step, in whichever spelling the page uses.
+  recipeIngredient: z.array(createFromSchemaLineSchema).optional(),
+  recipeInstructions: z.array(createFromSchemaStepSchema).optional(),
   // Optional for the same reason as on create: no url of its own is what
   // "authored on this instance" means. `source` follows from it — see
   // recipeSourceForUrl — so there is no second field to keep consistent.

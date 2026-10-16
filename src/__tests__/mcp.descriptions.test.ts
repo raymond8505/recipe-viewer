@@ -56,6 +56,7 @@ import {
 import {
   ARCHIVED_RECIPE_STATUS,
   DEFAULT_RECIPE_STATUS,
+  INGREDIENT_LINE_MAX_LENGTH,
 } from "@/lib/schemas/recipe";
 import { IMAGE_CONTENT_TYPES } from "@/lib/imageTypes";
 
@@ -209,10 +210,44 @@ describe("the two recipe-create tools", () => {
     expect(TOOL_SCHEMAS.create_recipe_from_schema.additionalProperties).toBe(true);
   });
 
-  it("asks for lines and steps as plain strings", () => {
+  // The string spelling is what makes this the easy tool, and it is listed
+  // first for that reason; the object spellings are what keep a recipe with
+  // groups, sections or timers from having to drop to create_recipe.
+  it("offers lines and steps in both spellings, the plain string first", () => {
     const { properties } = TOOL_SCHEMAS.create_recipe_from_schema;
-    expect(properties.recipeIngredient.items.type).toBe("string");
-    expect(properties.recipeInstructions.items.type).toBe("string");
+    expect(properties.recipeIngredient.items.oneOf.map((form) => form.type)).toEqual([
+      "string",
+      "object",
+    ]);
+    expect(properties.recipeInstructions.items.oneOf.map((form) => form.type)).toEqual([
+      "string",
+      "object",
+      "object",
+    ]);
+  });
+
+  // A client validating arguments against this schema must reject exactly the
+  // lines the server's validator would, so the cap is one constant.
+  it("caps an ingredient line where the validator caps it, in both spellings", () => {
+    const [asString, asObject] =
+      TOOL_SCHEMAS.create_recipe_from_schema.properties.recipeIngredient.items.oneOf;
+    expect(asString.maxLength).toBe(INGREDIENT_LINE_MAX_LENGTH);
+    expect(asObject.properties.name.maxLength).toBe(INGREDIENT_LINE_MAX_LENGTH);
+  });
+
+  // A section's steps are HowToSteps, so both places that take one must offer
+  // the same fields — including timeRequired, or a timer inside a section has
+  // nowhere to be declared.
+  it("describes a section's steps with the same HowToStep shape as a top-level step", () => {
+    const [, topLevelStep, section] =
+      TOOL_SCHEMAS.create_recipe_from_schema.properties.recipeInstructions.items.oneOf;
+    expect(section.properties.itemListElement.items).toBe(topLevelStep);
+    expect(Object.keys(topLevelStep.properties)).toEqual([
+      "@type",
+      "text",
+      "name",
+      "timeRequired",
+    ]);
   });
 });
 
