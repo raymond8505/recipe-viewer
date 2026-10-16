@@ -61,8 +61,8 @@ vi.mock("@/lib/embedding", () => ({ generateEmbedding: vi.fn() }));
 import {
   clearCookingNotes,
   createIngredient,
-  createRecipe,
-  createRecipeFromSchema,
+  createRecipeDetailed,
+  createRecipeSimple,
   deleteIngredient,
   deleteRecipe,
   getIngredient,
@@ -92,7 +92,7 @@ import {
   ingredientUpdateToolInputSchema,
   NUTRITION_BASIS_REQUIRED,
 } from "@/lib/schemas/ingredient";
-import { recipeCreateFromSchemaInputSchema } from "@/lib/schemas/recipe";
+import { recipeCreateSimpleInputSchema } from "@/lib/schemas/recipe";
 
 describe("searchIngredients", () => {
   beforeEach(() => vi.clearAllMocks());
@@ -682,7 +682,7 @@ describe("getToken", () => {
   });
 });
 
-describe("createRecipe", () => {
+describe("createRecipeDetailed", () => {
   beforeEach(() => vi.clearAllMocks());
 
   it("delegates to createRecipeRow and passes through the row", async () => {
@@ -696,7 +696,7 @@ describe("createRecipe", () => {
     } as never;
     vi.mocked(createRecipeRow).mockResolvedValueOnce(inserted);
 
-    const out = await createRecipe({
+    const out = await createRecipeDetailed({
       url: "https://example.com/r",
       source: "example.com",
       schema: { name: "New" },
@@ -717,7 +717,7 @@ describe("createRecipe", () => {
       metadata: { schema: { name: "New" } },
     } as never);
 
-    await createRecipe({ source: "example.com", schema: { name: "New" } });
+    await createRecipeDetailed({ source: "example.com", schema: { name: "New" } });
 
     const arg = vi.mocked(createRecipeRow).mock.calls[0][0];
     expect(arg.id).toMatch(
@@ -740,7 +740,7 @@ describe("createRecipe", () => {
       metadata: { schema: { name: "New" } },
     } as never);
 
-    await createRecipe({ schema: { name: "New" } });
+    await createRecipeDetailed({ schema: { name: "New" } });
 
     const arg = vi.mocked(createRecipeRow).mock.calls[0][0];
     expect(arg.source).toBe("custom");
@@ -760,7 +760,7 @@ describe("createRecipe", () => {
       metadata: { schema: { name: "New" } },
     } as never);
 
-    await createRecipe({
+    await createRecipeDetailed({
       source: "example.com",
       schema: {
         name: "New",
@@ -790,7 +790,7 @@ describe("createRecipe", () => {
       metadata: { schema: { name: "New" } },
     } as never);
 
-    await createRecipe({
+    await createRecipeDetailed({
       source: "example.com",
       schema: {
         name: "New",
@@ -818,7 +818,7 @@ describe("createRecipe", () => {
       metadata: { schema: { name: "New" } },
     } as never);
 
-    await createRecipe({ source: "instagram.com", schema: { name: "New" } });
+    await createRecipeDetailed({ source: "instagram.com", schema: { name: "New" } });
 
     expect(vi.mocked(createRecipeRow).mock.calls[0][0].source).toBe("instagram.com");
   });
@@ -833,7 +833,7 @@ describe("createRecipe", () => {
       metadata: { schema: { name: "New" } },
     } as never);
 
-    const out = await createRecipe({
+    const out = await createRecipeDetailed({
       source: "example.com",
       schema: { name: "New", cookingNotes: "should be stripped" },
     });
@@ -847,12 +847,12 @@ describe("createRecipe", () => {
     const { createRecipeRow } = await import("@/lib/recipes");
     vi.mocked(createRecipeRow).mockRejectedValueOnce(new RecipeRepoError("insert_failed", "RLS"));
     await expect(
-      createRecipe({ url: "https://example.com/r", source: "x", schema: { name: "X" } }),
+      createRecipeDetailed({ url: "https://example.com/r", source: "x", schema: { name: "X" } }),
     ).rejects.toMatchObject({ code: "create_failed" });
   });
 });
 
-describe("createRecipeFromSchema", () => {
+describe("createRecipeSimple", () => {
   beforeEach(() => vi.clearAllMocks());
 
   // A flat list of strings is exactly one nameless group on both sides — the
@@ -863,8 +863,8 @@ describe("createRecipeFromSchema", () => {
     const { createRecipeRow } = await import("@/lib/recipes");
     vi.mocked(createRecipeRow).mockResolvedValueOnce(makeRecipe("r1", "Mapo Tofu"));
 
-    await createRecipeFromSchema(
-      recipeCreateFromSchemaInputSchema.parse({
+    await createRecipeSimple(
+      recipeCreateSimpleInputSchema.parse({
         name: "Mapo Tofu",
         recipeIngredient: ["1 block tofu", "1 tbsp doubanjiang"],
         recipeInstructions: ["Fry the paste.", "Add the tofu."],
@@ -887,8 +887,8 @@ describe("createRecipeFromSchema", () => {
     const { createRecipeRow } = await import("@/lib/recipes");
     vi.mocked(createRecipeRow).mockResolvedValueOnce(makeRecipe("r1", "Mapo Tofu"));
 
-    await createRecipeFromSchema(
-      recipeCreateFromSchemaInputSchema.parse({
+    await createRecipeSimple(
+      recipeCreateSimpleInputSchema.parse({
         name: "Mapo Tofu",
         recipeIngredient: [
           "1 block tofu",
@@ -917,8 +917,8 @@ describe("createRecipeFromSchema", () => {
     const { createRecipeRow } = await import("@/lib/recipes");
     vi.mocked(createRecipeRow).mockResolvedValueOnce(makeRecipe("r1", "Mapo Tofu"));
 
-    await createRecipeFromSchema(
-      recipeCreateFromSchemaInputSchema.parse({
+    await createRecipeSimple(
+      recipeCreateSimpleInputSchema.parse({
         name: "Mapo Tofu",
         recipeInstructions: [
           "Press the tofu.",
@@ -946,8 +946,8 @@ describe("createRecipeFromSchema", () => {
     const { createRecipeRow } = await import("@/lib/recipes");
     vi.mocked(createRecipeRow).mockResolvedValueOnce(makeRecipe("r1", "X"));
 
-    await createRecipeFromSchema(
-      recipeCreateFromSchemaInputSchema.parse({
+    await createRecipeSimple(
+      recipeCreateSimpleInputSchema.parse({
         name: "X",
         recipeInstructions: [
           {
@@ -975,7 +975,7 @@ describe("createRecipeFromSchema", () => {
     const { createRecipeRow } = await import("@/lib/recipes");
     vi.mocked(createRecipeRow).mockResolvedValueOnce(makeRecipe("r1", "X"));
 
-    await createRecipeFromSchema({ name: "X", url: "https://www.seriouseats.com/mapo" });
+    await createRecipeSimple({ name: "X", url: "https://www.seriouseats.com/mapo" });
 
     const arg = vi.mocked(createRecipeRow).mock.calls[0][0];
     expect(arg.source).toBe("seriouseats.com");
@@ -986,7 +986,7 @@ describe("createRecipeFromSchema", () => {
     const { createRecipeRow } = await import("@/lib/recipes");
     vi.mocked(createRecipeRow).mockResolvedValueOnce(makeRecipe("r1", "X"));
 
-    await createRecipeFromSchema({ name: "X" });
+    await createRecipeSimple({ name: "X" });
 
     const arg = vi.mocked(createRecipeRow).mock.calls[0][0];
     expect(arg.url).toBe(`http://localhost:3000/recipes/${arg.id}`);
@@ -999,7 +999,7 @@ describe("createRecipeFromSchema", () => {
     const { createRecipeRow } = await import("@/lib/recipes");
     vi.mocked(createRecipeRow).mockResolvedValueOnce(makeRecipe("r1", "X"));
 
-    await createRecipeFromSchema({ name: "X", url: "http://localhost:3000/recipes/abc" });
+    await createRecipeSimple({ name: "X", url: "http://localhost:3000/recipes/abc" });
 
     expect(vi.mocked(createRecipeRow).mock.calls[0][0].source).toBe("custom");
   });
@@ -1008,7 +1008,7 @@ describe("createRecipeFromSchema", () => {
     const { createRecipeRow } = await import("@/lib/recipes");
     vi.mocked(createRecipeRow).mockResolvedValueOnce(makeRecipe("r1", "X"));
 
-    await createRecipeFromSchema({ name: "X" });
+    await createRecipeSimple({ name: "X" });
 
     expect(vi.mocked(createRecipeRow).mock.calls[0][0].status).toBeUndefined();
   });
@@ -1019,8 +1019,8 @@ describe("createRecipeFromSchema", () => {
     const { createRecipeRow } = await import("@/lib/recipes");
     vi.mocked(createRecipeRow).mockResolvedValueOnce(makeRecipe("r1", "X"));
 
-    await createRecipeFromSchema(
-      recipeCreateFromSchemaInputSchema.parse({ name: "X", recipeYield: 4 }),
+    await createRecipeSimple(
+      recipeCreateSimpleInputSchema.parse({ name: "X", recipeYield: 4 }),
     );
 
     expect(vi.mocked(createRecipeRow).mock.calls[0][0].schema.recipeYield).toBe("4");
@@ -1032,8 +1032,8 @@ describe("createRecipeFromSchema", () => {
     const { createRecipeRow } = await import("@/lib/recipes");
     vi.mocked(createRecipeRow).mockResolvedValueOnce(makeRecipe("r1", "X"));
 
-    await createRecipeFromSchema(
-      recipeCreateFromSchemaInputSchema.parse({
+    await createRecipeSimple(
+      recipeCreateSimpleInputSchema.parse({
         name: "X",
         image: "https://example.com/x.jpg",
         nutrition: { calories: "200 kcal" },
@@ -1052,7 +1052,7 @@ describe("createRecipeFromSchema", () => {
     const { createRecipeRow } = await import("@/lib/recipes");
     vi.mocked(createRecipeRow).mockResolvedValueOnce(makeRecipe("new-id", "X"));
 
-    await expect(createRecipeFromSchema({ name: "X" })).resolves.toEqual({
+    await expect(createRecipeSimple({ name: "X" })).resolves.toEqual({
       created: true,
       id: "new-id",
       url: "https://new.raymonds.recipes/recipes/new-id",
@@ -1062,7 +1062,7 @@ describe("createRecipeFromSchema", () => {
   it("translates RecipeRepoError to ToolError(create_failed)", async () => {
     const { createRecipeRow } = await import("@/lib/recipes");
     vi.mocked(createRecipeRow).mockRejectedValueOnce(new RecipeRepoError("insert_failed", "RLS"));
-    await expect(createRecipeFromSchema({ name: "X" })).rejects.toMatchObject({
+    await expect(createRecipeSimple({ name: "X" })).rejects.toMatchObject({
       code: "create_failed",
     });
   });

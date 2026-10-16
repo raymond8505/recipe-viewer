@@ -40,7 +40,7 @@ export interface RecipeIngredientReconcile {
  *
  * A line with no usable id falls back to an unclaimed row with the same text.
  * That is a shim for writers that don't carry ids — a re-scrape, an MCP
- * `create_recipe`, an agent posting bare strings — and it exists because the
+ * an MCP create tool, an agent posting bare strings — and it exists because the
  * alternative is worse in exactly the common case: without it, a re-scrape
  * carrying unchanged text recreates every row and drops every catalog
  * association a user curated. Repeated identical lines carry over

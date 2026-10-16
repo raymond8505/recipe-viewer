@@ -2,7 +2,7 @@
 // validators, used in the `tools/list` response so MCP clients can do client-
 // side argument validation.
 //
-// The actual zod validators (recipeSearchInputSchema, recipeCreateInputSchema,
+// The actual zod validators (recipeSearchInputSchema, recipeCreateDetailedInputSchema,
 // etc.) live in `@/lib/schemas/recipe` so they're reusable by non-MCP callers
 // (API route handlers, form validators). The JSON Schema map below is the
 // only thing here that is genuinely MCP-protocol-specific — it describes the
@@ -34,7 +34,7 @@ import { TOOL, type ToolName } from "./toolNames";
 
 // The stored recipe: everything but the ingredients and instructions, which
 // live on the row as `ingredients` / `instructions` (see
-// recipeIngredientsJsonSchema / recipeInstructionsJsonSchema). create_recipe
+// recipeIngredientsJsonSchema / recipeInstructionsJsonSchema). create_recipe_detailed
 // takes the Schema.org form below, with `recipeIngredient` and
 // `recipeInstructions` added back for scrapes.
 const storedRecipeJsonSchema = {
@@ -60,7 +60,7 @@ const storedRecipeJsonSchema = {
     notes: { type: "string", description: "App-internal notes (not part of Schema.org/Recipe)" },
     cookingNotes: {
       type: "string",
-      description: `App-internal cooking notes — READ-ONLY for agents. Ignored by ${TOOL.create_recipe}/${TOOL.update_recipe} (the call still succeeds with a warning). Authored by users in cooking mode; clear it via the ${TOOL.clear_cooking_notes} tool.`,
+      description: `App-internal cooking notes — READ-ONLY for agents. Ignored by ${TOOL.create_recipe_detailed}/${TOOL.update_recipe} (the call still succeeds with a warning). Authored by users in cooking mode; clear it via the ${TOOL.clear_cooking_notes} tool.`,
     },
   },
   additionalProperties: true,
@@ -68,7 +68,7 @@ const storedRecipeJsonSchema = {
 
 // A Schema.org Recipe as a scraper produces it: the stored fields plus
 // `recipeIngredient`, whose `group` objects are this app's extension, and
-// `recipeInstructions`. Only create_recipe takes it; both become groups
+// `recipeInstructions`. Only create_recipe_detailed takes it; both become groups
 // server-side.
 const schemaOrgRecipeJsonSchema = {
   ...storedRecipeJsonSchema,
@@ -418,7 +418,7 @@ export const TOOL_SCHEMAS = {
       },
     },
   },
-  create_recipe: {
+  create_recipe_detailed: {
     type: "object",
     required: ["schema"],
     properties: {
@@ -436,11 +436,11 @@ export const TOOL_SCHEMAS = {
       schema: schemaOrgRecipeJsonSchema,
     },
   },
-  // The flat twin of create_recipe: the properties ARE a Schema.org Recipe's,
-  // with no wrapper object and no status. `additionalProperties` is open on
-  // purpose — a caller pastes a page's whole JSON-LD, and the extra keys it
-  // carries are dropped by the validator rather than rejected by the client.
-  create_recipe_from_schema: {
+  // The simplified twin: the properties ARE the recipe's, with no wrapper object
+  // and no status. `additionalProperties` is open on purpose — a caller pastes a
+  // page's whole JSON-LD, and the extra keys it carries are dropped by the
+  // validator rather than rejected by the client.
+  create_recipe_simple: {
     type: "object",
     required: ["name"],
     additionalProperties: true,

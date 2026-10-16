@@ -691,8 +691,8 @@ function stepFromSchemaOrg(item: HowToStep): RecipeStep[] {
 }
 
 /**
- * The inbound edge: `recipeInstructions` as create_recipe or the re-scrape
- * webhook delivers it → canonical groups. The wire form is the array
+ * The inbound edge: `recipeInstructions` as either MCP create tool or the
+ * re-scrape webhook delivers it → canonical groups. The wire form is the array
  * `schemaOrgRecipeInputSchema` validates: HowToStep objects, `@type` optional,
  * and HowToSections whose `itemListElement` is an array of them. Anything but
  * an array is no steps: a string is iterable too, and iterating it would yield

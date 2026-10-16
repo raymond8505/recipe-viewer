@@ -50,8 +50,8 @@ import type {
   SchemaRecipe,
 } from "@/types/recipe";
 import type {
-  RecipeCreateFromSchemaInput,
-  RecipeCreateInput,
+  RecipeCreateSimpleInput,
+  RecipeCreateDetailedInput,
   RecipeIdInput,
   RecipeImageUploadInput,
   RecipeSearchInput,
@@ -315,8 +315,8 @@ const COOKING_NOTES_IGNORED_WARNING =
 
 export type RecipeRowWithWarnings = RecipeRow & { warnings?: string[] };
 
-export async function createRecipe(
-  args: RecipeCreateInput,
+export async function createRecipeDetailed(
+  args: RecipeCreateDetailedInput,
 ): Promise<RecipeRowWithWarnings> {
   // The inbound Schema.org edge: scrapes arrive with `recipeIngredient` and
   // `recipeInstructions`, which become groups here and never reach the stored
@@ -352,18 +352,21 @@ export async function createRecipe(
 }
 
 /**
- * `create_recipe`'s flat twin, for a caller holding a page's JSON-LD: the
- * Schema.org Recipe IS the argument object, `source` follows from the url
- * rather than being asked for, and the response says only that the row exists
- * and where.
+ * The simplified create path, and the one most callers want: the recipe's
+ * fields ARE the argument object, `source` follows from the url rather than
+ * being asked for, and the response says only that the row exists and where.
+ * Its field names are Schema.org's, but it is a shape of this app's own
+ * choosing rather than a conformant Recipe — which is the whole point, since a
+ * caller holding a page's JSON-LD can paste it and a caller holding nothing can
+ * write it. What it cannot express, `createRecipeDetailed` can.
  *
  * The catalog matching this promises is `createRecipeRow`'s — it mints a
  * `recipe_ingredients` row per line and schedules the normalization run that
  * matches them, leaving whatever it cannot resolve unmatched. Nothing is
  * awaited here, so the response cannot report what matched.
  */
-export async function createRecipeFromSchema(
-  args: RecipeCreateFromSchemaInput,
+export async function createRecipeSimple(
+  args: RecipeCreateSimpleInput,
 ): Promise<{ created: true; id: string; url: string }> {
   const { url: pageUrl, recipeIngredient, recipeInstructions, ...schema } = args;
   const id = crypto.randomUUID();

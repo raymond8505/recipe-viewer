@@ -2,8 +2,8 @@
 import { describe, it, expect } from "vitest";
 import {
   INGREDIENT_LINE_MAX_LENGTH,
-  recipeCreateFromSchemaInputSchema,
-  recipeCreateInputSchema,
+  recipeCreateSimpleInputSchema,
+  recipeCreateDetailedInputSchema,
   recipeImageUploadInputSchema,
   recipeInstructionsInputSchema,
   schemaOrgRecipeInputSchema,
@@ -100,20 +100,20 @@ describe("recipeImageUploadInputSchema", () => {
 });
 
 // `url` and `source` are coupled: omitting url means "authored on this
-// instance", and createRecipe fills in both defaults (own canonical URL +
+// instance", and createRecipeDetailed fills in both defaults (own canonical URL +
 // CUSTOM_RECIPE_SOURCE). Providing a url without a source is the one shape the
 // default must NOT cover — it would label someone else's page as the user's own
 // recipe, which is precisely what the Re-scrape control reads.
-describe("recipeCreateInputSchema — url/source coupling", () => {
+describe("recipeCreateDetailedInputSchema — url/source coupling", () => {
   const schema = { name: "Test Recipe" };
 
   it("accepts a create with neither url nor source", () => {
-    const result = recipeCreateInputSchema.safeParse({ schema });
+    const result = recipeCreateDetailedInputSchema.safeParse({ schema });
     expect(result.success).toBe(true);
   });
 
   it("rejects a url with no source, naming the source field", () => {
-    const result = recipeCreateInputSchema.safeParse({
+    const result = recipeCreateDetailedInputSchema.safeParse({
       url: "https://seriouseats.com/adana-kebab",
       schema,
     });
@@ -123,7 +123,7 @@ describe("recipeCreateInputSchema — url/source coupling", () => {
   });
 
   it("accepts a url with a source", () => {
-    const result = recipeCreateInputSchema.safeParse({
+    const result = recipeCreateDetailedInputSchema.safeParse({
       url: "https://seriouseats.com/adana-kebab",
       source: "seriouseats.com",
       schema,
@@ -132,7 +132,7 @@ describe("recipeCreateInputSchema — url/source coupling", () => {
   });
 
   it("accepts an explicit source with no url", () => {
-    const result = recipeCreateInputSchema.safeParse({
+    const result = recipeCreateDetailedInputSchema.safeParse({
       source: "instagram.com",
       schema,
     });
@@ -140,7 +140,7 @@ describe("recipeCreateInputSchema — url/source coupling", () => {
   });
 
   it("still rejects an empty-string source", () => {
-    const result = recipeCreateInputSchema.safeParse({ source: "", schema });
+    const result = recipeCreateDetailedInputSchema.safeParse({ source: "", schema });
     expect(result.success).toBe(false);
   });
 });
@@ -247,14 +247,14 @@ describe("totalWeightInputSchema", () => {
   });
 });
 
-describe("recipeCreateFromSchemaInputSchema", () => {
+describe("recipeCreateSimpleInputSchema", () => {
   // JSON-LD spells a yield either way, and parseYield reads only the string.
   it("accepts a yield as a number or a string, and stores the string", () => {
     expect(
-      recipeCreateFromSchemaInputSchema.parse({ name: "X", recipeYield: 4 }).recipeYield,
+      recipeCreateSimpleInputSchema.parse({ name: "X", recipeYield: 4 }).recipeYield,
     ).toBe("4");
     expect(
-      recipeCreateFromSchemaInputSchema.parse({ name: "X", recipeYield: "Makes 12 cookies" })
+      recipeCreateSimpleInputSchema.parse({ name: "X", recipeYield: "Makes 12 cookies" })
         .recipeYield,
     ).toBe("Makes 12 cookies");
   });
@@ -263,7 +263,7 @@ describe("recipeCreateFromSchemaInputSchema", () => {
   it("accepts an author as a name, a Person, or an array of either", () => {
     const expected = { "@type": "Person", name: "Kenji" };
     for (const author of ["Kenji", { name: "Kenji" }, [{ name: "Kenji" }], ["Kenji"]]) {
-      expect(recipeCreateFromSchemaInputSchema.parse({ name: "X", author }).author).toEqual(
+      expect(recipeCreateSimpleInputSchema.parse({ name: "X", author }).author).toEqual(
         expected,
       );
     }
@@ -271,7 +271,7 @@ describe("recipeCreateFromSchemaInputSchema", () => {
 
   it("keeps the first of several authors, having nowhere to put a second", () => {
     expect(
-      recipeCreateFromSchemaInputSchema.parse({
+      recipeCreateSimpleInputSchema.parse({
         name: "X",
         author: [{ name: "Diana Henry" }, { name: "Kenji" }],
       }).author,
@@ -281,7 +281,7 @@ describe("recipeCreateFromSchemaInputSchema", () => {
   // The tool's premise: a caller pastes a page's whole JSON-LD, and the keys
   // this app has no use for neither reach storage nor fail the call.
   it("drops the keys the app does not store rather than rejecting them", () => {
-    const result = recipeCreateFromSchemaInputSchema.safeParse({
+    const result = recipeCreateSimpleInputSchema.safeParse({
       "@context": "https://schema.org",
       "@type": "Recipe",
       name: "X",
@@ -311,7 +311,7 @@ describe("recipeCreateFromSchemaInputSchema", () => {
     ],
   ])("rejects a blank %s rather than dropping it", (_spelling, blank) => {
     expect(
-      recipeCreateFromSchemaInputSchema.safeParse({ name: "X", ...blank }).success,
+      recipeCreateSimpleInputSchema.safeParse({ name: "X", ...blank }).success,
     ).toBe(false);
   });
 
@@ -324,7 +324,7 @@ describe("recipeCreateFromSchemaInputSchema", () => {
       itemListElement: [{ text: "Fry the paste." }],
     };
     expect(
-      recipeCreateFromSchemaInputSchema.parse({
+      recipeCreateSimpleInputSchema.parse({
         name: "X",
         recipeInstructions: ["Press the tofu.", { text: "Mince." }, section],
       }).recipeInstructions,
@@ -335,7 +335,7 @@ describe("recipeCreateFromSchemaInputSchema", () => {
   // fromSchemaOrgIngredients' job, not the validator's.
   it("accepts a line as a string or as { name, group }", () => {
     expect(
-      recipeCreateFromSchemaInputSchema.parse({
+      recipeCreateSimpleInputSchema.parse({
         name: "X",
         recipeIngredient: ["1 egg", { name: "1 tbsp doubanjiang", group: "Sauce" }],
       }).recipeIngredient,
@@ -343,10 +343,10 @@ describe("recipeCreateFromSchemaInputSchema", () => {
   });
 
   it("requires a name and rejects a url that is not one", () => {
-    expect(recipeCreateFromSchemaInputSchema.safeParse({}).success).toBe(false);
-    expect(recipeCreateFromSchemaInputSchema.safeParse({ name: "  " }).success).toBe(false);
+    expect(recipeCreateSimpleInputSchema.safeParse({}).success).toBe(false);
+    expect(recipeCreateSimpleInputSchema.safeParse({ name: "  " }).success).toBe(false);
     expect(
-      recipeCreateFromSchemaInputSchema.safeParse({ name: "X", url: "seriouseats.com" })
+      recipeCreateSimpleInputSchema.safeParse({ name: "X", url: "seriouseats.com" })
         .success,
     ).toBe(false);
   });
@@ -356,11 +356,11 @@ describe("recipeCreateFromSchemaInputSchema", () => {
   it("rejects an over-long ingredient line in either spelling", () => {
     const tooLong = "a".repeat(INGREDIENT_LINE_MAX_LENGTH + 1);
     expect(
-      recipeCreateFromSchemaInputSchema.safeParse({ name: "X", recipeIngredient: [tooLong] })
+      recipeCreateSimpleInputSchema.safeParse({ name: "X", recipeIngredient: [tooLong] })
         .success,
     ).toBe(false);
     expect(
-      recipeCreateFromSchemaInputSchema.safeParse({
+      recipeCreateSimpleInputSchema.safeParse({
         name: "X",
         recipeIngredient: [{ name: tooLong }],
       }).success,

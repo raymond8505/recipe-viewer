@@ -2,7 +2,7 @@ import type { IngredientRow, RecipeIngredientRow } from "./ingredient";
 
 /**
  * The object form of a Schema.org `recipeIngredient` entry as it arrives from
- * outside — a scrape, `create_recipe` — carrying this app's
+ * outside — a scrape, either MCP create tool — carrying this app's
  * `group` extension. Inbound only: `fromSchemaOrgIngredients` turns a list of
  * these (or bare strings) into write input, and nothing internal reads them.
  */

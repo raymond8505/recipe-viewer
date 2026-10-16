@@ -153,7 +153,7 @@ describe("rendered prose constants", () => {
   it("renders the metric yield units in both forms", () => {
     expect(METRIC_UNIT_SLASHES).toBe("g/kg/ml/l");
     expect(METRIC_UNIT_OR_LIST).toBe('"g", "kg", "ml", or "l"');
-    expect(descriptionOf("create_recipe")).toContain(METRIC_UNIT_SLASHES);
+    expect(descriptionOf("create_recipe_detailed")).toContain(METRIC_UNIT_SLASHES);
     expect(descriptionOf("update_recipe")).toContain(METRIC_UNIT_SLASHES);
   });
 
@@ -176,7 +176,7 @@ describe("enum defaults", () => {
   });
 
   it("documents the statuses the repo writes", () => {
-    for (const tool of ["create_recipe", "create_recipe_from_schema"] as const) {
+    for (const tool of ["create_recipe_detailed", "create_recipe_simple"] as const) {
       expect(descriptionOf(tool)).toContain(
         `defaults status to '${DEFAULT_RECIPE_STATUS}'`,
       );
@@ -188,15 +188,24 @@ describe("enum defaults", () => {
 });
 
 // Two create tools is a choice an agent has to make before it has read either
-// one, so the harder tool has to hand the easy case over. These pin the shape
-// difference that choice turns on.
+// one, and the names alone do not say which is the default — so the detailed
+// one has to hand the ordinary case over. These pin that handoff and the shape
+// difference the choice turns on.
 describe("the two recipe-create tools", () => {
-  it("points create_recipe at the simpler tool for a plain Schema.org recipe", () => {
-    expect(descriptionOf("create_recipe")).toContain(TOOL.create_recipe_from_schema);
+  it("sends create_recipe_detailed's callers to the simple tool by default", () => {
+    expect(descriptionOf("create_recipe_detailed")).toContain(TOOL.create_recipe_simple);
   });
 
-  it("takes the Schema.org fields flat, with no wrapper and no status", () => {
-    const { properties } = TOOL_SCHEMAS.create_recipe_from_schema;
+  // The simple tool is listed first so an agent reading tools/list meets the
+  // default before the exception.
+  it("lists the simple tool ahead of the detailed one", () => {
+    expect(TOOL_NAMES.indexOf(TOOL.create_recipe_simple)).toBeLessThan(
+      TOOL_NAMES.indexOf(TOOL.create_recipe_detailed),
+    );
+  });
+
+  it("takes the recipe's fields flat, with no wrapper and no status", () => {
+    const { properties } = TOOL_SCHEMAS.create_recipe_simple;
     expect(properties).toHaveProperty("recipeIngredient");
     expect(properties).toHaveProperty("recipeInstructions");
     expect(properties).not.toHaveProperty("schema");
@@ -207,14 +216,14 @@ describe("the two recipe-create tools", () => {
   // A pasted JSON-LD blob carries keys this app has no use for; a client that
   // validates arguments against the schema must not reject the call for them.
   it("lets a whole JSON-LD blob through for the validator to trim", () => {
-    expect(TOOL_SCHEMAS.create_recipe_from_schema.additionalProperties).toBe(true);
+    expect(TOOL_SCHEMAS.create_recipe_simple.additionalProperties).toBe(true);
   });
 
   // The string spelling is what makes this the easy tool, and it is listed
   // first for that reason; the object spellings are what keep a recipe with
-  // groups, sections or timers from having to drop to create_recipe.
+  // groups, sections or timers from having to drop to create_recipe_detailed.
   it("offers lines and steps in both spellings, the plain string first", () => {
-    const { properties } = TOOL_SCHEMAS.create_recipe_from_schema;
+    const { properties } = TOOL_SCHEMAS.create_recipe_simple;
     expect(properties.recipeIngredient.items.oneOf.map((form) => form.type)).toEqual([
       "string",
       "object",
@@ -230,7 +239,7 @@ describe("the two recipe-create tools", () => {
   // lines the server's validator would, so the cap is one constant.
   it("caps an ingredient line where the validator caps it, in both spellings", () => {
     const [asString, asObject] =
-      TOOL_SCHEMAS.create_recipe_from_schema.properties.recipeIngredient.items.oneOf;
+      TOOL_SCHEMAS.create_recipe_simple.properties.recipeIngredient.items.oneOf;
     expect(asString.maxLength).toBe(INGREDIENT_LINE_MAX_LENGTH);
     expect(asObject.properties.name.maxLength).toBe(INGREDIENT_LINE_MAX_LENGTH);
   });
@@ -240,7 +249,7 @@ describe("the two recipe-create tools", () => {
   // nowhere to be declared.
   it("describes a section's steps with the same HowToStep shape as a top-level step", () => {
     const [, topLevelStep, section] =
-      TOOL_SCHEMAS.create_recipe_from_schema.properties.recipeInstructions.items.oneOf;
+      TOOL_SCHEMAS.create_recipe_simple.properties.recipeInstructions.items.oneOf;
     expect(section.properties.itemListElement.items).toBe(topLevelStep);
     expect(Object.keys(topLevelStep.properties)).toEqual([
       "@type",

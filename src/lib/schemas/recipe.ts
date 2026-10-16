@@ -13,7 +13,7 @@ import type { Assert, Assignable } from "@/lib/exhaustive";
 import type { RecipeInstructionGroup, RecipeRowColumns } from "@/types/recipe";
 
 // A Schema.org `recipeIngredient` entry as it arrives from outside (a scrape,
-// create_recipe): a bare string, or an object carrying this app's `group`
+// create_recipe_detailed): a bare string, or an object carrying this app's `group`
 // extension. Inbound only — see SchemaOrgIngredientLine.
 export const schemaOrgIngredientLineSchema = z.union([
   z.string(),
@@ -158,7 +158,7 @@ export const schemaRecipeSchema = z
 
 // The inbound Schema.org edge: the stored recipe plus `recipeIngredient` and
 // `recipeInstructions`, for writers that speak Schema.org because their source
-// does (a scrape landing through create_recipe or the re-scrape webhook).
+// does (a scrape landing through create_recipe_detailed or the re-scrape webhook).
 // `fromSchemaOrgIngredients` / `fromSchemaOrgInstructions` turn them into
 // groups at the boundary; the stored schema never carries either.
 export const schemaOrgRecipeInputSchema = schemaRecipeSchema.extend({
@@ -252,7 +252,7 @@ const SOURCE_REQUIRED_WITH_URL_ISSUE = {
   path: ["source"],
 };
 
-export const recipeCreateInputSchema = z
+export const recipeCreateDetailedInputSchema = z
   .object({
     // Optional — when omitted, the create tool defaults it to the recipe's own
     // canonical URL on this instance (env.MCP_PUBLIC_URL + /recipes/<new-uuid>).
@@ -264,7 +264,7 @@ export const recipeCreateInputSchema = z
   })
   .refine(sourceRequiredWithUrl, SOURCE_REQUIRED_WITH_URL_ISSUE);
 
-// The three pieces the plain-Schema.org edge below is assembled from: one
+// The three pieces the simplified create edge below is assembled from: one
 // author name, one ingredient line, one step.
 const authorNameSchema = z
   .union([z.string().trim().min(1), z.object({ name: z.string().trim().min(1) })])
@@ -272,7 +272,7 @@ const authorNameSchema = z
 
 // One ingredient line: the plain string a flat JSON-LD list gives you, or the
 // object form a page uses to put the line under a named group. Stricter about
-// blanks than the schemaOrgIngredientLineSchema create_recipe shares — a blank
+// blanks than the schemaOrgIngredientLineSchema create_recipe_detailed shares — a blank
 // entry fails the call, because dropping it would leave a short list that reads
 // as the recipe's own, with nothing to show a line went missing.
 const ingredientLineTextSchema = z
@@ -281,7 +281,7 @@ const ingredientLineTextSchema = z
   .min(1)
   .max(INGREDIENT_LINE_MAX_LENGTH);
 
-const createFromSchemaLineSchema = z.union([
+const simpleIngredientLineSchema = z.union([
   ingredientLineTextSchema,
   // `group` is not held to that: fromSchemaOrgIngredients reads a blank one as
   // "ungrouped", so rejecting the whole paste over an empty heading would throw
@@ -299,7 +299,7 @@ const nonBlankHowToStepSchema = howToStepSchema.extend({
 // `{ text }` HowToStep here rather than at the parse site — beside the author
 // and the numeric yield, for the same reason — and that wrap is what makes a
 // flat list of strings exactly one nameless group.
-const createFromSchemaStepSchema = z.union([
+const simpleStepSchema = z.union([
   z
     .string()
     .trim()
@@ -309,18 +309,20 @@ const createFromSchemaStepSchema = z.union([
   howToSectionSchema.extend({ itemListElement: z.array(nonBlankHowToStepSchema) }),
 ]);
 
-// The plain-Schema.org edge, for a caller holding a page's JSON-LD and nothing
-// else: the arguments ARE the Recipe, and `source` is derived from `url` rather
-// than asked for.
+// The simplified create edge: the arguments ARE the recipe, and `source` is
+// derived from `url` rather than asked for. The field names are Schema.org's
+// and a page's JSON-LD can be pasted straight in, but this is NOT a conformant
+// Recipe and is not held to one — it is the shape that asks a caller for the
+// least.
 //
 // A fresh object rather than an extension of schemaOrgRecipeInputSchema, and
 // deliberately not `.passthrough()`: listing only the fields the app reads keeps
 // the rest of a scraped blob — image, nutrition, aggregateRating, video — out of
 // storage. Lines and steps arrive in either spelling the vocabulary allows, so a
 // page's named ingredient groups, HowToSections and step timers all survive this
-// edge. `recipeYield` is the one shape it still narrows (flat, no
-// QuantitativeValue) — and the author, however the page spells it.
-export const recipeCreateFromSchemaInputSchema = z.object({
+// edge. `recipeYield` is the one shape it narrows (flat, no QuantitativeValue)
+// — and the author, however the page spells it.
+export const recipeCreateSimpleInputSchema = z.object({
   name: z.string().trim().min(1),
   description: z.string().optional(),
   // Pages spell an author every way the vocabulary allows — a bare string, a
@@ -345,8 +347,8 @@ export const recipeCreateFromSchemaInputSchema = z.object({
   // string form, so the coercion belongs here rather than at the parse site.
   recipeYield: z.union([z.string(), z.number()]).transform(String).optional(),
   // One entry per line and per step, in whichever spelling the page uses.
-  recipeIngredient: z.array(createFromSchemaLineSchema).optional(),
-  recipeInstructions: z.array(createFromSchemaStepSchema).optional(),
+  recipeIngredient: z.array(simpleIngredientLineSchema).optional(),
+  recipeInstructions: z.array(simpleStepSchema).optional(),
   // Optional for the same reason as on create: no url of its own is what
   // "authored on this instance" means. `source` follows from it — see
   // recipeSourceForUrl — so there is no second field to keep consistent.
@@ -398,9 +400,9 @@ export const recipeImageUploadInputSchema = z.object({
 
 export type RecipeSearchInput = z.infer<typeof recipeSearchInputSchema>;
 export type RecipeIdInput = z.infer<typeof recipeIdInputSchema>;
-export type RecipeCreateInput = z.infer<typeof recipeCreateInputSchema>;
-export type RecipeCreateFromSchemaInput = z.infer<
-  typeof recipeCreateFromSchemaInputSchema
+export type RecipeCreateDetailedInput = z.infer<typeof recipeCreateDetailedInputSchema>;
+export type RecipeCreateSimpleInput = z.infer<
+  typeof recipeCreateSimpleInputSchema
 >;
 export type RecipeUpdateInput = z.infer<typeof recipeUpdateInputSchema>;
 export type RecipeImageUploadInput = z.infer<typeof recipeImageUploadInputSchema>;
