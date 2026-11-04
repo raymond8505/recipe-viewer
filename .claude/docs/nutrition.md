@@ -51,6 +51,21 @@ constant behind the raised error and both model-facing descriptions, pinned by
 
 **`match_ingredients` is hybrid keyword + semantic** (migration 0007): pg_trgm trigram similarity over `name` + each alias (best-of), fused with pgvector cosine via Reciprocal Rank Fusion (`rrf_k=50`, per-signal weights, all defaulted in SQL). Returns `semantic_similarity`, `keyword_similarity`, `score`. **Never threshold on `score`** — RRF is rank-only; threshold on the raw similarities (keyword ~1.0 = near-exact name/alias hit). Trigram was chosen over tsvector deliberately: ingredient names are 1–4 words where `ts_rank_cd` is meaningless and stemmed FTS misses typos. The single scored-CTE seq scan is intentional at catalog scale; the Supabase docs' two-limited-CTE + trgm/hnsw-index shape is the upgrade path if the catalog grows large.
 
+**A unit belongs to one of three groups, and only a weight converts to grams by itself.**
+`UNIT_DEFS` (`src/lib/units.ts`) holds volume, weight and **length** — a length because recipes
+write "2-inch piece ginger", where the number is the size of one object and not how much of it
+there is. Everything that turns a line into grams asks `isWeightUnit` **positively**, because
+`convert` returns its input unchanged between groups: reached with a length it would weigh 2
+inches of ginger as 2 grams. So `gramsForLine` returns null for a length and the line reports
+`no_weight_for_size` — its own exclusion reason, because no catalog field answers it (a density
+converts a volume; what a piece that big weighs depends on the food's shape). Only a typed or
+estimated weight, or a `(30g)` annotation in the line, settles one. The deterministic parser
+also drops the object a dimension sizes — the `piece` in `2-inch piece ginger` — because the
+catalog holds foods, not objects, and a name of "piece ginger" matches nothing; a word that
+genuinely names the food survives ("cinnamon stick"), and the same word is left alone where it
+IS the amount ("2 sticks butter"). The LLM parse prompt carries the same three rules, since its
+reading is the one that lands on the row.
+
 **`recipe_ingredients.resolved_grams` is the nutrition math's answer, persisted** (0024). The
 column is `resolveLineGrams` — now the single grams resolver, which `computeLineNutrition` also
 calls — stamped at `insertRecipeIngredientRows` / `updateRecipeIngredientRows`, so search ranks on

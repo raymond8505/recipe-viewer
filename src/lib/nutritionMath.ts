@@ -4,7 +4,14 @@
 //
 // Client-safe and pure — no supabase, no env.
 
-import { convert, isVolumeUnit, roundDecimal, unitKeyForAlias } from "./units";
+import {
+  convert,
+  isLengthUnit,
+  isVolumeUnit,
+  isWeightUnit,
+  roundDecimal,
+  unitKeyForAlias,
+} from "./units";
 import { flattenIngredients } from "./recipeIngredients";
 import { NUTRITION_FIELDS as NUTRITION_KEYS } from "./nutritionFields";
 import type {
@@ -31,6 +38,10 @@ export type ExclusionReason =
   | "no_quantity"
   | "no_unit"
   | "no_density"
+  // The line states a size. Its own reason because no catalog field answers
+  // it: a density converts a volume, but what a 2-inch piece weighs depends
+  // on the shape of the food, so only a weight settles it.
+  | "no_weight_for_size"
   | "no_nutrition";
 
 // The blockers a stored 0 can override. The grams-less reasons aren't here
@@ -64,7 +75,9 @@ export type LineComputation =
  * Convert a parsed quantity + unit to grams. Weight units convert directly;
  * volume units convert to ml then multiply by the ingredient's density.
  * Returns null when the line can't be converted: no quantity, no unit
- * (count lines like "2 eggs"), or a volume unit without a density.
+ * (count lines like "2 eggs"), a volume unit without a density, or a unit
+ * that measures neither (a dimension — "2-inch piece ginger" states a size,
+ * and what that weighs depends on the food).
  *
  * `quantity` for parsed ranges is the midpoint (normalization stores
  * (min+max)/2), so totals inherit that approximation.
@@ -79,6 +92,9 @@ export function gramsForLine(
     if (densityGPerMl == null) return null;
     return convert(quantity, unit, "ml") * densityGPerMl;
   }
+  // Asked positively: `convert` hands back its input unchanged across unit
+  // groups, so anything else would weigh its own number in grams.
+  if (!isWeightUnit(unit)) return null;
   return convert(quantity, unit, "g");
 }
 
@@ -100,7 +116,7 @@ export function explicitWeightGrams(text: string): number | null {
       const match = segment.match(AMOUNT_UNIT_RE);
       if (!match) continue;
       const unitKey = unitKeyForAlias(match[2]);
-      if (!unitKey || isVolumeUnit(unitKey)) continue;
+      if (!isWeightUnit(unitKey)) continue;
       const grams = convert(parseFloat(match[1]), unitKey, "g");
       if (grams > 0) return grams;
     }
@@ -243,6 +259,9 @@ export function computeLineNutrition(
   if (grams == null) {
     if (row.quantity == null) return { kind: "excluded", reason: "no_quantity" };
     if (row.unit == null) return { kind: "excluded", reason: "no_unit" };
+    if (isLengthUnit(row.unit)) {
+      return { kind: "excluded", reason: "no_weight_for_size" };
+    }
     return { kind: "excluded", reason: "no_density" };
   }
 

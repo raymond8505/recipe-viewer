@@ -1,9 +1,10 @@
 // Volume base unit: ml
 // Weight base unit: g
+// Length base unit: mm
 
 import type { QuantitativeValue } from "@/types/recipe";
 
-export type UnitGroup = "volume" | "weight";
+export type UnitGroup = "volume" | "weight" | "length";
 
 interface UnitDef {
   group: UnitGroup;
@@ -26,6 +27,14 @@ const UNIT_DEFS: Record<string, UnitDef> = {
   lb:      { group: "weight", display: "lb",    toBase: 453.592,  aliases: ["pounds", "pound", "lbs", "lb"] },
   g:       { group: "weight", display: "g",     toBase: 1,        aliases: ["grams", "gram", "g"] },
   kg:      { group: "weight", display: "kg",    toBase: 1000,     aliases: ["kilograms", "kilogram", "kg"] },
+  // A length states the SIZE of one object, not how much of it there is:
+  // "2-inch piece ginger" is one piece. Nothing converts a length to grams —
+  // that depends on the food's shape — so these lines weigh nothing until a
+  // gram weight is estimated or typed, and `gramsForLine` returns null for
+  // them rather than reading the number as grams.
+  inch:    { group: "length", display: "inch",  toBase: 25.4,     aliases: ["inches", "inch", "in", "\""] },
+  cm:      { group: "length", display: "cm",    toBase: 10,       aliases: ["centimeters", "centimeter", "centimetres", "centimetre", "cm"] },
+  mm:      { group: "length", display: "mm",    toBase: 1,        aliases: ["millimeters", "millimeter", "millimetres", "millimetre", "mm"] },
 };
 
 /**
@@ -38,6 +47,15 @@ export const METRIC_YIELD_UNITS = ["g", "kg", "ml", "l"] as const;
 
 const VOLUME_ORDER = ["tsp", "tbsp", "cup", "fl oz", "pt", "qt", "gal", "ml", "l"];
 const WEIGHT_ORDER = ["oz", "lb", "g", "kg"];
+const LENGTH_ORDER = ["mm", "cm", "inch"];
+
+// The units a line can be switched between in the editor: its own group, so a
+// dimension offers dimensions and never a weight it cannot convert to.
+const ORDER_BY_GROUP: Record<UnitGroup, string[]> = {
+  volume: VOLUME_ORDER,
+  weight: WEIGHT_ORDER,
+  length: LENGTH_ORDER,
+};
 
 // Build alias lookup sorted by length descending (longest alias tried first)
 const ALIAS_ENTRIES: [string, string][] = Object.entries(UNIT_DEFS)
@@ -74,7 +92,7 @@ export function getUnitGroup(unit: string | null): string[] {
   if (!unit) return [];
   const def = UNIT_DEFS[unit];
   if (!def) return [unit];
-  return def.group === "volume" ? VOLUME_ORDER : WEIGHT_ORDER;
+  return ORDER_BY_GROUP[def.group];
 }
 
 export function getUnitDisplay(unit: string): string {
@@ -84,6 +102,25 @@ export function getUnitDisplay(unit: string): string {
 export function isVolumeUnit(unit: string | null): boolean {
   if (!unit) return false;
   return UNIT_DEFS[unit]?.group === "volume";
+}
+
+/**
+ * Whether a unit measures weight, and so converts to grams on its own.
+ *
+ * Asked POSITIVELY by everything that turns a line into grams, because
+ * `convert` returns its input unchanged when the two units are in different
+ * groups — so a length or an unrecognized unit reaching a g conversion would
+ * come back as that many grams.
+ */
+export function isWeightUnit(unit: string | null): boolean {
+  if (!unit) return false;
+  return UNIT_DEFS[unit]?.group === "weight";
+}
+
+/** Whether a unit states a size rather than an amount. */
+export function isLengthUnit(unit: string | null): boolean {
+  if (!unit) return false;
+  return UNIT_DEFS[unit]?.group === "length";
 }
 
 export function roundDecimal(value: number, places = 1): number {
@@ -261,7 +298,10 @@ export function parseIngredient(str: string): ParsedIngredient | null {
   if (!m) return null;
   const amount = parseAmountToken(m[1]);
   if (!amount) return null;
-  const afterAmount = str.slice(m[0].length);
+  // The amount's own match stops at the hyphen in "2-inch": the range branch
+  // needs a number after the separator and "inch" is not one. What is left
+  // leads with that hyphen, which belongs to neither the amount nor the unit.
+  const afterAmount = str.slice(m[0].length).replace(/^[-–—](?=\S)/, "");
   for (const [alias, unitKey] of ALIAS_ENTRIES) {
     const pattern = new RegExp(`^(${escapeRe(alias)})(?=\\s|$)`, "i");
     const um = afterAmount.match(pattern);
