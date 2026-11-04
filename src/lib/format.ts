@@ -342,6 +342,17 @@ export function recipeSourceForUrl(
 }
 
 /**
+ * Where to view the recipe `id` on this instance — the path
+ * `src/app/recipes/[id]/page.tsx` serves.
+ *
+ * `instanceBaseUrl` is a parameter rather than an `@/env` read because this
+ * module is client-safe, as on `recipeSourceForUrl` above.
+ */
+export function recipePageUrl(id: string, instanceBaseUrl: string): string {
+  return `${instanceBaseUrl}/recipes/${id}`;
+}
+
+/**
  * Whether a string can be handed to an `<a href>` we open in a new tab: an
  * absolute http(s) URL. Two jobs — it hides the "open source" affordance while
  * a URL is still being typed, and it keeps a `javascript:` value out of an href

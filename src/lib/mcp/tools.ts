@@ -29,6 +29,7 @@ import { ingredientEmbeddingText, ingredientQueryText } from "@/lib/ingredientAl
 import {
   CUSTOM_RECIPE_SOURCE,
   fromSchemaOrgInstructions,
+  recipePageUrl,
   recipeSourceForUrl,
 } from "@/lib/format";
 import {
@@ -315,9 +316,15 @@ const COOKING_NOTES_IGNORED_WARNING =
 
 export type RecipeRowWithWarnings = RecipeRow & { warnings?: string[] };
 
+// The two urls a just-created recipe has, and only a create response carries
+// both: `url` is the stored column, which points at the upstream page when there
+// is one, and `pageUrl` is where to view the recipe on this instance. An agent
+// that wants to show its work wants the second.
+export type CreatedRecipeRow = RecipeRowWithWarnings & { pageUrl: string };
+
 export async function createRecipeDetailed(
   args: RecipeCreateDetailedInput,
-): Promise<RecipeRowWithWarnings> {
+): Promise<CreatedRecipeRow> {
   // The inbound Schema.org edge: scrapes arrive with `recipeIngredient` and
   // `recipeInstructions`, which become groups here and never reach the stored
   // schema.
@@ -326,7 +333,7 @@ export async function createRecipeDetailed(
   // Default to the recipe's own canonical page on this instance.
   // MCP_PUBLIC_URL is the app's base-URL source of truth (also the OAuth /
   // recipe-token issuer), and is overridden per-PR on staging.
-  const url = args.url ?? `${env.MCP_PUBLIC_URL}/recipes/${id}`;
+  const url = args.url ?? recipePageUrl(id, env.MCP_PUBLIC_URL);
   // Same condition, second half: a recipe with no url of its own is authored
   // here, which is what CUSTOM_RECIPE_SOURCE means. (The input schema requires
   // an explicit source whenever a url IS given, so this only fires for the
@@ -343,9 +350,10 @@ export async function createRecipeDetailed(
       ingredients: fromSchemaOrgIngredients(recipeIngredient ?? []),
       instructions: fromSchemaOrgInstructions(recipeInstructions),
     });
+    const pageUrl = recipePageUrl(row.id, env.MCP_PUBLIC_URL);
     return cookingNotes !== undefined
-      ? { ...row, warnings: [COOKING_NOTES_IGNORED_WARNING] }
-      : row;
+      ? { ...row, pageUrl, warnings: [COOKING_NOTES_IGNORED_WARNING] }
+      : { ...row, pageUrl };
   } catch (err) {
     throw toToolError(err, "create_failed");
   }
@@ -354,11 +362,17 @@ export async function createRecipeDetailed(
 /**
  * The simplified create path, and the one most callers want: the recipe's
  * fields ARE the argument object, `source` follows from the url rather than
- * being asked for, and the response says only that the row exists and where.
- * Its field names are Schema.org's, but it is a shape of this app's own
+ * being asked for, and the response says only that the row exists and where to
+ * see it. Its field names are Schema.org's, but it is a shape of this app's own
  * choosing rather than a conformant Recipe — which is the whole point, since a
  * caller holding a page's JSON-LD can paste it and a caller holding nothing can
  * write it. What it cannot express, `createRecipeDetailed` can.
+ *
+ * The `url` answered is the recipe's page on this instance, which is not the
+ * `url` stored on the row: an upstream page given here stays in the column,
+ * because that column is the page `/rescrape` re-fetches and the one `source`
+ * is derived from. The caller is told where its recipe now lives, not where it
+ * came from.
  *
  * The catalog matching this promises is `createRecipeRow`'s — it mints a
  * `recipe_ingredients` row per line and schedules the normalization run that
@@ -368,22 +382,22 @@ export async function createRecipeDetailed(
 export async function createRecipeSimple(
   args: RecipeCreateSimpleInput,
 ): Promise<{ created: true; id: string; url: string }> {
-  const { url: pageUrl, recipeIngredient, recipeInstructions, ...schema } = args;
+  const { url: upstreamUrl, recipeIngredient, recipeInstructions, ...schema } = args;
   const id = crypto.randomUUID();
-  const url = pageUrl ?? `${env.MCP_PUBLIC_URL}/recipes/${id}`;
+  const url = upstreamUrl ?? recipePageUrl(id, env.MCP_PUBLIC_URL);
   try {
     const row = await createRecipeRow({
       id,
       url,
       // The url's host, or CUSTOM_RECIPE_SOURCE when there is no upstream page.
-      source: recipeSourceForUrl(pageUrl, env.MCP_PUBLIC_URL),
+      source: recipeSourceForUrl(upstreamUrl, env.MCP_PUBLIC_URL),
       // No status, so the repo's default applies: nothing arriving this way has
       // had a human eye on it yet.
       schema,
       ingredients: fromSchemaOrgIngredients(recipeIngredient ?? []),
       instructions: fromSchemaOrgInstructions(recipeInstructions),
     });
-    return { created: true, id: row.id, url: row.url };
+    return { created: true, id: row.id, url: recipePageUrl(row.id, env.MCP_PUBLIC_URL) };
   } catch (err) {
     throw toToolError(err, "create_failed");
   }

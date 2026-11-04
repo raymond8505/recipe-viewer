@@ -18,6 +18,7 @@ import {
   isBrowsableUrl,
   canonicalizeRecipeSource,
   recipeSourceForUrl,
+  recipePageUrl,
   CUSTOM_RECIPE_SOURCE,
   fromSchemaOrgInstructions,
   toSchemaOrgInstructions,
@@ -376,6 +377,26 @@ describe("recipeSourceForUrl", () => {
   // the user's own work.
   it("still names the host when the instance base url is unusable", () => {
     expect(recipeSourceForUrl("https://seriouseats.com/x", "")).toBe("seriouseats.com");
+  });
+});
+
+describe("recipePageUrl", () => {
+  const INSTANCE = "https://new.raymonds.recipes";
+
+  it("addresses a recipe by id on the instance it is given", () => {
+    expect(recipePageUrl("abc", INSTANCE)).toBe("https://new.raymonds.recipes/recipes/abc");
+    expect(recipePageUrl("abc", "http://localhost:3001")).toBe(
+      "http://localhost:3001/recipes/abc",
+    );
+  });
+
+  // The two halves of one route have to agree: a url this builds is one of our
+  // own pages, so the source derived from it is the own-recipe value. Spelling
+  // the path differently on either side would split that pair silently.
+  it("builds a url recipeSourceForUrl reads as the instance's own", () => {
+    expect(recipeSourceForUrl(recipePageUrl("abc", INSTANCE), INSTANCE)).toBe(
+      CUSTOM_RECIPE_SOURCE,
+    );
   });
 });
 

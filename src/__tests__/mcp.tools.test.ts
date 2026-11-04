@@ -841,6 +841,28 @@ describe("createRecipeDetailed", () => {
     const arg = vi.mocked(createRecipeRow).mock.calls[0][0];
     expect(arg.schema).not.toHaveProperty("cookingNotes");
     expect(out.warnings?.[0]).toMatch(/cookingNotes is read-only/);
+    expect(out.pageUrl).toBe("http://localhost:3000/recipes/x");
+  });
+
+  // Two urls, two jobs: the row's own is the upstream page /rescrape re-fetches,
+  // and pageUrl is where to send a person to look at what was just created.
+  it("answers with the recipe’s page here beside the stored upstream url", async () => {
+    const { createRecipeRow } = await import("@/lib/recipes");
+    vi.mocked(createRecipeRow).mockResolvedValueOnce(
+      makeRecipe("new-id", "New", {
+        url: "https://example.com/r",
+        source: "example.com",
+      }),
+    );
+
+    const out = await createRecipeDetailed({
+      url: "https://example.com/r",
+      source: "example.com",
+      schema: { name: "New" },
+    });
+
+    expect(out.url).toBe("https://example.com/r");
+    expect(out.pageUrl).toBe("http://localhost:3000/recipes/new-id");
   });
 
   it("translates RecipeRepoError to ToolError(create_failed)", async () => {
@@ -1048,15 +1070,40 @@ describe("createRecipeSimple", () => {
     expect(schema.name).toBe("X");
   });
 
-  it("answers with the row's id and url and nothing else", async () => {
+  it("answers with the row's id and its page here, and nothing else", async () => {
     const { createRecipeRow } = await import("@/lib/recipes");
     vi.mocked(createRecipeRow).mockResolvedValueOnce(makeRecipe("new-id", "X"));
 
     await expect(createRecipeSimple({ name: "X" })).resolves.toEqual({
       created: true,
       id: "new-id",
-      url: "https://new.raymonds.recipes/recipes/new-id",
+      url: "http://localhost:3000/recipes/new-id",
     });
+  });
+
+  // The answer is where to SEE the new recipe, which is never the page it was
+  // taken from. That page stays in the stored column, because it is what
+  // /rescrape re-fetches and what source is read off.
+  it("answers with its own page even for a recipe scraped from one", async () => {
+    const { createRecipeRow } = await import("@/lib/recipes");
+    vi.mocked(createRecipeRow).mockResolvedValueOnce(
+      makeRecipe("new-id", "X", {
+        url: "https://www.seriouseats.com/mapo",
+        source: "seriouseats.com",
+      }),
+    );
+
+    await expect(
+      createRecipeSimple({ name: "X", url: "https://www.seriouseats.com/mapo" }),
+    ).resolves.toEqual({
+      created: true,
+      id: "new-id",
+      url: "http://localhost:3000/recipes/new-id",
+    });
+
+    const arg = vi.mocked(createRecipeRow).mock.calls[0][0];
+    expect(arg.url).toBe("https://www.seriouseats.com/mapo");
+    expect(arg.source).toBe("seriouseats.com");
   });
 
   it("translates RecipeRepoError to ToolError(create_failed)", async () => {
