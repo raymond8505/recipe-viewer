@@ -36,8 +36,9 @@ import {
   RECIPE_INGREDIENT_ON_UPDATE_ERROR,
   RECIPE_INSTRUCTIONS_ON_UPDATE_ERROR,
   RECIPE_YIELD_ON_UPDATE_ERROR,
+  URL_ON_UPDATE_ERROR,
 } from "./copy";
-import { ARCHIVED_RECIPE_STATUS } from "@/lib/schemas/recipe";
+import { ARCHIVED_RECIPE_STATUS, recipeUpdateInputSchema } from "@/lib/schemas/recipe";
 import { RECIPE_TOKEN_TTL_SECONDS, signRecipeToken } from "./recipeToken";
 import { env } from "@/env";
 import {
@@ -73,12 +74,40 @@ import type { IngredientMatch, IngredientRow } from "@/types/ingredient";
 // into ToolError so the MCP dispatcher can render a uniform isError content
 // envelope. Supabase calls live in the repo modules — see CR feedback on PR #13.
 
+/**
+ * A recipe's two urls, named apart.
+ *
+ * `sourceUrl` is the stored column: the page `/rescrape` re-fetches and the
+ * one `source` is derived from. `pageUrl` is the recipe's own page on this
+ * instance, derived from its id and settable by nobody. They hold the same
+ * value for a recipe authored here, which has no upstream page — which is
+ * exactly why one field called `url` cannot say which of the two is meant.
+ */
+export interface RecipeUrlFields {
+  pageUrl: string;
+  sourceUrl: string;
+}
+
+export type WithNamedUrls<T> = Omit<T, "url"> & RecipeUrlFields;
+
+// Every tool that answers with a recipe answers with both urls, so an agent
+// reads one name for one concept whichever tool it called.
+function withNamedUrls<T extends { id: string; url: string }>(
+  row: T,
+): WithNamedUrls<T> {
+  const { url, ...rest } = row;
+  return {
+    ...rest,
+    pageUrl: recipePageUrl(row.id, env.MCP_PUBLIC_URL),
+    sourceUrl: url,
+  };
+}
+
 // Trimmed search hit. Search returns enough to identify/disambiguate a recipe
 // without shipping the full schema (ingredients, instructions, nutrition, …) for
 // every row — agents call get_recipe for the full document once they pick one.
-export interface RecipeSearchResultItem {
+export interface RecipeSearchResultItem extends RecipeUrlFields {
   id: string;
-  url: string;
   name: string;
   description?: string;
 }
@@ -87,7 +116,8 @@ export interface RecipeSearchResultItem {
 // documented keys can't drift from the interface above.
 export const RECIPE_SEARCH_RESULT_FIELDS = exhaustiveKeys<RecipeSearchResultItem>()([
   "id",
-  "url",
+  "pageUrl",
+  "sourceUrl",
   "name",
   "description",
 ]);
@@ -108,7 +138,8 @@ export async function searchRecipes(
   return {
     data: data.map((row) => ({
       id: row.id,
-      url: row.url,
+      pageUrl: recipePageUrl(row.id, env.MCP_PUBLIC_URL),
+      sourceUrl: row.url,
       name: row.metadata.schema.name,
       description: row.metadata.schema.description,
     })),
@@ -260,7 +291,7 @@ export type PublishedRecipeRow = Omit<RecipeRow, "metadata"> & {
 
 export async function getRecipe(
   args: RecipeIdInput,
-): Promise<PublishedRecipeRow> {
+): Promise<WithNamedUrls<PublishedRecipeRow>> {
   const row = await getRecipeById(args.id);
   if (!row) throw new ToolError("not_found", `Recipe ${args.id} not found`);
 
@@ -278,9 +309,9 @@ export async function getRecipe(
     recipeNormalizedNutrition(row),
   );
   const resolved = scalable.nutrition();
-  if (!resolved) return row;
+  if (!resolved) return withNamedUrls(row);
 
-  return {
+  return withNamedUrls<PublishedRecipeRow>({
     ...row,
     metadata: {
       ...row.metadata,
@@ -295,7 +326,7 @@ export async function getRecipe(
         },
       },
     },
-  };
+  });
 }
 
 export async function getToken(
@@ -318,11 +349,7 @@ const COOKING_NOTES_IGNORED_WARNING =
 
 export type RecipeRowWithWarnings = RecipeRow & { warnings?: string[] };
 
-// The two urls a just-created recipe has, and only a create response carries
-// both: `url` is the stored column, which points at the upstream page when there
-// is one, and `pageUrl` is where to view the recipe on this instance. An agent
-// that wants to show its work wants the second.
-export type CreatedRecipeRow = RecipeRowWithWarnings & { pageUrl: string };
+export type CreatedRecipeRow = WithNamedUrls<RecipeRowWithWarnings>;
 
 export async function createRecipeDetailed(
   args: RecipeCreateDetailedInput,
@@ -352,10 +379,10 @@ export async function createRecipeDetailed(
       ingredients: fromSchemaOrgIngredients(recipeIngredient ?? []),
       instructions: fromSchemaOrgInstructions(recipeInstructions),
     });
-    const pageUrl = recipePageUrl(row.id, env.MCP_PUBLIC_URL);
+    const answer = withNamedUrls(row);
     return cookingNotes !== undefined
-      ? { ...row, pageUrl, warnings: [COOKING_NOTES_IGNORED_WARNING] }
-      : { ...row, pageUrl };
+      ? { ...answer, warnings: [COOKING_NOTES_IGNORED_WARNING] }
+      : answer;
   } catch (err) {
     throw toToolError(err, "create_failed");
   }
@@ -422,9 +449,11 @@ export type UnmatchedIngredientGroup = Omit<RecipeIngredientGroup, "ingredients"
   ingredients: UnmatchedRecipeLine[];
 };
 
-export type UpdatedRecipeRow = Omit<RecipeRowWithWarnings, "ingredients"> & {
-  ingredients: UnmatchedIngredientGroup[];
-};
+export type UpdatedRecipeRow = WithNamedUrls<
+  Omit<RecipeRowWithWarnings, "ingredients"> & {
+    ingredients: UnmatchedIngredientGroup[];
+  }
+>;
 
 /**
  * Strip every line's catalog match out of an ingredient list.
@@ -453,6 +482,20 @@ function withoutMatches(
   }));
 }
 
+/**
+ * Parse an update's arguments, failing loudly on a bare `url`.
+ *
+ * Separate from the zod schema because the schema is a plain object: it
+ * strips keys it does not declare, so the only place a stray `url` is still
+ * visible is before the parse.
+ */
+export function parseRecipeUpdateArgs(args: unknown): RecipeUpdateInput {
+  if (typeof args === "object" && args !== null && "url" in args) {
+    throw new ToolError("invalid_input", URL_ON_UPDATE_ERROR);
+  }
+  return recipeUpdateInputSchema.parse(args);
+}
+
 export async function updateRecipe(
   args: RecipeUpdateInput,
 ): Promise<UpdatedRecipeRow> {
@@ -471,7 +514,7 @@ export async function updateRecipe(
   }
   try {
     const row = await updateRecipeRow(args.id, {
-      url: args.url,
+      url: args.sourceUrl,
       source: args.source,
       status: args.status,
       schema: args.schema !== undefined ? schema : undefined,
@@ -480,7 +523,10 @@ export async function updateRecipe(
       servings: args.servings,
       totalWeight: args.total_weight,
     });
-    const answer = { ...row, ingredients: withoutMatches(row.ingredients) };
+    const answer = withNamedUrls({
+      ...row,
+      ingredients: withoutMatches(row.ingredients),
+    });
     return cookingNotes !== undefined
       ? { ...answer, warnings: [COOKING_NOTES_IGNORED_WARNING] }
       : answer;

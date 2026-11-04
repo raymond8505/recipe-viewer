@@ -540,7 +540,12 @@ export const TOOL_SCHEMAS = {
     required: ["id"],
     properties: {
       id: { type: "string" },
-      url: { type: "string", format: "uri" },
+      sourceUrl: {
+        type: "string",
+        format: "uri",
+        description:
+          "The page this recipe came from — what Re-scrape re-fetches. The recipe's own page here is derived from its id and reported as pageUrl, not set.",
+      },
       source: { type: "string" },
       status: statusEnum,
       schema: {

@@ -67,6 +67,7 @@ import {
   deleteRecipe,
   getIngredient,
   getRecipe,
+  parseRecipeUpdateArgs,
   getToken,
   searchIngredients,
   searchRecipes,
@@ -554,7 +555,7 @@ describe("searchRecipes", () => {
     expect(out.data).toHaveLength(2);
   });
 
-  it("trims each result to id, url, name, description", async () => {
+  it("trims each result to id, both urls, name and description", async () => {
     const { getRecipes } = await import("@/lib/recipes");
     const fixture = recipeFixtures[0];
     vi.mocked(getRecipes).mockResolvedValueOnce({ data: [fixture], count: 1 });
@@ -563,7 +564,8 @@ describe("searchRecipes", () => {
 
     expect(out.data[0]).toEqual({
       id: fixture.id,
-      url: fixture.url,
+      pageUrl: `http://localhost:3000/recipes/${fixture.id}`,
+      sourceUrl: fixture.url,
       name: fixture.metadata.schema.name,
       description: fixture.metadata.schema.description,
     });
@@ -575,6 +577,39 @@ describe("searchRecipes", () => {
 
 describe("getRecipe", () => {
   beforeEach(() => vi.clearAllMocks());
+
+  // One concept, one name, whichever tool answered: a bare `url` cannot say
+  // which of the two it is.
+  it("answers with both urls named apart and no bare url", async () => {
+    const { getRecipeById } = await import("@/lib/recipes");
+    vi.mocked(getRecipeById).mockResolvedValueOnce(
+      makeRecipe("r1", "Mapo", { url: "https://seriouseats.com/mapo" }),
+    );
+
+    const out = await getRecipe({ id: "r1" });
+
+    expect(out).not.toHaveProperty("url");
+    expect(out.sourceUrl).toBe("https://seriouseats.com/mapo");
+    expect(out.pageUrl).toBe("http://localhost:3000/recipes/r1");
+  });
+
+  // A recipe authored here has no upstream page, so the column holds its own
+  // page and sourceUrl echoes it. The pair coinciding is the signal, and is
+  // why neither can be reported under one name.
+  it("echoes the stored column even when it is the recipe’s own page", async () => {
+    const { getRecipeById } = await import("@/lib/recipes");
+    vi.mocked(getRecipeById).mockResolvedValueOnce(
+      makeRecipe("r1", "Mine", {
+        url: "http://localhost:3000/recipes/r1",
+        source: "custom",
+      }),
+    );
+
+    const out = await getRecipe({ id: "r1" });
+
+    expect(out.sourceUrl).toBe("http://localhost:3000/recipes/r1");
+    expect(out.pageUrl).toBe(out.sourceUrl);
+  });
 
   it("returns the recipe row when found", async () => {
     const { getRecipeById } = await import("@/lib/recipes");
@@ -844,9 +879,9 @@ describe("createRecipeDetailed", () => {
     expect(out.pageUrl).toBe("http://localhost:3000/recipes/x");
   });
 
-  // Two urls, two jobs: the row's own is the upstream page /rescrape re-fetches,
+  // Two urls, two jobs: sourceUrl is the upstream page /rescrape re-fetches,
   // and pageUrl is where to send a person to look at what was just created.
-  it("answers with the recipe’s page here beside the stored upstream url", async () => {
+  it("answers with both urls named apart", async () => {
     const { createRecipeRow } = await import("@/lib/recipes");
     vi.mocked(createRecipeRow).mockResolvedValueOnce(
       makeRecipe("new-id", "New", {
@@ -861,7 +896,8 @@ describe("createRecipeDetailed", () => {
       schema: { name: "New" },
     });
 
-    expect(out.url).toBe("https://example.com/r");
+    expect(out).not.toHaveProperty("url");
+    expect(out.sourceUrl).toBe("https://example.com/r");
     expect(out.pageUrl).toBe("http://localhost:3000/recipes/new-id");
   });
 
@@ -1133,6 +1169,53 @@ describe("updateRecipe", () => {
       existing.id,
       expect.objectContaining({ schema: { description: "patched" } }),
     );
+  });
+
+  it("answers with both urls named apart", async () => {
+    const { updateRecipeRow } = await import("@/lib/recipes");
+    vi.mocked(updateRecipeRow).mockResolvedValueOnce(
+      makeRecipe("r1", "Mapo", { url: "https://seriouseats.com/mapo" }),
+    );
+
+    const out = await updateRecipe({ id: "r1", schema: { description: "x" } });
+
+    expect(out).not.toHaveProperty("url");
+    expect(out.sourceUrl).toBe("https://seriouseats.com/mapo");
+    expect(out.pageUrl).toBe("http://localhost:3000/recipes/r1");
+  });
+
+  // The one url a patch can set is the source page; the page url follows from
+  // the id, so there is nothing to set.
+  it("writes the source column from sourceUrl", async () => {
+    const { updateRecipeRow } = await import("@/lib/recipes");
+    vi.mocked(updateRecipeRow).mockResolvedValueOnce(makeRecipe("r1", "X"));
+
+    await updateRecipe({ id: "r1", sourceUrl: "https://seriouseats.com/mapo" });
+
+    expect(updateRecipeRow).toHaveBeenCalledWith(
+      "r1",
+      expect.objectContaining({ url: "https://seriouseats.com/mapo" }),
+    );
+  });
+
+  // The input object strips keys it does not declare, so a stray `url` would
+  // otherwise read as a source page the agent successfully set.
+  it("fails the call on a bare url rather than ignoring it", () => {
+    expect(() =>
+      parseRecipeUpdateArgs({ id: "r1", url: "https://seriouseats.com/mapo" }),
+    ).toThrowError(
+      expect.objectContaining({
+        name: "ToolError",
+        code: "invalid_input",
+        message: expect.stringContaining("sourceUrl"),
+      }),
+    );
+  });
+
+  it("accepts a patch that names sourceUrl", () => {
+    expect(
+      parseRecipeUpdateArgs({ id: "r1", sourceUrl: "https://seriouseats.com/mapo" }),
+    ).toEqual({ id: "r1", sourceUrl: "https://seriouseats.com/mapo" });
   });
 
   // A reworded line is re-matched after the call returns, and the agent cannot

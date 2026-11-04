@@ -362,7 +362,10 @@ export const recipeCreateSimpleInputSchema = z.object({
 // the tool rejects any of the three rather than silently ignoring it.
 export const recipeUpdateInputSchema = z.object({
   id: z.string().min(1),
-  url: z.string().url().optional(),
+  // The stored column, named for what it is: the page /rescrape re-fetches.
+  // A recipe's page on this instance is derived from its id, so it is
+  // reported and never accepted.
+  sourceUrl: z.string().url().optional(),
   source: z.string().min(1).optional(),
   status: recipeStatusSchema.optional(),
   schema: schemaRecipeSchema.partial().optional(),

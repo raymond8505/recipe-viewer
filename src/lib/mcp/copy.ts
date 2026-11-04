@@ -39,6 +39,15 @@ export const RECIPE_INSTRUCTIONS_ON_UPDATE_ERROR = `schema.recipeInstructions is
 export const RECIPE_YIELD_ON_UPDATE_ERROR = `schema.recipeYield is not accepted on update — the call FAILS if you send one, it is not ignored. A recipe's serving count is column-backed: send \`servings\` ({ amount, unit? }) instead, where amount is the number of servings and unit is what they are counted in ("servings", "kebabs"). Omit \`servings\` to leave the count alone; send { "amount": null } to clear it. The whole recipe's raw weight goes through \`total_weight\` ({ amount, unit }), NOT a valueReference. ${TOOL.get_recipe} returns all four as servings_amount / servings_unit / total_weight_amount / total_weight_unit.`;
 
 /**
+ * A recipe has two urls and this tool accepts only one of them, so a bare
+ * `url` is ambiguous about which was meant. Rejected rather than stripped:
+ * the input object drops keys it does not know, so a silently ignored `url`
+ * looks to the agent like a source page it successfully set.
+ */
+export const URL_ON_UPDATE_ERROR =
+  "url is not a field on this tool. A recipe has two: `sourceUrl`, the page it came from and the one Re-scrape re-fetches, which is what you set here; and `pageUrl`, its own page on this instance, which is derived from its id and reported back but never set. Send `sourceUrl` if you meant the first.";
+
+/**
  * "a, b, or c". Hand-rolled rather than Intl.ListFormat, whose output varies
  * with the runtime's ICU build — these strings are asserted in tests and read
  * by agents, so they must be identical everywhere.
