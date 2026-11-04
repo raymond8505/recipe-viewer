@@ -9,7 +9,11 @@ import type {
 export interface RecipeIngredientReconcile {
   /** Rows that don't exist yet, ids already minted. */
   inserts: RecipeIngredientRow[];
-  /** Existing rows whose text moved, with the re-parse merged in. */
+  /**
+   * Existing rows whose text moved, with the re-parse merged in. A row lands
+   * here on a text change and nothing else, which is what makes this the set
+   * the caller hands the matcher as re-matchable.
+   */
   updates: RecipeIngredientRow[];
   /** Rows the incoming groups do not name. */
   deleteIds: string[];
@@ -19,9 +23,10 @@ export interface RecipeIngredientReconcile {
   rows: RecipeIngredientRow[];
   /**
    * Whether the SET of lines changed — something added or removed — as opposed
-   * to the same lines reworded, reordered or regrouped. Only a set change is
-   * worth running the matcher for: re-guessing a line that merely moved would
-   * overwrite a curated association with the matcher's opinion.
+   * to the same lines reworded, reordered or regrouped. A set change means
+   * some line has no association at all, which is the matcher's core job;
+   * `updates` covers the other reason to run it. A pure reorder or regrouping
+   * is neither, and runs nothing: those lines carry the same words.
    */
   lineSetChanged: boolean;
 }

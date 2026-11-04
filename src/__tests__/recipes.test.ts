@@ -948,7 +948,11 @@ describe("updateRecipeRow", () => {
     expect(updates[0].content).toContain("- 2 cups rice");
   });
 
-  it("rewords a line in place: re-parses its row, keeps its match, schedules nothing", async () => {
+  // The save keeps the association and hands the row to the run: a reworded
+  // line's stored match answers for different words, and the matcher is what
+  // replaces it. Nothing here nulls it in the meantime, so the line keeps
+  // answering with nutrition until a better answer exists.
+  it("rewords a line in place: re-parses its row, keeps its match, sends it for re-matching", async () => {
     const { updates } = mockLines();
 
     await updateRecipeRow("r1", {
@@ -972,7 +976,27 @@ describe("updateRecipeRow", () => {
     expect(mockDeleteRecipeIngredientRows).toHaveBeenCalledWith("r1", []);
     expect(updates[0].ingredients).toEqual(withLines.ingredients);
     expect(updates[0].content).toContain("- 2 tsp ground cumin");
-    expect(mockScheduleNormalization).not.toHaveBeenCalled();
+    expect(mockScheduleNormalization).toHaveBeenCalledWith("r1", ["ri-0"]);
+  });
+
+  // Only the reworded row is re-matchable. A line added in the same save has
+  // no association to overrule, and the untouched line keeps its own.
+  it("names only the reworded rows when a save also adds a line", async () => {
+    mockLines();
+
+    await updateRecipeRow("r1", {
+      ingredients: [
+        { name: "Rub", ingredients: [{ id: "ri-0", raw_text: "2 tsp ground cumin" }] },
+        {
+          ingredients: [
+            { id: "ri-1", raw_text: "2 cups rice" },
+            { raw_text: "1 tbsp butter" },
+          ],
+        },
+      ],
+    });
+
+    expect(mockScheduleNormalization).toHaveBeenCalledWith("r1", ["ri-0"]);
   });
 
   it("reorders and regroups by rewriting the column alone", async () => {
@@ -1007,7 +1031,9 @@ describe("updateRecipeRow", () => {
       { name: "Rub", ingredients: ["ri-0"] },
       { ingredients: ["ri-1", inserted[0].id] },
     ]);
-    expect(mockScheduleNormalization).toHaveBeenCalledWith("r1");
+    // No reworded row, so nothing the run may re-answer — a fresh row has no
+    // association to overrule.
+    expect(mockScheduleNormalization).toHaveBeenCalledWith("r1", []);
   });
 
   it("removes a line: prunes its row after the recipe row lands, schedules normalization", async () => {
@@ -1034,7 +1060,7 @@ describe("updateRecipeRow", () => {
     expect(mockDeleteRecipeIngredientRows.mock.invocationCallOrder[0]).toBeGreaterThan(
       recipeUpdate.mock.invocationCallOrder[0],
     );
-    expect(mockScheduleNormalization).toHaveBeenCalledWith("r1");
+    expect(mockScheduleNormalization).toHaveBeenCalledWith("r1", []);
   });
 
   // A prune failing after the save landed must not fail the save — the rows

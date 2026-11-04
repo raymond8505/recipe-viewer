@@ -29,7 +29,18 @@ describe("scheduleNormalization", () => {
     const deferred = mockAfter.mock.calls[0][0] as () => Promise<void>;
     await deferred();
 
-    expect(runNormalization).toHaveBeenCalledWith("r-1");
+    expect(runNormalization).toHaveBeenCalledWith("r-1", []);
+  });
+
+  // The rows a save reworded travel to the run: without them it would fill
+  // gaps only and leave each reworded line answering for its old wording.
+  it("hands the run the rows it may re-match", async () => {
+    scheduleNormalization("r-1", ["row-a", "row-b"]);
+
+    const deferred = mockAfter.mock.calls[0][0] as () => Promise<void>;
+    await deferred();
+
+    expect(runNormalization).toHaveBeenCalledWith("r-1", ["row-a", "row-b"]);
   });
 
   it("runs detached when after() throws (vitest / scripts — no request scope)", async () => {
@@ -40,7 +51,7 @@ describe("scheduleNormalization", () => {
     expect(() => scheduleNormalization("r-1")).not.toThrow();
 
     await vi.waitFor(() => {
-      expect(runNormalization).toHaveBeenCalledWith("r-1");
+      expect(runNormalization).toHaveBeenCalledWith("r-1", []);
     });
   });
 

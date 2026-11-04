@@ -53,8 +53,13 @@ export interface StoredIngredientGroup {
 
 /**
  * What a writer sends for one ingredient. `id` names the row the line already
- * is — send it back to keep the row (and the catalog association curated on
- * it); leave it off for a genuinely new line and the write path mints one.
+ * is — send it back to keep the row; leave it off for a genuinely new line and
+ * the write path mints one.
+ *
+ * Keeping the row keeps the catalog association curated on it only while the
+ * text is unchanged. Send the same id with different words and the save hands
+ * that row to the matcher to re-answer, because the association names which
+ * food the line means and those new words may name another one.
  */
 export interface RecipeIngredientLineInput {
   id?: string;
