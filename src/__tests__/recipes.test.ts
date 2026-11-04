@@ -183,13 +183,25 @@ describe("getRecipes", () => {
     expect(builder.range).toHaveBeenCalledWith(10, 19);
   });
 
-  it("matches a query against the recipe name or its catalog ingredients", async () => {
+  it("matches a query against the name, the catalog, or the line labels", async () => {
     const { builder } = makeSupabaseMock();
     await getRecipes({ query: "pasta" });
 
     expect(builder.or).toHaveBeenCalledWith(
-      'metadata->schema->>name.ilike."%pasta%",ingredient_catalog_text.ilike."%pasta%"',
+      'metadata->schema->>name.ilike."%pasta%"' +
+        ',ingredient_catalog_text.ilike."%pasta%"' +
+        ',ingredient_line_text.ilike."%pasta%"',
     );
+  });
+
+  // The arm that reaches a line the catalog has no answer for: an unmatched
+  // line is invisible to the catalog arm by construction.
+  it("asks for the line labels as well as the catalog", async () => {
+    const { builder } = makeSupabaseMock();
+    await getRecipes({ query: "ginger" });
+
+    const [filter] = builder.or.mock.calls.at(-1) as [string];
+    expect(filter).toContain('ingredient_line_text.ilike."%ginger%"');
   });
 
   it("does not filter by query when none is provided", async () => {
@@ -198,7 +210,10 @@ describe("getRecipes", () => {
 
     // The status branch still emits its own `or`; none of them is the search.
     const calls = builder.or.mock.calls.flat();
-    expect(calls.some((c: unknown) => typeof c === "string" && c.includes("ingredient_catalog_text"))).toBe(false);
+    const isSearch = (c: unknown) =>
+      typeof c === "string" &&
+      (c.includes("ingredient_catalog_text") || c.includes("ingredient_line_text"));
+    expect(calls.some(isSearch)).toBe(false);
   });
 
   // Unquoted, the comma would end the operand: PostgREST answers 400 PGRST100,
@@ -208,7 +223,9 @@ describe("getRecipes", () => {
     await getRecipes({ query: "salt, table" });
 
     expect(builder.or).toHaveBeenCalledWith(
-      'metadata->schema->>name.ilike."%salt, table%",ingredient_catalog_text.ilike."%salt, table%"',
+      'metadata->schema->>name.ilike."%salt, table%"' +
+        ',ingredient_catalog_text.ilike."%salt, table%"' +
+        ',ingredient_line_text.ilike."%salt, table%"',
     );
   });
 
@@ -219,7 +236,9 @@ describe("getRecipes", () => {
     await getRecipes({ query: String.raw`a"b\c` });
 
     expect(builder.or).toHaveBeenCalledWith(
-      String.raw`metadata->schema->>name.ilike."%a\"b\\c%",ingredient_catalog_text.ilike."%a\"b\\c%"`,
+      String.raw`metadata->schema->>name.ilike."%a\"b\\c%"` +
+        String.raw`,ingredient_catalog_text.ilike."%a\"b\\c%"` +
+        String.raw`,ingredient_line_text.ilike."%a\"b\\c%"`,
     );
   });
 
@@ -361,12 +380,14 @@ describe("getStatusCounts", () => {
     expect(result).toEqual({ published: 2, draft: 1, archived: 1, __null: 2 });
   });
 
-  it("matches a query against the recipe name or its catalog ingredients", async () => {
+  it("matches a query against the name, the catalog, or the line labels", async () => {
     const { builder } = makeSupabaseMock({ data: [] });
     await getStatusCounts({ query: "pasta" });
 
     expect(builder.or).toHaveBeenCalledWith(
-      'metadata->schema->>name.ilike."%pasta%",ingredient_catalog_text.ilike."%pasta%"',
+      'metadata->schema->>name.ilike."%pasta%"' +
+        ',ingredient_catalog_text.ilike."%pasta%"' +
+        ',ingredient_line_text.ilike."%pasta%"',
     );
   });
 
