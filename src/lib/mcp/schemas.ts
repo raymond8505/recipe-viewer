@@ -2,7 +2,7 @@
 // validators, used in the `tools/list` response so MCP clients can do client-
 // side argument validation.
 //
-// The actual zod validators (recipeSearchInputSchema, recipeCreateInputSchema,
+// The actual zod validators (recipeSearchInputSchema, recipeCreateDetailedInputSchema,
 // etc.) live in `@/lib/schemas/recipe` so they're reusable by non-MCP callers
 // (API route handlers, form validators). The JSON Schema map below is the
 // only thing here that is genuinely MCP-protocol-specific — it describes the
@@ -15,7 +15,11 @@ import {
 } from "@/lib/schemas/ingredient";
 import { FOOD_PORTION_UNIQUE_RULE } from "@/lib/foodPortions";
 import { CUSTOM_RECIPE_SOURCE } from "@/lib/format";
-import { ARCHIVED_RECIPE_STATUS, RECIPE_STATUSES } from "@/lib/schemas/recipe";
+import {
+  ARCHIVED_RECIPE_STATUS,
+  INGREDIENT_LINE_MAX_LENGTH,
+  RECIPE_STATUSES,
+} from "@/lib/schemas/recipe";
 import { NUTRITION_FIELDS, type NutritionField } from "@/lib/nutritionFields";
 import { METRIC_YIELD_UNITS } from "@/lib/units";
 import {
@@ -30,7 +34,7 @@ import { TOOL, type ToolName } from "./toolNames";
 
 // The stored recipe: everything but the ingredients and instructions, which
 // live on the row as `ingredients` / `instructions` (see
-// recipeIngredientsJsonSchema / recipeInstructionsJsonSchema). create_recipe
+// recipeIngredientsJsonSchema / recipeInstructionsJsonSchema). create_recipe_detailed
 // takes the Schema.org form below, with `recipeIngredient` and
 // `recipeInstructions` added back for scrapes.
 const storedRecipeJsonSchema = {
@@ -56,7 +60,7 @@ const storedRecipeJsonSchema = {
     notes: { type: "string", description: "App-internal notes (not part of Schema.org/Recipe)" },
     cookingNotes: {
       type: "string",
-      description: `App-internal cooking notes — READ-ONLY for agents. Ignored by ${TOOL.create_recipe}/${TOOL.update_recipe} (the call still succeeds with a warning). Authored by users in cooking mode; clear it via the ${TOOL.clear_cooking_notes} tool.`,
+      description: `App-internal cooking notes — READ-ONLY for agents. Ignored by ${TOOL.create_recipe_detailed}/${TOOL.update_recipe} (the call still succeeds with a warning). Authored by users in cooking mode; clear it via the ${TOOL.clear_cooking_notes} tool.`,
     },
   },
   additionalProperties: true,
@@ -64,7 +68,7 @@ const storedRecipeJsonSchema = {
 
 // A Schema.org Recipe as a scraper produces it: the stored fields plus
 // `recipeIngredient`, whose `group` objects are this app's extension, and
-// `recipeInstructions`. Only create_recipe takes it; both become groups
+// `recipeInstructions`. Only create_recipe_detailed takes it; both become groups
 // server-side.
 const schemaOrgRecipeJsonSchema = {
   ...storedRecipeJsonSchema,
@@ -124,6 +128,30 @@ const schemaOrgRecipeJsonSchema = {
       description:
         "The steps as a scraper produces them: an array of HowToStep ({ text, name?, timeRequired? }) and HowToSection ({ name, itemListElement: HowToStep[] }) objects. The server turns these into instruction groups; read them back as `instructions`.",
       items: { type: "object" },
+    },
+  },
+} as const;
+
+// Schema.org/HowToStep, as a page publishes one. Named here because a
+// HowToSection's itemListElement is an array of exactly this.
+const howToStepJsonSchema = {
+  type: "object",
+  required: ["text"],
+  description: "Schema.org/HowToStep.",
+  properties: {
+    "@type": {
+      type: "string",
+      description: 'Optional — "HowToStep" where the page spells it out.',
+    },
+    text: { type: "string", description: "The step as the recipe says it." },
+    name: {
+      type: "string",
+      description: 'Short label, e.g. "Simmer" — also the label on its cook-mode timer.',
+    },
+    timeRequired: {
+      type: "string",
+      description:
+        "ISO 8601 duration (e.g. PT10M). Becomes a cook-mode timer, which needs a name to label it.",
     },
   },
 } as const;
@@ -390,7 +418,7 @@ export const TOOL_SCHEMAS = {
       },
     },
   },
-  create_recipe: {
+  create_recipe_detailed: {
     type: "object",
     required: ["schema"],
     properties: {
@@ -406,6 +434,105 @@ export const TOOL_SCHEMAS = {
       },
       status: statusEnum,
       schema: schemaOrgRecipeJsonSchema,
+    },
+  },
+  // The simplified twin: the properties ARE the recipe's, with no wrapper object
+  // and no status. `additionalProperties` is open on purpose — a caller pastes a
+  // page's whole JSON-LD, and the extra keys it carries are dropped by the
+  // validator rather than rejected by the client.
+  create_recipe_simple: {
+    type: "object",
+    required: ["name"],
+    additionalProperties: true,
+    properties: {
+      name: { type: "string", description: "The recipe's title." },
+      description: { type: "string" },
+      author: {
+        description:
+          "The author's name — a plain string, Schema.org's { name } object, or an array of either (only the first is kept).",
+        oneOf: [
+          { type: "string" },
+          { type: "object", required: ["name"], properties: { name: { type: "string" } } },
+          {
+            type: "array",
+            items: {
+              oneOf: [
+                { type: "string" },
+                { type: "object", required: ["name"], properties: { name: { type: "string" } } },
+              ],
+            },
+          },
+        ],
+      },
+      prepTime: { type: "string", description: "ISO 8601 duration (e.g. PT30M)" },
+      cookTime: { type: "string", description: "ISO 8601 duration" },
+      totalTime: {
+        type: "string",
+        description:
+          "ISO 8601 duration. Not derived from prepTime + cookTime — a recipe can rest or marinate.",
+      },
+      recipeCuisine: { type: "string" },
+      recipeCategory: {
+        oneOf: [{ type: "string" }, { type: "array", items: { type: "string" } }],
+      },
+      keywords: { type: "string" },
+      datePublished: { type: "string" },
+      recipeYield: {
+        description:
+          'How many servings the recipe makes: 4, "4 servings", or "Makes 12 cookies". A yield stating a QUANTITY rather than a count ("300 ml", "1 lb") is not a serving count and is ignored.',
+        oneOf: [{ type: "number" }, { type: "string" }],
+      },
+      recipeIngredient: {
+        type: "array",
+        description:
+          'The ingredient lines, one entry per line, exactly as the recipe writes them ("2 tsp cumin seed"). A plain string is the whole of it for an ungrouped list; use { name, group } for a line the recipe files under a heading ("For the sauce"), and the server builds those groups in first-appearance order. Do not split off the quantity or the unit — the server parses each line and matches it to the catalog.',
+        items: {
+          oneOf: [
+            { type: "string", maxLength: INGREDIENT_LINE_MAX_LENGTH },
+            {
+              type: "object",
+              required: ["name"],
+              properties: {
+                name: {
+                  type: "string",
+                  maxLength: INGREDIENT_LINE_MAX_LENGTH,
+                  description: "The line itself, as the recipe writes it.",
+                },
+                group: {
+                  type: "string",
+                  description: "The heading this line sits under; omit it for the ungrouped list.",
+                },
+              },
+            },
+          ],
+        },
+      },
+      recipeInstructions: {
+        type: "array",
+        description:
+          "The steps, in order, one entry per step. A plain string is enough for a step that is only its text; pass a page's HowToStep objects and HowToSections through as they stand when it publishes them, and the sections become the recipe's instruction sections and a timeRequired becomes a cook-mode timer.",
+        items: {
+          oneOf: [
+            { type: "string", description: "A step that is only its text." },
+            howToStepJsonSchema,
+            {
+              type: "object",
+              required: ["@type", "name", "itemListElement"],
+              description: "Schema.org/HowToSection — a named run of steps.",
+              properties: {
+                "@type": { type: "string", enum: ["HowToSection"] },
+                name: { type: "string", description: "Section heading." },
+                itemListElement: { type: "array", items: howToStepJsonSchema },
+              },
+            },
+          ],
+        },
+      },
+      url: {
+        type: "string",
+        format: "uri",
+        description: `The page this recipe came from; its host becomes the recipe's source. Omit it for a recipe authored here — the recipe then gets its own page on this instance and a source of "${CUSTOM_RECIPE_SOURCE}".`,
+      },
     },
   },
   update_recipe: {

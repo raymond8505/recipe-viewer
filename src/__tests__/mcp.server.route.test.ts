@@ -33,6 +33,7 @@ vi.mock("@/lib/supabase", () => ({
 import { POST, GET, DELETE } from "@/app/api/mcp/server/route";
 import { signAccessToken } from "@/lib/mcp/oauth";
 import { JsonRpcErrorCode, JsonRpcMethod } from "@/lib/mcp/types";
+import { TOOL_NAMES } from "@/lib/mcp/toolNames";
 import { NUTRITION_BASIS_REQUIRED } from "@/lib/schemas/ingredient";
 
 function rpc(body: object, headers: Record<string, string> = {}) {
@@ -80,29 +81,16 @@ describe("/api/mcp/server", () => {
       expect(body.result.serverInfo.name).toBe("recipe-viewer-mcp");
     });
 
-    it("lists 13 tools", async () => {
+    // Against the registry, not a second copy of it: what this covers is that
+    // the HTTP surface serves every tool the server declares. That the registry
+    // and the implementations agree is mcp.descriptions.test.ts's job.
+    it("lists every registered tool", async () => {
       const res = await POST(
         rpc({ jsonrpc: "2.0", id: 2, method: JsonRpcMethod.TOOLS_LIST }, { authorization: auth }),
       );
       const body = await res.json();
       const names = body.result.tools.map((t: { name: string }) => t.name).sort();
-      expect(names).toEqual(
-        [
-          "clear_cooking_notes",
-          "create_ingredient",
-          "create_recipe",
-          "delete_ingredient",
-          "delete_recipe",
-          "get_ingredient",
-          "get_recipe",
-          "get_token",
-          "search_ingredients",
-          "search_recipes",
-          "update_ingredient",
-          "update_recipe",
-          "upload_recipe_image",
-        ],
-      );
+      expect(names).toEqual([...TOOL_NAMES].sort());
     });
 
     // The descriptions are the agent's whole instruction surface, and two

@@ -26,7 +26,12 @@ import { fromSchemaOrgIngredients } from "@/lib/recipeIngredients";
 import { generateEmbedding } from "@/lib/embedding";
 import { exhaustiveKeys } from "@/lib/exhaustive";
 import { ingredientEmbeddingText, ingredientQueryText } from "@/lib/ingredientAliases";
-import { CUSTOM_RECIPE_SOURCE, fromSchemaOrgInstructions } from "@/lib/format";
+import {
+  CUSTOM_RECIPE_SOURCE,
+  fromSchemaOrgInstructions,
+  recipePageUrl,
+  recipeSourceForUrl,
+} from "@/lib/format";
 import {
   RECIPE_INGREDIENT_ON_UPDATE_ERROR,
   RECIPE_INSTRUCTIONS_ON_UPDATE_ERROR,
@@ -41,12 +46,15 @@ import {
   uploadRecipeImage as uploadImageToStorage,
 } from "@/lib/storage";
 import type {
+  RecipeIngredient,
+  RecipeIngredientGroup,
   RecipeRow,
   SchemaOrgNutrition,
   SchemaRecipe,
 } from "@/types/recipe";
 import type {
-  RecipeCreateInput,
+  RecipeCreateSimpleInput,
+  RecipeCreateDetailedInput,
   RecipeIdInput,
   RecipeImageUploadInput,
   RecipeSearchInput,
@@ -310,9 +318,15 @@ const COOKING_NOTES_IGNORED_WARNING =
 
 export type RecipeRowWithWarnings = RecipeRow & { warnings?: string[] };
 
-export async function createRecipe(
-  args: RecipeCreateInput,
-): Promise<RecipeRowWithWarnings> {
+// The two urls a just-created recipe has, and only a create response carries
+// both: `url` is the stored column, which points at the upstream page when there
+// is one, and `pageUrl` is where to view the recipe on this instance. An agent
+// that wants to show its work wants the second.
+export type CreatedRecipeRow = RecipeRowWithWarnings & { pageUrl: string };
+
+export async function createRecipeDetailed(
+  args: RecipeCreateDetailedInput,
+): Promise<CreatedRecipeRow> {
   // The inbound Schema.org edge: scrapes arrive with `recipeIngredient` and
   // `recipeInstructions`, which become groups here and never reach the stored
   // schema.
@@ -321,7 +335,7 @@ export async function createRecipe(
   // Default to the recipe's own canonical page on this instance.
   // MCP_PUBLIC_URL is the app's base-URL source of truth (also the OAuth /
   // recipe-token issuer), and is overridden per-PR on staging.
-  const url = args.url ?? `${env.MCP_PUBLIC_URL}/recipes/${id}`;
+  const url = args.url ?? recipePageUrl(id, env.MCP_PUBLIC_URL);
   // Same condition, second half: a recipe with no url of its own is authored
   // here, which is what CUSTOM_RECIPE_SOURCE means. (The input schema requires
   // an explicit source whenever a url IS given, so this only fires for the
@@ -338,17 +352,110 @@ export async function createRecipe(
       ingredients: fromSchemaOrgIngredients(recipeIngredient ?? []),
       instructions: fromSchemaOrgInstructions(recipeInstructions),
     });
+    const pageUrl = recipePageUrl(row.id, env.MCP_PUBLIC_URL);
     return cookingNotes !== undefined
-      ? { ...row, warnings: [COOKING_NOTES_IGNORED_WARNING] }
-      : row;
+      ? { ...row, pageUrl, warnings: [COOKING_NOTES_IGNORED_WARNING] }
+      : { ...row, pageUrl };
   } catch (err) {
     throw toToolError(err, "create_failed");
   }
 }
 
+/**
+ * The simplified create path, and the one most callers want: the recipe's
+ * fields ARE the argument object, `source` follows from the url rather than
+ * being asked for, and the response says only that the row exists and where to
+ * see it. Its field names are Schema.org's, but it is a shape of this app's own
+ * choosing rather than a conformant Recipe — which is the whole point, since a
+ * caller holding a page's JSON-LD can paste it and a caller holding nothing can
+ * write it. What it cannot express, `createRecipeDetailed` can.
+ *
+ * The `url` answered is the recipe's page on this instance, which is not the
+ * `url` stored on the row: an upstream page given here stays in the column,
+ * because that column is the page `/rescrape` re-fetches and the one `source`
+ * is derived from. The caller is told where its recipe now lives, not where it
+ * came from.
+ *
+ * The catalog matching this promises is `createRecipeRow`'s — it mints a
+ * `recipe_ingredients` row per line and schedules the normalization run that
+ * matches them, leaving whatever it cannot resolve unmatched. Nothing is
+ * awaited here, so the response cannot report what matched.
+ */
+export async function createRecipeSimple(
+  args: RecipeCreateSimpleInput,
+): Promise<{ created: true; id: string; url: string }> {
+  const { url: upstreamUrl, recipeIngredient, recipeInstructions, ...schema } = args;
+  const id = crypto.randomUUID();
+  const url = upstreamUrl ?? recipePageUrl(id, env.MCP_PUBLIC_URL);
+  try {
+    const row = await createRecipeRow({
+      id,
+      url,
+      // The url's host, or CUSTOM_RECIPE_SOURCE when there is no upstream page.
+      source: recipeSourceForUrl(upstreamUrl, env.MCP_PUBLIC_URL),
+      // No status, so the repo's default applies: nothing arriving this way has
+      // had a human eye on it yet.
+      schema,
+      ingredients: fromSchemaOrgIngredients(recipeIngredient ?? []),
+      instructions: fromSchemaOrgInstructions(recipeInstructions),
+    });
+    return { created: true, id: row.id, url: recipePageUrl(row.id, env.MCP_PUBLIC_URL) };
+  } catch (err) {
+    throw toToolError(err, "create_failed");
+  }
+}
+
+/**
+ * One ingredient line as an update answers with it: the line and its parse,
+ * and nothing about which catalog ingredient it resolves to.
+ *
+ * `Omit` rather than a hand-written field list so that adding a column to
+ * `RecipeIngredientRow` is a compile error in `withoutMatches` below, where
+ * someone has to decide whether an update may report it.
+ */
+export type UnmatchedRecipeLine = Omit<
+  RecipeIngredient,
+  "ingredient_id" | "match_status" | "confidence" | "ingredient"
+>;
+
+export type UnmatchedIngredientGroup = Omit<RecipeIngredientGroup, "ingredients"> & {
+  ingredients: UnmatchedRecipeLine[];
+};
+
+export type UpdatedRecipeRow = Omit<RecipeRowWithWarnings, "ingredients"> & {
+  ingredients: UnmatchedIngredientGroup[];
+};
+
+/**
+ * Strip every line's catalog match out of an ingredient list.
+ *
+ * An update that reworded a line hands that row to the matcher, so the match
+ * on it answers for different words and a run is already on its way to
+ * replace it. Reporting it would hand an agent a value that is wrong by the
+ * time it reads it, and the agent cannot tell which lines those are. A match
+ * is read from `get_recipe`, once it has settled.
+ */
+function withoutMatches(
+  groups: readonly RecipeIngredientGroup[],
+): UnmatchedIngredientGroup[] {
+  return groups.map((group) => ({
+    ...group,
+    ingredients: group.ingredients.map((line) => ({
+      id: line.id,
+      raw_text: line.raw_text,
+      quantity: line.quantity,
+      unit: line.unit,
+      name_text: line.name_text,
+      note: line.note,
+      estimated_grams: line.estimated_grams,
+      grams_source: line.grams_source,
+    })),
+  }));
+}
+
 export async function updateRecipe(
   args: RecipeUpdateInput,
-): Promise<RecipeRowWithWarnings> {
+): Promise<UpdatedRecipeRow> {
   const { cookingNotes, ...schema } = args.schema ?? {};
   // The zod schema is passthrough, so without these checks a dead key sails
   // into the merge and is silently stripped — a loud failure teaches the agent
@@ -373,9 +480,10 @@ export async function updateRecipe(
       servings: args.servings,
       totalWeight: args.total_weight,
     });
+    const answer = { ...row, ingredients: withoutMatches(row.ingredients) };
     return cookingNotes !== undefined
-      ? { ...row, warnings: [COOKING_NOTES_IGNORED_WARNING] }
-      : row;
+      ? { ...answer, warnings: [COOKING_NOTES_IGNORED_WARNING] }
+      : answer;
   } catch (err) {
     throw toToolError(err, "update_failed");
   }

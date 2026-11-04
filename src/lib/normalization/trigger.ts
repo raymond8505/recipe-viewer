@@ -5,6 +5,11 @@ import { after } from "next/server";
  * `after()` so recipe writes return immediately and a Gemini/USDA outage can
  * never fail a save.
  *
+ * `rematchIds` names rows whose association the run may replace — the lines a
+ * save reworded, whose stored match answers for wording the line has since
+ * moved away from. Omitting it (the manual re-run endpoint, a create) leaves
+ * the run filling gaps only.
+ *
  * Never throws. Outside a request scope (vitest, the backfill script) `after()`
  * itself throws synchronously — the catch runs the work as a detached promise
  * instead.
@@ -14,10 +19,13 @@ import { after } from "next/server";
  * by the route-auth-policy gate test) must not pull @langchain/langgraph
  * statically.
  */
-export function scheduleNormalization(recipeId: string): void {
+export function scheduleNormalization(
+  recipeId: string,
+  rematchIds: readonly string[] = [],
+): void {
   const run = async () => {
     const { runNormalization } = await import("./graph");
-    await runNormalization(recipeId);
+    await runNormalization(recipeId, rematchIds);
   };
 
   try {

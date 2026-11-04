@@ -687,13 +687,14 @@ export async function updateRecipeRow(
       ? (writePatch.servings_unit ?? null)
       : current.servings_unit;
 
-  // Normalization exists to GUESS an association for a line that has none, so
-  // it only has work when the SET of lines changes — one was added or removed.
-  // Rewording, reordering or regrouping leaves every row (and therefore every
-  // curated association) exactly where it was, so it must not re-run:
-  // re-guessing there would overwrite the user's own corrections with the
-  // matcher's opinion, which is precisely backwards. The reconcile draws that
-  // distinction; the deterministic re-parse it produces is not a matcher run.
+  // Normalization has work when the SET of lines changes — something added or
+  // removed — and when a line is REWORDED, because an association names which
+  // food a line means and a reworded line names it in different words. The
+  // reworded rows go to the run as `rematchIds`, the only rows it may
+  // re-answer.
+  // Reordering and regrouping carry the same words, so they are neither. The
+  // reconcile draws both distinctions; the deterministic re-parse it produces
+  // is not a matcher run.
   const reconcile =
     patch.ingredients !== undefined
       ? reconcileRecipeIngredients(id, patch.ingredients, existingRows)
@@ -772,7 +773,11 @@ export async function updateRecipeRow(
     await deleteRecipeIngredientRows(id, reconcile.deleteIds).catch((err) => {
       console.error(`Failed to prune ingredient rows for ${id}:`, err);
     });
-    if (reconcile.lineSetChanged) scheduleNormalization(id);
+    // `updates` IS the reworded set — a row lands there only on a text change.
+    const rematchIds = reconcile.updates.map((row) => row.id);
+    if (reconcile.lineSetChanged || rematchIds.length > 0) {
+      scheduleNormalization(id, rematchIds);
+    }
   }
 
   return hydrate(data as RecipeRowColumns, finalRows, await getCatalogForRows(finalRows));

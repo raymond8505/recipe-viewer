@@ -178,10 +178,11 @@ describe("runNormalization — matching", () => {
     ]);
   });
 
-  // The association is a claim about which FOOD a line means. Rewording the
-  // line doesn't change that claim, so a run must not overrule it: the row is
-  // found by its id, and the text on it is whatever the recipe says now.
-  it("keeps an existing association when the line's text changed", async () => {
+  // A run overrules an association only for the rows it is handed. Given none,
+  // it fills gaps and nothing else — the row is found by its id, and the text
+  // on it is whatever the recipe says now. This is the manual re-run endpoint's
+  // behaviour, and a save's for every line it did not reword.
+  it("keeps an existing association when it is not asked to re-match", async () => {
     vi.mocked(getRecipeIngredients).mockResolvedValue(
       rowsFor(recipe, {
         [CUMIN_ROW_ID]: {
@@ -206,6 +207,91 @@ describe("runNormalization — matching", () => {
         raw_text: "1 tsp cumin seed",
       }),
     ]);
+  });
+
+  // The one case a run may re-answer: the save that reworded the line names
+  // its row, and the stored association describes words other than the ones
+  // the line carries. A manual pick is no exception — it answers for wording
+  // the line has moved away from.
+  it("replaces even a manual association for a row it is asked to re-match", async () => {
+    vi.mocked(getRecipeIngredients).mockResolvedValue(
+      rowsFor(recipe, {
+        [CUMIN_ROW_ID]: {
+          raw_text: "1 tsp ground cumin", // recipe now says "1 tsp cumin seed"
+          ingredient_id: "ing-manual",
+          match_status: "manual",
+        },
+      }),
+    );
+    vi.mocked(matchIngredients).mockResolvedValue([
+      candidate("ing-auto", "cumin seed", 0.9),
+    ]);
+
+    await runNormalization("r-1", [CUMIN_ROW_ID]);
+
+    expect(persistedRows()).toEqual([
+      expect.objectContaining({
+        ingredient_id: "ing-auto",
+        match_status: "matched",
+        confidence: 0.9,
+        raw_text: "1 tsp cumin seed",
+      }),
+    ]);
+  });
+
+  // Re-matching can also come back empty, and then the line is unmatched: that
+  // association answers for other words, so keeping it would leave the line
+  // quietly pointing at a food it does not name, and reporting that food's
+  // nutrition.
+  it("clears the association when a re-match comes back with nothing", async () => {
+    vi.mocked(getRecipeIngredients).mockResolvedValue(
+      rowsFor(recipe, {
+        [CUMIN_ROW_ID]: {
+          raw_text: "1 tsp ground cumin",
+          ingredient_id: "ing-manual",
+          match_status: "manual",
+          confidence: null,
+        },
+      }),
+    );
+    // Ambiguous with no adjudication is the established no-answer path: it
+    // stops short of minting a novel catalog row.
+    vi.mocked(matchIngredients).mockResolvedValue([
+      candidate("ing-1", "cumin, ground", 0.7),
+    ]);
+    vi.mocked(generateStructured)
+      .mockResolvedValueOnce(CUMIN_PARSE) // parse
+      .mockResolvedValueOnce(null); // adjudicate fails
+
+    await runNormalization("r-1", [CUMIN_ROW_ID]);
+
+    expect(persistedRows()?.[0]).toMatchObject({
+      ingredient_id: null,
+      match_status: "unmatched",
+      confidence: null,
+    });
+  });
+
+  // Being handed one row does not open the others: a save that reworded one
+  // line must not re-answer the line beside it.
+  it("leaves a curated row alone when another row is the one re-matched", async () => {
+    const two = makeTestRecipe(makeIngredientLines(["2 cups rice", "1 tsp cumin seed"]));
+    vi.mocked(getRecipeById).mockResolvedValue(two);
+    vi.mocked(getRecipeIngredients).mockResolvedValue(
+      rowsFor(two, {
+        "ri-2-cups-rice": { ingredient_id: "ing-rice", match_status: "manual" },
+        [CUMIN_ROW_ID]: { ingredient_id: "ing-old-cumin", match_status: "manual" },
+      }),
+    );
+    vi.mocked(matchIngredients).mockResolvedValue([
+      candidate("ing-auto", "anything", 0.9),
+    ]);
+
+    await runNormalization("r-1", [CUMIN_ROW_ID]);
+
+    const byId = new Map(persistedRows()?.map((row) => [row.id, row]));
+    expect(byId.get("ri-2-cups-rice")?.ingredient_id).toBe("ing-rice");
+    expect(byId.get(CUMIN_ROW_ID)?.ingredient_id).toBe("ing-auto");
   });
 
   it("inherits by row id, not position, when a line moves", async () => {
