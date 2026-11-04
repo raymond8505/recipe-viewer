@@ -46,6 +46,8 @@ import {
   uploadRecipeImage as uploadImageToStorage,
 } from "@/lib/storage";
 import type {
+  RecipeIngredient,
+  RecipeIngredientGroup,
   RecipeRow,
   SchemaOrgNutrition,
   SchemaRecipe,
@@ -403,9 +405,57 @@ export async function createRecipeSimple(
   }
 }
 
+/**
+ * One ingredient line as an update answers with it: the line and its parse,
+ * and nothing about which catalog ingredient it resolves to.
+ *
+ * `Omit` rather than a hand-written field list so that adding a column to
+ * `RecipeIngredientRow` is a compile error in `withoutMatches` below, where
+ * someone has to decide whether an update may report it.
+ */
+export type UnmatchedRecipeLine = Omit<
+  RecipeIngredient,
+  "ingredient_id" | "match_status" | "confidence" | "ingredient"
+>;
+
+export type UnmatchedIngredientGroup = Omit<RecipeIngredientGroup, "ingredients"> & {
+  ingredients: UnmatchedRecipeLine[];
+};
+
+export type UpdatedRecipeRow = Omit<RecipeRowWithWarnings, "ingredients"> & {
+  ingredients: UnmatchedIngredientGroup[];
+};
+
+/**
+ * Strip every line's catalog match out of an ingredient list.
+ *
+ * An update that reworded a line hands that row to the matcher, so the match
+ * on it answers for different words and a run is already on its way to
+ * replace it. Reporting it would hand an agent a value that is wrong by the
+ * time it reads it, and the agent cannot tell which lines those are. A match
+ * is read from `get_recipe`, once it has settled.
+ */
+function withoutMatches(
+  groups: readonly RecipeIngredientGroup[],
+): UnmatchedIngredientGroup[] {
+  return groups.map((group) => ({
+    ...group,
+    ingredients: group.ingredients.map((line) => ({
+      id: line.id,
+      raw_text: line.raw_text,
+      quantity: line.quantity,
+      unit: line.unit,
+      name_text: line.name_text,
+      note: line.note,
+      estimated_grams: line.estimated_grams,
+      grams_source: line.grams_source,
+    })),
+  }));
+}
+
 export async function updateRecipe(
   args: RecipeUpdateInput,
-): Promise<RecipeRowWithWarnings> {
+): Promise<UpdatedRecipeRow> {
   const { cookingNotes, ...schema } = args.schema ?? {};
   // The zod schema is passthrough, so without these checks a dead key sails
   // into the merge and is silently stripped — a loud failure teaches the agent
@@ -430,9 +480,10 @@ export async function updateRecipe(
       servings: args.servings,
       totalWeight: args.total_weight,
     });
+    const answer = { ...row, ingredients: withoutMatches(row.ingredients) };
     return cookingNotes !== undefined
-      ? { ...row, warnings: [COOKING_NOTES_IGNORED_WARNING] }
-      : row;
+      ? { ...answer, warnings: [COOKING_NOTES_IGNORED_WARNING] }
+      : answer;
   } catch (err) {
     throw toToolError(err, "update_failed");
   }

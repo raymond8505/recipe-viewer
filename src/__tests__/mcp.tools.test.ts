@@ -1135,6 +1135,58 @@ describe("updateRecipe", () => {
     );
   });
 
+  // A reworded line is re-matched after the call returns, and the agent cannot
+  // tell which lines those are — so no line reports a match it might be about
+  // to lose. The parse and the row id stay: an agent needs the ids to send the
+  // list back.
+  it("answers with no catalog match on any line", async () => {
+    const { updateRecipeRow } = await import("@/lib/recipes");
+    const flour = makeIngredient("ing-flour", "Flour, all purpose");
+    const existing = makeRecipe("r1", "Bread", {
+      ingredients: makeIngredientLines([
+        makeMatchedIngredient("100 g flour", flour),
+        "a pinch of salt",
+      ]),
+    });
+    vi.mocked(updateRecipeRow).mockResolvedValueOnce(existing);
+
+    const out = await updateRecipe({ id: "r1", schema: { description: "x" } });
+
+    const lines = out.ingredients.flatMap((group) => group.ingredients);
+    expect(lines).toHaveLength(2);
+    for (const line of lines) {
+      expect(line).not.toHaveProperty("ingredient_id");
+      expect(line).not.toHaveProperty("match_status");
+      expect(line).not.toHaveProperty("confidence");
+      expect(line).not.toHaveProperty("ingredient");
+    }
+    expect(lines[0]).toMatchObject({
+      raw_text: "100 g flour",
+      quantity: 100,
+      unit: "g",
+    });
+    expect(lines[0].id).toBe(existing.ingredients[0].ingredients[0].id);
+  });
+
+  // The groups themselves are untouched: a named group keeps its name, and an
+  // ungrouped list stays one group with no name key.
+  it("keeps the group structure while dropping the matches", async () => {
+    const { updateRecipeRow } = await import("@/lib/recipes");
+    const existing = makeRecipe("r1", "Curry", {
+      ingredients: [
+        { name: "Sauce", ingredients: makeIngredientLines(["2 tbsp paste"])[0].ingredients },
+        { ingredients: makeIngredientLines(["2 cups rice"])[0].ingredients },
+      ],
+    });
+    vi.mocked(updateRecipeRow).mockResolvedValueOnce(existing);
+
+    const out = await updateRecipe({ id: "r1", schema: { description: "x" } });
+
+    expect(out.ingredients[0].name).toBe("Sauce");
+    expect(out.ingredients[1]).not.toHaveProperty("name");
+    expect(out.ingredients[1].ingredients[0].raw_text).toBe("2 cups rice");
+  });
+
   it("ignores cookingNotes in the patch and returns a warning", async () => {
     const { updateRecipeRow } = await import("@/lib/recipes");
     const existing = recipeFixtures[0];
@@ -1218,6 +1270,7 @@ describe("updateRecipe", () => {
 
   it("passes servings and total_weight straight through to the repo patch", async () => {
     const { updateRecipeRow } = await import("@/lib/recipes");
+    vi.mocked(updateRecipeRow).mockResolvedValueOnce(makeRecipe("r1", "X"));
 
     await updateRecipe({
       id: "r1",
@@ -1237,6 +1290,7 @@ describe("updateRecipe", () => {
   // have to stay distinguishable all the way to the column.
   it("forwards an explicit null amount as a clear", async () => {
     const { updateRecipeRow } = await import("@/lib/recipes");
+    vi.mocked(updateRecipeRow).mockResolvedValueOnce(makeRecipe("r1", "X"));
 
     await updateRecipe({ id: "r1", servings: { amount: null } });
     expect(updateRecipeRow).toHaveBeenCalledWith(
