@@ -161,6 +161,70 @@ describe("addAliasesAndReembed", () => {
   });
 });
 
+describe("the quantity guard on accretion", () => {
+  // An alias names what a row IS. A parsed line name that still carries an
+  // amount is a parse remainder, and accreting one is permanent: it lands in
+  // the stored array AND the embedding built from it.
+  it("drops a candidate that leads with an amount, keeping the rest", async () => {
+    await addAliasesAndReembed("ing-1", [
+      "+ 2 tbsp all-purpose flour",
+      "all-purpose flour",
+    ]);
+
+    expect(addIngredientAliases).toHaveBeenCalledWith("ing-1", [
+      "all-purpose flour",
+    ]);
+  });
+
+  it("spends no RPC and no embedding when every candidate is an amount", async () => {
+    const out = await addAliasesAndReembed("ing-1", ["2 tbsp flour"]);
+
+    expect(out).toBeNull();
+    expect(addIngredientAliases).not.toHaveBeenCalled();
+    expect(generateEmbedding).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    "1% cottage cheese",
+    "3% milk",
+    "18% cream",
+    "cottage cheese (1%)",
+    "thumb-sized piece ginger (approx. 15g)",
+    "00 flour",
+    "half and half",
+  ])("keeps %s, which is how the food is named", async (alias) => {
+    // Every one of these is a real catalog alias: a bare number is not a
+    // quantity, so the guard rejects only a number followed by a UNIT.
+    await addAliasesAndReembed("ing-1", [alias]);
+
+    expect(addIngredientAliases).toHaveBeenCalledWith("ing-1", [alias]);
+  });
+
+  it.each([
+    "+ 2 tbsp all-purpose flour",
+    "plus 2 tbsp flour",
+    "& 1 cup water",
+    "+ 6 tablespoons water (340g)",
+  ])("rejects %s, an amount behind a connector", async (alias) => {
+    // The connector is what hides the amount from parseIngredient, so it is
+    // stripped before the test rather than trusted to fail the parse.
+    await addAliasesAndReembed("ing-1", [alias]);
+
+    expect(addIngredientAliases).not.toHaveBeenCalled();
+  });
+
+  it("guards the batch path too, from the one place both callers meet", async () => {
+    await accreteAliasesFromLines([
+      { ingredient_id: "ing-1", name_text: "+ 2 tbsp all-purpose flour" },
+      { ingredient_id: "ing-1", name_text: "all-purpose flour" },
+    ]);
+
+    expect(addIngredientAliases).toHaveBeenCalledWith("ing-1", [
+      "all-purpose flour",
+    ]);
+  });
+});
+
 describe("removeAliasAndReembed", () => {
   it("re-embeds from the surviving aliases", async () => {
     vi.mocked(removeIngredientAlias).mockResolvedValue(
