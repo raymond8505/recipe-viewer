@@ -167,6 +167,22 @@ describe("rendered prose constants", () => {
     expect(description).toContain(TOOL.create_ingredient);
   });
 
+  it("accounts for all three search arms and their precedence", () => {
+    // The search matches on the recipe name, a matched line's catalog
+    // name/alias, and the recipe's own parsed line wording (db/migrations/0027
+    // + 0029). An agent ranks its own next move on this precedence, so a
+    // description naming fewer arms than the SQL has sends it to
+    // search_ingredients to explain a gap search does not have.
+    const description = descriptionOf("search_recipes");
+    expect(description).toContain("NAME");
+    expect(description).toContain("ALIAS");
+    expect(description).toContain("OWN ingredient wording");
+    expect(description).toContain("BY WEIGHT");
+    // A line with no catalog match is still searched, by its own wording, so
+    // any sentence claiming otherwise contradicts the third arm.
+    expect(description).not.toContain("is NOT searched");
+  });
+
   it("renders every accepted image format in the upload description", () => {
     expect(IMAGE_FORMAT_LIST).toBe("PNG, JPEG, or WebP");
     for (const { label } of Object.values(IMAGE_CONTENT_TYPES)) {

@@ -91,9 +91,17 @@ const TOOL_IMPLS: {
   [K in ToolName]: Pick<ToolDefinition, "description" | "call">;
 } = {
   search_recipes: {
-    description: `Search recipes by name, by catalog ingredient, source, or status. Returns a paginated list with total count; each result is trimmed to { ${RECIPE_SEARCH_RESULT_FIELDS.join(", ")} } — call ${TOOL.get_recipe} with an id for the full schema. Use this before ${TOOL.get_recipe} when you only have a name. ${RECIPE_TWO_URLS}
+    description: `Search recipes by name, by ingredient (either the catalog row a line is matched to or the recipe's own wording), source, or status. Returns a paginated list with total count; each result is trimmed to { ${RECIPE_SEARCH_RESULT_FIELDS.join(", ")} } — call ${TOOL.get_recipe} with an id for the full schema. Use this before ${TOOL.get_recipe} when you only have a name. ${RECIPE_TWO_URLS}
 
-A query matches a recipe's NAME or its INGREDIENTS. An ingredient matches only through the catalog: the line must already be associated with a catalog ingredient whose name or one of whose aliases contains the query. Recipe wording that was never matched to the catalog is NOT searched, so a food the catalog doesn't cover yet returns name hits only — that is a gap in the catalog, not proof the recipes don't exist. Use ${TOOL.search_ingredients} to see what the catalog calls a food, and which spellings it answers to, before concluding a search came up empty.`,
+A query is a case-insensitive SUBSTRING, tried against THREE things, and results come back in that order of priority:
+
+1. the recipe's NAME. A title says what a recipe IS, so every name hit outranks every ingredient hit.
+2. the CATALOG name or any ALIAS of an ingredient one of its lines is matched to. This is the arm aliases exist for: it is what lets "cilantro" find a recipe whose line reads "fresh coriander".
+3. the recipe's OWN ingredient wording — each line's parsed ingredient name, as the recipe words it.
+
+Within one of those tiers, recipes are ordered by HOW MUCH OF THE RECIPE the matching ingredient accounts for BY WEIGHT: a stew built on the food you asked for outranks one that finishes with a spoonful of it. A match whose lines carry no resolved weight scores zero and still appears, below the weighted ones — absence of a weight is never treated as absence of a match.
+
+Arm 3 is why an unmatched line is no longer invisible: a food the catalog does not cover yet is still findable by the words the recipe itself uses, so a thin result is no longer evidence of a catalog gap. What arm 3 cannot do is bridge wording — it is a substring test on the parsed name, so it finds "coriander" inside "fresh coriander" but will never connect "cilantro" to it. That bridge is arm 2's, and only a matched line has one. When a search comes up empty or reads thin, ${TOOL.search_ingredients} is still how you learn what the catalog calls a food and which spellings it answers to.`,
     call: (args) => searchRecipes(recipeSearchInputSchema.parse(args)),
   },
   search_ingredients: {

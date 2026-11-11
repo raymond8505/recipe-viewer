@@ -594,6 +594,32 @@ describe("searchRecipes", () => {
     expect(out.data).toHaveLength(2);
   });
 
+  it("asks for the relevance sort, the only one the tiers reach", async () => {
+    // search_recipes_ranked runs for this sort alone, so an agent that did not
+    // ask for it would be handed the newest matches rather than the best.
+    const { getRecipes } = await import("@/lib/recipes");
+    vi.mocked(getRecipes).mockResolvedValueOnce({ data: [], count: 0 });
+
+    await searchRecipes({ query: "tofu" });
+
+    expect(getRecipes).toHaveBeenCalledWith(
+      expect.objectContaining({ sort: "relevance" }),
+    );
+  });
+
+  it("asks for newest when there is no query to rank", async () => {
+    // A filter-only call (source/status) has nothing to be relevant to, and
+    // relevance over an empty query would rank the whole corpus by nothing.
+    const { getRecipes } = await import("@/lib/recipes");
+    vi.mocked(getRecipes).mockResolvedValueOnce({ data: [], count: 0 });
+
+    await searchRecipes({ status: "draft" });
+
+    expect(getRecipes).toHaveBeenCalledWith(
+      expect.objectContaining({ sort: "newest" }),
+    );
+  });
+
   it("trims each result to id, both urls, name and description", async () => {
     const { getRecipes } = await import("@/lib/recipes");
     const fixture = recipeFixtures[0];

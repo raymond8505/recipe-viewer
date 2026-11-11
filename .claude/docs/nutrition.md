@@ -75,16 +75,25 @@ the math resolving its own from the hydrated line is what keeps a drafted line �
 review, with no row yet — computing the same as a saved one. Improving a line's weight therefore
 improves search ranking for free, and the two can never drift apart.
 
-**Recipe search reaches only what the catalog covers.** Search matches a recipe's name OR the
-catalog `name`/`aliases` of the ingredients its lines resolve to (`ingredient_catalog_text`,
-db/migrations/0023 — see [supabase-data-layer.md](supabase-data-layer.md)). A line with no
-`ingredient_id` is not searched at all, so the feature's reach IS normalization's reach: at the time
-of writing 290 of 6,493 lines are associated, spread over **23 of 578 recipes**. A search for a food
-the catalog doesn't cover yet returns name hits only — that is a gap in the catalog, not a bug in
-search, and it closes as normalization runs without any code changing. Two consequences worth
-knowing: pick QA terms from the data (`select i.name, count(distinct ri.recipe_id) ... group by`),
-because an intuitive term like "butter" can add zero recipes; and the MCP `search_recipes`
-description says this outright, so an agent doesn't read an empty result as "no such recipes".
+**Recipe search has three arms, ranked in precedence order.** A query is a case-insensitive
+substring tried against the recipe's `name`; the catalog `name`/`aliases` of the ingredients its
+lines resolve to (`ingredient_catalog_text`, db/migrations/0023 — see
+[supabase-data-layer.md](supabase-data-layer.md)); and the parsed `name_text` of its own ingredient
+lines (`ingredient_line_text`, db/migrations/0027). `search_recipes_ranked` tiers them in that
+order — a name hit outranks a catalog hit outranks a line-wording hit — and within a tier orders by
+the matching lines' share of the recipe **by weight**, keeping a zero-weight match visible below
+the weighted ones. 0029 is the live definition of that function; edit it there. The tiering runs on
+the `relevance` sort ONLY — every other sort takes the same three-arm membership and orders by its
+own column, so a sort choice silently decides whether relevance applies at all.
+
+**Catalog coverage decides synonym reach, not reach.** The line arm makes an unmatched line
+findable by the words the recipe itself uses, so a thin result is not evidence of a catalog gap.
+What that arm cannot do is bridge wording: it is a substring test, so "cilantro" reaches a line
+reading "fresh coriander" only through the catalog arm's aliases, and only for a line that has an
+`ingredient_id`. At the time of writing 290 of 6,493 lines are associated, spread over **23 of 578
+recipes** — so when QA'ing the catalog arm specifically, pick terms from the data (`select i.name,
+count(distinct ri.recipe_id) ... group by`), because an intuitive term like "butter" can add zero
+recipes through that arm while still matching plenty of line wording.
 
 ## Line identity, data layer, normalization
 

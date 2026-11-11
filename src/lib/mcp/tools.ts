@@ -29,6 +29,7 @@ import { exhaustiveKeys } from "@/lib/exhaustive";
 import { ingredientEmbeddingText, ingredientQueryText } from "@/lib/ingredientAliases";
 import {
   CUSTOM_RECIPE_SOURCE,
+  defaultSortFor,
   fromSchemaOrgInstructions,
   parseDurationToSeconds,
   recipePageUrl,
@@ -143,6 +144,12 @@ export async function searchRecipes(
     status: args.status,
     page: args.page,
     limit: args.limit,
+    // The same default the reader's search box resolves to, from the same
+    // helper: an agent's query is a search, and relevance is the question a
+    // search asks. Only this sort reaches search_recipes_ranked, so without it
+    // an agent gets the newest matches rather than the best ones — and the
+    // tier order the tool description teaches would never run.
+    sort: defaultSortFor(args.query),
     // MCP callers are authenticated via OAuth — treat as logged-in so they see
     // drafts/archived rows when filtering explicitly by status.
     isLoggedIn: true,
