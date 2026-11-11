@@ -48,8 +48,8 @@ export const POST = requireSessionOrRecipeToken(
 
     const bytes = new Uint8Array(await file.arrayBuffer());
 
-    // Default-on: point metadata.schema.image at the uploaded file, matching the
-    // MCP upload_recipe_image tool's direct paths. Callers opt out with
+    // Default-on: point the recipe's image column at the uploaded file, matching
+    // the MCP upload_recipe_image tool's direct paths. Callers opt out with
     // updateSchema=false (or "0") — the web UI does this because it has a human
     // verification step and folds the returned URL into its own full-schema save.
     const rawUpdateSchema = form.get("updateSchema");
@@ -59,7 +59,7 @@ export const POST = requireSessionOrRecipeToken(
       const image = await uploadRecipeImage(id, bytes, file.type);
       if (updateSchema) {
         try {
-          await updateRecipeRow(id, { schema: { image } });
+          await updateRecipeRow(id, { image });
         } catch {
           return NextResponse.json(
             {

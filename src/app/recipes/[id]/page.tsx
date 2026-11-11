@@ -18,15 +18,14 @@ export async function generateMetadata({
   const recipe = await getRecipeById(id);
   if (!recipe) return { title: "Recipe Not Found" };
 
-  const { schema } = recipe.metadata;
-  const image = getFirstImage(schema.image);
-  const description = schema.description ?? undefined;
+  const { name, image } = recipe;
+  const description = recipe.description ?? undefined;
 
   return {
-    title: schema.name,
+    title: name,
     description,
     openGraph: {
-      title: schema.name,
+      title: name,
       description,
       ...(image && {
         images: [{ url: image }],
@@ -35,7 +34,7 @@ export async function generateMetadata({
     },
     twitter: {
       card: image ? "summary_large_image" : "summary",
-      title: schema.name,
+      title: name,
       description,
       ...(image && { images: [image] }),
     },

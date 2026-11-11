@@ -64,10 +64,18 @@ import {
 } from "@/fixtures";
 import type { RecipeDocument, SchemaRecipe } from "@/types/recipe";
 
-/** The document the repo builds for `content`, for a schema-only expectation. */
-function markdownDoc(schema: SchemaRecipe): RecipeDocument {
+/** The document the repo builds for `content`, for a scalar-only expectation. */
+function markdownDoc(
+  name: string,
+  overrides: Partial<RecipeDocument> = {},
+): RecipeDocument {
   return {
-    schema,
+    schema: {},
+    name,
+    image: null,
+    description: null,
+    notes: null,
+    cooking_notes: null,
     ingredients: [],
     instructions: [],
     prep_time: null,
@@ -77,6 +85,7 @@ function markdownDoc(schema: SchemaRecipe): RecipeDocument {
     servings_unit: null,
     total_weight_amount: null,
     total_weight_unit: null,
+    ...overrides,
   };
 }
 
@@ -188,7 +197,7 @@ describe("getRecipes", () => {
     await getRecipes({ query: "pasta" });
 
     expect(builder.or).toHaveBeenCalledWith(
-      'metadata->schema->>name.ilike."%pasta%"' +
+      'name.ilike."%pasta%"' +
         ',ingredient_catalog_text.ilike."%pasta%"' +
         ',ingredient_line_text.ilike."%pasta%"',
     );
@@ -223,7 +232,7 @@ describe("getRecipes", () => {
     await getRecipes({ query: "salt, table" });
 
     expect(builder.or).toHaveBeenCalledWith(
-      'metadata->schema->>name.ilike."%salt, table%"' +
+      'name.ilike."%salt, table%"' +
         ',ingredient_catalog_text.ilike."%salt, table%"' +
         ',ingredient_line_text.ilike."%salt, table%"',
     );
@@ -236,7 +245,7 @@ describe("getRecipes", () => {
     await getRecipes({ query: String.raw`a"b\c` });
 
     expect(builder.or).toHaveBeenCalledWith(
-      String.raw`metadata->schema->>name.ilike."%a\"b\\c%"` +
+      String.raw`name.ilike."%a\"b\\c%"` +
         String.raw`,ingredient_catalog_text.ilike."%a\"b\\c%"` +
         String.raw`,ingredient_line_text.ilike."%a\"b\\c%"`,
     );
@@ -310,14 +319,14 @@ describe("getRecipes", () => {
     const { builder } = makeSupabaseMock();
     await getRecipes({ sort: "name-asc" });
 
-    expect(builder.order).toHaveBeenCalledWith("metadata->schema->>name", { ascending: true });
+    expect(builder.order).toHaveBeenCalledWith("name", { ascending: true });
   });
 
   it("sorts by name descending for 'name-desc'", async () => {
     const { builder } = makeSupabaseMock();
     await getRecipes({ sort: "name-desc" });
 
-    expect(builder.order).toHaveBeenCalledWith("metadata->schema->>name", { ascending: false });
+    expect(builder.order).toHaveBeenCalledWith("name", { ascending: false });
   });
 
   it("returns empty data and zero count on supabase error", async () => {
@@ -385,7 +394,7 @@ describe("getStatusCounts", () => {
     await getStatusCounts({ query: "pasta" });
 
     expect(builder.or).toHaveBeenCalledWith(
-      'metadata->schema->>name.ilike."%pasta%"' +
+      'name.ilike."%pasta%"' +
         ',ingredient_catalog_text.ilike."%pasta%"' +
         ',ingredient_line_text.ilike."%pasta%"',
     );
@@ -536,11 +545,98 @@ describe("createRecipeRow", () => {
 
     expect(inserts[0]).toMatchObject({
       name: "Soup",
-      content: recipeToMarkdown(markdownDoc(schema)),
+      content: recipeToMarkdown(
+        markdownDoc("Soup", { description: "Hot broth." }),
+      ),
       url: "https://example.com",
       source: "example.com",
       status: "draft",
     });
+  });
+
+  // The promoted scalars. Create is the inbound Schema.org edge, so `image`
+  // arrives in either wire shape and is reduced to the single URL the column
+  // holds — the same rule the yield follows two tests down. `cookingNotes` is
+  // absent by design: it is authored in cooking mode, never on create.
+  it("promotes image, description and notes to their columns", async () => {
+    const { inserts } = makeWriteSupabaseMock({
+      insertSingle: { data: { id: "x", ingredients: [], instructions: [] }, error: null },
+    });
+
+    await createRecipeRow({
+      url: "https://example.com",
+      source: "example.com",
+      schema: {
+        name: "Soup",
+        image: "https://cdn.example.com/soup.png",
+        description: "Hot broth.",
+        notes: "Salt at the end.",
+      },
+    });
+
+    expect(inserts[0]).toMatchObject({
+      image: "https://cdn.example.com/soup.png",
+      description: "Hot broth.",
+      notes: "Salt at the end.",
+    });
+  });
+
+  it("takes the first entry of an array image", async () => {
+    const { inserts } = makeWriteSupabaseMock({
+      insertSingle: { data: { id: "x", ingredients: [], instructions: [] }, error: null },
+    });
+
+    await createRecipeRow({
+      url: "https://example.com",
+      source: "example.com",
+      schema: { name: "Soup", image: ["https://cdn.example.com/a.png", "b.png"] },
+    });
+
+    expect(inserts[0].image).toBe("https://cdn.example.com/a.png");
+  });
+
+  // NULL is the one spelling of "this recipe has none" every reader branches
+  // on, so a blank string must not reach the column as a second one.
+  it("writes NULL for a blank or absent value", async () => {
+    const { inserts } = makeWriteSupabaseMock({
+      insertSingle: { data: { id: "x", ingredients: [], instructions: [] }, error: null },
+    });
+
+    await createRecipeRow({
+      url: "https://example.com",
+      source: "example.com",
+      schema: { name: "Soup", description: "   ", image: "" },
+    });
+
+    expect(inserts[0]).toMatchObject({
+      image: null,
+      description: null,
+      notes: null,
+    });
+  });
+
+  // The zod schema is .passthrough(), so a scraper or a stale agent can still
+  // send the three dropped keys. None may reach the stored blob.
+  it("strips author, keywords and datePublished from the blob", async () => {
+    const { inserts } = makeWriteSupabaseMock({
+      insertSingle: { data: { id: "x", ingredients: [], instructions: [] }, error: null },
+    });
+
+    await createRecipeRow({
+      url: "https://example.com",
+      source: "example.com",
+      schema: {
+        name: "Soup",
+        author: { name: "Someone Else" },
+        keywords: "weeknight",
+        datePublished: "2020-01-01",
+      } as never,
+    });
+
+    const blob = (inserts[0].metadata as { schema: object }).schema;
+    expect(blob).not.toHaveProperty("author");
+    expect(blob).not.toHaveProperty("keywords");
+    expect(blob).not.toHaveProperty("datePublished");
   });
 
   it("includes the embedding as a pgvector literal when generation succeeds", async () => {
@@ -631,21 +727,24 @@ describe("createRecipeRow", () => {
     });
   });
 
-  it("strips a nutrition.servingSize without mutating the caller's object", async () => {
+  // Nutrition is derived from the ingredient catalog on every read, so the
+  // whole block goes rather than just its servingSize — a stored one could
+  // only ever contradict the lines it claims to describe.
+  it("strips the whole nutrition block, leaving the caller's object alone", async () => {
     const { inserts } = makeWriteSupabaseMock({
       insertSingle: { data: { id: "x", ingredients: [], instructions: [] }, error: null },
     });
-    const nutrition = { calories: "300 kcal", servingSize: "1 cup" };
-    const schema = { name: "Soup", nutrition };
+    const schema = {
+      name: "Soup",
+      nutrition: { calories: "300 kcal", servingSize: "1 cup" },
+    } as never;
 
     await createRecipeRow({ url: "https://example.com", source: "example.com", schema });
 
-    const stored = (inserts[0].metadata as { schema: { nutrition: object } }).schema;
-    expect(stored.nutrition).not.toHaveProperty("servingSize");
-    expect(stored.nutrition).toMatchObject({ calories: "300 kcal" });
-    // The spread is shallow, so a careless delete would reach into the payload
-    // the MCP handler still owns.
-    expect(nutrition.servingSize).toBe("1 cup");
+    const stored = (inserts[0].metadata as { schema: object }).schema;
+    expect(stored).not.toHaveProperty("nutrition");
+    // The strip copies; the payload the MCP handler still owns is untouched.
+    expect(schema).toHaveProperty("nutrition");
   });
 
   it("omits the embedding column when generation fails (null)", async () => {
@@ -759,7 +858,12 @@ describe("updateRecipeRow", () => {
     servings_unit: "kebabs",
     total_weight_amount: null,
     total_weight_unit: null,
-    metadata: { schema: { name: "Original", description: "Old blurb" } },
+    name: "Original",
+    image: null,
+    description: "Old blurb",
+    notes: null,
+    cooking_notes: null,
+    metadata: { schema: {} },
   };
 
   // Three-way, like the times: the key absent leaves both columns alone, an
@@ -836,21 +940,118 @@ describe("updateRecipeRow", () => {
     });
   });
 
+  // Same three-way contract the servings have, one column at a time: absent
+  // leaves it, blank clears it, a value sets it.
+  describe("promoted scalars", () => {
+    it("mirrors a schema patch into the columns", async () => {
+      const { updates } = makeWriteSupabaseMock({
+        selectSingle: { data: existing, error: null },
+        updateSingle: { data: existing, error: null },
+      });
+
+      await updateRecipeRow("r1", {
+        image: "https://cdn.example.com/new.png",
+        description: "Fresh blurb",
+        notes: "Rest it longer.",
+        cookingNotes: "Used Valentina.",
+      });
+
+      expect(updates[0]).toMatchObject({
+        image: "https://cdn.example.com/new.png",
+        description: "Fresh blurb",
+        notes: "Rest it longer.",
+        cooking_notes: "Used Valentina.",
+      });
+    });
+
+    it("clears a column on a blank value", async () => {
+      const { updates } = makeWriteSupabaseMock({
+        selectSingle: { data: existing, error: null },
+        updateSingle: { data: existing, error: null },
+      });
+
+      await updateRecipeRow("r1", { description: "", cookingNotes: "  " });
+      expect(updates[0].description).toBeNull();
+      expect(updates[0].cooking_notes).toBeNull();
+    });
+
+    it("leaves a column alone when its key is absent", async () => {
+      const { updates } = makeWriteSupabaseMock({
+        selectSingle: { data: existing, error: null },
+        updateSingle: { data: existing, error: null },
+      });
+
+      await updateRecipeRow("r1", { description: "Fresh blurb" });
+      expect(updates[0]).not.toHaveProperty("image");
+      expect(updates[0]).not.toHaveProperty("notes");
+      expect(updates[0]).not.toHaveProperty("cooking_notes");
+    });
+  });
+
+  // The column has a now() default and no trigger, so the repo layer is what
+  // keeps it moving — without this it would record creation time forever.
+  describe("updated_at", () => {
+    it("stamps the write", async () => {
+      const { updates } = makeWriteSupabaseMock({
+        selectSingle: { data: existing, error: null },
+        updateSingle: { data: existing, error: null },
+      });
+
+      await updateRecipeRow("r1", { description: "Fresh blurb" });
+      expect(Date.parse(updates[0].updated_at as string)).not.toBeNaN();
+    });
+
+    it("does not stamp a patch that changes nothing", async () => {
+      const { updates } = makeWriteSupabaseMock({
+        selectSingle: { data: existing, error: null },
+        updateSingle: { data: existing, error: null },
+      });
+
+      await updateRecipeRow("r1", {});
+      expect(updates).toHaveLength(0);
+    });
+  });
+
   beforeEach(() => {
     mockGenerateEmbedding.mockReset().mockResolvedValue(null);
   });
 
-  it("syncs the top-level name column when schema.name changes (bug fix)", async () => {
+  it("writes the name column and never a name back into the blob", async () => {
     const { updates } = makeWriteSupabaseMock({
       selectSingle: { data: existing, error: null },
       updateSingle: { data: existing, error: null },
     });
 
-    await updateRecipeRow("r1", { schema: { name: "Renamed" } });
+    await updateRecipeRow("r1", { name: "Renamed" });
 
     expect(updates[0]).toMatchObject({ name: "Renamed" });
-    // metadata.schema should still be merged
-    expect((updates[0].metadata as { schema: { name: string } }).schema.name).toBe("Renamed");
+    expect((updates[0].metadata as { schema: object }).schema).not.toHaveProperty(
+      "name",
+    );
+  });
+
+  // The column is NOT NULL and a listing has nothing else to show, so an empty
+  // title box has to degrade to "no change" rather than to a nameless row.
+  it("ignores a blank name rather than clearing the column", async () => {
+    const { updates } = makeWriteSupabaseMock({
+      selectSingle: { data: existing, error: null },
+      updateSingle: { data: existing, error: null },
+    });
+
+    await updateRecipeRow("r1", { name: "   ", description: "Fresh blurb" });
+    expect(updates[0]).not.toHaveProperty("name");
+  });
+
+  // The markdown's first two blocks are the title and the blurb, so either
+  // changing has to re-render `content` the way a servings change does.
+  it("recomputes content when only a promoted scalar changes", async () => {
+    const { updates } = makeWriteSupabaseMock({
+      selectSingle: { data: existing, error: null },
+      updateSingle: { data: existing, error: null },
+    });
+
+    await updateRecipeRow("r1", { name: "Renamed" });
+    expect(updates[0].content).toContain("# Renamed");
   });
 
   it("recomputes content as the markdown of the merged schema on any schema change", async () => {
@@ -859,12 +1060,11 @@ describe("updateRecipeRow", () => {
       updateSingle: { data: existing, error: null },
     });
 
-    await updateRecipeRow("r1", { schema: { description: "Fresh blurb" } });
+    await updateRecipeRow("r1", { description: "Fresh blurb" });
 
-    const mergedSchema = { name: "Original", description: "Fresh blurb" };
     expect(updates[0]).toMatchObject({
       content: recipeToMarkdown({
-        ...markdownDoc(mergedSchema),
+        ...markdownDoc("Original", { description: "Fresh blurb" }),
         // The row's own count, untouched by this patch — the markdown always
         // describes the recipe as saved.
         servings_amount: existing.servings_amount,
@@ -1143,7 +1343,7 @@ describe("updateRecipeRow", () => {
       selectSingle: {
         data: {
           ...existing,
-          metadata: { schema: { name: "Original", recipeIngredient: ["frozen"] } },
+          metadata: { schema: { recipeCuisine: "Thai", recipeIngredient: ["frozen"] } },
         },
         error: null,
       },
@@ -1151,12 +1351,16 @@ describe("updateRecipeRow", () => {
     });
 
     await updateRecipeRow("r1", {
-      schema: { description: "Fresh blurb", recipeIngredient: ["stray"] } as never,
+      schema: { keywords: "weeknight", recipeIngredient: ["stray"] } as never,
     });
 
     const blob = (updates[0].metadata as { schema: object }).schema;
     expect(blob).not.toHaveProperty("recipeIngredient");
-    expect(blob).toMatchObject({ description: "Fresh blurb" });
+    // A dropped key is stripped on the same pass, though for the opposite
+    // reason: nothing rebuilds it at an edge because nothing wants it.
+    expect(blob).not.toHaveProperty("keywords");
+    // What the blob is still the source of survives.
+    expect(blob).toMatchObject({ recipeCuisine: "Thai" });
   });
 });
 
@@ -1195,37 +1399,40 @@ describe("recipe time columns", () => {
     mockGenerateEmbedding.mockReset().mockResolvedValue(null);
   });
 
-  it("reads times from the columns, not the stale blob copy", async () => {
+  it("deletes the blob's time keys at the read exit and answers with the columns", async () => {
     makeSupabaseMock({ singleData: structuredClone(staleBlobRow) });
 
     const row = await getRecipeById("r1");
 
-    expect(row?.metadata.schema).toMatchObject({
-      prepTime: "PT20M",
-      cookTime: "PT35M",
-      totalTime: "PT55M",
-    });
+    // Nothing above this module reads a time off the blob, so the three keys
+    // are dead — and a dead key has to be GONE rather than merely stale,
+    // because the MCP server JSON-stringifies whole rows.
+    expect(row?.metadata.schema).not.toHaveProperty("prepTime");
+    expect(row?.metadata.schema).not.toHaveProperty("cookTime");
+    expect(row?.metadata.schema).not.toHaveProperty("totalTime");
+    expect(row).toMatchObject({ prep_time: 1200, cook_time: 2100, total_time: 3300 });
   });
 
-  it("drops a schema time key when its column is null", async () => {
+  it("leaves nothing behind for a reader to find when a column is null", async () => {
     makeSupabaseMock({
       singleData: { ...structuredClone(staleBlobRow), cook_time: null },
     });
 
     const row = await getRecipeById("r1");
 
-    // Deleted, not set to null: every downstream `if (schema.cookTime)` has to
-    // see the same shape a recipe that never had a cook time produces.
+    // The dangerous shape: a cleared column beside a frozen 999 in the blob.
+    // Nothing can reach the 999.
     expect(row?.metadata.schema).not.toHaveProperty("cookTime");
-    expect(row?.metadata.schema.prepTime).toBe("PT20M");
+    expect(row?.cook_time).toBeNull();
   });
 
-  it("hydrates every row in a list query, not just single reads", async () => {
+  it("scrubs every row in a list query, not just single reads", async () => {
     makeSupabaseMock({ data: [structuredClone(staleBlobRow)], count: 1 });
 
     const { data } = await getRecipes();
 
-    expect(data[0].metadata.schema.totalTime).toBe("PT55M");
+    expect(data[0].metadata.schema).not.toHaveProperty("totalTime");
+    expect(data[0].total_time).toBe(3300);
   });
 
   it("writes times to columns and keeps them out of the blob on create", async () => {
@@ -1271,25 +1478,60 @@ describe("recipe time columns", () => {
       updateSingle: { data: structuredClone(staleBlobRow), error: null },
     });
 
-    await updateRecipeRow("r1", { schema: { cookTime: null } });
+    await updateRecipeRow("r1", { times: { cook: null } });
 
     expect(updates[0]).toMatchObject({ cook_time: null });
   });
 
-  it("leaves an untouched time at its column value, not the blob's", async () => {
+  it("leaves the other two times alone when one is patched", async () => {
     const { updates } = makeWriteSupabaseMock({
       selectSingle: { data: structuredClone(staleBlobRow), error: null },
       updateSingle: { data: structuredClone(staleBlobRow), error: null },
     });
 
-    // A patch that says nothing about times — the blob's 999 must not win.
-    await updateRecipeRow("r1", { schema: { description: "Fresh blurb" } });
+    // Each member of `times` is independently three-way: naming one must not
+    // touch the columns the caller said nothing about.
+    await updateRecipeRow("r1", { times: { prep: 2700 } });
 
-    expect(updates[0]).toMatchObject({
-      prep_time: 1200,
-      cook_time: 2100,
-      total_time: 3300,
+    expect(updates[0]).toMatchObject({ prep_time: 2700 });
+    expect(updates[0]).not.toHaveProperty("cook_time");
+    expect(updates[0]).not.toHaveProperty("total_time");
+  });
+
+  it("re-renders the searchable markdown for a times-only patch", async () => {
+    const { updates } = makeWriteSupabaseMock({
+      selectSingle: { data: structuredClone(staleBlobRow), error: null },
+      updateSingle: { data: structuredClone(staleBlobRow), error: null },
     });
+
+    // The markdown prints a Prep/Cook/Total line, so a time change has to
+    // re-render it for the same reason a servings change does. When the times
+    // travelled inside `schema` this fell out of the schema branch; as their
+    // own patch field they need naming, or the embedded text keeps describing
+    // the times the recipe just stopped having.
+    await updateRecipeRow("r1", { times: { prep: 2700 } });
+
+    expect(updates[0].content).toContain("Prep: 45 min");
+    expect(updates[0].content).not.toContain("Prep: 20 min");
+  });
+
+  it("does not touch a time column a patch said nothing about", async () => {
+    const { updates } = makeWriteSupabaseMock({
+      selectSingle: { data: structuredClone(staleBlobRow), error: null },
+      updateSingle: { data: structuredClone(staleBlobRow), error: null },
+    });
+
+    // A patch with no `times` leaves all three columns ABSENT from the write
+    // rather than restating them. Nothing re-derives a time column from the
+    // blob, so the frozen 999 cannot reach one.
+    await updateRecipeRow("r1", { description: "Fresh blurb" });
+
+    expect(updates[0]).not.toHaveProperty("prep_time");
+    expect(updates[0]).not.toHaveProperty("cook_time");
+    expect(updates[0]).not.toHaveProperty("total_time");
+    // The markdown still has to describe the row this write leaves behind, so
+    // it reads the times off `current`'s columns — never the blob's 999.
+    expect(updates[0].content).toContain("Prep: 20 min · Cook: 35 min · Total: 55 min");
   });
 
   it("never writes time keys back into the blob on update", async () => {
@@ -1298,11 +1540,15 @@ describe("recipe time columns", () => {
       updateSingle: { data: structuredClone(staleBlobRow), error: null },
     });
 
-    await updateRecipeRow("r1", { schema: { prepTime: "PT45M" } });
+    await updateRecipeRow("r1", { times: { prep: 2700 } });
 
     expect(updates[0]).toMatchObject({ prep_time: 2700 });
     const blob = (updates[0].metadata as { schema: object }).schema;
     expect(blob).not.toHaveProperty("prepTime");
+    // The frozen 999s the row arrived with are stripped too, not merely left
+    // un-refreshed: every write strips the whole dead-key list.
+    expect(blob).not.toHaveProperty("cookTime");
+    expect(blob).not.toHaveProperty("totalTime");
   });
 });
 
@@ -1542,10 +1788,42 @@ describe("recipe ingredients hydration", () => {
     expect(recipe?.ingredients[0].ingredients).toHaveLength(2);
   });
 
-  // recipeYield and nutrition.servingSize are column-backed now, so the blob's
-  // copies are frozen artifacts. The read exit is what keeps them from reaching
-  // a consumer — the MCP server JSON-stringifies whole rows.
-  it("deletes the blob's dead recipeYield and nutrition.servingSize at the read exit", async () => {
+  // `metadata` is nullable and holds whatever was written: a failed scrape
+  // stores its diagnosis there and no `schema` at all. RecipeRow promises
+  // consumers a `metadata.schema` they can read without a guard, so the read
+  // exit is what makes that true. One such row exists; without this the detail
+  // page throws on `schema.prepTime` before rendering anything.
+  it("gives a row whose blob has no schema an empty one, keeping what is there", async () => {
+    makeSupabaseMock({
+      singleData: {
+        ...structuredClone(storedRow),
+        metadata: { error: "Behind paywall", is_complete: false },
+      },
+    });
+    mockGetRecipeIngredients.mockResolvedValue(rows);
+
+    const recipe = await getRecipeById("r1");
+
+    expect(recipe?.metadata.schema).toEqual({});
+    // The diagnosis is data someone wrote; nothing here is entitled to drop it.
+    expect(recipe?.metadata).toMatchObject({ error: "Behind paywall" });
+  });
+
+  it("survives a null metadata column", async () => {
+    makeSupabaseMock({
+      singleData: { ...structuredClone(storedRow), metadata: null },
+    });
+    mockGetRecipeIngredients.mockResolvedValue(rows);
+
+    await expect(getRecipeById("r1")).resolves.toMatchObject({
+      metadata: { schema: {} },
+    });
+  });
+
+  // The yield is column-backed and the nutrition is derived from the catalog,
+  // so both of the blob's copies are frozen artifacts. The read exit is what
+  // keeps them from reaching a consumer — the MCP server stringifies whole rows.
+  it("deletes the blob's dead recipeYield and nutrition at the read exit", async () => {
     makeSupabaseMock({
       singleData: {
         ...structuredClone(storedRow),
@@ -1553,7 +1831,7 @@ describe("recipe ingredients hydration", () => {
         servings_unit: "servings",
         metadata: {
           schema: {
-            name: "Curry",
+            recipeCuisine: "Thai",
             recipeYield: "99 portions",
             nutrition: { calories: "300 kcal", servingSize: "1 frozen copy" },
           },
@@ -1565,9 +1843,9 @@ describe("recipe ingredients hydration", () => {
     const recipe = await getRecipeById("r1");
 
     expect(recipe?.metadata.schema).not.toHaveProperty("recipeYield");
-    expect(recipe?.metadata.schema.nutrition).not.toHaveProperty("servingSize");
-    // Only those two keys go — the nutrients beside them are still stored data.
-    expect(recipe?.metadata.schema.nutrition?.calories).toBe("300 kcal");
+    expect(recipe?.metadata.schema).not.toHaveProperty("nutrition");
+    // What the blob is still the source of survives the same pass.
+    expect(recipe?.metadata.schema.recipeCuisine).toBe("Thai");
     expect(recipe?.servings_amount).toBe(4);
   });
 
@@ -1688,7 +1966,7 @@ describe("getRecipes — relevance ranking", () => {
     await getRecipes({ query: "onion", sort: "name-asc" });
 
     expect(client.rpc).not.toHaveBeenCalled();
-    expect(builder.order).toHaveBeenCalledWith("metadata->schema->>name", {
+    expect(builder.order).toHaveBeenCalledWith("name", {
       ascending: true,
     });
   });

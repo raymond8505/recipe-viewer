@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { POST } from "@/app/api/recipes/[id]/regenerate-image/route";
 import { makeIngredientLines, makeRecipe } from "@/fixtures";
+import type { SchemaRecipe } from "@/types/recipe";
 
 vi.mock("@/lib/recipes", async (orig) => {
   const actual = await orig<typeof import("@/lib/recipes")>();
@@ -95,8 +96,19 @@ describe("POST /api/recipes/[id]/regenerate-image", () => {
     vi.mocked(getRecipeById).mockResolvedValueOnce(
       makeRecipe("recipe-1", "Old Recipe", {
         prep_time: 900,
+        notes: "draw it rustic",
         ingredients: makeIngredientLines(["2 cups flour", "1 egg"]),
-        metadata: { schema: { name: "Old Recipe", prepTime: "PT5M", notes: "draw it rustic" } },
+        // A blob frozen before the promotions, carrying a stale copy of every
+        // field the columns now own. None of it may reach the payload: the
+        // name, the notes and the time below all come from the columns beside
+        // it, and the figures differ so a leak cannot look like a pass.
+        metadata: {
+          schema: {
+            name: "Stale Name",
+            prepTime: "PT5M",
+            notes: "stale note",
+          } as unknown as SchemaRecipe,
+        },
       }),
     );
     const fetchSpy = vi.fn(() => makeWebhookResponse(true));

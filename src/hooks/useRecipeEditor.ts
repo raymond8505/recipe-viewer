@@ -15,9 +15,7 @@ import {
   formatTimeInput,
   ingredientsToEditable,
   instructionsToEditable,
-  parseDurationToSeconds,
   parseTimeInput,
-  secondsToIso,
 } from "@/lib/format";
 
 /**
@@ -28,7 +26,32 @@ import {
  * would clear it.
  */
 export interface RecipeEditPatch {
+  /**
+   * The stored blob, passed straight through. It is down to `recipeCuisine` and
+   * `recipeCategory`, and the editor edits neither — but a re-scrape under
+   * review carries NEWLY scraped values here (`draftRecipeDocument`), and
+   * saving the review is how they persist. Dropping this field would silently
+   * stop that working.
+   *
+   * It is the document's schema by reference, never an object literal built
+   * around it: a literal's spread skips excess-property checks, which is how a
+   * write into a blob nothing reads once compiled clean.
+   */
   schema: SchemaRecipe;
+  /**
+   * The three time columns in SECONDS, always present — an unparseable entry
+   * falls back to the stored column value, so there is no "leave it alone"
+   * case to express by absence.
+   */
+  times: { prep: number | null; cook: number | null; total: number | null };
+  /**
+   * The column-backed scalars the editor edits. `description` and `notes` are
+   * `string | null` rather than optional: emptying either field is a CLEAR, and
+   * an omitted key would read as "leave it alone" after the JSON round trip.
+   */
+  name: string;
+  description: string | null;
+  notes: string | null;
   ingredients: RecipeIngredientGroupInput[];
   instructions: RecipeInstructionGroup[];
   servings?: { amount: number; unit: string | null };
@@ -115,20 +138,17 @@ export interface UseRecipeEditor {
 }
 
 /**
- * One recipe time's contribution to the saved schema. `parseTimeInput`'s
- * three-way result maps straight onto the patch semantics `updateRecipeRow`
- * expects: a number sets the time, `null` clears it, and an unparseable entry
- * falls back to the stored column value — a bad time degrades to "no change"
- * rather than blocking the save, exactly as an invalid servings input does.
+ * One recipe time's contribution to the patch, in SECONDS — the unit the
+ * column holds, so nothing here spells ISO 8601. `parseTimeInput`'s three-way
+ * result maps straight onto the patch semantics `updateRecipeRow` expects: a
+ * number sets the time, `null` clears it, and an unparseable entry falls back
+ * to the stored column value — a bad time degrades to "no change" rather than
+ * blocking the save, exactly as an invalid servings input does.
  */
-function buildTime(
-  raw: string,
-  baseSeconds: number | null,
-): string | null | undefined {
+function buildTime(raw: string, baseSeconds: number | null): number | null {
   const seconds = parseTimeInput(raw);
-  if (seconds === undefined) return secondsToIso(baseSeconds);
-  if (seconds === null) return null;
-  return secondsToIso(seconds) ?? null;
+  if (seconds === undefined) return baseSeconds;
+  return seconds;
 }
 
 /** A timer needs a label; a label on its own is fine. So the only invalid
@@ -166,12 +186,12 @@ export function useRecipeEditor(): UseRecipeEditor {
     (doc: RecipeDocument, { status, url, source }: EditRowFields) => {
       const { schema, ingredients, instructions } = doc;
       setDraft({
-        name: schema.name,
+        name: doc.name,
         url,
-        description: schema.description ?? "",
+        description: doc.description ?? "",
         ingredients: ingredientsToEditable(ingredients),
         instructions: instructionsToEditable(instructions),
-        notes: schema.notes ?? "",
+        notes: doc.notes ?? "",
         status,
         source,
         servings: doc.servings_amount?.toString() ?? "",
@@ -208,15 +228,21 @@ export function useRecipeEditor(): UseRecipeEditor {
           ? { amount: n, unit: draft.servingsUnit.trim() || null }
           : undefined;
       return {
-        schema: {
-          ...base,
-          name: draft.name.trim() || base.name,
-          description: draft.description || undefined,
-          notes: draft.notes || undefined,
-          prepTime: buildTime(draft.prepTime, doc.prep_time),
-          cookTime: buildTime(draft.cookTime, doc.cook_time),
-          totalTime: buildTime(draft.totalTime, doc.total_time),
+        // By reference, unchanged — see RecipeEditPatch.schema. The times used
+        // to be spliced in here, which is why this was a literal.
+        schema: base,
+        times: {
+          prep: buildTime(draft.prepTime, doc.prep_time),
+          cook: buildTime(draft.cookTime, doc.cook_time),
+          total: buildTime(draft.totalTime, doc.total_time),
         },
+        // A blank title falls back to the stored one — the column is NOT NULL,
+        // and an empty title box is a mistake, not an instruction. A blank
+        // description or note is the opposite: an explicit clear, which is why
+        // they send null rather than dropping the key.
+        name: draft.name.trim() || doc.name,
+        description: draft.description.trim() || null,
+        notes: draft.notes.trim() || null,
         ingredients: editableToIngredientInput(draft.ingredients),
         instructions: editableToInstructions(draft.instructions),
         ...(servings ? { servings } : {}),

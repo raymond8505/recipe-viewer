@@ -487,7 +487,9 @@ describe("ScalableRecipe — nutrition views", () => {
     // well-formedness is not what qualifies a number to be shown, provenance is.
     expect(
       makeScalableRecipe({
-        schema: { nutrition: { calories: "200 kcal", fatContent: "5 g" } },
+        schema: {
+          nutrition: { calories: "200 kcal", fatContent: "5 g" },
+        } as SchemaRecipe,
       }).nutrition(),
     ).toBeNull();
   });

@@ -1,4 +1,5 @@
 import { generateEmbedding } from "./embedding";
+import { parseIngredient } from "./units";
 import {
   addIngredientAliases,
   removeIngredientAlias,
@@ -21,6 +22,31 @@ import {
 // aliases keep whatever casing the user gave us because we display them back.
 function normalize(text: string): string {
   return text.trim().toLowerCase();
+}
+
+// What a line uses to add a second amount to its first: "1¾ cups + 2 tbsp
+// all-purpose flour". Stripped before the test below because it is the very
+// thing that stops `parseIngredient` from seeing the amount behind it.
+const LEADING_CONNECTOR_RE = /^\s*(?:\+|&|plus|and)\s+/i;
+
+/**
+ * Whether a candidate alias leads with an AMOUNT rather than naming a food.
+ *
+ * An alias is recipe language for what a row IS, so a quantity in one is never
+ * identity — it is a parse remainder. A line worded "1¾ cups + 2 tbsp
+ * all-purpose flour" yields its first amount as the line's quantity and leaves
+ * the second in the parsed name, so accreting that name teaches the row to
+ * answer to "+ 2 tbsp all-purpose flour" — in its embedding as much as in its
+ * array, since both are built from the same text.
+ *
+ * `parseIngredient` is the judge so the unit table stays the only definition of
+ * a unit; a unit added there is covered here with no second list to maintain.
+ * A bare number is deliberately NOT enough to reject: "1% cottage cheese" and
+ * "3% milk" are how those foods are named.
+ */
+function leadsWithQuantity(alias: string): boolean {
+  const parsed = parseIngredient(alias.replace(LEADING_CONNECTOR_RE, ""));
+  return parsed != null && parsed.unit != null;
 }
 
 /**
@@ -68,15 +94,24 @@ async function reembed(row: AliasMutationResult): Promise<void> {
  *
  * Never throws. Alias upkeep is bookkeeping that runs after the association it
  * describes is already committed, so a failure here must not fail the caller's
- * request or normalization run. Returns null when the ingredient is gone or the
- * mutation failed.
+ * request or normalization run. Returns null when nothing is left to add, when
+ * the ingredient is gone, or when the mutation failed.
+ *
+ * Candidates that lead with an amount are dropped HERE rather than at either
+ * call site: the batch accretion and the manual re-point both arrive through
+ * this function, so one guard covers both and a third caller cannot be written
+ * without it. A parse gap this guard does not anticipate costs a missing alias,
+ * which the next association re-offers; an accreted one is permanent.
  */
 export async function addAliasesAndReembed(
   id: string,
   aliases: string[],
 ): Promise<AliasMutationResult | null> {
+  const named = aliases.filter((alias) => !leadsWithQuantity(alias));
+  if (named.length === 0) return null;
+
   try {
-    const result = await addIngredientAliases(id, aliases);
+    const result = await addIngredientAliases(id, named);
     if (result?.changed) await reembed(result);
     return result;
   } catch (err) {
@@ -105,8 +140,9 @@ export async function removeAliasAndReembed(
  *
  * Batched by ingredient: five lines resolving to one row cost a single RPC and
  * at most one re-embed, not five of each. Lines with no association are
- * skipped. Names are deduped case-insensitively before the call, but passed
- * through verbatim — the first casing seen is the one stored.
+ * skipped, as is any name that leads with an amount (see
+ * addAliasesAndReembed). Names are deduped case-insensitively before the call,
+ * but passed through verbatim — the first casing seen is the one stored.
  *
  * Never throws (each ingredient is independent; one failure can't sink the rest).
  */
