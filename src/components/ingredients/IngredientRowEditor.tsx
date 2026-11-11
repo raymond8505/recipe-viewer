@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { ChevronDown } from "lucide-react";
+import { CheckCheck, ChevronDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { TableCell, TableRow } from "@/components/ui/table";
 import { useIngredientRowEditor } from "@/hooks/useIngredientRowEditor";
@@ -21,6 +21,7 @@ import {
   STICKY_ALIASES_CELL,
   STICKY_NAME_CELL,
 } from "./tableStyles";
+import { formatIsoDate } from "@/lib/format";
 import { scaleNutritionToGrams } from "@/lib/nutritionMath";
 import { formatAmount } from "@/lib/units";
 
@@ -39,8 +40,8 @@ import { formatAmount } from "@/lib/units";
 const detailInputClass =
   "w-14 shrink-0 bg-transparent text-right text-sm rounded-none border-0 border-b border-muted-foreground/30 focus:border-orange-400 focus:outline-none";
 
-// Name, Aliases, primary nutrition, Serving, Source, Actions.
-const TOTAL_COLUMNS = PRIMARY_NUTRITION_COLUMNS.length + 5;
+// Name, Aliases, primary nutrition, Serving, Source, Last checked, Actions.
+const TOTAL_COLUMNS = PRIMARY_NUTRITION_COLUMNS.length + 6;
 
 export default function IngredientRowEditor({
   ingredient,
@@ -64,6 +65,7 @@ export default function IngredientRowEditor({
     confirmingDelete,
     setConfirmingDelete,
     handleSave,
+    handleMarkChecked,
     handleDelete,
   } = useIngredientRowEditor(ingredient, onSaved, onDeleted);
 
@@ -125,6 +127,34 @@ export default function IngredientRowEditor({
             source={ingredient.source}
             fdcId={ingredient.fdc_id}
           />
+        </TableCell>
+        {/* The stamp and the only control that moves it, side by side. The
+            title sits on the wrapper because a disabled button fires no mouse
+            events, so the dirty-row explanation would never surface from it. */}
+        <TableCell
+          className="whitespace-nowrap text-sm text-muted-foreground"
+          title={
+            dirty
+              ? "Save this row before marking it checked"
+              : "Record that this row's data was verified against a source just now"
+          }
+        >
+          <span className="inline-flex items-center gap-1">
+            {formatIsoDate(ingredient.last_checked) ?? "—"}
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={handleMarkChecked}
+              // Disabled while dirty, not hidden: the PATCH remounts the row
+              // (the parent keys it by updated_at), which would throw away an
+              // unsaved draft. The flow is edit → Save → Mark checked.
+              disabled={busy || dirty}
+              aria-label={`Mark ${ingredient.name} checked`}
+              className="text-muted-foreground"
+            >
+              <CheckCheck size={16} aria-hidden />
+            </Button>
+          </span>
         </TableCell>
         <TableCell
           className={`${STICKY_ACTIONS_CELL} whitespace-nowrap text-right group-hover:bg-muted`}

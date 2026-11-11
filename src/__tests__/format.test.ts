@@ -11,11 +11,14 @@ import {
   parseNumeric,
   pluralize,
   formatDate,
+  formatIsoDate,
   getFirstImage,
   toArray,
   isOwnRecipe,
   isBrowsableUrl,
   canonicalizeRecipeSource,
+  recipeSourceForUrl,
+  recipePageUrl,
   CUSTOM_RECIPE_SOURCE,
   fromSchemaOrgInstructions,
   toSchemaOrgInstructions,
@@ -163,6 +166,29 @@ describe("formatDate", () => {
   });
 });
 
+describe("formatIsoDate", () => {
+  it("keeps a bare ISO date as it stands", () => {
+    expect(formatIsoDate("2026-02-25")).toBe("2026-02-25");
+  });
+
+  // What PostgREST returns for a timestamptz — the shape last_checked arrives
+  // in, offset and all.
+  it("reduces a timestamp with an offset to its UTC day", () => {
+    expect(formatIsoDate("2026-09-12T15:20:00+00:00")).toBe("2026-09-12");
+  });
+
+  // UTC, not local: a late-evening stamp must not read as the next day for a
+  // reader east of Greenwich, or two rows checked together would show
+  // different dates.
+  it("resolves a non-UTC instant on its UTC day", () => {
+    expect(formatIsoDate("2026-09-12T22:30:00-04:00")).toBe("2026-09-13");
+  });
+
+  it.each([undefined, null, "not-a-date", ""])("returns null for %j", (value) => {
+    expect(formatIsoDate(value)).toBeNull();
+  });
+});
+
 describe("getFirstImage", () => {
   it("returns string image directly", () => {
     expect(getFirstImage("https://example.com/img.jpg")).toBe(
@@ -299,6 +325,78 @@ describe("canonicalizeRecipeSource", () => {
     );
     expect(canonicalizeRecipeSource("seriouseats.com")).toBe("seriouseats.com");
     expect(canonicalizeRecipeSource("")).toBe("");
+  });
+});
+
+describe("recipeSourceForUrl", () => {
+  const INSTANCE = "https://new.raymonds.recipes";
+
+  it("names the site a scraped recipe came from", () => {
+    expect(recipeSourceForUrl("https://seriouseats.com/mapo-tofu", INSTANCE)).toBe(
+      "seriouseats.com",
+    );
+  });
+
+  it("collapses the www subdomain onto the bare host", () => {
+    expect(recipeSourceForUrl("https://www.seriouseats.com/mapo-tofu", INSTANCE)).toBe(
+      "seriouseats.com",
+    );
+  });
+
+  // The pair isOwnRecipe reads: no upstream page is what "custom" means, and a
+  // recipe with no url of its own has none.
+  it("marks a recipe with no url as the user's own", () => {
+    expect(recipeSourceForUrl(undefined, INSTANCE)).toBe(CUSTOM_RECIPE_SOURCE);
+  });
+
+  // The failure migration 0015 had to repair: this instance's host is deploy
+  // config, not provenance, so a page here is the user's own recipe.
+  it("marks a url on this instance as the user's own", () => {
+    expect(recipeSourceForUrl(`${INSTANCE}/recipes/abc`, INSTANCE)).toBe(
+      CUSTOM_RECIPE_SOURCE,
+    );
+  });
+
+  // Staging and dev hosts differ from production's, and each is its own
+  // instance — the comparison is against the base URL it is given, not a literal.
+  it("reads this instance from the base url it is given", () => {
+    expect(recipeSourceForUrl("http://localhost:3001/recipes/abc", "http://localhost:3001")).toBe(
+      CUSTOM_RECIPE_SOURCE,
+    );
+    expect(recipeSourceForUrl("http://localhost:3001/recipes/abc", INSTANCE)).toBe(
+      "localhost",
+    );
+  });
+
+  it("falls back to the own-recipe value when the url is not one", () => {
+    expect(recipeSourceForUrl("not a url", INSTANCE)).toBe(CUSTOM_RECIPE_SOURCE);
+    expect(recipeSourceForUrl("", INSTANCE)).toBe(CUSTOM_RECIPE_SOURCE);
+  });
+
+  // A base URL the deploy never set must not silently relabel every scrape as
+  // the user's own work.
+  it("still names the host when the instance base url is unusable", () => {
+    expect(recipeSourceForUrl("https://seriouseats.com/x", "")).toBe("seriouseats.com");
+  });
+});
+
+describe("recipePageUrl", () => {
+  const INSTANCE = "https://new.raymonds.recipes";
+
+  it("addresses a recipe by id on the instance it is given", () => {
+    expect(recipePageUrl("abc", INSTANCE)).toBe("https://new.raymonds.recipes/recipes/abc");
+    expect(recipePageUrl("abc", "http://localhost:3001")).toBe(
+      "http://localhost:3001/recipes/abc",
+    );
+  });
+
+  // The two halves of one route have to agree: a url this builds is one of our
+  // own pages, so the source derived from it is the own-recipe value. Spelling
+  // the path differently on either side would split that pair silently.
+  it("builds a url recipeSourceForUrl reads as the instance's own", () => {
+    expect(recipeSourceForUrl(recipePageUrl("abc", INSTANCE), INSTANCE)).toBe(
+      CUSTOM_RECIPE_SOURCE,
+    );
   });
 });
 

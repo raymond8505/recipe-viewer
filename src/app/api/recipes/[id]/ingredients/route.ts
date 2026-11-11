@@ -24,10 +24,14 @@ export const GET = requireSessionOrDev(
 // Edit one ingredient's text in place (the NutritionDetail inline edit). This
 // writes the RECIPE — updateRecipeRow re-parses the row deterministically and
 // recomputes content/embedding — and the line is addressed by its row id, so
-// its group, its position and its catalog match are all untouched.
+// its group and its position are untouched.
 //
-// Rewording does NOT re-normalize: the row keeps its association and the new
-// parse lands in-band, so the groups that come back are already current.
+// The new parse lands in-band, so the groups that come back carry it. The
+// catalog match in them is the one the row still holds: new words mean a new
+// answer about which food the line names, and updateRecipeRow schedules that
+// re-match post-response. So this payload's match can be one a run is about
+// to replace, and the settled one appears on a re-read — the same deal the
+// Normalize action spells out to the user as "Queued — check again".
 export const PATCH = requireSessionOrDev(
   async (req: Request, { params }: RouteContext<"/api/recipes/[id]/ingredients">) => {
     const { id } = await params;

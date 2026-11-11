@@ -1,5 +1,6 @@
 import { getSupabaseAdminClient, selectColumns, toVectorLiteral } from "./supabase";
 import { resolveLineGrams } from "./nutritionMath";
+import { DEFAULT_INGREDIENT_SOURCE } from "./schemas/ingredient";
 import type {
   GramsSource,
   IngredientKeywordMatch,
@@ -55,6 +56,7 @@ const INGREDIENT_COLUMNS = selectColumns<IngredientRow>()([
   "source",
   "created_at",
   "updated_at",
+  "last_checked",
 ]);
 
 // `line_id` and `position` are dead columns (db/migrations/0016) and absent
@@ -94,6 +96,7 @@ export interface CreateIngredientInput {
   density_g_per_ml?: number | null;
   food_portions?: UsdaFoodPortion[] | null;
   source?: IngredientSource;
+  last_checked?: string | null;
   // Required: the embedding is what makes an ingredient matchable via
   // match_ingredients() — an embedding-less row would be invisible to
   // matching. The column is NOT NULL (db/migrations/0006).
@@ -109,6 +112,10 @@ export interface UpdateIngredientPatch {
   density_g_per_ml?: number | null;
   food_portions?: UsdaFoodPortion[] | null;
   source?: IngredientSource;
+  // `| null` clears the stamp back to "never checked" — the opposite of
+  // `embedding` below, and the reason this isn't derived here the way
+  // `resolved_grams` is: only a caller can say a row was checked.
+  last_checked?: string | null;
   // No `| null`: the column is NOT NULL — an embedding can be replaced but
   // never cleared.
   embedding?: number[];
@@ -259,6 +266,21 @@ export async function updateIngredientRow(
   const { embedding, ...fields } = patch;
   const writePatch: Record<string, unknown> = { ...fields };
   if (embedding) writePatch.embedding = toVectorLiteral(embedding);
+
+  // A row whose data a person edited is "manual": its values are the editor's,
+  // not the USDA record's. The fdc_id stays either way, and that is the
+  // provenance trail. Derived here, at the chokepoint the HTTP route and the
+  // MCP tool both funnel through, so the two can never disagree about
+  // provenance — the same arrangement `resolved_grams` uses.
+  //
+  // `last_checked` and `embedding` are excluded because neither changes what
+  // the row SAYS: a check confirms the stored values (a USDA row verified
+  // against USDA is still a USDA row), and the embedding is re-derived from
+  // the name. A patch carrying only those leaves `source` alone.
+  const changesData = Object.keys(fields).some((key) => key !== "last_checked");
+  if (changesData && patch.source === undefined) {
+    writePatch.source = DEFAULT_INGREDIENT_SOURCE;
+  }
 
   if (Object.keys(writePatch).length === 0) {
     const current = await getIngredientById(id);

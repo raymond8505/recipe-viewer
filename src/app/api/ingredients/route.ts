@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireSessionOrDev } from "@/lib/api/guard";
 import { generateEmbedding } from "@/lib/embedding";
+import { portionConflictIssue } from "@/lib/foodPortions";
 import { ingredientEmbeddingText } from "@/lib/ingredientAliases";
 import {
   IngredientRepoError,
@@ -32,7 +33,13 @@ export const POST = requireSessionOrDev(async (req: Request) => {
   const body = await req.json().catch(() => null);
   const parsed = ingredientCreateInputSchema.safeParse(body);
   if (!parsed.success) {
-    return NextResponse.json({ error: "Invalid ingredient" }, { status: 400 });
+    // A portion contradiction names the label the caller gave two weights, so
+    // it can be acted on; everything else stays generic.
+    const conflict = portionConflictIssue(parsed.error.issues);
+    return NextResponse.json(
+      { error: conflict ?? "Invalid ingredient" },
+      { status: 400 },
+    );
   }
 
   // Manual entries need an embedding to be matchable, and the column is NOT

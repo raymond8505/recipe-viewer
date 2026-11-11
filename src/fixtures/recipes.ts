@@ -10,7 +10,7 @@ import { makeInstructionGroup } from "./instructions";
 // post-0019 database row would carry the columns and NO schema time keys; only
 // repo-layer tests should model that.
 //
-// The name, image, description and both sets of notes are columns too (0026),
+// The name, image, description and both sets of notes are columns too (0028),
 // and like the servings they have no blob counterpart to agree with: the schema
 // block here holds only what the blob is still the source of.
 //

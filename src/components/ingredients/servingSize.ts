@@ -1,10 +1,11 @@
+import { portionLabel } from "@/lib/foodPortions";
 import type { UsdaFoodPortion } from "@/types/ingredient";
 
 // Ingredients store nutrition per 100 g and have no serving-size column; this
 // derives a human-readable representative portion from the USDA food_portions
-// audit trail instead, e.g. "1 tsp ≈ 2 g". SR Legacy foods hide the unit in
-// `modifier` (e.g. "tsp, whole") with measureUnit.name === "undetermined";
-// Foundation foods populate measureUnit.name.
+// audit trail instead, e.g. "1 tsp ≈ 2 g". The label comes from
+// `portionLabel`, the same one `food_portions` uniqueness keys on, so the name
+// a portion is read under and the name it is deduped under are one thing.
 
 // The basis an ingredient with no usable portion falls back to: a plain 100 g
 // weight (matches DEFAULT_PORTION_DRAFT, the create-form seed). Scaling
@@ -31,20 +32,13 @@ function formatGrams(grams: number): string {
   return `${rounded} g`;
 }
 
-function unitLabel(portion: UsdaFoodPortion): string | null {
-  const name = portion.measureUnit?.name;
-  if (name && name !== "undetermined") return name;
-  if (portion.modifier) return portion.modifier;
-  return null;
-}
-
 export function formatServingSize(
   portions: UsdaFoodPortion[] | null,
 ): string {
   const portion = representativePortion(portions);
 
   const amount = portion.amount ?? 1;
-  const unit = unitLabel(portion);
+  const unit = portionLabel(portion);
   const measure = unit ? `${amount} ${unit}` : null;
 
   return measure

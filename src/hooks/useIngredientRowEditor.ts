@@ -72,6 +72,10 @@ export interface UseIngredientRowEditor {
   setConfirmingDelete: Dispatch<SetStateAction<boolean>>;
   /** PATCH only the changed fields; on success hands the fresh row to onSaved. */
   handleSave: () => Promise<void>;
+  /** Stamp `last_checked` with the current time. Its own request, never folded
+   *  into handleSave: people edit rows for reasons that aren't checks, so
+   *  asserting "I verified this against a source" stays a separate act. */
+  handleMarkChecked: () => Promise<void>;
   /** DELETE the row; on success reports its id to onDeleted. */
   handleDelete: () => Promise<void>;
 }
@@ -82,6 +86,10 @@ export interface UseIngredientRowEditor {
  * successful save via its `${id}-${updated_at}` key, which re-seeds it), and only
  * the fields that actually changed are sent — the nutrition jsonb is replaced
  * whole, so a nutrition edit resends every non-empty field.
+ *
+ * `last_checked` is deliberately absent from the draft. It is an assertion
+ * ("I verified this against a source"), not an edit, so `handleMarkChecked`
+ * writes it alone and a save can never claim it on the user's behalf.
  */
 export function useIngredientRowEditor(
   ingredient: IngredientRow,
@@ -142,6 +150,22 @@ export function useIngredientRowEditor(
     }
   }
 
+  // `busy` stays set on success, like handleSave: onSaved remounts the row.
+  async function handleMarkChecked() {
+    setBusy(true);
+    setError(null);
+    try {
+      onSaved(
+        await updateIngredient(ingredient.id, {
+          last_checked: new Date().toISOString(),
+        }),
+      );
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Mark checked failed");
+      setBusy(false);
+    }
+  }
+
   async function handleDelete() {
     setBusy(true);
     setError(null);
@@ -164,6 +188,7 @@ export function useIngredientRowEditor(
     confirmingDelete,
     setConfirmingDelete,
     handleSave,
+    handleMarkChecked,
     handleDelete,
   };
 }

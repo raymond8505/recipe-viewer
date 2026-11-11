@@ -66,6 +66,29 @@ const PROMOTED_KEY_LIST = Object.keys(PROMOTED_UPDATE_ARGS)
 export const RECIPE_SCALARS_ON_UPDATE_ERROR = `${PROMOTED_KEY_LIST} are not accepted on update — the call FAILS if you send one, it is not ignored. Each is a top-level argument now: send \`name\`, \`description\`, \`notes\` or \`image\` beside \`id\`. Omit one to leave it alone; send null to clear \`description\`, \`notes\` or \`image\` (\`name\` cannot be cleared). ${TOOL.get_recipe} returns all four at the top level of the row.`;
 
 /**
+ * Which of a recipe's two urls is which, said once for every tool that answers
+ * with both. An agent that picks the wrong one sends a person off to the site
+ * the recipe was scraped from, not to its page here.
+ */
+export const RECIPE_TWO_URLS =
+  "Every recipe answers with two urls: `pageUrl`, its page on this instance, which is where you send a person to look at it; and `sourceUrl`, the page it came from, which is what Re-scrape re-fetches. They hold the same value for a recipe with no upstream page.";
+
+/**
+ * A recipe has two urls and this tool accepts only one of them, so a bare
+ * `url` is ambiguous about which was meant. Rejected rather than stripped:
+ * the input object drops keys it does not know, so a silently ignored `url`
+ * looks to the agent like a source page it successfully set.
+ */
+export const URL_ON_UPDATE_ERROR = `url is not a field on this tool. ${RECIPE_TWO_URLS} \`sourceUrl\` is the one you set here; \`pageUrl\` is derived from the recipe's id and never set. Send \`sourceUrl\` if you meant the first.`;
+
+/**
+ * What a write does with `cookingNotes`, said once for both tools that take a
+ * schema. Ignoring it is the surprise worth stating: the call succeeds, so an
+ * agent that is not told reads the success as notes it wrote.
+ */
+export const COOKING_NOTES_READ_ONLY = `cookingNotes is read-only for agents: if present it is ignored (the call still succeeds) and the response carries a 'warnings' note explaining why. ${TOOL.clear_cooking_notes} is the only agent-writable path.`;
+
+/**
  * "a, b, or c". Hand-rolled rather than Intl.ListFormat, whose output varies
  * with the runtime's ICU build — these strings are asserted in tests and read
  * by agents, so they must be identical everywhere.
@@ -107,6 +130,14 @@ type IngredientDetailOnlyField = Exclude<keyof IngredientRow, keyof IngredientMa
 
 export const INGREDIENT_DETAIL_ONLY_FIELDS = exhaustiveKeys<
   Pick<IngredientRow, IngredientDetailOnlyField>
->()(["fdc_id", "fdc_data_type", "food_portions", "source", "created_at", "updated_at"]);
+>()([
+  "fdc_id",
+  "fdc_data_type",
+  "food_portions",
+  "source",
+  "created_at",
+  "updated_at",
+  "last_checked",
+]);
 
 export const INGREDIENT_DETAIL_ONLY_LIST = INGREDIENT_DETAIL_ONLY_FIELDS.join(", ");

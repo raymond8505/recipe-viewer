@@ -98,6 +98,19 @@ export async function importUsdaIngredient(
   return row;
 }
 
+/**
+ * The sentence a 400 carries, when it has one. The ingredient routes answer a
+ * body the user can actually fix — a portion label given two weights, say —
+ * with prose naming the offender, and throwing it away would leave the form
+ * showing a status code for a mistake sitting in front of the user. Other
+ * statuses keep the status line: a 500 has nothing to act on.
+ */
+async function actionableMessage(res: Response): Promise<string | null> {
+  if (res.status !== 400) return null;
+  const body = await res.json().catch(() => null);
+  return typeof body?.error === "string" ? body.error : null;
+}
+
 export async function createIngredient(
   input: IngredientCreateInput,
 ): Promise<IngredientRow> {
@@ -110,7 +123,10 @@ export async function createIngredient(
     throw new Error("An ingredient with that name already exists");
   }
   if (!res.ok) {
-    throw new Error(`Ingredient create failed with status ${res.status}`);
+    throw new Error(
+      (await actionableMessage(res)) ??
+        `Ingredient create failed with status ${res.status}`,
+    );
   }
   return res.json();
 }
@@ -128,7 +144,10 @@ export async function updateIngredient(
     throw new Error("An ingredient with that name already exists");
   }
   if (!res.ok) {
-    throw new Error(`Ingredient update failed with status ${res.status}`);
+    throw new Error(
+      (await actionableMessage(res)) ??
+        `Ingredient update failed with status ${res.status}`,
+    );
   }
   return res.json();
 }

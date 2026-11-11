@@ -206,6 +206,12 @@ export default function IngredientsTable({
                 Serving
               </TableHead>
               <TableHead className={STICKY_HEAD}>Source</TableHead>
+              <TableHead
+                title="When this row's data was last verified against a source"
+                className={STICKY_HEAD}
+              >
+                Last checked
+              </TableHead>
               <TableHead className={`${STICKY_ACTIONS_HEAD} text-right`}>
                 Actions
               </TableHead>
@@ -215,7 +221,7 @@ export default function IngredientsTable({
             {rows.length === 0 ? (
               <TableRow>
                 <TableCell
-                  colSpan={PRIMARY_NUTRITION_COLUMNS.length + 5}
+                  colSpan={PRIMARY_NUTRITION_COLUMNS.length + 6}
                   className="text-center text-muted-foreground py-8"
                 >
                   {loading

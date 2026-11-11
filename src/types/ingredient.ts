@@ -43,6 +43,10 @@ export interface IngredientRow {
   source: IngredientSource;
   created_at: string;
   updated_at: string;
+  // When this row's data was last verified against a source (db/migrations/0026).
+  // Asserted by a caller, never derived — and deliberately not `updated_at`,
+  // which moves on any write. null = never checked.
+  last_checked: string | null;
 }
 
 // One ingredient of a recipe, as the `recipe_ingredients` table holds it

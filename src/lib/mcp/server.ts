@@ -3,6 +3,7 @@ import { TOOL_SCHEMAS } from "./schemas";
 import { RECIPE_TOKEN_TTL_LABEL } from "./recipeToken";
 import { TOOL, TOOL_NAMES, type ToolName } from "./toolNames";
 import {
+  COOKING_NOTES_READ_ONLY,
   IMAGE_FORMAT_LIST,
   INGREDIENT_DETAIL_ONLY_LIST,
   METRIC_UNIT_SLASHES,
@@ -10,22 +11,25 @@ import {
   RECIPE_INGREDIENT_ON_UPDATE_ERROR,
   RECIPE_INSTRUCTIONS_ON_UPDATE_ERROR,
   RECIPE_SCALARS_ON_UPDATE_ERROR,
+  RECIPE_TWO_URLS,
   RECIPE_YIELD_ON_UPDATE_ERROR,
   TBSP_ML_EXAMPLE,
 } from "./copy";
 import {
   DEFAULT_INGREDIENT_SOURCE,
+  NUTRITION_BASIS_REQUIRED,
 } from "@/lib/schemas/ingredient";
+import { FOOD_PORTION_UNIQUE_RULE } from "@/lib/foodPortions";
 import {
   ARCHIVED_RECIPE_STATUS,
   DEFAULT_RECIPE_STATUS,
 } from "@/lib/schemas/recipe";
 import {
-  recipeCreateInputSchema,
+  recipeCreateSimpleInputSchema,
+  recipeCreateDetailedInputSchema,
   recipeIdInputSchema,
   recipeImageUploadInputSchema,
   recipeSearchInputSchema,
-  recipeUpdateInputSchema,
 } from "@/lib/schemas/recipe";
 import {
   ingredientCreateToolInputSchema,
@@ -36,12 +40,14 @@ import {
 import {
   clearCookingNotes,
   createIngredient,
-  createRecipe,
+  createRecipeDetailed,
+  createRecipeSimple,
   deleteIngredient,
   deleteRecipe,
   getIngredient,
   getRecipe,
   getToken,
+  parseRecipeUpdateArgs,
   RECIPE_SEARCH_RESULT_FIELDS,
   searchIngredients,
   searchRecipes,
@@ -83,7 +89,7 @@ const TOOL_IMPLS: {
   [K in ToolName]: Pick<ToolDefinition, "description" | "call">;
 } = {
   search_recipes: {
-    description: `Search recipes by name, by catalog ingredient, source, or status. Returns a paginated list with total count; each result is trimmed to { ${RECIPE_SEARCH_RESULT_FIELDS.join(", ")} } — call ${TOOL.get_recipe} with an id for the full schema. Use this before ${TOOL.get_recipe} when you only have a name.
+    description: `Search recipes by name, by catalog ingredient, source, or status. Returns a paginated list with total count; each result is trimmed to { ${RECIPE_SEARCH_RESULT_FIELDS.join(", ")} } — call ${TOOL.get_recipe} with an id for the full schema. Use this before ${TOOL.get_recipe} when you only have a name. ${RECIPE_TWO_URLS}
 
 A query matches a recipe's NAME or its INGREDIENTS. An ingredient matches only through the catalog: the line must already be associated with a catalog ingredient whose name or one of whose aliases contains the query. Recipe wording that was never matched to the catalog is NOT searched, so a food the catalog doesn't cover yet returns name hits only — that is a gap in the catalog, not proof the recipes don't exist. Use ${TOOL.search_ingredients} to see what the catalog calls a food, and which spellings it answers to, before concluding a search came up empty.`,
     call: (args) => searchRecipes(recipeSearchInputSchema.parse(args)),
@@ -97,11 +103,11 @@ A query matches a recipe's NAME or its INGREDIENTS. An ingredient matches only t
     call: (args) => getIngredient(ingredientIdInputSchema.parse(args)),
   },
   create_ingredient: {
-    description: `Add a NEW ingredient to the known-ingredient catalog — the last resort, not the first move. Both name (case-insensitively) and fdc_id are unique.\n\nBEFORE CALLING THIS, call ${TOOL.search_ingredients}. The catalog names foods the way USDA does, so the row you want usually already exists under wording you would not have guessed — "Butter, without salt" is the row for "unsalted butter". Check each result's aliases first — if your recipe's wording is already among them, that row is your ingredient and there is nothing to do. If a result is the same food (see ${TOOL.search_ingredients} on judging semantic_similarity) but lacks your wording, that IS still your ingredient: do NOT create a second row. Instead call ${TOOL.update_ingredient} adding your wording to the aliases the search already returned. Teaching an existing row a new alias is the normal, expected outcome — it is how the catalog learns recipe language, and it is nearly always right when create feels tempting.\n\nOnly create when nothing in the catalog is the same food. Put the canonical name in name and the recipe-language wording in aliases: matching searches both, so the aliases are what make the row findable from a recipe line. Nutrition values are given as measured for a portion: whenever you pass nutrition, the nutrition_portion field is REQUIRED (the call is rejected without it — note this is its own field; food_portions does NOT satisfy it); omit both to create the row with no nutrition, in which case nutrition_portion is not needed. Example: calories per 1 tbsp with nutrition_portion { gramWeight: 14, amount: 1, modifier: "tbsp" }. The server converts deterministically for storage and saves the portion on the ingredient. density_g_per_ml converts volume↔weight (grams = ml × density). The matching embedding is derived server-side from name + aliases — you never supply it. source defaults to '${DEFAULT_INGREDIENT_SOURCE}'.`,
+    description: `Add a NEW ingredient to the known-ingredient catalog — the last resort, not the first move. Both name (case-insensitively) and fdc_id are unique.\n\nBEFORE CALLING THIS, call ${TOOL.search_ingredients}. The catalog names foods the way USDA does, so the row you want usually already exists under wording you would not have guessed — "Butter, without salt" is the row for "unsalted butter". Check each result's aliases first — if your recipe's wording is already among them, that row is your ingredient and there is nothing to do. If a result is the same food (see ${TOOL.search_ingredients} on judging semantic_similarity) but lacks your wording, that IS still your ingredient: do NOT create a second row. Instead call ${TOOL.update_ingredient} adding your wording to the aliases the search already returned. Teaching an existing row a new alias is the normal, expected outcome — it is how the catalog learns recipe language, and it is nearly always right when create feels tempting.\n\nOnly create when nothing in the catalog is the same food. Put the canonical name in name and the recipe-language wording in aliases: matching searches both, so the aliases are what make the row findable from a recipe line. Give nutrition exactly as your source states it and say what it is measured against: ${NUTRITION_BASIS_REQUIRED} Omit both to create the row with no nutrition. The basis is arithmetic only and stores nothing — list the weights this food is sold or measured in through food_portions ("1/4 package" at 85 g), which is the only field that records them. ${FOOD_PORTION_UNIQUE_RULE} density_g_per_ml converts volume↔weight (grams = ml × density). The matching embedding is derived server-side from name + aliases — you never supply it. source defaults to '${DEFAULT_INGREDIENT_SOURCE}'.`,
     call: (args) => createIngredient(ingredientCreateToolInputSchema.parse(args)),
   },
   update_ingredient: {
-    description: `Patch fields on a catalog ingredient — only the fields you pass change. This is also how you TEACH THE CATALOG A NEW NAME: when ${TOOL.search_ingredients} found the right food under wording a recipe would not use, add that recipe wording to this row's aliases rather than creating a second row. Renaming OR changing aliases re-derives the matching embedding server-side (it spans both), which is what makes the new wording findable afterwards. aliases REPLACES the whole array rather than appending — ALWAYS pass the row's existing aliases back alongside the one you are adding, or you will silently delete the names the catalog already learned. ${TOOL.search_ingredients} returns them, so no extra call is needed; use ${TOOL.get_ingredient} if you are working from an id you did not just search for. To change nutrition, pass nutrition as measured for a portion: whenever you pass nutrition values, the nutrition_portion field is REQUIRED (the call is rejected without it — note this is its own field; food_portions does NOT satisfy it); the one exception is nutrition: null, which clears the stored nutrition and needs no nutrition_portion. The stored nutrition is replaced to match the given values + nutrition_portion (whole object, deterministic conversion; the portion itself is not saved). Fails with 'conflict' if the new name (case-insensitive) or fdc_id collides with another row.`,
+    description: `Patch fields on a catalog ingredient — only the fields you pass change. This is also how you TEACH THE CATALOG A NEW NAME: when ${TOOL.search_ingredients} found the right food under wording a recipe would not use, add that recipe wording to this row's aliases rather than creating a second row. Renaming OR changing aliases re-derives the matching embedding server-side (it spans both), which is what makes the new wording findable afterwards. aliases REPLACES the whole array rather than appending — ALWAYS pass the row's existing aliases back alongside the one you are adding, or you will silently delete the names the catalog already learned. ${TOOL.search_ingredients} returns them, so no extra call is needed; use ${TOOL.get_ingredient} if you are working from an id you did not just search for. To change nutrition, give the values as your source states them: ${NUTRITION_BASIS_REQUIRED} The stored nutrition is REPLACED whole by that conversion; the one exception is nutrition: null, which clears it and needs no basis. The basis stores nothing — food_portions is the only field that records named weights, and it too replaces the whole list. ${FOOD_PORTION_UNIQUE_RULE}\n\nWHEN YOU HAVE JUST VERIFIED THIS ROW AGAINST A SOURCE, also pass last_checked with the current time — that stamp is what a curator sweeps for stale rows by, and nothing derives it. Only then: a rename, an alias, or a number you copied without checking leaves it alone.\n\nFails with 'conflict' if the new name (case-insensitive) or fdc_id collides with another row.`,
     call: (args) => updateIngredient(ingredientUpdateToolInputSchema.parse(args)),
   },
   delete_ingredient: {
@@ -109,20 +115,30 @@ A query matches a recipe's NAME or its INGREDIENTS. An ingredient matches only t
     call: (args) => deleteIngredient(ingredientIdInputSchema.parse(args)),
   },
   get_recipe: {
-    description: `Fetch the full recipe row for a given recipe UUID. \`ingredients\` is the ingredient list: ordered groups ({ name?, ingredients }) of lines, each line being the recipe_ingredients row — id, raw_text, the parsed quantity/unit/name_text, match_status — plus \`ingredient\`, the catalog row it is matched to (per-100g nutrition, density) or null. \`instructions\` is the step list: ordered groups ({ name?, steps }) of { text, name?, seconds? }, where a step's name is its cook-mode timer label and seconds its duration. The base servings are \`servings_amount\` / \`servings_unit\` and the whole recipe's raw weight \`total_weight_amount\` / \`total_weight_unit\` — set them through ${TOOL.update_recipe}'s \`servings\` / \`total_weight\`. \`metadata.schema\` carries everything else (name, times, nutrition, notes) and has none of recipeIngredient, recipeInstructions or recipeYield; its \`nutrition.servingSize\` is derived from the servings columns, not stored. Keep each line's id when you send the list back through ${TOOL.update_recipe}.`,
+    description: `Fetch the full recipe row for a given recipe UUID. \`ingredients\` is the ingredient list: ordered groups ({ name?, ingredients }) of lines, each line being the recipe_ingredients row — id, raw_text, the parsed quantity/unit/name_text, match_status — plus \`ingredient\`, the catalog row it is matched to (per-100g nutrition, density) or null. \`instructions\` is the step list: ordered groups ({ name?, steps }) of { text, name?, seconds? }, where a step's name is its cook-mode timer label and seconds its duration. The base servings are \`servings_amount\` / \`servings_unit\` and the whole recipe's raw weight \`total_weight_amount\` / \`total_weight_unit\` — set them through ${TOOL.update_recipe}'s \`servings\` / \`total_weight\`. \`metadata.schema\` carries everything else (name, times, nutrition, notes) and has none of recipeIngredient, recipeInstructions or recipeYield; its \`nutrition.servingSize\` is derived from the servings columns, not stored. Keep each line's id when you send the list back through ${TOOL.update_recipe}. ${RECIPE_TWO_URLS}`,
     call: (args) => getRecipe(recipeIdInputSchema.parse(args)),
   },
   get_token: {
     description: `Mint a short-lived (${RECIPE_TOKEN_TTL_LABEL}) bearer token scoped to a single recipe UUID. Required to authenticate agent-facing HTTP endpoints such as the multipart image upload (POST /api/recipes/<id>/upload-image) — call this first, then pass the returned token as \`Authorization: Bearer <token>\`. The token only works for the recipe id you pass here. Returns { token, recipeId, expiresInSeconds }.`,
     call: (args) => getToken(recipeIdInputSchema.parse(args)),
   },
-  create_recipe: {
-    description: `Insert a new recipe row. Requires source and a Schema.org Recipe object (schema.recipeIngredient as plain strings, or { name, group } objects to place lines under named groups; schema.recipeInstructions as an array of HowToStep / HowToSection objects — the server turns them into ingredient and instruction groups; read them back as \`ingredients\` and \`instructions\` via ${TOOL.get_recipe}); defaults status to '${DEFAULT_RECIPE_STATUS}'. url is OPTIONAL — when omitted it defaults to the recipe's own canonical page on this instance (<base-url>/recipes/<new-uuid>). Set recipeYield as a structured QuantitativeValue — value = serving count, unitText = its label, and valueReference = the recipe's raw weight/volume in metric units (value + unitText; unitText must be one of ${METRIC_UNIT_SLASHES}) when known, since it drives the per-serving nutrition; a plain-string yield is accepted but deprecated. The server parses it once into the servings and total-weight columns, which is what ${TOOL.get_recipe} returns and ${TOOL.update_recipe} edits. cookingNotes is read-only for agents: if present it is ignored (the call still succeeds) and the response carries a 'warnings' note explaining why.`,
-    call: (args) => createRecipe(recipeCreateInputSchema.parse(args)),
+  create_recipe_detailed: {
+    description: `The long way round. ${TOOL.create_recipe_simple} creates a recipe from the same ingredient lines and HowTo steps with no wrapper object, and is what you want unless you need one of the three things it cannot express: a structured recipeYield carrying the recipe's total weight, an explicit status, or a source that is not the url's host. Needing none of them, use that tool — this one asks for strictly more and stores the same recipe.
+
+Insert a new recipe row from a Schema.org Recipe object; defaults status to '${DEFAULT_RECIPE_STATUS}'. The server turns schema.recipeIngredient and schema.recipeInstructions into ingredient and instruction groups — read them back as \`ingredients\` and \`instructions\` via ${TOOL.get_recipe}. Give recipeYield's valueReference the recipe's raw weight in metric units (${METRIC_UNIT_SLASHES}) whenever the recipe states one, since that weight is what the per-serving nutrition is figured from; the server parses the yield once into the servings and total-weight columns, which is what ${TOOL.update_recipe} edits from then on. ${COOKING_NOTES_READ_ONLY} ${RECIPE_TWO_URLS} The response is the stored recipe with both urls named, so link a person to \`pageUrl\`.`,
+    call: (args) => createRecipeDetailed(recipeCreateDetailedInputSchema.parse(args)),
+  },
+  create_recipe_simple: {
+    description: `Create a recipe. This is the tool to reach for first, whether the recipe comes off a web page or you are writing it with the user. The arguments ARE the recipe, with no wrapper object: the field names are Schema.org's, so a page's JSON-LD Recipe can be pasted in as its fields, but this is not a conformant Recipe and you are not held to one. If the page publishes no JSON-LD, write these fields yourself from what it says. Keys this app has no use for are ignored rather than rejected, so a whole blob can go in as-is.
+
+Do not look anything up first: the server parses every ingredient line and matches it against the ingredient catalog itself, then leaves whatever it cannot match unmatched for a person to fix in the app. That happens after this call returns, so the response cannot tell you which lines matched — open the returned url, or call ${TOOL.get_recipe}, to see.
+
+The recipe defaults status to '${DEFAULT_RECIPE_STATUS}', and no image is stored from the page — set one afterwards with ${TOOL.upload_recipe_image}. Returns the new recipe's id and url, and nothing else. That url is the recipe's page on this instance — pass an upstream url and you still get the new page back, not the page you scraped.`,
+    call: (args) => createRecipeSimple(recipeCreateSimpleInputSchema.parse(args)),
   },
   update_recipe: {
-    description: `Patch fields on an existing recipe — only the fields you pass change. The recipe's own scalars are top-level arguments: \`name\`, \`description\`, \`notes\`, \`image\`. \`schema\` carries what is left of the stored Schema.org blob (the times, recipeCuisine, recipeCategory) and is merged into it, not replaced. ${RECIPE_SCALARS_ON_UPDATE_ERROR} ${RECIPE_INGREDIENT_ON_UPDATE_ERROR} ${RECIPE_INSTRUCTIONS_ON_UPDATE_ERROR} ${RECIPE_YIELD_ON_UPDATE_ERROR} \`total_weight.unit\` must be one of ${METRIC_UNIT_SLASHES}. cookingNotes is read-only for agents: if present it is ignored (the call still succeeds) and the response carries a 'warnings' note. Use ${TOOL.clear_cooking_notes} to clear it.`,
-    call: (args) => updateRecipe(recipeUpdateInputSchema.parse(args)),
+    description: `Patch fields on an existing recipe — only the fields you pass change. The recipe's own scalars are top-level arguments: \`name\`, \`description\`, \`notes\`, \`image\`. ${RECIPE_TWO_URLS} \`sourceUrl\` is the only one you can set; \`pageUrl\` follows from the recipe's id. Sending \`url\` FAILS the call rather than being ignored. \`schema\` carries what is left of the stored Schema.org blob (the times, recipeCuisine, recipeCategory) and is merged into it, not replaced. ${RECIPE_SCALARS_ON_UPDATE_ERROR} ${RECIPE_INGREDIENT_ON_UPDATE_ERROR} ${RECIPE_INSTRUCTIONS_ON_UPDATE_ERROR} ${RECIPE_YIELD_ON_UPDATE_ERROR} \`total_weight.unit\` must be one of ${METRIC_UNIT_SLASHES}. Rewording a line re-opens which catalog ingredient it names: the server re-matches that line after this call returns, and a re-match that finds nothing leaves it unmatched. So the ingredient lines in the response carry no match at all — no \`ingredient_id\`, no \`match_status\`, no \`ingredient\` — because any match here could be one that run is replacing. Read matches from ${TOOL.get_recipe} once they have settled. ${COOKING_NOTES_READ_ONLY}`,
+    call: (args) => updateRecipe(parseRecipeUpdateArgs(args)),
   },
   clear_cooking_notes: {
     description:

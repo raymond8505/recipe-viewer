@@ -1,4 +1,4 @@
--- 0026_recipes_promote_blob_fields
+-- 0028_recipes_promote_blob_fields
 --
 -- Promote a recipe's image, description, notes and cooking notes out of the
 -- `metadata` JSONB blob into top-level columns, and make the long-existing
@@ -29,7 +29,7 @@
 -- `not ilike '%null%'` evaluate to NULL, which drops the row from every listing.
 -- Reading the column is what surfaces it again.
 --
--- NOT NULL on name is deliberately NOT here — it is 0027, after the backfill.
+-- NOT NULL on name is deliberately NOT here — it is 0029, after the backfill.
 -- A row whose name lives only in the blob would fail the constraint on the way
 -- in, and the script that would have fixed it runs between the two migrations.
 -- (No such row exists today, but the replay order has to be correct on its own.)
@@ -86,7 +86,7 @@ alter table public.recipes
   add column if not exists cooking_notes text;
 
 comment on column public.recipes.name is
-  'The recipe title, and its identity in every listing. Source of truth — metadata.schema.name is a dead pre-0026 artifact. The column always existed and was always written; 0026 is what made it the thing that gets READ.';
+  'The recipe title, and its identity in every listing. Source of truth — metadata.schema.name is a dead pre-0028 artifact. The column always existed and was always written; 0028 is what made it the thing that gets READ.';
 
 comment on column public.recipes.image is
   'Single image URL (usually Supabase Storage), or NULL for a recipe with no image. Schema.org allows image to be an array and the inbound edge still accepts one, but it is reduced to its first entry here — see getFirstImage in src/lib/format.ts.';

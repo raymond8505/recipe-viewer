@@ -21,6 +21,11 @@ type Story = StoryObj<typeof IngredientsTable>;
  * FoodData Central id) alongside manual entries. The main-row nutrition is
  * read-only and scaled to each row's serving (its first portion, or 100 g when
  * it has none); the per-100 g values are editable in a row's details.
+ *
+ * Last checked is the date a row's data was last verified against a source —
+ * an em dash where that has never happened, which is most of a young catalog.
+ * The check beside it stamps the current time; it is the only UI route to that
+ * date, since an ordinary save is an edit, not a verification.
  */
 export const Populated: Story = {
   args: {
@@ -55,6 +60,10 @@ export const BoundedHeight: Story = {
 /**
  * A dirty row: editing any cell keeps changes draft-local and reveals the
  * per-row Save. Demonstrates the save affordance without a network call.
+ *
+ * Also the Mark checked button's disabled state — stamping PATCHes the row,
+ * which remounts it and would drop the draft, so the check greys out until
+ * the edit is saved. The second row keeps its enabled one for comparison.
  */
 export const EditingARow: Story = {
   args: {

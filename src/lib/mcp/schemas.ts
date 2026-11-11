@@ -2,7 +2,7 @@
 // validators, used in the `tools/list` response so MCP clients can do client-
 // side argument validation.
 //
-// The actual zod validators (recipeSearchInputSchema, recipeCreateInputSchema,
+// The actual zod validators (recipeSearchInputSchema, recipeCreateDetailedInputSchema,
 // etc.) live in `@/lib/schemas/recipe` so they're reusable by non-MCP callers
 // (API route handlers, form validators). The JSON Schema map below is the
 // only thing here that is genuinely MCP-protocol-specific — it describes the
@@ -11,9 +11,15 @@
 import {
   DEFAULT_INGREDIENT_SOURCE,
   INGREDIENT_SOURCES,
+  NUTRITION_BASIS_REQUIRED,
 } from "@/lib/schemas/ingredient";
+import { FOOD_PORTION_UNIQUE_RULE } from "@/lib/foodPortions";
 import { CUSTOM_RECIPE_SOURCE } from "@/lib/format";
-import { ARCHIVED_RECIPE_STATUS, RECIPE_STATUSES } from "@/lib/schemas/recipe";
+import {
+  ARCHIVED_RECIPE_STATUS,
+  INGREDIENT_LINE_MAX_LENGTH,
+  RECIPE_STATUSES,
+} from "@/lib/schemas/recipe";
 import { NUTRITION_FIELDS, type NutritionField } from "@/lib/nutritionFields";
 import { METRIC_YIELD_UNITS } from "@/lib/units";
 import {
@@ -41,6 +47,13 @@ const storedRecipeJsonSchema = {
     totalTime: { type: "string", description: "ISO 8601 duration" },
     recipeCuisine: { type: "string" },
     recipeCategory: { oneOf: [{ type: "string" }, { type: "array", items: { type: "string" } }] },
+    // Not promoted and not dropped: `cooking_notes` is a column, but it is the
+    // one the write tools ACCEPT AND IGNORE rather than reject, so it has to be
+    // documented on the schema field both of them take — which is this one.
+    cookingNotes: {
+      type: "string",
+      description: `App-internal cooking notes — READ-ONLY for agents. Ignored by ${TOOL.create_recipe_detailed}/${TOOL.update_recipe} (the call still succeeds with a warning). Authored by users in cooking mode; clear it via the ${TOOL.clear_cooking_notes} tool.`,
+    },
   },
   additionalProperties: true,
 } as const;
@@ -57,17 +70,13 @@ const promotedScalarsJsonSchema = {
       "One image URL. An array is accepted (Schema.org allows one) and its first entry is kept.",
   },
   notes: { type: "string", description: "App-internal notes (not part of Schema.org/Recipe)" },
-  cookingNotes: {
-    type: "string",
-    description: `App-internal cooking notes — READ-ONLY for agents. Ignored by ${TOOL.create_recipe}/${TOOL.update_recipe} (the call still succeeds with a warning). Authored by users in cooking mode; clear it via the ${TOOL.clear_cooking_notes} tool.`,
-  },
 } as const;
 
 // A Schema.org Recipe as a scraper produces it: the stored blob plus every
 // column-backed field in its wire spelling — the scalars above, plus
 // `recipeIngredient`, whose `group` objects are this app's extension, and
-// `recipeInstructions`. Only create_recipe takes it; each is reduced to its
-// column server-side.
+// `recipeInstructions`. Only create_recipe_detailed takes it; each is reduced
+// to its column server-side.
 const schemaOrgRecipeJsonSchema = {
   ...storedRecipeJsonSchema,
   required: ["name"],
@@ -128,6 +137,30 @@ const schemaOrgRecipeJsonSchema = {
       description:
         "The steps as a scraper produces them: an array of HowToStep ({ text, name?, timeRequired? }) and HowToSection ({ name, itemListElement: HowToStep[] }) objects. The server turns these into instruction groups; read them back as `instructions`.",
       items: { type: "object" },
+    },
+  },
+} as const;
+
+// Schema.org/HowToStep, as a page publishes one. Named here because a
+// HowToSection's itemListElement is an array of exactly this.
+const howToStepJsonSchema = {
+  type: "object",
+  required: ["text"],
+  description: "Schema.org/HowToStep.",
+  properties: {
+    "@type": {
+      type: "string",
+      description: 'Optional — "HowToStep" where the page spells it out.',
+    },
+    text: { type: "string", description: "The step as the recipe says it." },
+    name: {
+      type: "string",
+      description: 'Short label, e.g. "Simmer" — also the label on its cook-mode timer.',
+    },
+    timeRequired: {
+      type: "string",
+      description:
+        "ISO 8601 duration (e.g. PT10M). Becomes a cook-mode timer, which needs a name to label it.",
     },
   },
 } as const;
@@ -243,7 +276,7 @@ const statusEnum = { type: "string", enum: RECIPE_STATUSES } as const;
 const ingredientNutritionJsonSchema = {
   type: "object",
   description:
-    "Nutrition values AS MEASURED for the accompanying `nutrition_portion`. Passing this makes `nutrition_portion` REQUIRED — the call is rejected without it, and food_portions does NOT satisfy it (exception: nutrition null on update, which clears stored values and needs no nutrition_portion). The server converts to its storage form deterministically. All fields optional non-negative numbers; omit what you don't know.",
+    `Nutrition values AS MEASURED against \`nutrition_basis_g\` — read them straight off a label or a source without converting. ${NUTRITION_BASIS_REQUIRED} Passing nutrition therefore REQUIRES nutrition_basis_g and the call is rejected without it, the one exception being nutrition null on update, which clears the stored values. All fields optional non-negative numbers; omit what you don't know.`,
   // Derived from NUTRITION_FIELDS so the wire schema can't omit a nutrient the
   // zod validator accepts. (This object loses `as const` as a result — nothing
   // indexes these property names at the type level, so that's free.)
@@ -280,20 +313,10 @@ const ingredientFieldsJsonSchema = {
     description: 'USDA data type of fdc_id (e.g. "Foundation", "SR Legacy").',
   },
   nutrition: ingredientNutritionJsonSchema,
-  nutrition_portion: {
-    type: "object",
-    required: ["gramWeight"],
-    description:
-      'The portion the nutrition values are measured for — REQUIRED whenever nutrition is passed, unnecessary otherwise (e.g. 1 tbsp: { gramWeight: 14, amount: 1, modifier: "tbsp" }). Distinct from food_portions, which never satisfies this. On create it is also saved as a named portion of the ingredient.',
-    properties: {
-      gramWeight: { type: "number", exclusiveMinimum: 0, description: "Total gram weight of the portion" },
-      amount: { type: "number", exclusiveMinimum: 0 },
-      modifier: { type: "string", description: 'Portion label/unit, e.g. "tbsp" or "cup, whole"' },
-      measureUnit: {
-        type: "object",
-        properties: { name: { type: "string" } },
-      },
-    },
+  nutrition_basis_g: {
+    type: "number",
+    exclusiveMinimum: 0,
+    description: `${NUTRITION_BASIS_REQUIRED} Required whenever nutrition is passed, meaningless otherwise. It is a measurement basis only and stores nothing — to ALSO list that weight as a named serving, add it to food_portions.`,
   },
   density_g_per_ml: {
     type: ["number", "null"],
@@ -302,8 +325,7 @@ const ingredientFieldsJsonSchema = {
   food_portions: {
     type: "array",
     maxItems: 50,
-    description:
-      "Named DISPLAY portions with gram weights (USDA foodPortions shape); drives serving-size rendering only. NOT the nutrition basis — nutrition values are measured against `nutrition_portion`, and this field does not satisfy that requirement.",
+    description: `The named weights this food is commonly measured in — "1/4 package" at 85 g, "1 cup" at 120 g (USDA foodPortions shape). Drives serving-size rendering only, and is the only field that writes them. ${FOOD_PORTION_UNIQUE_RULE} Replaces the whole list on update; omit it to leave the stored portions alone.`,
     items: {
       type: "object",
       required: ["gramWeight"],
@@ -322,6 +344,12 @@ const ingredientFieldsJsonSchema = {
     type: "string",
     enum: INGREDIENT_SOURCES,
     description: `Provenance of the row. Defaults to "${DEFAULT_INGREDIENT_SOURCE}" for agent-created rows.`,
+  },
+  last_checked: {
+    type: ["string", "null"],
+    format: "date-time",
+    description:
+      "ISO 8601 timestamp of when this row's values were last VERIFIED against a source — USDA, a package label, or a consensus check you just ran. Stamp it with the current time only when you actually checked the values in this same task: renaming the row, teaching it an alias, or writing a number you did not verify is NOT a check, and omitting the field leaves the stored date alone. This is deliberately not updated_at, which moves on every write — it is what tells a curator which rows have gone stale. Pass null to clear it back to never-checked.",
   },
 } as const;
 
@@ -357,16 +385,16 @@ export const TOOL_SCHEMAS = {
   create_ingredient: {
     type: "object",
     required: ["name"],
-    // Machine-readable form of "nutrition needs nutrition_portion" for
+    // Machine-readable form of "nutrition needs nutrition_basis_g" for
     // clients that validate arguments against the schema.
-    dependentRequired: { nutrition: ["nutrition_portion"] },
+    dependentRequired: { nutrition: ["nutrition_basis_g"] },
     properties: ingredientFieldsJsonSchema,
   },
   update_ingredient: {
     type: "object",
     required: ["id"],
     // No dependentRequired here: it keys on property PRESENCE, and
-    // `nutrition: null` (clearing) is legal without a nutrition_portion.
+    // `nutrition: null` (clearing) is legal without a nutrition_basis_g.
     properties: {
       id: { type: "string", description: "Ingredient UUID" },
       ...ingredientFieldsJsonSchema,
@@ -399,7 +427,7 @@ export const TOOL_SCHEMAS = {
       },
     },
   },
-  create_recipe: {
+  create_recipe_detailed: {
     type: "object",
     required: ["schema"],
     properties: {
@@ -417,12 +445,116 @@ export const TOOL_SCHEMAS = {
       schema: schemaOrgRecipeJsonSchema,
     },
   },
+  // The simplified twin: the properties ARE the recipe's, with no wrapper object
+  // and no status. `additionalProperties` is open on purpose — a caller pastes a
+  // page's whole JSON-LD, and the extra keys it carries are dropped by the
+  // validator rather than rejected by the client.
+  create_recipe_simple: {
+    type: "object",
+    required: ["name"],
+    additionalProperties: true,
+    properties: {
+      name: { type: "string", description: "The recipe's title." },
+      description: { type: "string" },
+      author: {
+        description:
+          "The author's name — a plain string, Schema.org's { name } object, or an array of either (only the first is kept).",
+        oneOf: [
+          { type: "string" },
+          { type: "object", required: ["name"], properties: { name: { type: "string" } } },
+          {
+            type: "array",
+            items: {
+              oneOf: [
+                { type: "string" },
+                { type: "object", required: ["name"], properties: { name: { type: "string" } } },
+              ],
+            },
+          },
+        ],
+      },
+      prepTime: { type: "string", description: "ISO 8601 duration (e.g. PT30M)" },
+      cookTime: { type: "string", description: "ISO 8601 duration" },
+      totalTime: {
+        type: "string",
+        description:
+          "ISO 8601 duration. Not derived from prepTime + cookTime — a recipe can rest or marinate.",
+      },
+      recipeCuisine: { type: "string" },
+      recipeCategory: {
+        oneOf: [{ type: "string" }, { type: "array", items: { type: "string" } }],
+      },
+      keywords: { type: "string" },
+      datePublished: { type: "string" },
+      recipeYield: {
+        description:
+          'How many servings the recipe makes: 4, "4 servings", or "Makes 12 cookies". A yield stating a QUANTITY rather than a count ("300 ml", "1 lb") is not a serving count and is ignored.',
+        oneOf: [{ type: "number" }, { type: "string" }],
+      },
+      recipeIngredient: {
+        type: "array",
+        description:
+          'The ingredient lines, one entry per line, exactly as the recipe writes them ("2 tsp cumin seed"). A plain string is the whole of it for an ungrouped list; use { name, group } for a line the recipe files under a heading ("For the sauce"), and the server builds those groups in first-appearance order. Do not split off the quantity or the unit — the server parses each line and matches it to the catalog.',
+        items: {
+          oneOf: [
+            { type: "string", maxLength: INGREDIENT_LINE_MAX_LENGTH },
+            {
+              type: "object",
+              required: ["name"],
+              properties: {
+                name: {
+                  type: "string",
+                  maxLength: INGREDIENT_LINE_MAX_LENGTH,
+                  description: "The line itself, as the recipe writes it.",
+                },
+                group: {
+                  type: "string",
+                  description: "The heading this line sits under; omit it for the ungrouped list.",
+                },
+              },
+            },
+          ],
+        },
+      },
+      recipeInstructions: {
+        type: "array",
+        description:
+          "The steps, in order, one entry per step. A plain string is enough for a step that is only its text; pass a page's HowToStep objects and HowToSections through as they stand when it publishes them, and the sections become the recipe's instruction sections and a timeRequired becomes a cook-mode timer.",
+        items: {
+          oneOf: [
+            { type: "string", description: "A step that is only its text." },
+            howToStepJsonSchema,
+            {
+              type: "object",
+              required: ["@type", "name", "itemListElement"],
+              description: "Schema.org/HowToSection — a named run of steps.",
+              properties: {
+                "@type": { type: "string", enum: ["HowToSection"] },
+                name: { type: "string", description: "Section heading." },
+                itemListElement: { type: "array", items: howToStepJsonSchema },
+              },
+            },
+          ],
+        },
+      },
+      url: {
+        type: "string",
+        format: "uri",
+        description: `The page this recipe came from; its host becomes the recipe's source. Omit it for a recipe authored here — the recipe then gets its own page on this instance and a source of "${CUSTOM_RECIPE_SOURCE}".`,
+      },
+    },
+  },
   update_recipe: {
     type: "object",
     required: ["id"],
     properties: {
       id: { type: "string" },
-      url: { type: "string", format: "uri" },
+      sourceUrl: {
+        type: "string",
+        format: "uri",
+        description:
+          "The page this recipe came from — what Re-scrape re-fetches. The recipe's own page here is derived from its id and reported as pageUrl, not set.",
+      },
       source: { type: "string" },
       status: statusEnum,
       name: { type: "string", description: "The recipe's title. Cannot be cleared." },

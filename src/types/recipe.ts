@@ -2,7 +2,7 @@ import type { IngredientRow, RecipeIngredientRow } from "./ingredient";
 
 /**
  * The object form of a Schema.org `recipeIngredient` entry as it arrives from
- * outside — a scrape, `create_recipe` — carrying this app's
+ * outside — a scrape, either MCP create tool — carrying this app's
  * `group` extension. Inbound only: `fromSchemaOrgIngredients` turns a list of
  * these (or bare strings) into write input, and nothing internal reads them.
  */
@@ -53,8 +53,13 @@ export interface StoredIngredientGroup {
 
 /**
  * What a writer sends for one ingredient. `id` names the row the line already
- * is — send it back to keep the row (and the catalog association curated on
- * it); leave it off for a genuinely new line and the write path mints one.
+ * is — send it back to keep the row; leave it off for a genuinely new line and
+ * the write path mints one.
+ *
+ * Keeping the row keeps the catalog association curated on it only while the
+ * text is unchanged. Send the same id with different words and the save hands
+ * that row to the matcher to re-answer, because the association names which
+ * food the line means and those new words may name another one.
  */
 export interface RecipeIngredientLineInput {
   id?: string;
@@ -97,7 +102,7 @@ export interface RecipeRowColumns {
   status: "published" | "archived" | "draft" | null;
   /**
    * The recipe's title, and its identity in every listing — the column is what
-   * search filters, both name sorts and the two junk-name guards read (0026).
+   * search filters, both name sorts and the two junk-name guards read (0028).
    * `metadata.schema.name` holds a frozen copy on older rows that nothing may
    * read; there is no hydrate-back.
    */
@@ -218,7 +223,7 @@ export type RecipeDocumentSource = Pick<
  */
 export type SchemaOrgRecipe = SchemaRecipe & {
   /**
-   * The wire spellings of the column-backed scalars (0026). Outbound they are
+   * The wire spellings of the column-backed scalars (0028). Outbound they are
    * built from the document's columns; inbound a scrape or an agent sends them
    * and the write path reduces them to columns exactly once — `image` through
    * `getFirstImage`, since Schema.org allows an array and the column holds one.
@@ -326,7 +331,7 @@ export interface SchemaRecipe {
   recipeCuisine?: string;
   recipeCategory?: string | string[];
   // What is NOT here, and where it lives instead: a recipe's name, image,
-  // description and both kinds of notes are columns (0026); its ingredients are
+  // description and both kinds of notes are columns (0028); its ingredients are
   // `RecipeRow.ingredients`, its instructions `RecipeRow.instructions`, its
   // times the three `*_time` columns and its servings the `servings_amount` /
   // `servings_unit` pair. The Schema.org spellings of all of them exist only on

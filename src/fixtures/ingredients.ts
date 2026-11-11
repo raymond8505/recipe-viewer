@@ -49,6 +49,9 @@ export const ingredientFixtures: IngredientRow[] = [
     source: "usda",
     created_at: "2026-07-01T12:00:00.000Z",
     updated_at: "2026-07-01T12:00:00.000Z",
+    // Two of these five carry a check and three don't, so the ingredients
+    // table renders both a date and its "—" in every story and test.
+    last_checked: "2026-09-12T15:20:00.000Z",
   },
   {
     id: "b2c97fc7-7a4f-4a76-8e66-1e6d4b3da202",
@@ -82,6 +85,7 @@ export const ingredientFixtures: IngredientRow[] = [
     source: "usda",
     created_at: "2026-07-01T12:00:00.000Z",
     updated_at: "2026-07-01T12:00:00.000Z",
+    last_checked: null,
   },
   {
     id: "c3da80d8-8b50-4b87-9f77-2f7e5c4eb303",
@@ -115,6 +119,7 @@ export const ingredientFixtures: IngredientRow[] = [
     source: "usda",
     created_at: "2026-07-01T12:00:00.000Z",
     updated_at: "2026-07-01T12:00:00.000Z",
+    last_checked: null,
   },
   {
     id: "d4eb91e9-9c61-4c98-a088-3a8f6d5fc404",
@@ -131,6 +136,7 @@ export const ingredientFixtures: IngredientRow[] = [
     source: "manual",
     created_at: "2026-07-02T12:00:00.000Z",
     updated_at: "2026-07-03T09:30:00.000Z",
+    last_checked: "2026-08-30T11:00:00.000Z",
   },
   {
     id: "e5fca2fa-ad72-4da9-b199-4b9a7e60d505",
@@ -157,6 +163,7 @@ export const ingredientFixtures: IngredientRow[] = [
     source: "usda",
     created_at: "2026-07-02T12:00:00.000Z",
     updated_at: "2026-07-02T12:00:00.000Z",
+    last_checked: null,
   },
 ];
 
@@ -178,6 +185,7 @@ export function makeIngredient(
     source: "usda",
     created_at: "2026-07-01T12:00:00.000Z",
     updated_at: "2026-07-01T12:00:00.000Z",
+    last_checked: null,
     ...overrides,
   };
 }

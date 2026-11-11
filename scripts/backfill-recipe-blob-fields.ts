@@ -1,4 +1,4 @@
-// One-shot, resumable backfill for db/migrations/0026's four promoted columns.
+// One-shot, resumable backfill for db/migrations/0028's four promoted columns.
 //
 //   yarn backfill:recipe-blob-fields              # every un-backfilled recipe
 //   yarn backfill:recipe-blob-fields --limit=10   # cap a pass (smoke-testing)
@@ -6,7 +6,7 @@
 //
 // Copies `metadata.schema.{image,description,notes,cookingNotes}` into
 // `recipes.{image,description,notes,cooking_notes}`. The blob copies are
-// deliberately LEFT IN PLACE — 0026 declares them dead rather than deleting
+// deliberately LEFT IN PLACE — 0028 declares them dead rather than deleting
 // them, and the repo layer deletes them at the read exit and strips them from
 // every write.
 //
@@ -26,7 +26,7 @@
 // direction a "reconcile" would have assumed — so the run prints them and
 // writes neither.
 //
-// A row with no name in either place is reported separately: 0027 puts NOT NULL
+// A row with no name in either place is reported separately: 0029 puts NOT NULL
 // on the column and such a row would block it.
 //
 // The derived `content` column is NOT refreshed (0019's and 0022's backfills
@@ -74,7 +74,7 @@ interface Planned {
   changed: boolean;
   /** Column and blob disagree about the name — for a human, not for a write. */
   nameDiverged: { column: string | null; blob: string | null } | null;
-  /** No name in either place; 0027's NOT NULL would reject this row. */
+  /** No name in either place; 0029's NOT NULL would reject this row. */
   nameMissing: boolean;
   /** The blob held a `string[]` image, reduced to its first entry. */
   imageWasArray: boolean;
@@ -189,10 +189,10 @@ async function main() {
   const missing = plans.filter((p) => p.planned.nameMissing);
   if (missing.length > 0) {
     console.log(
-      `\n${missing.length} recipe(s) with no name in the column OR the blob — 0027's NOT NULL will reject these:`,
+      `\n${missing.length} recipe(s) with no name in the column OR the blob — 0029's NOT NULL will reject these:`,
     );
     for (const { row } of missing) console.log(`  ${row.id}`);
-    console.log("Give each one a name before applying 0027.");
+    console.log("Give each one a name before applying 0029.");
   }
 
   const diverged = plans.filter((p) => p.planned.nameDiverged);

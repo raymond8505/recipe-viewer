@@ -78,6 +78,13 @@ const NormalizationState = Annotation.Root({
   // (the reconcile creates one before this run is ever scheduled), so this is
   // what persist writes back to — not raw_text, not position.
   rowIds: Annotation<string[]>,
+  // Row ids whose existing association this run MAY replace: the lines the
+  // save reworded. Empty for a create and for the manual re-run endpoint,
+  // which ask only for the gaps to be filled.
+  rematchIds: Annotation<string[]>({
+    reducer: (_a, b) => b,
+    default: () => [],
+  }),
   parsed: Annotation<ParsedLine[]>,
   matches: Annotation<LineMatch[]>,
   // position → resolved gram weight for lines the density path can't convert
@@ -123,9 +130,9 @@ function parsePrompt(lines: string[]): string {
     "",
     "For every line extract:",
     '- quantity: the amount as a number (convert fractions: "1 1/2" → 1.5; use the midpoint of ranges: "2-3" → 2.5). null if the line has no amount.',
-    '- unit: the measurement unit word as written (e.g. "tsp", "tablespoons", "cups", "g"). null when there is no unit (e.g. "2 eggs").',
-    '- name: the ingredient itself in lowercase, without quantity, unit, or preparation text (e.g. "all-purpose flour", "yellow onion").',
-    '- note: preparation/qualifier text (e.g. "finely chopped", "divided"). null if none.',
+    '- unit: the measurement unit word as written (e.g. "tsp", "tablespoons", "cups", "g"). A SIZE counts as a unit: in "2-inch piece ginger" the unit is "inch" and the quantity is 2. null when there is no unit (e.g. "2 eggs").',
+    '- name: the ingredient itself in lowercase, without quantity, unit, or preparation text (e.g. "all-purpose flour", "yellow onion"). "2-inch piece ginger" is "ginger" — the catalog holds foods, not the objects a size describes. Keep a word that genuinely names the food ("cinnamon stick").',
+    '- note: preparation/qualifier text (e.g. "finely chopped", "divided"), including the object a size describes (the "piece" in "2-inch piece ginger", the "knob" in "1-inch knob of ginger"). null if none.',
     "",
     `Return exactly ${lines.length} items, in the same order as the lines.`,
     "",
@@ -489,18 +496,24 @@ async function persist(state: State): Promise<Partial<State>> {
     return {};
   }
 
-  // Normalization GUESSES an association for a line that hasn't got one. A
-  // line that already has one — however it got there — is not a question this
-  // run is entitled to re-answer: the user may have picked it deliberately,
-  // and there is no signal here that would justify overruling them. So an
-  // existing association always survives, and the matcher's opinion is used
-  // only to fill gaps.
+  // Normalization GUESSES an association for a line that hasn't got one, and
+  // an existing association otherwise survives: the user may have picked it
+  // deliberately, so the matcher's opinion only fills gaps.
+  //
+  // `rematchIds` is the one signal that justifies overruling one. A row lands
+  // there when the save reworded its line, which makes the stored association
+  // a claim about different words than the line now carries — a manual pick
+  // included, since it was chosen against wording the line has moved away
+  // from. Such a row takes the matcher's answer whatever it is, so a re-match
+  // that finds nothing leaves the line unmatched rather than pointing at a
+  // food the line does not name.
   //
   // Every line already has its row (the reconcile made it on save), so this
   // run only ever UPDATES rows by id — it creates none and deletes none. A row
   // the save dropped since this run began is simply not in `rowIds`.
   const existingRows = await getRecipeIngredients(state.recipeId);
   const priorById = new Map(existingRows.map((row) => [row.id, row]));
+  const rematchIds = new Set(state.rematchIds);
 
   const matchByPosition = new Map(state.matches.map((m) => [m.position, m]));
   const rows: RecipeIngredientRow[] = state.parsed.flatMap((line) => {
@@ -524,7 +537,7 @@ async function persist(state: State): Promise<Partial<State>> {
       grams_source: estimate?.source ?? null,
     };
 
-    if (prior.ingredient_id != null) return [parseFields];
+    if (prior.ingredient_id != null && !rematchIds.has(id)) return [parseFields];
 
     const match = matchByPosition.get(line.position);
     const status: MatchStatus =
@@ -593,7 +606,10 @@ const graph = new StateGraph(NormalizationState)
  * error lands as normalization_status "failed" with the message recorded, and
  * the recipe save that scheduled this run is long since committed.
  */
-export async function runNormalization(recipeId: string): Promise<void> {
+export async function runNormalization(
+  recipeId: string,
+  rematchIds: readonly string[] = [],
+): Promise<void> {
   try {
     const recipe = await getRecipeById(recipeId);
     if (!recipe) return; // deleted between schedule and run
@@ -616,7 +632,13 @@ export async function runNormalization(recipeId: string): Promise<void> {
     }
 
     await setRecipeNormalization(recipeId, { status: "running", error: null });
-    await graph.invoke({ recipeId, fingerprint, rawLines, rowIds });
+    await graph.invoke({
+      recipeId,
+      fingerprint,
+      rawLines,
+      rowIds,
+      rematchIds: [...rematchIds],
+    });
   } catch (err) {
     console.error(`Normalization failed for ${recipeId}:`, err);
     try {

@@ -114,6 +114,46 @@ describe("POST /api/ingredients", () => {
     );
   });
 
+  it("collapses a repeated portion before it reaches the repo", async () => {
+    const res = await POST(
+      makeJsonRequest({
+        name: "flour",
+        food_portions: [
+          { modifier: "cup", gramWeight: 120 },
+          { modifier: "cup", gramWeight: 120 },
+        ],
+      }),
+    );
+
+    expect(res.status).toBe(201);
+    expect(createIngredientRow).toHaveBeenCalledWith(
+      expect.objectContaining({
+        food_portions: [{ modifier: "cup", gramWeight: 120 }],
+      }),
+    );
+  });
+
+  // The form renders whatever the client wrapper throws, so a contradiction
+  // the user can actually fix has to arrive as the sentence naming the label —
+  // not the generic "Invalid ingredient" every other parse failure gets.
+  it("answers a portion contradiction with the label it names", async () => {
+    const res = await POST(
+      makeJsonRequest({
+        name: "flour",
+        food_portions: [
+          { modifier: "cup", gramWeight: 120 },
+          { modifier: "cup", gramWeight: 125 },
+        ],
+      }),
+    );
+
+    expect(res.status).toBe(400);
+    const body = await res.json();
+    expect(body.error).toContain('"cup"');
+    expect(body.error).not.toBe("Invalid ingredient");
+    expect(createIngredientRow).not.toHaveBeenCalled();
+  });
+
   it("rejects a food_portion with a non-positive gram weight with 400", async () => {
     const res = await POST(
       makeJsonRequest({ name: "flour", food_portions: [{ gramWeight: 0 }] }),

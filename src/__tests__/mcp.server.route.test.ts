@@ -33,6 +33,8 @@ vi.mock("@/lib/supabase", () => ({
 import { POST, GET, DELETE } from "@/app/api/mcp/server/route";
 import { signAccessToken } from "@/lib/mcp/oauth";
 import { JsonRpcErrorCode, JsonRpcMethod } from "@/lib/mcp/types";
+import { TOOL_NAMES } from "@/lib/mcp/toolNames";
+import { NUTRITION_BASIS_REQUIRED } from "@/lib/schemas/ingredient";
 
 function rpc(body: object, headers: Record<string, string> = {}) {
   return new Request("http://localhost/api/mcp/server", {
@@ -79,29 +81,16 @@ describe("/api/mcp/server", () => {
       expect(body.result.serverInfo.name).toBe("recipe-viewer-mcp");
     });
 
-    it("lists 13 tools", async () => {
+    // Against the registry, not a second copy of it: what this covers is that
+    // the HTTP surface serves every tool the server declares. That the registry
+    // and the implementations agree is mcp.descriptions.test.ts's job.
+    it("lists every registered tool", async () => {
       const res = await POST(
         rpc({ jsonrpc: "2.0", id: 2, method: JsonRpcMethod.TOOLS_LIST }, { authorization: auth }),
       );
       const body = await res.json();
       const names = body.result.tools.map((t: { name: string }) => t.name).sort();
-      expect(names).toEqual(
-        [
-          "clear_cooking_notes",
-          "create_ingredient",
-          "create_recipe",
-          "delete_ingredient",
-          "delete_recipe",
-          "get_ingredient",
-          "get_recipe",
-          "get_token",
-          "search_ingredients",
-          "search_recipes",
-          "update_ingredient",
-          "update_recipe",
-          "upload_recipe_image",
-        ],
-      );
+      expect(names).toEqual([...TOOL_NAMES].sort());
     });
 
     // The descriptions are the agent's whole instruction surface, and two
@@ -185,9 +174,11 @@ describe("/api/mcp/server", () => {
     });
 
     it("formats argument-validation failures with tool name and field paths", async () => {
-      // Regression for the food_portions spiral: nutrition without
-      // nutrition_portion must fail with a message that names the tool and
-      // the missing field — not a raw zod issues array with path [].
+      // Nutrition without a basis fails with a message that names the tool
+      // and the missing field — never a raw zod issues array with path [].
+      // The payload is the one an agent reaches for when it mistakes
+      // food_portions for the basis; the two are different TYPES, so the
+      // schema can say which it wants.
       const res = await POST(
         rpc(
           {
@@ -210,8 +201,8 @@ describe("/api/mcp/server", () => {
       expect(body.result.isError).toBe(true);
       const text = body.result.content[0].text as string;
       expect(text).toMatch(/^invalid_arguments: create_ingredient/);
-      expect(text).toMatch(/nutrition_portion:/);
-      expect(text).toMatch(/food_portions does not satisfy/);
+      expect(text).toMatch(/nutrition_basis_g:/);
+      expect(text).toContain(NUTRITION_BASIS_REQUIRED);
     });
 
     it("returns isError result when the tool throws", async () => {

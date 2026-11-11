@@ -232,6 +232,55 @@ describe("updateIngredientRow", () => {
     );
   });
 
+  // A row carrying hand-edited values is "manual" — those values are the
+  // editor's, not USDA's — while the fdc_id stays as the provenance trail.
+  it("demotes a row to manual when the patch changes its data", async () => {
+    const row = makeIngredient("ing-1", "cumin", { source: "manual" });
+    useQueue([{ data: { id: "ing-1" } }, { data: row }]);
+
+    await updateIngredientRow("ing-1", { density_g_per_ml: 0.5 });
+
+    expect(builderAt(1).update).toHaveBeenCalledWith(
+      expect.objectContaining({ density_g_per_ml: 0.5, source: "manual" }),
+    );
+  });
+
+  // A check CONFIRMS the stored values — a USDA row verified against USDA is
+  // still a USDA row. This is the Mark checked button's exact patch, and the
+  // MCP tool's when an agent stamps a row it verified.
+  it("leaves source alone for a patch that only stamps last_checked", async () => {
+    const row = makeIngredient("ing-1", "cumin", { source: "usda" });
+    useQueue([{ data: { id: "ing-1" } }, { data: row }]);
+
+    await updateIngredientRow("ing-1", { last_checked: "2026-09-22T14:03:00.000Z" });
+
+    const written = builderAt(1).update.mock.calls[0][0];
+    expect(written).toHaveProperty("last_checked", "2026-09-22T14:03:00.000Z");
+    expect(written).not.toHaveProperty("source");
+  });
+
+  // The alias-refresh path (ingredientAliases.ts) re-embeds a row without
+  // touching what it says, so it must not demote either.
+  it("leaves source alone for an embedding-only refresh", async () => {
+    const row = makeIngredient("ing-1", "cumin", { source: "usda" });
+    useQueue([{ data: { id: "ing-1" } }, { data: row }]);
+
+    await updateIngredientRow("ing-1", { embedding: [1, 2] });
+
+    expect(builderAt(1).update.mock.calls[0][0]).not.toHaveProperty("source");
+  });
+
+  it("honors a source the caller sets explicitly", async () => {
+    const row = makeIngredient("ing-1", "cumin", { source: "usda" });
+    useQueue([{ data: { id: "ing-1" } }, { data: row }]);
+
+    await updateIngredientRow("ing-1", { name: "cumin seed", source: "usda" });
+
+    expect(builderAt(1).update).toHaveBeenCalledWith(
+      expect.objectContaining({ source: "usda" }),
+    );
+  });
+
   it("returns the current row without writing when the patch is empty", async () => {
     const row = makeIngredient("ing-1", "cumin seed");
     useQueue([{ data: { id: "ing-1" } }, { data: row }]);
