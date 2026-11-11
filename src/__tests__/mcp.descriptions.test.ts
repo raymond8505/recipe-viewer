@@ -42,6 +42,7 @@ import { FOOD_PORTION_UNIQUE_RULE } from "@/lib/foodPortions";
 import {
   COOKING_NOTES_READ_ONLY,
   IMAGE_FORMAT_LIST,
+  INGREDIENT_SEARCH_MODE,
   METRIC_UNIT_OR_LIST,
   METRIC_UNIT_SLASHES,
   orList,
@@ -146,6 +147,24 @@ describe("rendered prose constants", () => {
     // pinned here (not just on the HTTP response) so an interpolated number
     // can't quietly reintroduce one.
     expect(descriptionOf("search_ingredients")).not.toMatch(/0\.85|0\.6\b/);
+  });
+
+  it("names every search mode the ingredient tool can answer with", () => {
+    // The mode is the agent's only signal for which score fields it got, so a
+    // mode the tool can return but the description never mentions is a number
+    // the agent has no instruction for.
+    const description = descriptionOf("search_ingredients");
+    for (const mode of Object.values(INGREDIENT_SEARCH_MODE)) {
+      expect(description).toContain(`\`${mode}\``);
+    }
+  });
+
+  it("tells an agent not to read a degraded result as an empty catalog", () => {
+    // The expensive mistake in keyword mode: a semantic-only match can't
+    // surface, and an agent that reads the gap as "absent" creates a duplicate.
+    const description = descriptionOf("search_ingredients");
+    expect(description).toContain("INCONCLUSIVE");
+    expect(description).toContain(TOOL.create_ingredient);
   });
 
   it("renders every accepted image format in the upload description", () => {

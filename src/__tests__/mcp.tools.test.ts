@@ -3,6 +3,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import {
   makeIngredient,
   makeIngredientLines,
+  makeKeywordMatch,
   makeMatchedIngredient,
   makeRecipe,
   makeSteps,
@@ -44,6 +45,7 @@ vi.mock("@/lib/storage", () => ({
 
 vi.mock("@/lib/ingredients", () => ({
   matchIngredients: vi.fn(),
+  searchIngredientsKeyword: vi.fn(),
   getIngredientById: vi.fn(),
   createIngredientRow: vi.fn(),
   updateIngredientRow: vi.fn(),
@@ -85,6 +87,7 @@ import {
   getIngredientById,
   IngredientRepoError,
   matchIngredients,
+  searchIngredientsKeyword,
   updateIngredientRow,
 } from "@/lib/ingredients";
 import { generateEmbedding } from "@/lib/embedding";
@@ -118,23 +121,59 @@ describe("searchIngredients", () => {
 
     expect(generateEmbedding).toHaveBeenCalledWith("cumin");
     expect(matchIngredients).toHaveBeenCalledWith("cumin", [0.1, 0.2], 3);
-    expect(out).toEqual({ data: matches });
+    expect(out).toEqual({ searchMode: "hybrid", data: matches });
     // Aliases must survive to the agent (db/migrations/0012): the catalog is
     // named in USDA wording, so they are what identifies a row as the caller's
     // ingredient, and they're what an alias-adding update has to pass back.
     expect(out.data[0].aliases).toEqual(["cumin", "whole cumin"]);
   });
 
-  it("throws ToolError(embedding_unavailable) when embedding fails", async () => {
+  it("falls back to the keyword RPC when the embedding is unavailable", async () => {
+    // A failed Gemini call must not read to an agent as an empty catalog: the
+    // trigram RPC covers the same rows, so the tool answers from it and names
+    // the narrower ranking on its way out.
     vi.mocked(generateEmbedding).mockResolvedValueOnce(null);
+    const matches = [makeKeywordMatch("ing-1", "Spices, cumin seed")];
+    vi.mocked(searchIngredientsKeyword).mockResolvedValueOnce(matches);
+
+    const out = await searchIngredients({ query: "cumin", limit: 5 });
+
+    expect(searchIngredientsKeyword).toHaveBeenCalledWith("cumin", 5);
+    expect(matchIngredients).not.toHaveBeenCalled();
+    expect(out).toEqual({ searchMode: "keyword", data: matches });
+  });
+
+  it("names the ranking on every answer, so neither mode is silent", async () => {
+    // The two modes carry different score fields; an agent that cannot tell
+    // them apart reads a missing semantic_similarity as a zero match.
+    vi.mocked(generateEmbedding).mockResolvedValueOnce(null);
+    vi.mocked(searchIngredientsKeyword).mockResolvedValueOnce([]);
+    const degraded = await searchIngredients({ query: "cumin", limit: 5 });
+
+    vi.mocked(generateEmbedding).mockResolvedValueOnce([0.1]);
+    vi.mocked(matchIngredients).mockResolvedValueOnce([]);
+    const normal = await searchIngredients({ query: "cumin", limit: 5 });
+
+    expect([degraded.searchMode, normal.searchMode]).toEqual([
+      "keyword",
+      "hybrid",
+    ]);
+  });
+
+  it("translates a keyword-RPC failure into ToolError(search_failed)", async () => {
+    vi.mocked(generateEmbedding).mockResolvedValueOnce(null);
+    vi.mocked(searchIngredientsKeyword).mockRejectedValueOnce(
+      new IngredientRepoError("match_failed", "trigram rpc exploded"),
+    );
 
     const err = await searchIngredients({ query: "cumin", limit: 5 }).catch(
       (e: unknown) => e,
     );
 
+    // The fallback is a narrower search, not a looser contract: an RPC failure
+    // still has to surface as unavailable rather than as "no matches".
     expect(err).toBeInstanceOf(ToolError);
-    expect((err as ToolError).code).toBe("embedding_unavailable");
-    expect(matchIngredients).not.toHaveBeenCalled();
+    expect((err as ToolError).code).toBe("search_failed");
   });
 
   it("translates IngredientRepoError into ToolError(search_failed)", async () => {

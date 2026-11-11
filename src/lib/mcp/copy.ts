@@ -169,3 +169,22 @@ export const INGREDIENT_DETAIL_ONLY_FIELDS = exhaustiveKeys<
 ]);
 
 export const INGREDIENT_DETAIL_ONLY_LIST = INGREDIENT_DETAIL_ONLY_FIELDS.join(", ");
+
+/**
+ * The two rankings `search_ingredients` can answer with. Semantic matching
+ * needs a Gemini embedding of the query, which is a paid external call that
+ * can fail on its own; the trigram RPC needs nothing but Postgres. So the
+ * tool answers in whichever mode it could actually produce and NAMES it on
+ * every response, because the two carry different score fields and an agent
+ * must never have to infer which numbers it got.
+ *
+ * Interpolated into the tool description, so the literals an agent is told to
+ * read are the literals the tool returns.
+ */
+export const INGREDIENT_SEARCH_MODE = {
+  hybrid: "hybrid",
+  keyword: "keyword",
+} as const;
+
+export type IngredientSearchMode =
+  (typeof INGREDIENT_SEARCH_MODE)[keyof typeof INGREDIENT_SEARCH_MODE];

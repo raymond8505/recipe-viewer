@@ -12,6 +12,7 @@ import {
   getIngredientById,
   IngredientRepoError,
   matchIngredients,
+  searchIngredientsKeyword,
   updateIngredientRow,
   type UpdateIngredientPatch,
 } from "@/lib/ingredients";
@@ -34,6 +35,7 @@ import {
   recipeSourceForUrl,
 } from "@/lib/format";
 import {
+  INGREDIENT_SEARCH_MODE,
   RECIPE_INGREDIENT_ON_UPDATE_ERROR,
   RECIPE_INSTRUCTIONS_ON_UPDATE_ERROR,
   RECIPE_SCALARS_ON_UPDATE_ERROR,
@@ -73,7 +75,11 @@ import type {
   IngredientSearchInput,
   IngredientUpdateToolInput,
 } from "@/lib/schemas/ingredient";
-import type { IngredientMatch, IngredientRow } from "@/types/ingredient";
+import type {
+  IngredientKeywordMatch,
+  IngredientMatch,
+  IngredientRow,
+} from "@/types/ingredient";
 
 // Every tool here is a thin wrapper over a repo helper (`@/lib/recipes`,
 // `@/lib/ingredients`). They handle argument typing + translate repo errors
@@ -155,26 +161,55 @@ export async function searchRecipes(
   };
 }
 
-// Semantic search over the ingredient catalog: embed the query with the same
-// model that embedded the catalog names, then cosine-match via the
-// match_ingredients RPC. IngredientMatch already carries everything an agent
-// needs (per-100g nutrition + density) — no follow-up fetch tool required.
+/**
+ * What `search_ingredients` answers with: the rows plus the ranking that
+ * produced them.
+ *
+ * A discriminated union rather than a mode flag beside one widened row type,
+ * because the two rankings carry different score fields — so reading
+ * `semantic_similarity` off a keyword result is a compile error here instead
+ * of an `undefined` an agent is told is a number.
+ */
+export type IngredientSearchResult =
+  | {
+      searchMode: typeof INGREDIENT_SEARCH_MODE.hybrid;
+      data: IngredientMatch[];
+    }
+  | {
+      searchMode: typeof INGREDIENT_SEARCH_MODE.keyword;
+      data: IngredientKeywordMatch[];
+    };
+
+// Search over the ingredient catalog, hybrid when the query can be embedded
+// and trigram-only when it can't. Either ranking returns everything an agent
+// needs on each row (per-100g nutrition + density), so neither leaves it
+// owing a follow-up fetch.
 export async function searchIngredients(
   args: IngredientSearchInput,
-): Promise<{ data: IngredientMatch[] }> {
+): Promise<IngredientSearchResult> {
   // ingredientQueryText, not the raw query: catalog vectors are built from
   // lowercased name + aliases, so the query side has to fold case identically
   // or the normalization works against the match instead of for it.
   const embedding = await generateEmbedding(ingredientQueryText(args.query));
-  if (!embedding) {
-    throw new ToolError(
-      "embedding_unavailable",
-      "Semantic ingredient search is temporarily unavailable (embedding generation failed) — retry shortly.",
-    );
-  }
 
   try {
-    return { data: await matchIngredients(args.query, embedding, args.limit) };
+    // No embedding means the Gemini call failed, which is not a reason to
+    // answer "the catalog has nothing": the trigram RPC ranks the same rows
+    // and returns the same nutrition and density, so a query naming a row or
+    // one of its aliases still finds it. Its reach is narrower — it cannot
+    // match wording the row doesn't carry — which is why the mode is reported
+    // rather than quietly substituted.
+    if (!embedding) {
+      return {
+        searchMode: INGREDIENT_SEARCH_MODE.keyword,
+        data: await searchIngredientsKeyword(args.query, args.limit),
+      };
+    }
+
+    return {
+      searchMode: INGREDIENT_SEARCH_MODE.hybrid,
+      data: await matchIngredients(args.query, embedding, args.limit),
+    };
   } catch (err) {
     if (err instanceof IngredientRepoError) {
       throw new ToolError("search_failed", err.detail);
