@@ -183,13 +183,25 @@ describe("getRecipes", () => {
     expect(builder.range).toHaveBeenCalledWith(10, 19);
   });
 
-  it("matches a query against the recipe name or its catalog ingredients", async () => {
+  it("matches a query against the name, the catalog, or the line labels", async () => {
     const { builder } = makeSupabaseMock();
     await getRecipes({ query: "pasta" });
 
     expect(builder.or).toHaveBeenCalledWith(
-      'metadata->schema->>name.ilike."%pasta%",ingredient_catalog_text.ilike."%pasta%"',
+      'metadata->schema->>name.ilike."%pasta%"' +
+        ',ingredient_catalog_text.ilike."%pasta%"' +
+        ',ingredient_line_text.ilike."%pasta%"',
     );
+  });
+
+  // The arm that reaches a line the catalog has no answer for: an unmatched
+  // line is invisible to the catalog arm by construction.
+  it("asks for the line labels as well as the catalog", async () => {
+    const { builder } = makeSupabaseMock();
+    await getRecipes({ query: "ginger" });
+
+    const [filter] = builder.or.mock.calls.at(-1) as [string];
+    expect(filter).toContain('ingredient_line_text.ilike."%ginger%"');
   });
 
   it("does not filter by query when none is provided", async () => {
@@ -198,7 +210,10 @@ describe("getRecipes", () => {
 
     // The status branch still emits its own `or`; none of them is the search.
     const calls = builder.or.mock.calls.flat();
-    expect(calls.some((c: unknown) => typeof c === "string" && c.includes("ingredient_catalog_text"))).toBe(false);
+    const isSearch = (c: unknown) =>
+      typeof c === "string" &&
+      (c.includes("ingredient_catalog_text") || c.includes("ingredient_line_text"));
+    expect(calls.some(isSearch)).toBe(false);
   });
 
   // Unquoted, the comma would end the operand: PostgREST answers 400 PGRST100,
@@ -208,7 +223,9 @@ describe("getRecipes", () => {
     await getRecipes({ query: "salt, table" });
 
     expect(builder.or).toHaveBeenCalledWith(
-      'metadata->schema->>name.ilike."%salt, table%",ingredient_catalog_text.ilike."%salt, table%"',
+      'metadata->schema->>name.ilike."%salt, table%"' +
+        ',ingredient_catalog_text.ilike."%salt, table%"' +
+        ',ingredient_line_text.ilike."%salt, table%"',
     );
   });
 
@@ -219,7 +236,9 @@ describe("getRecipes", () => {
     await getRecipes({ query: String.raw`a"b\c` });
 
     expect(builder.or).toHaveBeenCalledWith(
-      String.raw`metadata->schema->>name.ilike."%a\"b\\c%",ingredient_catalog_text.ilike."%a\"b\\c%"`,
+      String.raw`metadata->schema->>name.ilike."%a\"b\\c%"` +
+        String.raw`,ingredient_catalog_text.ilike."%a\"b\\c%"` +
+        String.raw`,ingredient_line_text.ilike."%a\"b\\c%"`,
     );
   });
 
@@ -361,12 +380,14 @@ describe("getStatusCounts", () => {
     expect(result).toEqual({ published: 2, draft: 1, archived: 1, __null: 2 });
   });
 
-  it("matches a query against the recipe name or its catalog ingredients", async () => {
+  it("matches a query against the name, the catalog, or the line labels", async () => {
     const { builder } = makeSupabaseMock({ data: [] });
     await getStatusCounts({ query: "pasta" });
 
     expect(builder.or).toHaveBeenCalledWith(
-      'metadata->schema->>name.ilike."%pasta%",ingredient_catalog_text.ilike."%pasta%"',
+      'metadata->schema->>name.ilike."%pasta%"' +
+        ',ingredient_catalog_text.ilike."%pasta%"' +
+        ',ingredient_line_text.ilike."%pasta%"',
     );
   });
 
@@ -948,7 +969,11 @@ describe("updateRecipeRow", () => {
     expect(updates[0].content).toContain("- 2 cups rice");
   });
 
-  it("rewords a line in place: re-parses its row, keeps its match, schedules nothing", async () => {
+  // The save keeps the association and hands the row to the run: a reworded
+  // line's stored match answers for different words, and the matcher is what
+  // replaces it. Nothing here nulls it in the meantime, so the line keeps
+  // answering with nutrition until a better answer exists.
+  it("rewords a line in place: re-parses its row, keeps its match, sends it for re-matching", async () => {
     const { updates } = mockLines();
 
     await updateRecipeRow("r1", {
@@ -972,7 +997,27 @@ describe("updateRecipeRow", () => {
     expect(mockDeleteRecipeIngredientRows).toHaveBeenCalledWith("r1", []);
     expect(updates[0].ingredients).toEqual(withLines.ingredients);
     expect(updates[0].content).toContain("- 2 tsp ground cumin");
-    expect(mockScheduleNormalization).not.toHaveBeenCalled();
+    expect(mockScheduleNormalization).toHaveBeenCalledWith("r1", ["ri-0"]);
+  });
+
+  // Only the reworded row is re-matchable. A line added in the same save has
+  // no association to overrule, and the untouched line keeps its own.
+  it("names only the reworded rows when a save also adds a line", async () => {
+    mockLines();
+
+    await updateRecipeRow("r1", {
+      ingredients: [
+        { name: "Rub", ingredients: [{ id: "ri-0", raw_text: "2 tsp ground cumin" }] },
+        {
+          ingredients: [
+            { id: "ri-1", raw_text: "2 cups rice" },
+            { raw_text: "1 tbsp butter" },
+          ],
+        },
+      ],
+    });
+
+    expect(mockScheduleNormalization).toHaveBeenCalledWith("r1", ["ri-0"]);
   });
 
   it("reorders and regroups by rewriting the column alone", async () => {
@@ -1007,7 +1052,9 @@ describe("updateRecipeRow", () => {
       { name: "Rub", ingredients: ["ri-0"] },
       { ingredients: ["ri-1", inserted[0].id] },
     ]);
-    expect(mockScheduleNormalization).toHaveBeenCalledWith("r1");
+    // No reworded row, so nothing the run may re-answer — a fresh row has no
+    // association to overrule.
+    expect(mockScheduleNormalization).toHaveBeenCalledWith("r1", []);
   });
 
   it("removes a line: prunes its row after the recipe row lands, schedules normalization", async () => {
@@ -1034,7 +1081,7 @@ describe("updateRecipeRow", () => {
     expect(mockDeleteRecipeIngredientRows.mock.invocationCallOrder[0]).toBeGreaterThan(
       recipeUpdate.mock.invocationCallOrder[0],
     );
-    expect(mockScheduleNormalization).toHaveBeenCalledWith("r1");
+    expect(mockScheduleNormalization).toHaveBeenCalledWith("r1", []);
   });
 
   // A prune failing after the save landed must not fail the save — the rows

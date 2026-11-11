@@ -232,19 +232,22 @@ const PAGE_SIZE = 24;
 const MAX_QUERY_LENGTH = 200;
 
 /**
- * The two arms a search query matches on: the recipe's own name, and the
- * catalog names and aliases of the ingredients its lines resolve to (the
- * `ingredient_catalog_text` computed field, db/migrations/0023).
+ * The three arms a search query matches on: the recipe's own name, the catalog
+ * names and aliases of the ingredients its lines resolve to
+ * (`ingredient_catalog_text`, db/migrations/0023), and the parsed names of its
+ * own ingredient lines (`ingredient_line_text`, db/migrations/0027).
  *
- * Aliases are the reason the second arm exists — they are what lets "cilantro"
- * find a recipe whose line reads "fresh coriander".
+ * Aliases are the reason the catalog arm exists — they are what lets
+ * "cilantro" find a recipe whose line reads "fresh coriander". The line arm is
+ * what reaches a line the catalog has no answer for yet: an unmatched line is
+ * invisible to the catalog arm by construction, and those are the recipes a
+ * reader is least likely to find any other way.
  *
- * Deliberately NOT the line text (`recipe_ingredients.raw_text` / `name_text`):
- * matching the catalog and walking back to the recipes skips unmatched lines by
- * construction, so search speaks the one vocabulary a person can also browse in
- * the ingredient manager. The cost is that a line normalization hasn't matched
- * yet is unsearchable; that shrinks on its own as the catalog fills, and no code
- * changes when it does.
+ * This filter only decides WHICH recipes match. Which arm matched decides the
+ * order, and only on the relevance sort: `search_recipes_ranked` tiers a name
+ * hit over a catalog hit over a line-label hit (0027). The two cannot be one
+ * expression — PostgREST orders by columns the row already holds, and the tier
+ * depends on the query.
  *
  * `getRecipes` and `getStatusCounts` must both filter through this. They run the
  * same search against the same corpus, so a predicate that lived in only one of
@@ -253,7 +256,11 @@ const MAX_QUERY_LENGTH = 200;
  */
 function recipeSearchFilter(query: string): string {
   const value = orFilterValue(`%${query.slice(0, MAX_QUERY_LENGTH)}%`);
-  return `metadata->schema->>name.ilike.${value},ingredient_catalog_text.ilike.${value}`;
+  return (
+    `metadata->schema->>name.ilike.${value}` +
+    `,ingredient_catalog_text.ilike.${value}` +
+    `,ingredient_line_text.ilike.${value}`
+  );
 }
 
 export async function getStatusCounts(opts?: {
@@ -300,9 +307,11 @@ type ColumnSort = Exclude<SortOption, "relevance">;
  */
 const RELEVANCE_TIEBREAK: ColumnSort = "newest";
 
-/** One row of `search_recipes_ranked` (db/migrations/0025). */
+/** One row of `search_recipes_ranked` (db/migrations/0027). */
 interface RankedId {
   id: string;
+  /** 3 = name hit, 2 = catalog hit, 1 = line label only. Ordering only. */
+  tier: number;
   score: number;
   total_count: number;
 }
@@ -319,9 +328,10 @@ interface RankedId {
  * page of ids — two dozen — nowhere near the URL limit an unpaged id list
  * would hit.
  *
- * The RPC filters on `ingredient_catalog_text`, the same computed field
- * `getStatusCounts` filters on, so the ranked page and the status chips beside
- * it always describe the same set of recipes.
+ * The RPC filters on the same three arms `recipeSearchFilter` builds, so the
+ * ranked page and the status chips beside it always describe the same set of
+ * recipes. It adds the tier and the weight share on top, which only order that
+ * set and never widen or narrow it.
  */
 async function rankedRecipes(
   opts: { query?: string; source?: string; status?: string; catalog?: boolean },
@@ -687,13 +697,14 @@ export async function updateRecipeRow(
       ? (writePatch.servings_unit ?? null)
       : current.servings_unit;
 
-  // Normalization exists to GUESS an association for a line that has none, so
-  // it only has work when the SET of lines changes — one was added or removed.
-  // Rewording, reordering or regrouping leaves every row (and therefore every
-  // curated association) exactly where it was, so it must not re-run:
-  // re-guessing there would overwrite the user's own corrections with the
-  // matcher's opinion, which is precisely backwards. The reconcile draws that
-  // distinction; the deterministic re-parse it produces is not a matcher run.
+  // Normalization has work when the SET of lines changes — something added or
+  // removed — and when a line is REWORDED, because an association names which
+  // food a line means and a reworded line names it in different words. The
+  // reworded rows go to the run as `rematchIds`, the only rows it may
+  // re-answer.
+  // Reordering and regrouping carry the same words, so they are neither. The
+  // reconcile draws both distinctions; the deterministic re-parse it produces
+  // is not a matcher run.
   const reconcile =
     patch.ingredients !== undefined
       ? reconcileRecipeIngredients(id, patch.ingredients, existingRows)
@@ -772,7 +783,11 @@ export async function updateRecipeRow(
     await deleteRecipeIngredientRows(id, reconcile.deleteIds).catch((err) => {
       console.error(`Failed to prune ingredient rows for ${id}:`, err);
     });
-    if (reconcile.lineSetChanged) scheduleNormalization(id);
+    // `updates` IS the reworded set — a row lands there only on a text change.
+    const rematchIds = reconcile.updates.map((row) => row.id);
+    if (reconcile.lineSetChanged || rematchIds.length > 0) {
+      scheduleNormalization(id, rematchIds);
+    }
   }
 
   return hydrate(data as RecipeRowColumns, finalRows, await getCatalogForRows(finalRows));

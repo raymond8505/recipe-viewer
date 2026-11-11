@@ -309,6 +309,49 @@ export function canonicalizeRecipeSource(source: string): string {
   return isOwnRecipe({ source }) ? CUSTOM_RECIPE_SOURCE : source;
 }
 
+/** The host a URL names, or null when the string isn't a URL. */
+function hostnameOf(url: string): string | null {
+  try {
+    return new URL(url).hostname || null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * The `source` to store for a recipe whose page is at `url` — the bare host
+ * ("seriouseats.com"), or `CUSTOM_RECIPE_SOURCE` when there is no upstream page
+ * to name.
+ *
+ * A url on this instance's own host counts as no upstream page. `source` is
+ * what `isOwnRecipe` reads, so storing the host there would answer "is this
+ * mine?" from deploy config, and a recipe authored here would offer a Re-scrape
+ * aimed at its own page. `instanceBaseUrl` is a parameter rather than an
+ * `@/env` read because this module is client-safe.
+ */
+export function recipeSourceForUrl(
+  url: string | undefined,
+  instanceBaseUrl: string,
+): string {
+  if (!url) return CUSTOM_RECIPE_SOURCE;
+  const host = hostnameOf(url);
+  if (!host || host === hostnameOf(instanceBaseUrl)) return CUSTOM_RECIPE_SOURCE;
+  // One site, one source: "www.seriouseats.com" and "seriouseats.com" are the
+  // same provenance, and `source` is what the search filter groups by.
+  return host.replace(/^www\./, "");
+}
+
+/**
+ * Where to view the recipe `id` on this instance — the path
+ * `src/app/recipes/[id]/page.tsx` serves.
+ *
+ * `instanceBaseUrl` is a parameter rather than an `@/env` read because this
+ * module is client-safe, as on `recipeSourceForUrl` above.
+ */
+export function recipePageUrl(id: string, instanceBaseUrl: string): string {
+  return `${instanceBaseUrl}/recipes/${id}`;
+}
+
 /**
  * Whether a string can be handed to an `<a href>` we open in a new tab: an
  * absolute http(s) URL. Two jobs — it hides the "open source" affordance while
@@ -659,8 +702,8 @@ function stepFromSchemaOrg(item: HowToStep): RecipeStep[] {
 }
 
 /**
- * The inbound edge: `recipeInstructions` as create_recipe or the re-scrape
- * webhook delivers it → canonical groups. The wire form is the array
+ * The inbound edge: `recipeInstructions` as either MCP create tool or the
+ * re-scrape webhook delivers it → canonical groups. The wire form is the array
  * `schemaOrgRecipeInputSchema` validates: HowToStep objects, `@type` optional,
  * and HowToSections whose `itemListElement` is an array of them. Anything but
  * an array is no steps: a string is iterable too, and iterating it would yield

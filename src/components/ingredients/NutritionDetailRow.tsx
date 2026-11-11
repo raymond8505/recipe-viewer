@@ -41,6 +41,7 @@ const EXCLUSION_TITLES: Record<ExclusionReason, string> = {
   no_quantity: `No parsed amount — can't convert to grams. ${GRAMS_FIXES}`,
   no_unit: `No unit (count line) — can't convert to grams. ${GRAMS_FIXES}`,
   no_density: `Volume unit but the ingredient has no density. ${GRAMS_FIXES}`,
+  no_weight_for_size: `A size, not an amount — what a piece that big weighs depends on the food. ${GRAMS_FIXES}`,
 };
 
 // A line whose 0 overrode one of the catalog blockers. It contributes nothing

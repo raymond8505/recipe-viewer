@@ -2,7 +2,7 @@ import type { IngredientRow, RecipeIngredientRow } from "./ingredient";
 
 /**
  * The object form of a Schema.org `recipeIngredient` entry as it arrives from
- * outside — a scrape, `create_recipe` — carrying this app's
+ * outside — a scrape, either MCP create tool — carrying this app's
  * `group` extension. Inbound only: `fromSchemaOrgIngredients` turns a list of
  * these (or bare strings) into write input, and nothing internal reads them.
  */
@@ -53,8 +53,13 @@ export interface StoredIngredientGroup {
 
 /**
  * What a writer sends for one ingredient. `id` names the row the line already
- * is — send it back to keep the row (and the catalog association curated on
- * it); leave it off for a genuinely new line and the write path mints one.
+ * is — send it back to keep the row; leave it off for a genuinely new line and
+ * the write path mints one.
+ *
+ * Keeping the row keeps the catalog association curated on it only while the
+ * text is unchanged. Send the same id with different words and the save hands
+ * that row to the matcher to re-answer, because the association names which
+ * food the line means and those new words may name another one.
  */
 export interface RecipeIngredientLineInput {
   id?: string;

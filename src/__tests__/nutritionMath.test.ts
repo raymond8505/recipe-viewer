@@ -65,6 +65,17 @@ describe("gramsForLine", () => {
     expect(gramsForLine(150, "g", null)).toBe(150);
   });
 
+  // `convert` returns its input unchanged across unit groups, so a dimension
+  // reaching the g conversion would weigh its own number in grams: 2 inches
+  // of ginger as 2 g. What a size weighs depends on the food, so the line
+  // weighs nothing until a gram weight is estimated or typed.
+  it("refuses to weigh a dimension", () => {
+    expect(gramsForLine(2, "inch", null)).toBeNull();
+    expect(gramsForLine(2, "inch", 0.95)).toBeNull();
+    expect(gramsForLine(3, "cm", null)).toBeNull();
+    expect(gramsForLine(4, "mm", null)).toBeNull();
+  });
+
   it("converts volume units through density", () => {
     // 1 tsp = 4.92892 ml; olive oil ~0.92 g/ml
     expect(gramsForLine(1, "tsp", 0.92)).toBeCloseTo(4.5346, 3);
@@ -306,6 +317,24 @@ describe("computeLineNutrition", () => {
         { nutrition: { calories_kcal: 100 }, density_g_per_ml: null },
       ),
     ).toEqual({ kind: "excluded", reason: "no_density" });
+  });
+
+  // Not no_density: a density converts a volume, and there is no catalog
+  // field that turns inches into grams. Saying so would send the curator to
+  // the ingredient manager for a fix that does not exist there.
+  it("names a size as its own blocker", () => {
+    expect(
+      computeLineNutrition(
+        {
+          quantity: 2,
+          unit: "inch",
+          ingredient_id: "ing-ginger",
+          raw_text: "2-inch piece ginger",
+          estimated_grams: null,
+        },
+        { nutrition: { calories: 80 }, density_g_per_ml: 0.95 },
+      ),
+    ).toEqual({ kind: "excluded", reason: "no_weight_for_size" });
   });
 
   it("uses a stored estimate and marks the provenance 'estimated'", () => {

@@ -21,21 +21,29 @@
 the grid lists the rows, the status chips count them — so a predicate living in only one of them
 would have the chips claiming a total the grid cannot produce. A test pins the two strings equal.
 
-The second arm is **`ingredient_catalog_text`**, a PostgREST **computed field** (0023): a
-`stable security definer` function over the `recipes` row returning the newline-joined catalog
-`name` + `aliases` of every line that resolves to a catalog ingredient. Being a filter-only
-pseudo-column, it is never selected — `RECIPE_COLUMNS` doesn't name it and `selectColumns<RecipeRowColumns>()`
-stays exhaustive — so no read path changes shape.
+The other two arms are PostgREST **computed fields**, each a `stable security definer` function
+over the `recipes` row: **`ingredient_catalog_text`** (0023) returns the newline-joined catalog
+`name` + `aliases` of every line that resolves to a catalog ingredient, and
+**`ingredient_line_text`** (0027) returns the newline-joined `name_text` of the recipe's own
+lines, matched or not. Both are filter-only pseudo-columns, never selected — `RECIPE_COLUMNS`
+doesn't name either and `selectColumns<RecipeRowColumns>()` stays exhaustive — so no read path
+changes shape.
 
 - **A computed field, not an RPC, because ordering stays with the caller.** The user's sort
   (`newest`/`oldest`/`name-asc`/`name-desc`), `count: exact`, `.range()` and the status/source
   filters all keep working untouched, and search stays one query. An RPC returning the result set
   would have to re-implement every one of those in SQL; an RPC returning ids would put a uuid list
   in the URL, past the ~16 KB cliff `ID_CHUNK` exists for.
-- **Catalog `name` + `aliases` only — never `recipe_ingredients.raw_text` or `name_text`.**
-  Matching the catalog and walking back to the recipes skips unmatched lines by construction, so
-  search speaks the one vocabulary a person can also browse in the ingredient manager. Aliases are
-  the point: they are what lets "cilantro" find a recipe whose line reads "fresh coriander".
+- **Two vocabularies, in that order of authority.** The catalog arm speaks the controlled
+  vocabulary a person can also browse in the ingredient manager, and aliases are its point: they
+  are what lets "cilantro" find a recipe whose line reads "fresh coriander". The line arm speaks
+  the recipe's own wording, and exists because the catalog arm skips an unmatched line by
+  construction — those are the recipes a reader is least likely to reach any other way. A line
+  hit ranks below a catalog hit rather than beside it (see the tiers below).
+- **`name_text`, not `raw_text`.** The parsed name is the food the line is about; the raw line
+  carries its quantity, unit and preparation, so "cup" or "2" would match most of the corpus.
+  Where the parser could not read a line, `name_text` IS the whole lowercased line, so the
+  hardest cases lose nothing.
 - **Newline-separated, never spaces.** The arm is a plain `ilike '%q%'` over the whole aggregate, so
   a space-joined blob lets a query straddle two ingredients — with "black pepper" beside
   "Salt, table", `pepper salt` matched 3 recipes containing no such phrase. A newline cannot occur
@@ -64,15 +72,18 @@ the reader picked an explicit sort.
   the one description of a recipe row and the function needs no edit when a column is added. `.in()`
   carries one page of ids, nowhere near the URL limit. `.in()` does not preserve order, so the
   ranking is re-applied from the id list.
-- **A name hit scores 1.0**; anything else scores the matched lines' summed `resolved_grams` over a
+- **A tier decides the order first, the score only within it**: 3 a name hit, 2 a catalog hit, 1 a
+  line-label hit. The tier exists because "a catalog hit beats a line hit" has no room left in the
+  score — a catalog hit whose lines carry no weight already scores 0, and those stay visible. The
+  score is the matched lines' summed `resolved_grams` over a
   denominator — the recipe's stated `total_weight_amount` when it has one, else what its lines add
   up to. That second denominator undercounts wherever a line could not be weighed, which inflates
   the share; accepted, because the alternative is refusing to rank two thirds of the matches, and it
   sharpens as normalization fills `resolved_grams` in. A recipe with neither scores 0 and sorts last
   rather than disappearing.
-- **It matches on `ingredient_catalog_text`, the same computed field `getStatusCounts` filters on**,
-  so the ranked page and the status chips beside it can never describe different sets. Scoring is
-  layered on top and never widens or narrows the match.
+- **It matches on the same three arms `recipeSearchFilter` builds**, so the ranked page and the
+  status chips beside it can never describe different sets. The tier and the score are layered on
+  top and never widen or narrow the match.
 - **Ties fall back to `RELEVANCE_TIEBREAK`** (newest). Every name hit scores the same and every
   unweighable match scores 0, so without it their order would be the planner's and would shift
   between pages of one result set.
@@ -97,7 +108,7 @@ A line's **position is its index** in those arrays and its **identity is the row
 - **The catalog is opt-in on the list query: `getRecipes({ catalog: true })`.** It costs one more round trip for the *page* (every line on it, deduped by ingredient id — never one per recipe), and the home page pays it so the cards can carry nutrition badges. Without it `ingredient` is left **undefined**, and `computeRecipeNutrition` treats undefined and null alike, so an opted-out row reports no nutrition rather than a total undercounted by the lines it couldn't see. `/api/recipes` and MCP `search_recipes` render recipe text only and stay opted out.
 - An id no row answers to is **skipped**: the recipe renders one line short, and the next save repairs it. That state is reachable (see the write order), so throwing would take the page down over it.
 
-**Writes go through `reconcileRecipeIngredients`** (`src/lib/recipeIngredientReconcile.ts`, pure, tested without a database). Input is `RecipeIngredientGroupInput[]` — groups of `{ id?, raw_text }`. A line keeps its row by naming its id (only THIS recipe's rows count; each row is claimed once); a line with no usable id claims an unclaimed row with identical text (a re-scrape or an MCP create carries no ids, and recreating every row would drop every curated catalog match); whatever is left is a new row, its id minted **before** any write because the column must name it and PostgREST does not promise bulk-insert order. A kept row with new text is re-parsed (`parseLineDeterministic`), dropping `estimated_grams` only when quantity/unit moved. `lineSetChanged` (an insert or a delete) is the only thing that schedules normalization.
+**Writes go through `reconcileRecipeIngredients`** (`src/lib/recipeIngredientReconcile.ts`, pure, tested without a database). Input is `RecipeIngredientGroupInput[]` — groups of `{ id?, raw_text }`. A line keeps its row by naming its id (only THIS recipe's rows count; each row is claimed once); a line with no usable id claims an unclaimed row with identical text (a re-scrape or an MCP create carries no ids, and recreating every row would drop every curated catalog match); whatever is left is a new row, its id minted **before** any write because the column must name it and PostgREST does not promise bulk-insert order. A kept row with new text is re-parsed (`parseLineDeterministic`), dropping `estimated_grams` only when quantity/unit moved. Two things schedule normalization: `lineSetChanged` (an insert or a delete, so some line has no association at all) and a non-empty `updates` (a reword, whose stored association answers for wording the line has moved away from). The reworded ids travel to the run as `rematchIds` — the only rows it may re-answer — see [nutrition.md](nutrition.md).
 
 **The write order is load-bearing.** PostgREST gives one statement per request and there is no transaction, so `updateRecipeRow` goes: insert new rows → update reworded rows → **write the `recipes` row (the commit point: the column is the index)** → delete dropped rows (best-effort; a prune failure is logged, never fails the save). A crash before the third step leaves unreferenced rows; after it, orphans. Both are invisible to readers and prunable. `createRecipeRow` inserts the recipe row **first** because the ingredient rows reference it (FK), with the column already naming the minted ids; a failure between the two renders the recipe short those lines. A SQL function taking the whole reconcile is the upgrade path if this ever needs to be atomic.
 
@@ -148,7 +159,7 @@ Conversions live in `src/lib/format.ts` — never re-derive them. The ISO → co
 
 ## Migrations
 
-**Migration records in `db/migrations/` are applied out-of-band** via Supabase MCP `apply_migration` (project `xonkmdhnjpjkapnsmltu`); 0006+ show up in the project's migrations table, 0002–0005 predate that and don't — check `information_schema` for actual state, not the migrations list. 0016/0017 are applied (as `recipes_ingredients_instructions` / `recipe_ingredients_position_optional`); 0018 drops the dead `match_recipes` / `find_dinner` RPCs; 0021 is a column comment recording `recipes.instructions`' group shape — DDL only; 0023 adds the `ingredient_catalog_text` computed field that recipe search's ingredient arm filters on, 0024 the derived `recipe_ingredients.resolved_grams` it ranks by, and 0025 the `search_recipes_ranked` RPC that does the ranking (see Search above). 0026 adds `ingredients.last_checked` — nullable, no default and **no backfill**, because NULL there means "never verified against a source" and deriving one from `updated_at` would assert a check that never happened (see [nutrition.md](nutrition.md)).
+**Migration records in `db/migrations/` are applied out-of-band** via Supabase MCP `apply_migration` (project `xonkmdhnjpjkapnsmltu`); 0006+ show up in the project's migrations table, 0002–0005 predate that and don't — check `information_schema` for actual state, not the migrations list. 0016/0017 are applied (as `recipes_ingredients_instructions` / `recipe_ingredients_position_optional`); 0018 drops the dead `match_recipes` / `find_dinner` RPCs; 0021 is a column comment recording `recipes.instructions`' group shape — DDL only; 0023 adds the `ingredient_catalog_text` computed field that recipe search's ingredient arm filters on, 0024 the derived `recipe_ingredients.resolved_grams` it ranks by, and 0025 the `search_recipes_ranked` RPC that does the ranking (see Search above). 0026 adds `ingredients.last_checked` — nullable, no default and **no backfill**, because NULL there means "never verified against a source" and deriving one from `updated_at` would assert a check that never happened (see [nutrition.md](nutrition.md)). 0027 adds the `ingredient_line_text` computed field and redefines `search_recipes_ranked` to tier a catalog hit above a line-label hit — **one migration because the two are meaningless apart**: applied separately, the plain and ranked search paths would disagree about which recipes match. **It must be applied before the code that references it ships**, or every search is a 400 against a function that does not exist.
 
 **`yarn backfill:recipe-servings [--dry-run] [--limit=N]`** populates 0022's four columns from each row's `recipeYield`. It reports three buckets and guesses at none: yields it refused (columns left NULL), yields whose rendered label now differs (a collapsed range, a dropped parenthetical), and a `nutrition.servingSize` the columns cannot reconstruct. It does not refresh `content`.
 

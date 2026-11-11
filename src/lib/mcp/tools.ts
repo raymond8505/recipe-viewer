@@ -26,13 +26,20 @@ import { fromSchemaOrgIngredients } from "@/lib/recipeIngredients";
 import { generateEmbedding } from "@/lib/embedding";
 import { exhaustiveKeys } from "@/lib/exhaustive";
 import { ingredientEmbeddingText, ingredientQueryText } from "@/lib/ingredientAliases";
-import { CUSTOM_RECIPE_SOURCE, fromSchemaOrgInstructions } from "@/lib/format";
+import {
+  CUSTOM_RECIPE_SOURCE,
+  fromSchemaOrgInstructions,
+  recipePageUrl,
+  recipeSourceForUrl,
+} from "@/lib/format";
 import {
   RECIPE_INGREDIENT_ON_UPDATE_ERROR,
   RECIPE_INSTRUCTIONS_ON_UPDATE_ERROR,
   RECIPE_YIELD_ON_UPDATE_ERROR,
+  URL_ON_UPDATE_ERROR,
 } from "./copy";
-import { ARCHIVED_RECIPE_STATUS } from "@/lib/schemas/recipe";
+import { TOOL } from "./toolNames";
+import { ARCHIVED_RECIPE_STATUS, recipeUpdateInputSchema } from "@/lib/schemas/recipe";
 import { RECIPE_TOKEN_TTL_SECONDS, signRecipeToken } from "./recipeToken";
 import { env } from "@/env";
 import {
@@ -41,12 +48,15 @@ import {
   uploadRecipeImage as uploadImageToStorage,
 } from "@/lib/storage";
 import type {
+  RecipeIngredient,
+  RecipeIngredientGroup,
   RecipeRow,
   SchemaOrgNutrition,
   SchemaRecipe,
 } from "@/types/recipe";
 import type {
-  RecipeCreateInput,
+  RecipeCreateSimpleInput,
+  RecipeCreateDetailedInput,
   RecipeIdInput,
   RecipeImageUploadInput,
   RecipeSearchInput,
@@ -65,12 +75,40 @@ import type { IngredientMatch, IngredientRow } from "@/types/ingredient";
 // into ToolError so the MCP dispatcher can render a uniform isError content
 // envelope. Supabase calls live in the repo modules — see CR feedback on PR #13.
 
+/**
+ * A recipe's two urls, named apart.
+ *
+ * `sourceUrl` is the stored column: the page `/rescrape` re-fetches and the
+ * one `source` is derived from. `pageUrl` is the recipe's own page on this
+ * instance, derived from its id and settable by nobody. They hold the same
+ * value for a recipe authored here, which has no upstream page — which is
+ * exactly why one field called `url` cannot say which of the two is meant.
+ */
+export interface RecipeUrlFields {
+  pageUrl: string;
+  sourceUrl: string;
+}
+
+export type WithNamedUrls<T> = Omit<T, "url"> & RecipeUrlFields;
+
+// Every tool that answers with a recipe answers with both urls, so an agent
+// reads one name for one concept whichever tool it called.
+function withNamedUrls<T extends { id: string; url: string }>(
+  row: T,
+): WithNamedUrls<T> {
+  const { url, ...rest } = row;
+  return {
+    ...rest,
+    pageUrl: recipePageUrl(row.id, env.MCP_PUBLIC_URL),
+    sourceUrl: url,
+  };
+}
+
 // Trimmed search hit. Search returns enough to identify/disambiguate a recipe
 // without shipping the full schema (ingredients, instructions, nutrition, …) for
 // every row — agents call get_recipe for the full document once they pick one.
-export interface RecipeSearchResultItem {
+export interface RecipeSearchResultItem extends RecipeUrlFields {
   id: string;
-  url: string;
   name: string;
   description?: string;
 }
@@ -79,7 +117,8 @@ export interface RecipeSearchResultItem {
 // documented keys can't drift from the interface above.
 export const RECIPE_SEARCH_RESULT_FIELDS = exhaustiveKeys<RecipeSearchResultItem>()([
   "id",
-  "url",
+  "pageUrl",
+  "sourceUrl",
   "name",
   "description",
 ]);
@@ -100,7 +139,8 @@ export async function searchRecipes(
   return {
     data: data.map((row) => ({
       id: row.id,
-      url: row.url,
+      pageUrl: recipePageUrl(row.id, env.MCP_PUBLIC_URL),
+      sourceUrl: row.url,
       name: row.metadata.schema.name,
       description: row.metadata.schema.description,
     })),
@@ -252,7 +292,7 @@ export type PublishedRecipeRow = Omit<RecipeRow, "metadata"> & {
 
 export async function getRecipe(
   args: RecipeIdInput,
-): Promise<PublishedRecipeRow> {
+): Promise<WithNamedUrls<PublishedRecipeRow>> {
   const row = await getRecipeById(args.id);
   if (!row) throw new ToolError("not_found", `Recipe ${args.id} not found`);
 
@@ -270,9 +310,9 @@ export async function getRecipe(
     recipeNormalizedNutrition(row),
   );
   const resolved = scalable.nutrition();
-  if (!resolved) return row;
+  if (!resolved) return withNamedUrls(row);
 
-  return {
+  return withNamedUrls<PublishedRecipeRow>({
     ...row,
     metadata: {
       ...row.metadata,
@@ -287,7 +327,7 @@ export async function getRecipe(
         },
       },
     },
-  };
+  });
 }
 
 export async function getToken(
@@ -304,15 +344,17 @@ export async function getToken(
 // cookingNotes is user-authored in cooking mode and read-only to agents: the
 // create/update tools strip it rather than fail, and surface why in the
 // response. The dedicated clear_cooking_notes tool is the only agent-writable
-// path. See CLAUDE.md "Cooking Notes" rules.
+// path. See .claude/docs/cooking-mode.md "Cooking Notes".
 const COOKING_NOTES_IGNORED_WARNING =
-  "cookingNotes is read-only for agents and was ignored — it is authored by users in cooking mode. Use the clear_cooking_notes tool when explicitly asked to clear it.";
+  `cookingNotes is read-only for agents and was ignored — it is authored by users in cooking mode. Use the ${TOOL.clear_cooking_notes} tool when explicitly asked to clear it.`;
 
 export type RecipeRowWithWarnings = RecipeRow & { warnings?: string[] };
 
-export async function createRecipe(
-  args: RecipeCreateInput,
-): Promise<RecipeRowWithWarnings> {
+export type CreatedRecipeRow = WithNamedUrls<RecipeRowWithWarnings>;
+
+export async function createRecipeDetailed(
+  args: RecipeCreateDetailedInput,
+): Promise<CreatedRecipeRow> {
   // The inbound Schema.org edge: scrapes arrive with `recipeIngredient` and
   // `recipeInstructions`, which become groups here and never reach the stored
   // schema.
@@ -321,7 +363,7 @@ export async function createRecipe(
   // Default to the recipe's own canonical page on this instance.
   // MCP_PUBLIC_URL is the app's base-URL source of truth (also the OAuth /
   // recipe-token issuer), and is overridden per-PR on staging.
-  const url = args.url ?? `${env.MCP_PUBLIC_URL}/recipes/${id}`;
+  const url = args.url ?? recipePageUrl(id, env.MCP_PUBLIC_URL);
   // Same condition, second half: a recipe with no url of its own is authored
   // here, which is what CUSTOM_RECIPE_SOURCE means. (The input schema requires
   // an explicit source whenever a url IS given, so this only fires for the
@@ -338,17 +380,116 @@ export async function createRecipe(
       ingredients: fromSchemaOrgIngredients(recipeIngredient ?? []),
       instructions: fromSchemaOrgInstructions(recipeInstructions),
     });
+    const answer = withNamedUrls(row);
     return cookingNotes !== undefined
-      ? { ...row, warnings: [COOKING_NOTES_IGNORED_WARNING] }
-      : row;
+      ? { ...answer, warnings: [COOKING_NOTES_IGNORED_WARNING] }
+      : answer;
   } catch (err) {
     throw toToolError(err, "create_failed");
   }
 }
 
+/**
+ * The `url` answered is the recipe's page on this instance, not the `url`
+ * stored on the row: an upstream page given here stays in the column, because
+ * that column is the page `/rescrape` re-fetches and the one `source` is
+ * derived from.
+ *
+ * `createRecipeRow` schedules the normalization run that matches the lines to
+ * the catalog, and nothing here awaits it, so the response cannot report what
+ * matched.
+ */
+export async function createRecipeSimple(
+  args: RecipeCreateSimpleInput,
+): Promise<{ created: true; id: string; url: string }> {
+  const { url: upstreamUrl, recipeIngredient, recipeInstructions, ...schema } = args;
+  const id = crypto.randomUUID();
+  const url = upstreamUrl ?? recipePageUrl(id, env.MCP_PUBLIC_URL);
+  try {
+    const row = await createRecipeRow({
+      id,
+      url,
+      // The url's host, or CUSTOM_RECIPE_SOURCE when there is no upstream page.
+      source: recipeSourceForUrl(upstreamUrl, env.MCP_PUBLIC_URL),
+      // No status, so the repo's default applies: nothing arriving this way has
+      // had a human eye on it yet.
+      schema,
+      ingredients: fromSchemaOrgIngredients(recipeIngredient ?? []),
+      instructions: fromSchemaOrgInstructions(recipeInstructions),
+    });
+    return { created: true, id: row.id, url: recipePageUrl(row.id, env.MCP_PUBLIC_URL) };
+  } catch (err) {
+    throw toToolError(err, "create_failed");
+  }
+}
+
+/**
+ * One ingredient line as an update answers with it: the line and its parse,
+ * and nothing about which catalog ingredient it resolves to.
+ *
+ * `Omit` rather than a hand-written field list so that adding a column to
+ * `RecipeIngredientRow` is a compile error in `withoutMatches` below, where
+ * someone has to decide whether an update may report it.
+ */
+export type UnmatchedRecipeLine = Omit<
+  RecipeIngredient,
+  "ingredient_id" | "match_status" | "confidence" | "ingredient"
+>;
+
+export type UnmatchedIngredientGroup = Omit<RecipeIngredientGroup, "ingredients"> & {
+  ingredients: UnmatchedRecipeLine[];
+};
+
+export type UpdatedRecipeRow = WithNamedUrls<
+  Omit<RecipeRowWithWarnings, "ingredients"> & {
+    ingredients: UnmatchedIngredientGroup[];
+  }
+>;
+
+/**
+ * Strip every line's catalog match out of an ingredient list.
+ *
+ * An update that reworded a line hands that row to the matcher, so the match
+ * on it answers for different words and a run is already on its way to
+ * replace it. Reporting it would hand an agent a value that is wrong by the
+ * time it reads it, and the agent cannot tell which lines those are. A match
+ * is read from `get_recipe`, once it has settled.
+ */
+function withoutMatches(
+  groups: readonly RecipeIngredientGroup[],
+): UnmatchedIngredientGroup[] {
+  return groups.map((group) => ({
+    ...group,
+    ingredients: group.ingredients.map((line) => ({
+      id: line.id,
+      raw_text: line.raw_text,
+      quantity: line.quantity,
+      unit: line.unit,
+      name_text: line.name_text,
+      note: line.note,
+      estimated_grams: line.estimated_grams,
+      grams_source: line.grams_source,
+    })),
+  }));
+}
+
+/**
+ * Parse an update's arguments, failing loudly on a bare `url`.
+ *
+ * Separate from the zod schema because the schema is a plain object: it
+ * strips keys it does not declare, so the only place a stray `url` is still
+ * visible is before the parse.
+ */
+export function parseRecipeUpdateArgs(args: unknown): RecipeUpdateInput {
+  if (typeof args === "object" && args !== null && "url" in args) {
+    throw new ToolError("invalid_input", URL_ON_UPDATE_ERROR);
+  }
+  return recipeUpdateInputSchema.parse(args);
+}
+
 export async function updateRecipe(
   args: RecipeUpdateInput,
-): Promise<RecipeRowWithWarnings> {
+): Promise<UpdatedRecipeRow> {
   const { cookingNotes, ...schema } = args.schema ?? {};
   // The zod schema is passthrough, so without these checks a dead key sails
   // into the merge and is silently stripped — a loud failure teaches the agent
@@ -364,7 +505,7 @@ export async function updateRecipe(
   }
   try {
     const row = await updateRecipeRow(args.id, {
-      url: args.url,
+      url: args.sourceUrl,
       source: args.source,
       status: args.status,
       schema: args.schema !== undefined ? schema : undefined,
@@ -373,9 +514,13 @@ export async function updateRecipe(
       servings: args.servings,
       totalWeight: args.total_weight,
     });
+    const answer = withNamedUrls({
+      ...row,
+      ingredients: withoutMatches(row.ingredients),
+    });
     return cookingNotes !== undefined
-      ? { ...row, warnings: [COOKING_NOTES_IGNORED_WARNING] }
-      : row;
+      ? { ...answer, warnings: [COOKING_NOTES_IGNORED_WARNING] }
+      : answer;
   } catch (err) {
     throw toToolError(err, "update_failed");
   }

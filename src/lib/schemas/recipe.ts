@@ -1,19 +1,18 @@
-// Centralized zod validators for the recipe domain. Anything that needs to
-// validate a SchemaRecipe shape at runtime should import from here, so the
-// MCP tools, future API routes, and form handlers all agree on the contract.
-//
-// The TypeScript type for `SchemaRecipe` still lives in `src/types/recipe.ts`
-// — the two are kept aligned by hand. If the type grows, mirror the change
-// here.
+// The recipe domain's zod validators, in one place so the MCP tools, the API
+// routes and the repo layer all parse against the same contract.
 
 import { z } from "zod";
 import { CUSTOM_RECIPE_SOURCE } from "@/lib/format";
 import { METRIC_YIELD_UNITS } from "@/lib/units";
 import type { Assert, Assignable } from "@/lib/exhaustive";
-import type { RecipeInstructionGroup, RecipeRowColumns } from "@/types/recipe";
+import type {
+  RecipeInstructionGroup,
+  RecipeRowColumns,
+  SchemaRecipe,
+} from "@/types/recipe";
 
 // A Schema.org `recipeIngredient` entry as it arrives from outside (a scrape,
-// create_recipe): a bare string, or an object carrying this app's `group`
+// create_recipe_detailed): a bare string, or an object carrying this app's `group`
 // extension. Inbound only — see SchemaOrgIngredientLine.
 export const schemaOrgIngredientLineSchema = z.union([
   z.string(),
@@ -23,11 +22,18 @@ export const schemaOrgIngredientLineSchema = z.union([
   }),
 ]);
 
+/**
+ * The cap on one ingredient line's text, at every edge that accepts a line.
+ * `recipe_ingredients.raw_text` is unbounded `text`, so this is a sanity bound
+ * on what a writer may send rather than a storage limit.
+ */
+export const INGREDIENT_LINE_MAX_LENGTH = 500;
+
 // What a writer sends for a recipe's ingredients: groups of lines, each line
 // naming the row it already is (`id`) or arriving as text alone (a new row).
 export const recipeIngredientLineInputSchema = z.object({
   id: z.string().min(1).optional(),
-  raw_text: z.string().trim().min(1).max(500),
+  raw_text: z.string().trim().min(1).max(INGREDIENT_LINE_MAX_LENGTH),
 });
 
 export const recipeIngredientGroupInputSchema = z.object({
@@ -48,7 +54,6 @@ const quantitativeValueBase = {
   value: z.number().optional(),
 };
 
-// valueReference — the recipe's raw weight/volume; metric units only.
 const metricQuantitativeValue = z.object({
   ...quantitativeValueBase,
   unitText: z.enum(METRIC_YIELD_UNITS).optional(),
@@ -56,7 +61,7 @@ const metricQuantitativeValue = z.object({
 
 export const quantitativeValueSchema = z.object({
   ...quantitativeValueBase,
-  unitText: z.string().optional(), // serving label: free text ("kebabs")
+  unitText: z.string().optional(),
   valueReference: metricQuantitativeValue.optional(),
 });
 
@@ -95,7 +100,7 @@ export const recipeInstructionGroupInputSchema = z.object({
 export const recipeInstructionsInputSchema = z.array(recipeInstructionGroupInputSchema);
 
 // The input IS the stored type; pinned both ways so neither can grow a field
-// the other lacks. In source, not a test — tsconfig excludes src/__tests__.
+// the other lacks.
 export type _InstructionsInputMatchesGroups = Assert<
   Assignable<z.infer<typeof recipeInstructionsInputSchema>, RecipeInstructionGroup[]>
 >;
@@ -103,55 +108,67 @@ export type _InstructionGroupsMatchInput = Assert<
   Assignable<RecipeInstructionGroup[], z.infer<typeof recipeInstructionsInputSchema>>
 >;
 
-export const schemaRecipeSchema = z
-  .object({
-    "@context": z.string().optional(),
-    "@type": z.literal("Recipe").optional(),
-    name: z.string().min(1),
-    description: z.string().optional(),
-    image: z.union([z.string(), z.array(z.string())]).optional(),
-    author: z
-      .object({
-        "@type": z.literal("Person").optional(),
-        name: z.string(),
-      })
-      .optional(),
-    // Nullable so a partial update can clear a time outright; omitted still
-    // means "leave it alone". See RecipeRow's time columns.
-    cookTime: z.string().nullable().optional(),
-    prepTime: z.string().nullable().optional(),
-    totalTime: z.string().nullable().optional(),
-    // No recipeYield and no nutrition.servingSize: both are column-backed, so
-    // they live on schemaOrgRecipeInputSchema below, at the inbound edge that
-    // parses them. This schema is `.passthrough()`, so a sender can still put
-    // either on the wire — the repo layer strips them from every write.
-    recipeCuisine: z.string().optional(),
-    recipeCategory: z.union([z.string(), z.array(z.string())]).optional(),
-    keywords: z.string().optional(),
-    nutrition: z
-      .object({
-        "@type": z.literal("NutritionInformation").optional(),
-        calories: z.string().optional(),
-        proteinContent: z.string().optional(),
-        carbohydrateContent: z.string().optional(),
-        fatContent: z.string().optional(),
-        fiberContent: z.string().optional(),
-        sodiumContent: z.string().optional(),
-        sugarContent: z.string().optional(),
-        saturatedFatContent: z.string().optional(),
-        unsaturatedFatContent: z.string().optional(),
-        cholesterolContent: z.string().optional(),
-      })
-      .optional(),
-    datePublished: z.string().optional(),
-    notes: z.string().optional(),
-    cookingNotes: z.string().optional(),
-  })
-  .passthrough();
+// Declared strict and passed through below: `keyof` on a passthrough shape is
+// `string`, which would leave the pin beneath it asserting nothing.
+const schemaRecipeFields = z.object({
+  "@context": z.string().optional(),
+  "@type": z.literal("Recipe").optional(),
+  name: z.string().min(1),
+  description: z.string().optional(),
+  image: z.union([z.string(), z.array(z.string())]).optional(),
+  author: z
+    .object({
+      "@type": z.literal("Person").optional(),
+      name: z.string(),
+    })
+    .optional(),
+  // Nullable so a partial update can clear a time outright; omitted still
+  // means "leave it alone". See RecipeRow's time columns.
+  cookTime: z.string().nullable().optional(),
+  prepTime: z.string().nullable().optional(),
+  totalTime: z.string().nullable().optional(),
+  // No recipeYield and no nutrition.servingSize: both are column-backed, so
+  // they live on schemaOrgRecipeInputSchema below, at the inbound edge that
+  // parses them. This schema is `.passthrough()`, so a sender can still put
+  // either on the wire — the repo layer strips them from every write.
+  recipeCuisine: z.string().optional(),
+  recipeCategory: z.union([z.string(), z.array(z.string())]).optional(),
+  keywords: z.string().optional(),
+  nutrition: z
+    .object({
+      "@type": z.literal("NutritionInformation").optional(),
+      calories: z.string().optional(),
+      proteinContent: z.string().optional(),
+      carbohydrateContent: z.string().optional(),
+      fatContent: z.string().optional(),
+      fiberContent: z.string().optional(),
+      sodiumContent: z.string().optional(),
+      sugarContent: z.string().optional(),
+      saturatedFatContent: z.string().optional(),
+      unsaturatedFatContent: z.string().optional(),
+      cholesterolContent: z.string().optional(),
+    })
+    .optional(),
+  datePublished: z.string().optional(),
+  notes: z.string().optional(),
+  cookingNotes: z.string().optional(),
+});
+
+export const schemaRecipeSchema = schemaRecipeFields.passthrough();
+
+// `SchemaRecipe` (@/types/recipe) hand-mirrors the shape above so `@/types`
+// carries no runtime dependency. These pin the two key sets together: a field
+// one side gains and the other lacks stops the alias compiling.
+export type _SchemaKeysCoverSchemaRecipe = Assert<
+  Assignable<keyof z.infer<typeof schemaRecipeFields>, keyof SchemaRecipe>
+>;
+export type _SchemaRecipeKeysCoverSchema = Assert<
+  Assignable<keyof SchemaRecipe, keyof z.infer<typeof schemaRecipeFields>>
+>;
 
 // The inbound Schema.org edge: the stored recipe plus `recipeIngredient` and
 // `recipeInstructions`, for writers that speak Schema.org because their source
-// does (a scrape landing through create_recipe or the re-scrape webhook).
+// does (a scrape landing through create_recipe_detailed or the re-scrape webhook).
 // `fromSchemaOrgIngredients` / `fromSchemaOrgInstructions` turn them into
 // groups at the boundary; the stored schema never carries either.
 export const schemaOrgRecipeInputSchema = schemaRecipeSchema.extend({
@@ -182,24 +199,18 @@ export const totalWeightInputSchema = z.object({
   unit: z.enum(METRIC_YIELD_UNITS).nullable().optional(),
 });
 
-// Recipe row `status` column — used as a zod enum at boundaries (MCP tool
-// args, future form handlers) and as the source of valid values in the
-// JSON-Schema export for MCP tool descriptors.
+// The `status` column, as the enum every boundary validates against and the
+// source of the values the MCP JSON-Schema export lists.
 export const recipeStatusSchema = z.enum(["published", "archived", "draft"]);
 export const RECIPE_STATUSES = recipeStatusSchema.options;
 
 // Derived from the zod enum rather than restated, so the column's valid values
-// live in exactly one place. It lives HERE, beside the enum, rather than in the
-// repo module that reads the column: `@/lib/recipes` reaches `@/env` through
-// Supabase and the embedding client, so a client module that wants this type
-// would have to name a server module to get it. This file imports only zod,
-// format and units, so client and server can both just import it.
+// live in exactly one place.
 export type RecipeStatus = (typeof RECIPE_STATUSES)[number];
 
 // RecipeRowColumns hand-mirrors this union so `@/types` can stay free of any
 // runtime dependency. This pins the two together: drop or add a status on
-// either side and the alias stops compiling. It lives in source, not a test —
-// tsconfig excludes src/__tests__, so an assertion written there checks nothing.
+// either side and the alias stops compiling.
 export type _RecipeStatusMatchesRow = Assert<
   Assignable<RecipeStatus | null, RecipeRowColumns["status"]>
 >;
@@ -207,18 +218,11 @@ export type _RowStatusMatchesRecipeStatus = Assert<
   Assignable<RecipeRowColumns["status"], RecipeStatus | null>
 >;
 
-// The two statuses the app applies on its own — named so the repo writes, the
-// JSON-Schema export and the MCP tool prose that documents them all move
-// together when a status is renamed.
+// The statuses the app applies on its own, named so a rename reaches the repo
+// writes, the JSON-Schema export and the MCP prose that documents them.
 export const DEFAULT_RECIPE_STATUS = recipeStatusSchema.enum.draft;
 export const PUBLISHED_RECIPE_STATUS = recipeStatusSchema.enum.published;
 export const ARCHIVED_RECIPE_STATUS = recipeStatusSchema.enum.archived;
-
-// Input shapes for the recipe CRUD operations. Defined here (not in
-// `lib/mcp/schemas.ts`) so non-MCP callers — API route handlers, form
-// validators, future migrations — can reuse the same validators rather than
-// hand-rolling parallel ones. The MCP server consumes these via parse() at
-// the tool boundary; nothing else has to know they exist on that path.
 
 export const recipeSearchInputSchema = z.object({
   query: z.string().optional(),
@@ -245,26 +249,103 @@ const SOURCE_REQUIRED_WITH_URL_ISSUE = {
   path: ["source"],
 };
 
-export const recipeCreateInputSchema = z
+export const recipeCreateDetailedInputSchema = z
   .object({
-    // Optional — when omitted, the create tool defaults it to the recipe's own
-    // canonical URL on this instance (env.MCP_PUBLIC_URL + /recipes/<new-uuid>).
+    // Both optional only for a recipe authored here — see
+    // sourceRequiredWithUrl above.
     url: z.string().url().optional(),
-    // Optional only in that same case — see sourceRequiredWithUrl above.
     source: z.string().min(1).optional(),
     status: recipeStatusSchema.optional(),
     schema: schemaOrgRecipeInputSchema,
   })
   .refine(sourceRequiredWithUrl, SOURCE_REQUIRED_WITH_URL_ISSUE);
 
-// Update speaks the app's own shape: `ingredients` replaces the whole list
-// (lines keep their rows by id), `instructions` replaces the whole step list,
-// `servings` / `total_weight` set the columns, and `schema` is the stored
-// recipe — it has no recipeIngredient, recipeInstructions or recipeYield, and
-// the tool rejects any of the three rather than silently ignoring it.
+const authorNameSchema = z
+  .union([z.string().trim().min(1), z.object({ name: z.string().trim().min(1) })])
+  .transform((author) => (typeof author === "string" ? author : author.name));
+
+// One ingredient line: the plain string a flat JSON-LD list gives you, or the
+// object form a page uses to put the line under a named group. Stricter about
+// blanks than `schemaOrgIngredientLineSchema`, which create_recipe_detailed
+// shares: here a blank entry fails the call, because dropping it would leave a
+// short list that reads as the recipe's own, with nothing to show a line went
+// missing.
+const ingredientLineTextSchema = z
+  .string()
+  .trim()
+  .min(1)
+  .max(INGREDIENT_LINE_MAX_LENGTH);
+
+const simpleIngredientLineSchema = z.union([
+  ingredientLineTextSchema,
+  // `group` is not held to that: fromSchemaOrgIngredients reads a blank one as
+  // "ungrouped", so rejecting the whole paste over an empty heading would throw
+  // the lines away to protect a heading nobody needs.
+  z.object({ name: ingredientLineTextSchema, group: z.string().optional() }),
+]);
+
+/** A HowToStep held to the same no-blanks rule as a line. */
+const nonBlankHowToStepSchema = howToStepSchema.extend({
+  text: z.string().trim().min(1),
+});
+
+// One step, in all three spellings a page offers: a bare string, a HowToStep, or
+// a HowToSection carrying its own run. The bare string is wrapped as a
+// `{ text }` HowToStep here rather than at the parse site, so
+// `fromSchemaOrgInstructions` sees one shape — and that wrap is what makes a
+// flat list of strings exactly one nameless group.
+const simpleStepSchema = z.union([
+  z
+    .string()
+    .trim()
+    .min(1)
+    .transform((text) => ({ text })),
+  nonBlankHowToStepSchema,
+  howToSectionSchema.extend({ itemListElement: z.array(nonBlankHowToStepSchema) }),
+]);
+
+// A fresh object rather than an extension of schemaOrgRecipeInputSchema, and
+// deliberately not `.passthrough()`: listing only the fields the app reads keeps
+// the rest of a scraped blob — image, nutrition, aggregateRating, video — out of
+// storage. `recipeYield` is the one shape it narrows (flat, no
+// QuantitativeValue), and the author the one it widens.
+export const recipeCreateSimpleInputSchema = z.object({
+  name: z.string().trim().min(1),
+  description: z.string().optional(),
+  // Every spelling a page uses reduces to the one name the app stores; a list
+  // takes the first, since there is nowhere to put a second.
+  author: z
+    .union([authorNameSchema, z.array(authorNameSchema).nonempty()])
+    .transform((author) => ({
+      "@type": "Person" as const,
+      name: Array.isArray(author) ? author[0] : author,
+    }))
+    .optional(),
+  prepTime: z.string().optional(),
+  cookTime: z.string().optional(),
+  totalTime: z.string().optional(),
+  recipeCuisine: z.string().optional(),
+  recipeCategory: z.union([z.string(), z.array(z.string())]).optional(),
+  keywords: z.string().optional(),
+  datePublished: z.string().optional(),
+  // A bare number is legal JSON-LD ("recipeYield": 4) and `parseYield` reads the
+  // string form, so the coercion belongs here rather than at the parse site.
+  recipeYield: z.union([z.string(), z.number()]).transform(String).optional(),
+  recipeIngredient: z.array(simpleIngredientLineSchema).optional(),
+  recipeInstructions: z.array(simpleStepSchema).optional(),
+  // Absent is what "authored on this instance" means. `source` follows from it
+  // — see recipeSourceForUrl — so there is no second field to keep consistent.
+  url: z.string().url().optional(),
+});
+
+// Update speaks the app's own shape: `ingredients` and `instructions` each
+// replace the whole list, `servings` / `total_weight` set the columns, and
+// `schema` is the stored recipe. `parseRecipeUpdateArgs` rejects the three
+// Schema.org keys that shape lacks rather than letting them through unused.
 export const recipeUpdateInputSchema = z.object({
   id: z.string().min(1),
-  url: z.string().url().optional(),
+  // The stored column: the page /rescrape re-fetches.
+  sourceUrl: z.string().url().optional(),
   source: z.string().min(1).optional(),
   status: recipeStatusSchema.optional(),
   schema: schemaRecipeSchema.partial().optional(),
@@ -276,8 +357,7 @@ export const recipeUpdateInputSchema = z.object({
 
 // RecipeRowColumns hand-mirrors the servings columns for the same reason it
 // mirrors `status`: @/types stays free of any runtime dependency. These pin the
-// two together in SOURCE — tsconfig excludes src/__tests__, so an assertion
-// written there checks nothing.
+// two together.
 export type _ServingsInputMatchesRow = Assert<
   Assignable<
     z.infer<typeof servingsInputSchema>["amount"],
@@ -302,6 +382,9 @@ export const recipeImageUploadInputSchema = z.object({
 
 export type RecipeSearchInput = z.infer<typeof recipeSearchInputSchema>;
 export type RecipeIdInput = z.infer<typeof recipeIdInputSchema>;
-export type RecipeCreateInput = z.infer<typeof recipeCreateInputSchema>;
+export type RecipeCreateDetailedInput = z.infer<typeof recipeCreateDetailedInputSchema>;
+export type RecipeCreateSimpleInput = z.infer<
+  typeof recipeCreateSimpleInputSchema
+>;
 export type RecipeUpdateInput = z.infer<typeof recipeUpdateInputSchema>;
 export type RecipeImageUploadInput = z.infer<typeof recipeImageUploadInputSchema>;

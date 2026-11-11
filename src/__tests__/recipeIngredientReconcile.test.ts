@@ -183,7 +183,7 @@ describe("reconcileRecipeIngredients", () => {
     expect(result.stored).toEqual([{ ingredients: ["ri-0"] }]);
   });
 
-  // A re-scrape or an MCP create_recipe hands over bare text. Recreating every
+  // A re-scrape or an MCP create tool hands over bare text. Recreating every
   // row there would drop every association a user curated, so a line with no
   // usable id claims the row that says the same thing.
   it("carries an id-less line over to an unclaimed row with the same text", () => {

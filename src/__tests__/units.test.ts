@@ -12,6 +12,8 @@ import {
   getDefaultVolumeUnit,
   closestCommonFraction,
   unitKeyForAlias,
+  isWeightUnit,
+  isLengthUnit,
 } from "@/lib/units";
 
 describe("unitKeyForAlias", () => {
@@ -90,6 +92,37 @@ describe("getUnitGroup", () => {
 
   it("returns the unit itself for unknown unit", () => {
     expect(getUnitGroup("unknown")).toEqual(["unknown"]);
+  });
+
+  // A dimension can be restated in other dimensions and nothing else: the
+  // editor must not offer to turn 2 inches of ginger into 2 grams.
+  it("returns only length units for a length unit", () => {
+    const group = getUnitGroup("inch");
+    expect(group).toEqual(["mm", "cm", "inch"]);
+  });
+});
+
+describe("unit groups", () => {
+  it("separates weights from the units that are not weights", () => {
+    expect(isWeightUnit("g")).toBe(true);
+    expect(isWeightUnit("lb")).toBe(true);
+    expect(isWeightUnit("cup")).toBe(false);
+    expect(isWeightUnit("inch")).toBe(false);
+    expect(isWeightUnit(null)).toBe(false);
+    expect(isWeightUnit("unknown")).toBe(false);
+  });
+
+  it("knows the length units", () => {
+    expect(isLengthUnit("inch")).toBe(true);
+    expect(isLengthUnit("cm")).toBe(true);
+    expect(isLengthUnit("mm")).toBe(true);
+    expect(isLengthUnit("g")).toBe(false);
+    expect(isLengthUnit(null)).toBe(false);
+  });
+
+  it("converts within the length group", () => {
+    expect(convert(1, "inch", "mm")).toBeCloseTo(25.4, 5);
+    expect(convert(1, "inch", "cm")).toBeCloseTo(2.54, 5);
   });
 });
 
@@ -477,6 +510,43 @@ describe("parseIngredient", () => {
     expect(r!.amount).toEqual({ kind: "single", value: 2 });
     expect(r!.unit).toBe("cup");
     expect(r!.rest).toBe("flour");
+  });
+
+  // A hyphen before a word is a separator, not a range: the range branch
+  // wants a number after it. Leaving it attached put the hyphen at the front
+  // of the name, where no catalog ingredient could match it.
+  it("reads a hyphenated dimension as an amount and a unit", () => {
+    const r = parseIngredient("2-inch piece ginger");
+    expect(r).not.toBeNull();
+    expect(r!.amount).toEqual({ kind: "single", value: 2 });
+    expect(r!.unit).toBe("inch");
+    expect(r!.rest).toBe("piece ginger");
+  });
+
+  it("reads the other ways a recipe writes a dimension", () => {
+    for (const [line, unit] of [
+      ["1 inch piece ginger", "inch"],
+      ["1-inch piece ginger", "inch"],
+      ["2 inches of ginger", "inch"],
+      ["3 cm knob of ginger", "cm"],
+      ["4-mm slice of ginger", "mm"],
+    ] as const) {
+      expect(parseIngredient(line)?.unit, line).toBe(unit);
+    }
+  });
+
+  // An inch mark is the unit written as punctuation.
+  it("reads an inch mark as inches", () => {
+    const r = parseIngredient('1" piece ginger');
+    expect(r!.unit).toBe("inch");
+    expect(r!.rest).toBe("piece ginger");
+  });
+
+  // Same hyphen, a weight on the other side of it.
+  it("reads a hyphenated weight too", () => {
+    const r = parseIngredient("1-ounce package yeast");
+    expect(r!.unit).toBe("oz");
+    expect(r!.rest).toBe("package yeast");
   });
 
   it("parses range ingredient and strips the range from rest", () => {

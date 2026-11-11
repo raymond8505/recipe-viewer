@@ -3,12 +3,14 @@ import { TOOL_SCHEMAS } from "./schemas";
 import { RECIPE_TOKEN_TTL_LABEL } from "./recipeToken";
 import { TOOL, TOOL_NAMES, type ToolName } from "./toolNames";
 import {
+  COOKING_NOTES_READ_ONLY,
   IMAGE_FORMAT_LIST,
   INGREDIENT_DETAIL_ONLY_LIST,
   METRIC_UNIT_SLASHES,
   NUTRITION_FIELD_LIST,
   RECIPE_INGREDIENT_ON_UPDATE_ERROR,
   RECIPE_INSTRUCTIONS_ON_UPDATE_ERROR,
+  RECIPE_TWO_URLS,
   RECIPE_YIELD_ON_UPDATE_ERROR,
   TBSP_ML_EXAMPLE,
 } from "./copy";
@@ -22,11 +24,11 @@ import {
   DEFAULT_RECIPE_STATUS,
 } from "@/lib/schemas/recipe";
 import {
-  recipeCreateInputSchema,
+  recipeCreateSimpleInputSchema,
+  recipeCreateDetailedInputSchema,
   recipeIdInputSchema,
   recipeImageUploadInputSchema,
   recipeSearchInputSchema,
-  recipeUpdateInputSchema,
 } from "@/lib/schemas/recipe";
 import {
   ingredientCreateToolInputSchema,
@@ -37,12 +39,14 @@ import {
 import {
   clearCookingNotes,
   createIngredient,
-  createRecipe,
+  createRecipeDetailed,
+  createRecipeSimple,
   deleteIngredient,
   deleteRecipe,
   getIngredient,
   getRecipe,
   getToken,
+  parseRecipeUpdateArgs,
   RECIPE_SEARCH_RESULT_FIELDS,
   searchIngredients,
   searchRecipes,
@@ -84,7 +88,7 @@ const TOOL_IMPLS: {
   [K in ToolName]: Pick<ToolDefinition, "description" | "call">;
 } = {
   search_recipes: {
-    description: `Search recipes by name, by catalog ingredient, source, or status. Returns a paginated list with total count; each result is trimmed to { ${RECIPE_SEARCH_RESULT_FIELDS.join(", ")} } — call ${TOOL.get_recipe} with an id for the full schema. Use this before ${TOOL.get_recipe} when you only have a name.
+    description: `Search recipes by name, by catalog ingredient, source, or status. Returns a paginated list with total count; each result is trimmed to { ${RECIPE_SEARCH_RESULT_FIELDS.join(", ")} } — call ${TOOL.get_recipe} with an id for the full schema. Use this before ${TOOL.get_recipe} when you only have a name. ${RECIPE_TWO_URLS}
 
 A query matches a recipe's NAME or its INGREDIENTS. An ingredient matches only through the catalog: the line must already be associated with a catalog ingredient whose name or one of whose aliases contains the query. Recipe wording that was never matched to the catalog is NOT searched, so a food the catalog doesn't cover yet returns name hits only — that is a gap in the catalog, not proof the recipes don't exist. Use ${TOOL.search_ingredients} to see what the catalog calls a food, and which spellings it answers to, before concluding a search came up empty.`,
     call: (args) => searchRecipes(recipeSearchInputSchema.parse(args)),
@@ -110,20 +114,30 @@ A query matches a recipe's NAME or its INGREDIENTS. An ingredient matches only t
     call: (args) => deleteIngredient(ingredientIdInputSchema.parse(args)),
   },
   get_recipe: {
-    description: `Fetch the full recipe row for a given recipe UUID. \`ingredients\` is the ingredient list: ordered groups ({ name?, ingredients }) of lines, each line being the recipe_ingredients row — id, raw_text, the parsed quantity/unit/name_text, match_status — plus \`ingredient\`, the catalog row it is matched to (per-100g nutrition, density) or null. \`instructions\` is the step list: ordered groups ({ name?, steps }) of { text, name?, seconds? }, where a step's name is its cook-mode timer label and seconds its duration. The base servings are \`servings_amount\` / \`servings_unit\` and the whole recipe's raw weight \`total_weight_amount\` / \`total_weight_unit\` — set them through ${TOOL.update_recipe}'s \`servings\` / \`total_weight\`. \`metadata.schema\` carries everything else (name, times, nutrition, notes) and has none of recipeIngredient, recipeInstructions or recipeYield; its \`nutrition.servingSize\` is derived from the servings columns, not stored. Keep each line's id when you send the list back through ${TOOL.update_recipe}.`,
+    description: `Fetch the full recipe row for a given recipe UUID. \`ingredients\` is the ingredient list: ordered groups ({ name?, ingredients }) of lines, each line being the recipe_ingredients row — id, raw_text, the parsed quantity/unit/name_text, match_status — plus \`ingredient\`, the catalog row it is matched to (per-100g nutrition, density) or null. \`instructions\` is the step list: ordered groups ({ name?, steps }) of { text, name?, seconds? }, where a step's name is its cook-mode timer label and seconds its duration. The base servings are \`servings_amount\` / \`servings_unit\` and the whole recipe's raw weight \`total_weight_amount\` / \`total_weight_unit\` — set them through ${TOOL.update_recipe}'s \`servings\` / \`total_weight\`. \`metadata.schema\` carries everything else (name, times, nutrition, notes) and has none of recipeIngredient, recipeInstructions or recipeYield; its \`nutrition.servingSize\` is derived from the servings columns, not stored. Keep each line's id when you send the list back through ${TOOL.update_recipe}. ${RECIPE_TWO_URLS}`,
     call: (args) => getRecipe(recipeIdInputSchema.parse(args)),
   },
   get_token: {
     description: `Mint a short-lived (${RECIPE_TOKEN_TTL_LABEL}) bearer token scoped to a single recipe UUID. Required to authenticate agent-facing HTTP endpoints such as the multipart image upload (POST /api/recipes/<id>/upload-image) — call this first, then pass the returned token as \`Authorization: Bearer <token>\`. The token only works for the recipe id you pass here. Returns { token, recipeId, expiresInSeconds }.`,
     call: (args) => getToken(recipeIdInputSchema.parse(args)),
   },
-  create_recipe: {
-    description: `Insert a new recipe row. Requires source and a Schema.org Recipe object (schema.recipeIngredient as plain strings, or { name, group } objects to place lines under named groups; schema.recipeInstructions as an array of HowToStep / HowToSection objects — the server turns them into ingredient and instruction groups; read them back as \`ingredients\` and \`instructions\` via ${TOOL.get_recipe}); defaults status to '${DEFAULT_RECIPE_STATUS}'. url is OPTIONAL — when omitted it defaults to the recipe's own canonical page on this instance (<base-url>/recipes/<new-uuid>). Set recipeYield as a structured QuantitativeValue — value = serving count, unitText = its label, and valueReference = the recipe's raw weight/volume in metric units (value + unitText; unitText must be one of ${METRIC_UNIT_SLASHES}) when known, since it drives the per-serving nutrition; a plain-string yield is accepted but deprecated. The server parses it once into the servings and total-weight columns, which is what ${TOOL.get_recipe} returns and ${TOOL.update_recipe} edits. cookingNotes is read-only for agents: if present it is ignored (the call still succeeds) and the response carries a 'warnings' note explaining why.`,
-    call: (args) => createRecipe(recipeCreateInputSchema.parse(args)),
+  create_recipe_detailed: {
+    description: `The long way round. ${TOOL.create_recipe_simple} creates a recipe from the same ingredient lines and HowTo steps with no wrapper object, and is what you want unless you need one of the three things it cannot express: a structured recipeYield carrying the recipe's total weight, an explicit status, or a source that is not the url's host. Needing none of them, use that tool — this one asks for strictly more and stores the same recipe.
+
+Insert a new recipe row from a Schema.org Recipe object; defaults status to '${DEFAULT_RECIPE_STATUS}'. The server turns schema.recipeIngredient and schema.recipeInstructions into ingredient and instruction groups — read them back as \`ingredients\` and \`instructions\` via ${TOOL.get_recipe}. Give recipeYield's valueReference the recipe's raw weight in metric units (${METRIC_UNIT_SLASHES}) whenever the recipe states one, since that weight is what the per-serving nutrition is figured from; the server parses the yield once into the servings and total-weight columns, which is what ${TOOL.update_recipe} edits from then on. ${COOKING_NOTES_READ_ONLY} ${RECIPE_TWO_URLS} The response is the stored recipe with both urls named, so link a person to \`pageUrl\`.`,
+    call: (args) => createRecipeDetailed(recipeCreateDetailedInputSchema.parse(args)),
+  },
+  create_recipe_simple: {
+    description: `Create a recipe. This is the tool to reach for first, whether the recipe comes off a web page or you are writing it with the user. The arguments ARE the recipe, with no wrapper object: the field names are Schema.org's, so a page's JSON-LD Recipe can be pasted in as its fields, but this is not a conformant Recipe and you are not held to one. If the page publishes no JSON-LD, write these fields yourself from what it says. Keys this app has no use for are ignored rather than rejected, so a whole blob can go in as-is.
+
+Do not look anything up first: the server parses every ingredient line and matches it against the ingredient catalog itself, then leaves whatever it cannot match unmatched for a person to fix in the app. That happens after this call returns, so the response cannot tell you which lines matched — open the returned url, or call ${TOOL.get_recipe}, to see.
+
+The recipe defaults status to '${DEFAULT_RECIPE_STATUS}', and no image is stored from the page — set one afterwards with ${TOOL.upload_recipe_image}. Returns the new recipe's id and url, and nothing else. That url is the recipe's page on this instance — pass an upstream url and you still get the new page back, not the page you scraped.`,
+    call: (args) => createRecipeSimple(recipeCreateSimpleInputSchema.parse(args)),
   },
   update_recipe: {
-    description: `Patch fields on an existing recipe — only the fields you pass change. \`schema\` is merged into what is stored (not replaced). ${RECIPE_INGREDIENT_ON_UPDATE_ERROR} ${RECIPE_INSTRUCTIONS_ON_UPDATE_ERROR} ${RECIPE_YIELD_ON_UPDATE_ERROR} \`total_weight.unit\` must be one of ${METRIC_UNIT_SLASHES}. cookingNotes is read-only for agents: if present it is ignored (the call still succeeds) and the response carries a 'warnings' note. Use ${TOOL.clear_cooking_notes} to clear it.`,
-    call: (args) => updateRecipe(recipeUpdateInputSchema.parse(args)),
+    description: `Patch fields on an existing recipe — only the fields you pass change. ${RECIPE_TWO_URLS} \`sourceUrl\` is the only one you can set; \`pageUrl\` follows from the recipe's id. Sending \`url\` FAILS the call rather than being ignored. \`schema\` is merged into what is stored (not replaced). ${RECIPE_INGREDIENT_ON_UPDATE_ERROR} ${RECIPE_INSTRUCTIONS_ON_UPDATE_ERROR} ${RECIPE_YIELD_ON_UPDATE_ERROR} \`total_weight.unit\` must be one of ${METRIC_UNIT_SLASHES}. Rewording a line re-opens which catalog ingredient it names: the server re-matches that line after this call returns, and a re-match that finds nothing leaves it unmatched. So the ingredient lines in the response carry no match at all — no \`ingredient_id\`, no \`match_status\`, no \`ingredient\` — because any match here could be one that run is replacing. Read matches from ${TOOL.get_recipe} once they have settled. ${COOKING_NOTES_READ_ONLY}`,
+    call: (args) => updateRecipe(parseRecipeUpdateArgs(args)),
   },
   clear_cooking_notes: {
     description:
