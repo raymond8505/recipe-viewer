@@ -107,11 +107,10 @@ describe("RecipeDetail", () => {
   it("renders timing stats when present", () => {
     render(
       <RecipeDetail
-        recipe={makeRecipe({
-          prepTime: "PT10M",
-          cookTime: "PT30M",
-          totalTime: "PT40M",
-        })}
+        recipe={makeRecipe(
+          {},
+          { prep_time: 600, cook_time: 1800, total_time: 2400 },
+        )}
       />,
     );
     expect(screen.getByText("10 min")).toBeTruthy();

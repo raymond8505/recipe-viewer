@@ -10,7 +10,6 @@ import {
   parseDurationToSeconds,
   recipeToMarkdown,
   SCHEMA_ORG_ONLY_KEYS,
-  secondsToIso,
   stripSchemaOrgKeys,
 } from "./format";
 import { parseYield } from "./units";
@@ -110,38 +109,17 @@ const RECIPE_COLUMNS = selectColumns<RecipeRowColumns>()([
 // (JSON-LD, the markdown, the MCP tools, RecipeCard, RecipeDetail, CookingMode)
 // never observes a stale value or a dead key.
 //
-// The times are the one region with a hydrate-BACK, because `schema.prepTime`
-// still has readers above this module. Everything promoted since is read off
-// its column and merely deleted here; 0028's fields follow that rule, which is
-// why nothing below writes a name or an image into the blob it strips.
+// NOTHING HYDRATES BACK, and nothing may start to. Every promoted field is
+// read off its column and its blob key merely deleted — the times included,
+// which is why `hydrate` does not touch `prep_time` / `cook_time` /
+// `total_time` and why nothing below writes anything at all into the blob it
+// strips. Rewriting a dead key from its column would hand the next reader a
+// reason to consult the blob, and the blob is what this module exists to hide.
 //
 // The corollary is the thing to protect: a reader that queries `recipes`
 // without coming through here gets a pre-0019 answer, no ingredients, the
 // frozen steps and a name that may never have existed, silently.
 // ---------------------------------------------------------------------------
-
-const TIME_FIELDS = [
-  ["prepTime", "prep_time"],
-  ["cookTime", "cook_time"],
-  ["totalTime", "total_time"],
-] as const;
-
-/**
- * Overwrite a row's schema time keys from its columns, in place. A null column
- * DELETES the key rather than writing null, so a hydrated schema is
- * indistinguishable from one that never had the time — which is what every
- * downstream `if (schema.prepTime)` already expects.
- */
-function hydrateTimes(row: RecipeRowColumns): RecipeRowColumns {
-  const schema = row.metadata?.schema;
-  if (!schema) return row;
-  for (const [key, column] of TIME_FIELDS) {
-    const iso = secondsToIso(row[column]);
-    if (iso === undefined) delete schema[key];
-    else schema[key] = iso;
-  }
-  return row;
-}
 
 /**
  * A text column's value from whatever a writer sent. Blank collapses to NULL so
@@ -150,14 +128,6 @@ function hydrateTimes(row: RecipeRowColumns): RecipeRowColumns {
  */
 function textOrNull(value: string | null | undefined): string | null {
   return value?.trim() || null;
-}
-
-/** The blob-safe copy of a schema: times removed, so a write can never put a
- *  fresh value back into the artifact. */
-function stripTimes(schema: SchemaRecipe): SchemaRecipe {
-  const next = { ...schema };
-  for (const [key] of TIME_FIELDS) delete next[key];
-  return next;
 }
 
 // None of these keys is on SchemaRecipe any more, but all are still in older
@@ -175,9 +145,9 @@ function deleteDeadKeys(schema: SchemaRecipe): void {
 }
 
 /**
- * The one read exit. Times come from their columns; `ingredients` comes from
- * the column's id groups joined to the `recipe_ingredients` rows the caller
- * fetched; `instructions` is the column as stored (already the app's shape);
+ * The one read exit. `ingredients` comes from the column's id groups joined to
+ * the `recipe_ingredients` rows the caller fetched; `instructions` is the
+ * column as stored (already the app's shape);
  * the blob's dead keys are deleted so they can't leak through a spread (the
  * MCP server JSON-stringifies whole rows). With a `catalog` map every line
  * carries its catalog ingredient (`null` when unmatched); without one the key
@@ -200,7 +170,7 @@ function hydrate(
   const schema = row.metadata?.schema;
   if (schema) deleteDeadKeys(schema);
   return {
-    ...hydrateTimes(row),
+    ...row,
     metadata: { ...row.metadata, schema: schema ?? {} },
     ingredients: hydrateIngredientGroups(row.ingredients, rows, catalog),
   };
@@ -243,7 +213,22 @@ export interface UpdateRecipePatch {
   description?: string | null;
   notes?: string | null;
   cookingNotes?: string | null;
-  /** Merged into the stored schema — only the keys given change. */
+  /**
+   * The three time columns, in SECONDS — the column's own unit, so nothing
+   * here parses. Each key is three-way like the servings: absent leaves the
+   * column alone, `null` clears it, a number sets it.
+   *
+   * No `prepTime` / `cookTime` / `totalTime` inside `schema` any more. ISO 8601
+   * is a wire spelling and lives at the edges: `createRecipeRow` and
+   * `draftRecipeDocument` reduce it on the way in, and the MCP tool parses its
+   * ISO argument before calling this.
+   */
+  times?: { prep?: number | null; cook?: number | null; total?: number | null };
+  /**
+   * Merged into the stored schema — only the keys given change. Down to
+   * `recipeCuisine` and `recipeCategory`, the two fields awaiting the tagging
+   * system; nothing else may be sent through it.
+   */
   schema?: Partial<SchemaRecipe>;
   /** Replaces the whole ingredient list; a line keeps its row by naming its id. */
   ingredients?: RecipeIngredientGroupInput[];
@@ -576,11 +561,19 @@ export async function createRecipeRow(input: CreateRecipeInput): Promise<RecipeR
   // Schema.org `string | string[]` form and is reduced to the one URL the
   // column holds. `cookingNotes` is absent on purpose — it is authored in
   // cooking mode, never by whatever is creating the recipe.
+  //
+  // The three times obey the rule too, and the compiler cannot enforce it:
+  // `stripSchemaOrgKeys` returns its argument's type, so reading `.prepTime`
+  // off the stripped copy typechecks and quietly yields undefined. ISO is
+  // reduced to the column's seconds here, once, for the same reason the yield is.
   const columns = {
     name: input.schema.name,
     image: getFirstImage(input.schema.image),
     description: textOrNull(input.schema.description),
     notes: textOrNull(input.schema.notes),
+    prep_time: parseDurationToSeconds(input.schema.prepTime),
+    cook_time: parseDurationToSeconds(input.schema.cookTime),
+    total_time: parseDurationToSeconds(input.schema.totalTime),
   };
   const schema = stripSchemaOrgKeys(input.schema);
   // Every line becomes a row, and the row's id is its identity from the moment
@@ -591,18 +584,15 @@ export async function createRecipeRow(input: CreateRecipeInput): Promise<RecipeR
   const ingredients = hydrateIngredientGroups(reconcile.stored, reconcile.rows);
   const instructions = canonicalizeInstructions(input.instructions ?? []);
 
-  // Markdown (and therefore the embedding) is built from the times-bearing
-  // schema, the lines, the steps and the servings — the columns are where those
-  // LAND, not a reason for the searchable text to stop mentioning them.
+  // Markdown (and therefore the embedding) is built from the columns, the
+  // lines, the steps and the servings — the columns are where those LAND, not a
+  // reason for the searchable text to stop mentioning them.
   const content = recipeToMarkdown({
     schema,
     ...columns,
     cooking_notes: null,
     ingredients,
     instructions,
-    prep_time: parseDurationToSeconds(schema.prepTime),
-    cook_time: parseDurationToSeconds(schema.cookTime),
-    total_time: parseDurationToSeconds(schema.totalTime),
     servings_amount: yld?.amount ?? null,
     servings_unit: yld?.unit ?? null,
     total_weight_amount: yld?.weight?.amount ?? null,
@@ -619,16 +609,13 @@ export async function createRecipeRow(input: CreateRecipeInput): Promise<RecipeR
       url: input.url,
       source: input.source,
       status: input.status ?? DEFAULT_RECIPE_STATUS,
-      prep_time: parseDurationToSeconds(schema.prepTime),
-      cook_time: parseDurationToSeconds(schema.cookTime),
-      total_time: parseDurationToSeconds(schema.totalTime),
       servings_amount: yld?.amount ?? null,
       servings_unit: yld?.unit ?? null,
       total_weight_amount: yld?.weight?.amount ?? null,
       total_weight_unit: yld?.weight?.unit ?? null,
       ingredients: reconcile.stored,
       instructions,
-      metadata: { schema: stripTimes(schema) },
+      metadata: { schema },
     })
     .select(RECIPE_COLUMNS)
     .single();
@@ -741,6 +728,16 @@ export async function updateRecipeRow(
   if (patch.instructions !== undefined) {
     writePatch.instructions = canonicalizeInstructions(patch.instructions);
   }
+  // Each time is independently three-way: the key absent leaves the column
+  // alone, null clears it, a number sets it. Grouped rather than three loose
+  // scalars for the reason `servings` is grouped — but each member keyed
+  // separately, because unlike a serving unit without a count, one time is a
+  // perfectly good state without the other two.
+  if (patch.times !== undefined) {
+    if (patch.times.prep !== undefined) writePatch.prep_time = patch.times.prep;
+    if (patch.times.cook !== undefined) writePatch.cook_time = patch.times.cook;
+    if (patch.times.total !== undefined) writePatch.total_time = patch.times.total;
+  }
   if (patch.servings !== undefined) {
     writePatch.servings_amount = patch.servings.amount;
     if (patch.servings.unit !== undefined) {
@@ -766,6 +763,14 @@ export async function updateRecipeRow(
     "servings_unit" in writePatch
       ? (writePatch.servings_unit ?? null)
       : current.servings_unit;
+  // Same rule for the times: the markdown prints a Prep / Cook / Total line,
+  // so it needs what the row will hold, and a cleared time writes null.
+  const prepTime =
+    "prep_time" in writePatch ? (writePatch.prep_time ?? null) : current.prep_time;
+  const cookTime =
+    "cook_time" in writePatch ? (writePatch.cook_time ?? null) : current.cook_time;
+  const totalTime =
+    "total_time" in writePatch ? (writePatch.total_time ?? null) : current.total_time;
 
   // Normalization has work when the SET of lines changes — something added or
   // removed — and when a line is REWORDED, because an association names which
@@ -790,6 +795,9 @@ export async function updateRecipeRow(
     reconcile ||
     writePatch.instructions ||
     patch.servings !== undefined ||
+    // A time change moves the markdown's meta line exactly as a servings
+    // change does, so it earns a re-render too.
+    patch.times !== undefined ||
     // The title and the blurb are the markdown's first two blocks, so a change
     // to either has to re-render it for the same reason a servings change does.
     "name" in writePatch ||
@@ -799,12 +807,7 @@ export async function updateRecipeRow(
       ...current.metadata.schema,
       ...(patch.schema ?? {}),
     }) as SchemaRecipe;
-    // The blob is written WITHOUT times; the columns carry them. `mergedSchema`
-    // itself keeps them, because recipeToMarkdown below still has to see them.
-    writePatch.metadata = { ...current.metadata, schema: stripTimes(mergedSchema) };
-    writePatch.prep_time = parseDurationToSeconds(mergedSchema.prepTime);
-    writePatch.cook_time = parseDurationToSeconds(mergedSchema.cookTime);
-    writePatch.total_time = parseDurationToSeconds(mergedSchema.totalTime);
+    writePatch.metadata = { ...current.metadata, schema: mergedSchema };
     // `content` (markdown) and `embedding` are always recomputed from the
     // merged schema on any schema, ingredient or instruction change. Embedding
     // is best-effort: on failure we leave the existing embedding untouched
@@ -827,9 +830,9 @@ export async function updateRecipeRow(
         finalRows,
       ),
       instructions: writePatch.instructions ?? current.instructions,
-      prep_time: writePatch.prep_time,
-      cook_time: writePatch.cook_time,
-      total_time: writePatch.total_time,
+      prep_time: prepTime,
+      cook_time: cookTime,
+      total_time: totalTime,
       servings_amount: servingsAmount,
       servings_unit: servingsUnit,
       total_weight_amount: current.total_weight_amount,

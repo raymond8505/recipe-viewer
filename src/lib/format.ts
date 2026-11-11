@@ -8,8 +8,9 @@ const ISO_DURATION = /^PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?$/;
  * from one that reads as *no* time. "PT0M" is a well-formed zero (a no-cook
  * recipe says so explicitly); "P4D" and "20–22 min" are not durations we can
  * interpret. Both make formatDuration and parseDurationToSeconds return null,
- * so anything that must not silently discard a value — the time backfill —
- * needs this to tell the two apart.
+ * so anything that must not silently discard a value — `timesInputSchema`,
+ * where null is also how a caller spells a deliberate clear — needs this to
+ * tell the two apart.
  */
 export function isIsoDuration(value: string | undefined | null): boolean {
   return !!value && ISO_DURATION.test(value);
@@ -59,12 +60,14 @@ const pad = (n: number) => String(n).padStart(2, "0");
 // ---------------------------------------------------------------------------
 // Recipe times ↔ seconds.
 //
-// `recipes.prep_time` / `cook_time` / `total_time` are integer SECONDS, while
-// SchemaRecipe (and therefore JSON-LD, the MCP tools and every scraper) speaks
-// ISO 8601. `parseDurationToSeconds` above is already the ISO → column
-// direction, so there is no second reader to keep in step; these are the
-// return trip, all built on msToIsoDuration/formatDuration so the file still
-// has one parsing rule and one formatting rule.
+// `recipes.prep_time` / `cook_time` / `total_time` are integer SECONDS, and
+// seconds are what the app passes around. ISO 8601 survives only at the wire
+// edges — JSON-LD, the image webhook, a scrape, and MCP `update_recipe`'s
+// `times` argument — never on the stored blob and never in a component.
+// `parseDurationToSeconds` above is the ISO → column direction, so there is no
+// second reader to keep in step; these are the return trip, all built on
+// msToIsoDuration/formatDuration so the file still has one parsing rule and
+// one formatting rule.
 //
 // The editor works in HH:MM, which is coarser than the column. That is a
 // deliberate asymmetry — a recipe time is written in hours and minutes — but
@@ -72,7 +75,7 @@ const pad = (n: number) => String(n).padStart(2, "0");
 // formatTimeInput.
 // ---------------------------------------------------------------------------
 
-/** Seconds (a column value) → ISO 8601, for the schema. */
+/** Seconds (a column value) → ISO 8601, for the wire edges. */
 export function secondsToIso(
   seconds: number | null | undefined,
 ): string | undefined {
@@ -578,14 +581,15 @@ function schemaOrgYield(
  * `toSchemaOrgJsonLd` instead.
  */
 export function toSchemaOrgRecipe(doc: RecipeDocument): SchemaOrgRecipe {
-  const { prepTime: _p, cookTime: _c, totalTime: _t, ...rest } = doc.schema;
-  void _p;
-  void _c;
-  void _t;
   const texts = ingredientTexts(doc.ingredients);
   const steps = toSchemaOrgInstructions(doc.instructions);
   return {
-    ...rest,
+    // Stripped, not spread raw, and the order is why: `schemaOrgTimes` below
+    // emits nothing for a NULL column, so a stale `cookTime` sitting in the
+    // blob would survive into the payload as the recipe's cook time. One shared
+    // list covers every dead key at once, which a hand-written destructure of
+    // the three times would not.
+    ...stripSchemaOrgKeys(doc.schema),
     // Built from the columns, never from the blob's frozen copies — the same
     // rule the times and the yield follow below. A null column drops its key
     // rather than publishing an explicit null.
@@ -619,8 +623,11 @@ export function toSchemaOrgJsonLd(
 ): object {
   const { schema } = doc;
   const result: Record<string, unknown> = {
-    "@context": schema["@context"] ?? "https://schema.org",
-    "@type": schema["@type"] ?? "Recipe",
+    // Literals, not stored values. These two name the wire format rather than
+    // saying anything about the recipe, so a scraped copy of them was never
+    // worth reading — this IS Schema.org/Recipe whatever the source called it.
+    "@context": "https://schema.org",
+    "@type": "Recipe",
     name: doc.name,
   };
   const nutrition = options?.nutritionOverride;
@@ -661,6 +668,14 @@ export const PROMOTED_KEYS = [
   "recipeIngredient",
   "recipeInstructions",
   "recipeYield",
+  // The last three to arrive, and the only ones that were ever written BACK
+  // into the blob: the times had a hydrate-back so blob readers kept working
+  // while the columns became the truth (0019/0020). The readers are gone, so
+  // joining this list is the whole cutover — the read exit now deletes them
+  // and every write strips them, with no migration to scrub what is stored.
+  "prepTime",
+  "cookTime",
+  "totalTime",
 ] as const;
 
 /**
@@ -679,6 +694,12 @@ export const DROPPED_KEYS = [
   // Derived from the ingredient catalog on every read, so a stored block could
   // only ever disagree with the lines it claims to describe.
   "nutrition",
+  // The two format constants. They name the wire form rather than saying
+  // anything about the recipe, so the outbound edges emit them as literals and
+  // a stored copy was only ever residue. Dropped rather than promoted: there is
+  // no column behind them, exactly as with `author`.
+  "@context",
+  "@type",
 ] as const;
 
 /** What the read exit deletes and every write strips: both lists together. */
@@ -829,11 +850,11 @@ export function recipeToMarkdown(doc: RecipeDocument): string {
   const meta: string[] = [];
   const yieldValue = formatServings(doc.servings_amount, doc.servings_unit);
   if (yieldValue) meta.push(`Yield: ${yieldValue}`);
-  const prep = formatDuration(schema.prepTime);
+  const prep = formatSeconds(doc.prep_time);
   if (prep) meta.push(`Prep: ${prep}`);
-  const cook = formatDuration(schema.cookTime);
+  const cook = formatSeconds(doc.cook_time);
   if (cook) meta.push(`Cook: ${cook}`);
-  const total = formatDuration(schema.totalTime);
+  const total = formatSeconds(doc.total_time);
   if (total) meta.push(`Total: ${total}`);
   if (schema.recipeCuisine) meta.push(`Cuisine: ${schema.recipeCuisine}`);
   const category = toArray(schema.recipeCategory)[0];

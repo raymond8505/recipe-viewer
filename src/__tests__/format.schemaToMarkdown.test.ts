@@ -8,7 +8,7 @@ import {
   makeSteps,
   weighedYieldColumns,
 } from "@/fixtures";
-import type { RecipeDocument } from "@/types/recipe";
+import type { RecipeDocument, SchemaRecipe } from "@/types/recipe";
 
 /** A named document with no lines, no steps, no times and no serving count. */
 function doc(
@@ -33,7 +33,8 @@ describe("recipeToMarkdown", () => {
     const md = recipeToMarkdown(
       doc("Stew", {
         description: "A hearty stew.",
-        schema: { totalTime: "PT1H", recipeCuisine: "Irish" },
+        schema: { recipeCuisine: "Irish" },
+        total_time: 3600,
         servings_amount: 4,
         servings_unit: "servings",
       }),
@@ -43,6 +44,19 @@ describe("recipeToMarkdown", () => {
     expect(md).toContain("Yield: 4 servings");
     expect(md).toContain("Total: 1 hr");
     expect(md).toContain("Cuisine: Irish");
+  });
+
+  it("reads a time from its column, not a copy the blob still carries", () => {
+    // The markdown feeds the search embedding, so a stale blob time leaking in
+    // here would make a recipe findable by a duration it does not have.
+    const md = recipeToMarkdown(
+      doc("Stew", {
+        schema: { cookTime: "PT3H" } as unknown as SchemaRecipe,
+        cook_time: 1800,
+      }),
+    );
+    expect(md).toContain("Cook: 30 min");
+    expect(md).not.toContain("3 hr");
   });
 
   it("renders the yield from the servings columns, unit and all", () => {

@@ -66,6 +66,34 @@ const PROMOTED_KEY_LIST = Object.keys(PROMOTED_UPDATE_ARGS)
 export const RECIPE_SCALARS_ON_UPDATE_ERROR = `${PROMOTED_KEY_LIST} are not accepted on update — the call FAILS if you send one, it is not ignored. Each is a top-level argument now: send \`name\`, \`description\`, \`notes\` or \`image\` beside \`id\`. Omit one to leave it alone; send null to clear \`description\`, \`notes\` or \`image\` (\`name\` cannot be cleared). ${TOOL.get_recipe} returns all four at the top level of the row.`;
 
 /**
+ * The three time keys, by the `schema.` spelling an agent might still reach
+ * for, valued by the member of `times` that sets each one. Same contract as
+ * `PROMOTED_UPDATE_ARGS`: the handler rejects what this names and the prose
+ * below renders it, so an agent is told exactly the list that is checked.
+ */
+export const TIME_UPDATE_ARGS = {
+  prepTime: "prep",
+  cookTime: "cook",
+  totalTime: "total",
+} as const;
+
+export type TimeUpdateKey = keyof typeof TIME_UPDATE_ARGS;
+
+const TIME_KEY_LIST = Object.keys(TIME_UPDATE_ARGS)
+  .map((k) => `schema.${k}`)
+  .join(", ");
+
+const TIME_ARG_LIST = Object.values(TIME_UPDATE_ARGS).join(", ");
+
+/**
+ * The times twin of the rules above, rejected for the reason every one of them
+ * is: an agent that sends `schema.cookTime` and gets a 200 has every reason to
+ * believe it set the cook time. The times are columns; the blob keys of those
+ * names are read by nothing.
+ */
+export const RECIPE_TIMES_ON_UPDATE_ERROR = `${TIME_KEY_LIST} are not accepted on update — the call FAILS if you send one, it is not ignored. The times are column-backed: send \`times\` ({ ${TIME_ARG_LIST} }) instead, each an ISO 8601 duration of hours/minutes/seconds (e.g. "PT30M", "PT1H15M"). Omit a member to leave that time alone; send null to clear it. A duration this app cannot read ("20-22 min", "P4D") FAILS rather than clearing the column. ${TOOL.get_recipe} returns all three at the top level of the row as prep_time / cook_time / total_time, in SECONDS.`;
+
+/**
  * Which of a recipe's two urls is which, said once for every tool that answers
  * with both. An agent that picks the wrong one sends a person off to the site
  * the recipe was scraped from, not to its page here.

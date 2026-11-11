@@ -223,6 +223,13 @@ export type RecipeDocumentSource = Pick<
  */
 export type SchemaOrgRecipe = SchemaRecipe & {
   /**
+   * The two format constants. They say what wire form this is, not anything
+   * about the recipe, so they exist only here — `toSchemaOrgJsonLd` emits them
+   * as literals and an inbound scrape's copies are read by nothing.
+   */
+  "@context"?: string;
+  "@type"?: "Recipe";
+  /**
    * The wire spellings of the column-backed scalars (0028). Outbound they are
    * built from the document's columns; inbound a scrape or an agent sends them
    * and the write path reduces them to columns exactly once — `image` through
@@ -235,6 +242,17 @@ export type SchemaOrgRecipe = SchemaRecipe & {
   notes?: string;
   recipeIngredient?: string[];
   recipeInstructions?: Array<HowToStep | HowToSection>;
+  /**
+   * The wire form of the three `recipes.{prep,cook,total}_time` columns, which
+   * hold integer SECONDS. ISO 8601 lives here and nowhere inward: outbound
+   * `schemaOrgTimes` builds these from the columns, inbound `createRecipeRow`
+   * and `draftRecipeDocument` reduce them with `parseDurationToSeconds` exactly
+   * once. Nullable so an agent's patch can spell a CLEAR — `undefined`
+   * disappears in JSON and would read as "leave it alone" after the round trip.
+   */
+  prepTime?: string | null;
+  cookTime?: string | null;
+  totalTime?: string | null;
   /**
    * The wire form of the `servings_amount` / `servings_unit` /
    * `total_weight_*` columns. Outbound it is always the QuantitativeValue
@@ -320,14 +338,6 @@ export interface QuantitativeValue {
 }
 
 export interface SchemaRecipe {
-  "@context"?: string;
-  "@type"?: "Recipe";
-  // ISO 8601 durations, backed by the recipes.{prep,cook,total}_time columns.
-  // Explicitly nullable so a patch can CLEAR a time: `undefined` disappears in
-  // JSON and would read as "field absent, leave it alone" after the round trip.
-  cookTime?: string | null;
-  prepTime?: string | null;
-  totalTime?: string | null;
   recipeCuisine?: string;
   recipeCategory?: string | string[];
   // What is NOT here, and where it lives instead: a recipe's name, image,
@@ -339,8 +349,13 @@ export interface SchemaRecipe {
   // stored blob of older rows, frozen at backfill time; the repo layer deletes
   // them on read and strips them on write, so nothing above it can see one.
   //
+  // The two `@` constants are not here either: they describe the wire format
+  // rather than the recipe, so `toSchemaOrgJsonLd` emits them as literals and
+  // nothing reads a stored copy to decide what Schema.org is called.
+  //
   // What remains is the residue: two fields awaiting the tagging system that
-  // will replace them, and the two `@` constants the wire form needs.
+  // will replace them. Nothing else may be added — a field a recipe has is a
+  // column.
 }
 
 /**

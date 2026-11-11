@@ -45,7 +45,6 @@ export default async function RecipeIngredientsPage({
     );
   }
 
-  const { schema } = recipe.metadata;
 
   return (
     // Fills exactly what the shell leaves, so the table is the only thing that

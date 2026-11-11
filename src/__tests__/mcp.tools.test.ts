@@ -1170,6 +1170,23 @@ describe("updateRecipe", () => {
     );
   });
 
+  it("reduces the times from ISO to column seconds, keeping absent distinct from null", async () => {
+    const { updateRecipeRow } = await import("@/lib/recipes");
+    const existing = recipeFixtures[0];
+    vi.mocked(updateRecipeRow).mockResolvedValueOnce(existing);
+
+    await updateRecipe({
+      id: existing.id,
+      times: { prep: "PT15M", cook: null },
+    });
+
+    // `undefined` must survive as absent — "leave the total alone" — where
+    // null is a clear. Collapsing the two would make every patch that sets one
+    // time wipe the others.
+    const [, patch] = vi.mocked(updateRecipeRow).mock.calls[0];
+    expect(patch.times).toEqual({ prep: 900, cook: null, total: undefined });
+  });
+
   it("still merges what the blob is the source of", async () => {
     const { updateRecipeRow } = await import("@/lib/recipes");
     const existing = recipeFixtures[0];

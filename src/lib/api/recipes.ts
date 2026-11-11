@@ -31,6 +31,12 @@ export interface SaveRecipeBody {
    * alone, which is what an invalid entry in the servings box degrades to.
    */
   servings?: { amount: number | null; unit?: string | null };
+  /**
+   * The three time columns in SECONDS, as the editor built them. Always sent:
+   * an unparseable entry falls back to the stored value, so there is no
+   * "leave it alone" case.
+   */
+  times: { prep: number | null; cook: number | null; total: number | null };
   status: string;
   url: string;
   source: string;

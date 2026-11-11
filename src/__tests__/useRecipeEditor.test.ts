@@ -362,10 +362,16 @@ describe("useRecipeEditor", () => {
   describe("recipe times", () => {
     // The columns carry the times; the schema deliberately carries stale
     // copies (a different prep, a total the column has cleared) so a read
-    // that consults the blob rather than the column fails visibly.
+    // that consults the blob rather than the column fails visibly. They are
+    // cast because `SchemaRecipe` does not declare them — the whole point of
+    // this block is that nothing reads a time from there.
     const timed: RecipeDocument = {
       ...doc,
-      schema: { prepTime: "PT5M", cookTime: "PT1H30M", totalTime: "PT2H" },
+      schema: {
+        prepTime: "PT5M",
+        cookTime: "PT1H30M",
+        totalTime: "PT2H",
+      } as unknown as SchemaRecipe,
       ingredients: [],
       instructions: [],
       prep_time: 900,
@@ -382,13 +388,13 @@ describe("useRecipeEditor", () => {
       expect(result.current.draft.totalTime).toBe("");
     });
 
-    it("buildPatch writes the edited H:MM back as ISO", () => {
+    it("buildPatch writes the edited H:MM back as column seconds", () => {
       const { result } = renderHook(() => useRecipeEditor());
       act(() => result.current.begin(timed, ROW));
       act(() => result.current.patch({ prepTime: "0:20", totalTime: "1:45" }));
-      const built = result.current.buildPatch(timed).schema;
-      expect(built.prepTime).toBe("PT20M");
-      expect(built.totalTime).toBe("PT1H45M");
+      const { times } = result.current.buildPatch(timed);
+      expect(times.prep).toBe(1200);
+      expect(times.total).toBe(6300);
     });
 
     it("clears a time to null when the field is emptied", () => {
@@ -396,26 +402,39 @@ describe("useRecipeEditor", () => {
       act(() => result.current.begin(timed, ROW));
       act(() => result.current.patch({ cookTime: "" }));
       // null, not undefined: undefined disappears in JSON, so after the POST
-      // the merge would read it as "absent, leave it alone" and the time the
+      // the patch would read it as "absent, leave it alone" and the time the
       // user just deleted would come straight back.
-      expect(result.current.buildPatch(timed).schema.cookTime).toBeNull();
+      expect(result.current.buildPatch(timed).times.cook).toBeNull();
     });
 
     it("degrades an unparseable time to the column's value rather than blocking the save", () => {
       const { result } = renderHook(() => useRecipeEditor());
       act(() => result.current.begin(timed, ROW));
       act(() => result.current.patch({ prepTime: "a while" }));
-      expect(result.current.buildPatch(timed).schema.prepTime).toBe("PT15M");
+      expect(result.current.buildPatch(timed).times.prep).toBe(900);
       expect(result.current.canSave).toBe(true);
     });
 
     it("round-trips an untouched recipe's column times unchanged", () => {
       const { result } = renderHook(() => useRecipeEditor());
       act(() => result.current.begin(timed, ROW));
-      const built = result.current.buildPatch(timed).schema;
-      expect(built.prepTime).toBe("PT15M");
-      expect(built.cookTime).toBe("PT1H30M");
-      expect(built.totalTime).toBeNull();
+      const { times } = result.current.buildPatch(timed);
+      expect(times.prep).toBe(900);
+      expect(times.cook).toBe(5400);
+      expect(times.total).toBeNull();
+    });
+
+    it("passes the stored blob through untouched instead of splicing times into it", () => {
+      // The blob goes through BY REFERENCE, never as an object literal built
+      // around a spread of it: a spread's result skips TypeScript's
+      // excess-property check, so a stray key written into a blob nothing
+      // reads would compile clean. Identity is what pins that down.
+      const { result } = renderHook(() => useRecipeEditor());
+      act(() => result.current.begin(timed, ROW));
+      act(() => result.current.patch({ prepTime: "0:20" }));
+      const patch = result.current.buildPatch(timed);
+      expect(patch.schema).toBe(timed.schema);
+      expect(patch.times.prep).toBe(1200);
     });
   });
 });

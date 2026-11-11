@@ -28,23 +28,33 @@ import {
   RECIPE_INGREDIENT_ON_UPDATE_ERROR,
   RECIPE_INSTRUCTIONS_ON_UPDATE_ERROR,
   RECIPE_SCALARS_ON_UPDATE_ERROR,
+  RECIPE_TIMES_ON_UPDATE_ERROR,
   RECIPE_YIELD_ON_UPDATE_ERROR,
+  TIME_UPDATE_ARGS,
   TBSP_ML_EXAMPLE,
 } from "./copy";
 import { TOOL, type ToolName } from "./toolNames";
 
+// The three times in their WIRE spelling. They are not on the stored shape
+// below — they are seconds columns, and `update_recipe` sets them through its
+// top-level `times` argument. This const exists because a CREATE is a genuine
+// Schema.org edge: a scrape hands over `prepTime`, and the server reduces it to
+// the column once. Spread into the create schema only.
+const schemaOrgTimesJsonSchema = {
+  cookTime: { type: "string", description: "ISO 8601 duration (e.g. PT30M)" },
+  prepTime: { type: "string", description: "ISO 8601 duration" },
+  totalTime: { type: "string", description: "ISO 8601 duration" },
+} as const;
+
 // The stored blob — what `update_recipe`'s `schema` still merges into. Down to
-// the times (hydrated back from their columns) and the two fields the tagging
-// system will replace; a recipe's name, image, description and notes are
-// columns, reached through the top-level arguments of that tool, and its
-// ingredients, instructions and servings through theirs.
+// the two fields the tagging system will replace; a recipe's name, image,
+// description, notes and times are columns, reached through the top-level
+// arguments of that tool, and its ingredients, instructions and servings
+// through theirs.
 const storedRecipeJsonSchema = {
   type: "object",
   required: [],
   properties: {
-    cookTime: { type: "string", description: "ISO 8601 duration (e.g. PT30M)" },
-    prepTime: { type: "string", description: "ISO 8601 duration" },
-    totalTime: { type: "string", description: "ISO 8601 duration" },
     recipeCuisine: { type: "string" },
     recipeCategory: { oneOf: [{ type: "string" }, { type: "array", items: { type: "string" } }] },
     // Not promoted and not dropped: `cooking_notes` is a column, but it is the
@@ -83,6 +93,7 @@ const schemaOrgRecipeJsonSchema = {
   properties: {
     ...storedRecipeJsonSchema.properties,
     ...promotedScalarsJsonSchema,
+    ...schemaOrgTimesJsonSchema,
     recipeYield: {
       description: `Recipe yield. PREFERRED: a QuantitativeValue object — value = serving count, unitText = its label (e.g. 4 / "kebabs"); optional valueReference = the recipe's raw weight/volume in METRIC units (value + unitText, e.g. 454 / "g"; unitText must be ${METRIC_UNIT_SLASHES}), which drives the per-serving nutrition basis shown in the app. A plain string like "4 servings" is still accepted but DEPRECATED — prefer the structured object. ACCEPTED ON CREATE ONLY: the server parses this once into the servings_amount / servings_unit / total_weight_amount / total_weight_unit columns, which is what ${TOOL.get_recipe} returns and what ${TOOL.update_recipe} edits through its "servings" / "total_weight" fields.`,
       oneOf: [
@@ -184,6 +195,26 @@ const servingsJsonSchema = {
         'What the amount counts, PLURAL as a human would write it ("servings", "kebabs", "wraps"). Omit to leave it unchanged; null clears it and the app falls back to "servings".',
     },
   },
+} as const;
+
+// The three times, as update_recipe takes them. Each member is separately
+// optional: omitting one leaves that column alone, null clears it. ISO 8601
+// because that is the spelling an agent already speaks — the server reduces it
+// to the column's seconds once, here.
+const timesJsonSchema = {
+  type: "object",
+  required: [],
+  description:
+    "The recipe's prep, cook and total times. Omit a member to leave that time unchanged; send null to clear one. totalTime is NOT derived from prep + cook — a recipe may rest or marinate.",
+  properties: Object.fromEntries(
+    Object.values(TIME_UPDATE_ARGS).map((arg) => [
+      arg,
+      {
+        type: ["string", "null"],
+        description: `The recipe's ${arg} time as an ISO 8601 duration ("PT30M", "PT1H15M"); null clears it. A duration that is not hours/minutes/seconds fails the call.`,
+      },
+    ]),
+  ),
 } as const;
 
 // The whole recipe's raw weight — what the app divides by the serving count to
@@ -572,12 +603,13 @@ export const TOOL_SCHEMAS = {
       },
       schema: {
         ...storedRecipeJsonSchema,
-        description: `The remaining stored fields, merged into what is stored — only the keys you pass change. ${RECIPE_SCALARS_ON_UPDATE_ERROR} ${RECIPE_INGREDIENT_ON_UPDATE_ERROR} ${RECIPE_INSTRUCTIONS_ON_UPDATE_ERROR} ${RECIPE_YIELD_ON_UPDATE_ERROR}`,
+        description: `The remaining stored fields, merged into what is stored — only the keys you pass change. ${RECIPE_SCALARS_ON_UPDATE_ERROR} ${RECIPE_INGREDIENT_ON_UPDATE_ERROR} ${RECIPE_INSTRUCTIONS_ON_UPDATE_ERROR} ${RECIPE_YIELD_ON_UPDATE_ERROR} ${RECIPE_TIMES_ON_UPDATE_ERROR}`,
       },
       ingredients: recipeIngredientsJsonSchema,
       instructions: recipeInstructionsJsonSchema,
       servings: servingsJsonSchema,
       total_weight: totalWeightJsonSchema,
+      times: timesJsonSchema,
     },
   },
   clear_cooking_notes: {

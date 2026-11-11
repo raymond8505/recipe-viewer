@@ -1399,37 +1399,40 @@ describe("recipe time columns", () => {
     mockGenerateEmbedding.mockReset().mockResolvedValue(null);
   });
 
-  it("reads times from the columns, not the stale blob copy", async () => {
+  it("deletes the blob's time keys at the read exit and answers with the columns", async () => {
     makeSupabaseMock({ singleData: structuredClone(staleBlobRow) });
 
     const row = await getRecipeById("r1");
 
-    expect(row?.metadata.schema).toMatchObject({
-      prepTime: "PT20M",
-      cookTime: "PT35M",
-      totalTime: "PT55M",
-    });
+    // Nothing above this module reads a time off the blob, so the three keys
+    // are dead — and a dead key has to be GONE rather than merely stale,
+    // because the MCP server JSON-stringifies whole rows.
+    expect(row?.metadata.schema).not.toHaveProperty("prepTime");
+    expect(row?.metadata.schema).not.toHaveProperty("cookTime");
+    expect(row?.metadata.schema).not.toHaveProperty("totalTime");
+    expect(row).toMatchObject({ prep_time: 1200, cook_time: 2100, total_time: 3300 });
   });
 
-  it("drops a schema time key when its column is null", async () => {
+  it("leaves nothing behind for a reader to find when a column is null", async () => {
     makeSupabaseMock({
       singleData: { ...structuredClone(staleBlobRow), cook_time: null },
     });
 
     const row = await getRecipeById("r1");
 
-    // Deleted, not set to null: every downstream `if (schema.cookTime)` has to
-    // see the same shape a recipe that never had a cook time produces.
+    // The dangerous shape: a cleared column beside a frozen 999 in the blob.
+    // Nothing can reach the 999.
     expect(row?.metadata.schema).not.toHaveProperty("cookTime");
-    expect(row?.metadata.schema.prepTime).toBe("PT20M");
+    expect(row?.cook_time).toBeNull();
   });
 
-  it("hydrates every row in a list query, not just single reads", async () => {
+  it("scrubs every row in a list query, not just single reads", async () => {
     makeSupabaseMock({ data: [structuredClone(staleBlobRow)], count: 1 });
 
     const { data } = await getRecipes();
 
-    expect(data[0].metadata.schema.totalTime).toBe("PT55M");
+    expect(data[0].metadata.schema).not.toHaveProperty("totalTime");
+    expect(data[0].total_time).toBe(3300);
   });
 
   it("writes times to columns and keeps them out of the blob on create", async () => {
@@ -1475,25 +1478,60 @@ describe("recipe time columns", () => {
       updateSingle: { data: structuredClone(staleBlobRow), error: null },
     });
 
-    await updateRecipeRow("r1", { schema: { cookTime: null } });
+    await updateRecipeRow("r1", { times: { cook: null } });
 
     expect(updates[0]).toMatchObject({ cook_time: null });
   });
 
-  it("leaves an untouched time at its column value, not the blob's", async () => {
+  it("leaves the other two times alone when one is patched", async () => {
     const { updates } = makeWriteSupabaseMock({
       selectSingle: { data: structuredClone(staleBlobRow), error: null },
       updateSingle: { data: structuredClone(staleBlobRow), error: null },
     });
 
-    // A patch that says nothing about times — the blob's 999 must not win.
-    await updateRecipeRow("r1", { schema: { description: "Fresh blurb" } });
+    // Each member of `times` is independently three-way: naming one must not
+    // touch the columns the caller said nothing about.
+    await updateRecipeRow("r1", { times: { prep: 2700 } });
 
-    expect(updates[0]).toMatchObject({
-      prep_time: 1200,
-      cook_time: 2100,
-      total_time: 3300,
+    expect(updates[0]).toMatchObject({ prep_time: 2700 });
+    expect(updates[0]).not.toHaveProperty("cook_time");
+    expect(updates[0]).not.toHaveProperty("total_time");
+  });
+
+  it("re-renders the searchable markdown for a times-only patch", async () => {
+    const { updates } = makeWriteSupabaseMock({
+      selectSingle: { data: structuredClone(staleBlobRow), error: null },
+      updateSingle: { data: structuredClone(staleBlobRow), error: null },
     });
+
+    // The markdown prints a Prep/Cook/Total line, so a time change has to
+    // re-render it for the same reason a servings change does. When the times
+    // travelled inside `schema` this fell out of the schema branch; as their
+    // own patch field they need naming, or the embedded text keeps describing
+    // the times the recipe just stopped having.
+    await updateRecipeRow("r1", { times: { prep: 2700 } });
+
+    expect(updates[0].content).toContain("Prep: 45 min");
+    expect(updates[0].content).not.toContain("Prep: 20 min");
+  });
+
+  it("does not touch a time column a patch said nothing about", async () => {
+    const { updates } = makeWriteSupabaseMock({
+      selectSingle: { data: structuredClone(staleBlobRow), error: null },
+      updateSingle: { data: structuredClone(staleBlobRow), error: null },
+    });
+
+    // A patch with no `times` leaves all three columns ABSENT from the write
+    // rather than restating them. Nothing re-derives a time column from the
+    // blob, so the frozen 999 cannot reach one.
+    await updateRecipeRow("r1", { description: "Fresh blurb" });
+
+    expect(updates[0]).not.toHaveProperty("prep_time");
+    expect(updates[0]).not.toHaveProperty("cook_time");
+    expect(updates[0]).not.toHaveProperty("total_time");
+    // The markdown still has to describe the row this write leaves behind, so
+    // it reads the times off `current`'s columns — never the blob's 999.
+    expect(updates[0].content).toContain("Prep: 20 min · Cook: 35 min · Total: 55 min");
   });
 
   it("never writes time keys back into the blob on update", async () => {
@@ -1502,11 +1540,15 @@ describe("recipe time columns", () => {
       updateSingle: { data: structuredClone(staleBlobRow), error: null },
     });
 
-    await updateRecipeRow("r1", { schema: { prepTime: "PT45M" } });
+    await updateRecipeRow("r1", { times: { prep: 2700 } });
 
     expect(updates[0]).toMatchObject({ prep_time: 2700 });
     const blob = (updates[0].metadata as { schema: object }).schema;
     expect(blob).not.toHaveProperty("prepTime");
+    // The frozen 999s the row arrived with are stripped too, not merely left
+    // un-refreshed: every write strips the whole dead-key list.
+    expect(blob).not.toHaveProperty("cookTime");
+    expect(blob).not.toHaveProperty("totalTime");
   });
 });
 

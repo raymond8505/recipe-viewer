@@ -113,7 +113,9 @@ describe("draftRecipeDocument", () => {
     // The name is a document field now, and the strip takes it off the blob the
     // draft keeps — the same treatment the yield gets.
     expect(doc.name).toBe("Cake");
-    expect(doc.schema).toEqual({ prepTime: "PT15M", totalTime: "PT1H" });
+    // The times are stripped off the blob the draft keeps, like the name and
+    // the yield before them: the columns above are where a draft's times live.
+    expect(doc.schema).toEqual({});
     expect(doc.ingredients).toHaveLength(1);
     expect(doc.ingredients[0].ingredients[0]).toMatchObject({
       raw_text: "2 cups flour",

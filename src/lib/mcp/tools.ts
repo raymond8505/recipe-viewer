@@ -29,6 +29,7 @@ import { ingredientEmbeddingText, ingredientQueryText } from "@/lib/ingredientAl
 import {
   CUSTOM_RECIPE_SOURCE,
   fromSchemaOrgInstructions,
+  parseDurationToSeconds,
   recipePageUrl,
   recipeSourceForUrl,
 } from "@/lib/format";
@@ -36,8 +37,10 @@ import {
   RECIPE_INGREDIENT_ON_UPDATE_ERROR,
   RECIPE_INSTRUCTIONS_ON_UPDATE_ERROR,
   RECIPE_SCALARS_ON_UPDATE_ERROR,
+  RECIPE_TIMES_ON_UPDATE_ERROR,
   RECIPE_YIELD_ON_UPDATE_ERROR,
   PROMOTED_UPDATE_ARGS,
+  TIME_UPDATE_ARGS,
   URL_ON_UPDATE_ERROR,
 } from "./copy";
 import { TOOL } from "./toolNames";
@@ -514,6 +517,27 @@ export async function updateRecipe(
       throw new ToolError("invalid_input", RECIPE_SCALARS_ON_UPDATE_ERROR);
     }
   }
+  // And for the times, which left the blob last. A `schema.cookTime` that was
+  // quietly stripped would read to the agent as a cook time it had set.
+  for (const key of Object.keys(TIME_UPDATE_ARGS)) {
+    if (key in schema) {
+      throw new ToolError("invalid_input", RECIPE_TIMES_ON_UPDATE_ERROR);
+    }
+  }
+  // ISO 8601 in, seconds out — reduced once, here, because the columns hold
+  // seconds and `RecipeUpdateInput` is the agent-facing contract, which reads
+  // in the units its JSON Schema advertises. `undefined` has to survive as
+  // absent: it means "leave this time alone", where null is a clear. zod has
+  // already refused anything `parseDurationToSeconds` would answer null to for
+  // a reason other than being a well-formed zero.
+  const times =
+    args.times &&
+    Object.fromEntries(
+      Object.entries(args.times).map(([arg, iso]) => [
+        arg,
+        iso === undefined ? undefined : parseDurationToSeconds(iso),
+      ]),
+    );
   try {
     const row = await updateRecipeRow(args.id, {
       url: args.sourceUrl,
@@ -528,6 +552,7 @@ export async function updateRecipe(
       instructions: args.instructions,
       servings: args.servings,
       totalWeight: args.total_weight,
+      times,
     });
     const answer = withNamedUrls({
       ...row,

@@ -9,6 +9,7 @@ import {
   schemaOrgRecipeInputSchema,
   schemaRecipeSchema,
   servingsInputSchema,
+  timesInputSchema,
   totalWeightInputSchema,
 } from "@/lib/schemas/recipe";
 
@@ -213,6 +214,11 @@ describe("schemaRecipeSchema — the column-backed keys", () => {
       "keywords",
       "datePublished",
       "nutrition",
+      "prepTime",
+      "cookTime",
+      "totalTime",
+      "@context",
+      "@type",
     ]) {
       expect(declared).not.toContain(key);
     }
@@ -220,10 +226,53 @@ describe("schemaRecipeSchema — the column-backed keys", () => {
 
   // Two fields await the tagging system that will replace them; until then the
   // blob is still where they live, so the schema has to keep validating them.
-  it("still declares what the blob is the source of", () => {
-    expect(Object.keys(schemaRecipeSchema.shape)).toEqual(
-      expect.arrayContaining(["recipeCuisine", "recipeCategory"]),
-    );
+  // Asserted EXACTLY, not as a subset: the point of the cutover is that this is
+  // the whole of what a stored recipe blob may hold, and a key added back here
+  // is a field that should have become a column.
+  it("declares exactly what the blob is the source of and nothing else", () => {
+    expect(Object.keys(schemaRecipeSchema.shape)).toEqual([
+      "recipeCuisine",
+      "recipeCategory",
+    ]);
+  });
+});
+
+describe("timesInputSchema", () => {
+  it("takes an ISO duration, a null clear, or nothing at all", () => {
+    expect(timesInputSchema.safeParse({ prep: "PT15M", cook: "PT1H30M" }).success).toBe(true);
+    expect(timesInputSchema.safeParse({ cook: null }).success).toBe(true);
+    expect(timesInputSchema.safeParse({}).success).toBe(true);
+  });
+
+  it("refuses a duration the app cannot read rather than letting it clear a column", () => {
+    // `parseDurationToSeconds` answers null for each of these exactly as it
+    // does for a deliberate clear, so an unreadable value that parsed would
+    // silently wipe the time the caller meant to set. These are real stored
+    // values: two recipes carry day-length totals the regex has no field for.
+    for (const bad of ["20-22 min", "15 min", "P4D", "P1DT13H20M", ""]) {
+      expect(timesInputSchema.safeParse({ cook: bad }).success).toBe(false);
+    }
+  });
+
+  it("accepts a well-formed zero, which is a recipe saying it needs no time", () => {
+    // "PT0M" reads as no time rather than as a value lost in translation, and
+    // that distinction is the whole reason the check is `isIsoDuration` rather
+    // than "does it parse to a number".
+    expect(timesInputSchema.safeParse({ cook: "PT0M" }).success).toBe(true);
+  });
+});
+
+describe("schemaOrgRecipeInputSchema — the times are lenient at the create edge", () => {
+  // The opposite rule to `timesInputSchema`, deliberately: a create is a scrape
+  // speaking Schema.org, and it writes whatever the page said. A duration this
+  // app cannot read has to degrade to "no time" rather than fail the import —
+  // an update is an instruction, where failing loudly is the kinder answer.
+  it("accepts a duration it cannot read", () => {
+    const parsed = schemaOrgRecipeInputSchema.safeParse({
+      name: "Zucchini Bites",
+      cookTime: "20-22 min",
+    });
+    expect(parsed.success).toBe(true);
   });
 });
 

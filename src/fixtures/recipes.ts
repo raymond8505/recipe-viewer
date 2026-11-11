@@ -5,20 +5,20 @@ import { makeInstructionGroup } from "./instructions";
 
 // Time columns are SECONDS (see RecipeRow). These are HYDRATED rows — what
 // every consumer above src/lib/recipes.ts sees.
-// The time columns and their schema.{prepTime,cookTime,totalTime} counterparts
-// therefore agree here, because hydrateTimes has notionally already run. A raw
-// post-0019 database row would carry the columns and NO schema time keys; only
-// repo-layer tests should model that.
 //
-// The name, image, description and both sets of notes are columns too (0028),
-// and like the servings they have no blob counterpart to agree with: the schema
-// block here holds only what the blob is still the source of.
+// EVERY field a recipe has is a column here, and none of them has a blob
+// counterpart: the times (no hydrate-back any more — the three keys are dead
+// and deleted at the read exit), the name, image, description and both sets of
+// notes (0028), and the servings. The schema block holds only what the blob is
+// still the source of, which is the two fields the tagging system replaces.
 //
-// Servings are columns ONLY — there is no schema.recipeYield to agree with, and
-// no hydrate-back that would put one there. The first recipe's yield reads
-// "Enough for one 350g brick of tofu", which names no serving count parseYield
-// will accept, so its columns are null: that is the real shape of a recipe the
-// backfill reports rather than guesses at.
+// A test that needs a blob carrying a dead key supplies it itself, cast — see
+// .claude/docs/fixtures.md. Putting one here would mean every consumer's
+// fixtures disagree with every real row.
+//
+// The first recipe's yield reads "Enough for one 350g brick of tofu", which
+// names no serving count parseYield will accept, so its columns are null: that
+// is the real shape of a recipe the backfill reports rather than guesses at.
 export const recipeFixtures: RecipeRow[] = [
   {
     id: "7cd24839-e518-4c6b-92c4-62171165c332",
@@ -45,8 +45,6 @@ export const recipeFixtures: RecipeRow[] = [
     cooking_notes: null,
     metadata: {
       schema: {
-        prepTime: "PT5M",
-        totalTime: "PT5M",
         recipeCuisine: "Mexican-Inspired",
         recipeCategory: "Marinade",
       },
@@ -77,9 +75,6 @@ export const recipeFixtures: RecipeRow[] = [
     cooking_notes: null,
     metadata: {
       schema: {
-        prepTime: "PT20M",
-        cookTime: "PT35M",
-        totalTime: "PT55M",
         recipeCuisine: "Mexican",
         recipeCategory: "Main",
       },
@@ -142,9 +137,6 @@ export const recipeFixtures: RecipeRow[] = [
     cooking_notes: null,
     metadata: {
       schema: {
-        prepTime: "PT20M",
-        cookTime: "PT30M",
-        totalTime: "PT50M",
         recipeCuisine: "Thai",
         recipeCategory: "Main Course",
       },
@@ -175,9 +167,6 @@ export const recipeFixtures: RecipeRow[] = [
     cooking_notes: null,
     metadata: {
       schema: {
-        prepTime: "PT40M",
-        cookTime: "PT35M",
-        totalTime: "PT4H",
         recipeCuisine: "American",
         recipeCategory: "Breakfast",
       },
@@ -208,8 +197,6 @@ export const recipeFixtures: RecipeRow[] = [
     cooking_notes: null,
     metadata: {
       schema: {
-        prepTime: "PT5M",
-        totalTime: "PT5M",
         recipeCuisine: "Asian",
         recipeCategory: "Sauce",
       },

@@ -47,7 +47,9 @@ import {
   orList,
   RECIPE_INGREDIENT_ON_UPDATE_ERROR,
   RECIPE_INSTRUCTIONS_ON_UPDATE_ERROR,
+  RECIPE_TIMES_ON_UPDATE_ERROR,
   RECIPE_TWO_URLS,
+  TIME_UPDATE_ARGS,
   TBSP_ML_EXAMPLE,
   URL_ON_UPDATE_ERROR,
 } from "@/lib/mcp/copy";
@@ -335,6 +337,45 @@ describe("update_recipe's ingredient contract", () => {
     await expect(
       updateRecipe({ id: "r1", schema: { recipeIngredient: ["1 egg"] } as never }),
     ).rejects.toMatchObject({ message: RECIPE_INGREDIENT_ON_UPDATE_ERROR });
+  });
+});
+
+describe("update_recipe's time contract", () => {
+  // The times twin of the blocks around it: one constant, three surfaces.
+  it("states the rule in the tool description", () => {
+    expect(descriptionOf("update_recipe")).toContain(RECIPE_TIMES_ON_UPDATE_ERROR);
+  });
+
+  it("states the rule on the schema field it constrains", () => {
+    expect(TOOL_SCHEMAS.update_recipe.properties.schema.description).toContain(
+      RECIPE_TIMES_ON_UPDATE_ERROR,
+    );
+  });
+
+  it("is the message the tool actually throws", async () => {
+    const { updateRecipe } = await import("@/lib/mcp/tools");
+    await expect(
+      updateRecipe({ id: "r1", schema: { cookTime: "PT5M" } as never }),
+    ).rejects.toMatchObject({ message: RECIPE_TIMES_ON_UPDATE_ERROR });
+  });
+
+  it("offers the times as a top-level argument and nowhere inside schema", () => {
+    const update = TOOL_SCHEMAS.update_recipe.properties;
+    expect(Object.keys(update.times.properties)).toEqual(["prep", "cook", "total"]);
+    for (const key of Object.keys(TIME_UPDATE_ARGS)) {
+      expect(update.schema.properties).not.toHaveProperty(key);
+    }
+  });
+
+  it("still advertises the ISO times on create, which is a Schema.org edge", () => {
+    // They left `update_recipe`, not the create door: a scrape speaks
+    // `prepTime`, and the server reduces it to the column once. The two tools
+    // shared one JSON Schema const, so removing the keys from the stored shape
+    // would have silently taken them off create as well.
+    const created = TOOL_SCHEMAS.create_recipe_detailed.properties.schema.properties;
+    for (const key of Object.keys(TIME_UPDATE_ARGS)) {
+      expect(created).toHaveProperty(key);
+    }
   });
 });
 

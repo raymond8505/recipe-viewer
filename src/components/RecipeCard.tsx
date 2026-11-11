@@ -4,7 +4,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { useState, type ReactNode } from "react";
 import type { RecipeRow } from "@/types/recipe";
-import { formatDuration } from "@/lib/format";
+import { formatSeconds } from "@/lib/format";
 import {
   Card,
   CardContent,
@@ -34,13 +34,12 @@ export default function RecipeCard({
   badges,
 }: RecipeCardProps) {
   const {
-    metadata: { schema },
     id,
     name,
     image,
     description,
   } = recipe;
-  const totalTime = formatDuration(schema.totalTime ?? schema.cookTime);
+  const totalTime = formatSeconds(recipe.total_time ?? recipe.cook_time);
   const [imgError, setImgError] = useState(false);
 
   return (

@@ -36,6 +36,9 @@ export const POST = requireSessionOrRecipeToken(
       // Absent = leave the base servings alone, which is what an invalid entry
       // in the editor's servings box degrades to.
       servings?: { amount: number | null; unit?: string | null };
+      // The three time columns in SECONDS. The app's own save path never spells
+      // ISO 8601 — that is a wire form, and this is not the wire.
+      times?: { prep?: number | null; cook?: number | null; total?: number | null };
       status: RecipeStatus;
       url?: string;
       source?: string;
@@ -69,6 +72,7 @@ export const POST = requireSessionOrRecipeToken(
         ingredients: body.ingredients,
         instructions: body.instructions,
         servings: body.servings,
+        times: body.times,
         status: body.status,
       });
     } catch (err) {

@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import Image from "next/image";
 import type { RecipeRow, RecipeDocument } from "@/types/recipe";
 import {
-  formatDuration,
+  formatSeconds,
   formatDate,
   toArray,
   isOwnRecipe,
@@ -88,9 +88,9 @@ export default function RecipeDetail({
     [recipe, doc, status, url, source],
   );
   const { name, image, description } = doc;
-  const prepTime = formatDuration(schema.prepTime);
-  const cookTime = formatDuration(schema.cookTime);
-  const totalTime = formatDuration(schema.totalTime);
+  const prepTime = formatSeconds(doc.prep_time);
+  const cookTime = formatSeconds(doc.cook_time);
+  const totalTime = formatSeconds(doc.total_time);
   const categories = toArray(schema.recipeCategory);
   // Nutrition is a function of the lines the page holds right now, each with
   // its catalog row: the /update echo is hydrated, so a save keeps the numbers,
@@ -252,6 +252,7 @@ export default function RecipeDetail({
         ingredients,
         instructions,
         servings,
+        times,
       } = editor.buildPatch(doc);
       // A staged file is uploaded only once the rest of the save is going
       // through, so an abandoned edit leaves no orphan in storage.
@@ -266,6 +267,7 @@ export default function RecipeDetail({
         ...(image !== undefined ? { image } : {}),
         ingredients,
         instructions,
+        times,
         // Absent when the servings box holds something unusable, which the
         // route reads as "leave the count alone" rather than as a clear.
         ...(servings ? { servings } : {}),

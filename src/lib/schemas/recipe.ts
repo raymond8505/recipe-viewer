@@ -2,7 +2,7 @@
 // routes and the repo layer all parse against the same contract.
 
 import { z } from "zod";
-import { CUSTOM_RECIPE_SOURCE } from "@/lib/format";
+import { CUSTOM_RECIPE_SOURCE, isIsoDuration } from "@/lib/format";
 import { METRIC_YIELD_UNITS } from "@/lib/units";
 import type { Assert, Assignable } from "@/lib/exhaustive";
 import type {
@@ -110,20 +110,15 @@ export type _InstructionGroupsMatchInput = Assert<
 
 // The STORED blob, and nothing more — the validator counterpart of
 // `SchemaRecipe`. Everything a recipe is made of has a column; what is left is
-// the two fields awaiting the tagging system and the wire form's two constants.
+// the two fields awaiting the tagging system. The times left with the rest —
+// they are column-backed in SECONDS, and ISO 8601 is a wire spelling that now
+// lives only on `schemaOrgRecipeInputSchema` below and `timesInputSchema`.
 //
 // Declared strict and passed through below: `keyof` on a passthrough shape is
 // `string`, which would leave the pin beneath it asserting nothing. It IS
 // passthrough at the boundary, because a sender can still put a promoted or
 // dropped key on the wire — the repo layer strips every one from the write.
 const schemaRecipeFields = z.object({
-  "@context": z.string().optional(),
-  "@type": z.literal("Recipe").optional(),
-  // Nullable so a partial update can clear a time outright; omitted still
-  // means "leave it alone". See RecipeRow's time columns.
-  cookTime: z.string().nullable().optional(),
-  prepTime: z.string().nullable().optional(),
-  totalTime: z.string().nullable().optional(),
   recipeCuisine: z.string().optional(),
   recipeCategory: z.union([z.string(), z.array(z.string())]).optional(),
 });
@@ -148,10 +143,23 @@ export type _SchemaRecipeKeysCoverSchema = Assert<
 // `fromSchemaOrgInstructions` for the lines and steps — and stripped from the
 // blob that is stored.
 export const schemaOrgRecipeInputSchema = schemaRecipeSchema.extend({
+  "@context": z.string().optional(),
+  "@type": z.literal("Recipe").optional(),
   name: z.string().min(1),
   description: z.string().optional(),
   image: z.union([z.string(), z.array(z.string())]).optional(),
   notes: z.string().optional(),
+  // Re-declared here rather than inherited: the stored shape has no times, and
+  // leaving these to `.passthrough()` would make a scrape's durations untyped
+  // at the one edge that reduces them to the columns.
+  //
+  // Deliberately LENIENT, unlike `timesInputSchema`. A scrape writes whatever
+  // the page said — the stored blobs hold "20–22 min" and "15 min" — and a
+  // duration this app cannot read must degrade to "no time" rather than fail
+  // the whole create. `parseDurationToSeconds` returns null for all of them.
+  prepTime: z.string().nullable().optional(),
+  cookTime: z.string().nullable().optional(),
+  totalTime: z.string().nullable().optional(),
   recipeIngredient: z.array(schemaOrgIngredientLineSchema).optional(),
   recipeInstructions: z.array(z.union([howToStepSchema, howToSectionSchema])).optional(),
   recipeYield: z
@@ -168,6 +176,32 @@ export const schemaOrgRecipeInputSchema = schemaRecipeSchema.extend({
 export const servingsInputSchema = z.object({
   amount: z.number().positive().nullable(),
   unit: z.string().min(1).nullable().optional(),
+});
+
+/**
+ * The three time columns as a writer sets them, in ISO 8601 — the spelling an
+ * agent speaks. Three-way per field: the key absent leaves that column alone,
+ * `null` clears it, a duration sets it.
+ *
+ * STRICT, unlike the create edge: a duration this app cannot read is REFUSED
+ * rather than degraded. `parseDurationToSeconds` answers null for "20-22 min"
+ * exactly as it does for a deliberate clear, so without this an unreadable
+ * value would silently wipe the column the caller was trying to set. "PT0M" is
+ * a well-formed zero and still parses to null — a no-cook recipe saying so
+ * explicitly — which is the distinction `isIsoDuration` exists to draw.
+ */
+export const isoDurationInputSchema = z
+  .string()
+  .refine(isIsoDuration, {
+    message: "must be an ISO 8601 duration of hours, minutes and seconds (e.g. PT30M, PT1H15M)",
+  })
+  .nullable()
+  .optional();
+
+export const timesInputSchema = z.object({
+  prep: isoDurationInputSchema,
+  cook: isoDurationInputSchema,
+  total: isoDurationInputSchema,
 });
 
 /** The whole recipe's raw weight, metric only — same three-way semantics. */
@@ -316,9 +350,10 @@ export const recipeCreateSimpleInputSchema = z.object({
 });
 
 // Update speaks the app's own shape: `ingredients` and `instructions` each
-// replace the whole list, `servings` / `total_weight` set the columns, and
-// `schema` is the stored recipe. `parseRecipeUpdateArgs` rejects the three
-// Schema.org keys that shape lacks rather than letting them through unused.
+// replace the whole list, `servings` / `total_weight` / `times` set the
+// columns, and `schema` is the stored recipe — down to the two tag fields.
+// `updateRecipe` rejects the six Schema.org keys that shape lacks rather than
+// letting them through unused.
 export const recipeUpdateInputSchema = z.object({
   id: z.string().min(1),
   // The stored column: the page /rescrape re-fetches.
@@ -338,6 +373,7 @@ export const recipeUpdateInputSchema = z.object({
   instructions: recipeInstructionsInputSchema.optional(),
   servings: servingsInputSchema.optional(),
   total_weight: totalWeightInputSchema.optional(),
+  times: timesInputSchema.optional(),
 });
 
 // RecipeRowColumns hand-mirrors the servings columns for the same reason it

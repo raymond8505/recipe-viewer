@@ -4,7 +4,7 @@ import { useRef, useState, useEffect, useMemo } from "react";
 import Image from "next/image";
 import type { RecipeRow, RecipeDocument } from "@/types/recipe";
 import {
-  formatDuration,
+  formatSeconds,
   formatDate,
   toArray,
 } from "@/lib/format";
@@ -342,9 +342,9 @@ export default function CookingMode({
     }
   };
 
-  const prepTime = formatDuration(schema.prepTime);
-  const cookTime = formatDuration(schema.cookTime);
-  const totalTime = formatDuration(schema.totalTime);
+  const prepTime = formatSeconds(doc.prep_time);
+  const cookTime = formatSeconds(doc.cook_time);
+  const totalTime = formatSeconds(doc.total_time);
   const categories = toArray(schema.recipeCategory);
 
   return (
