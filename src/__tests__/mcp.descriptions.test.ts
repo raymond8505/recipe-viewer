@@ -40,13 +40,16 @@ import {
 } from "@/lib/schemas/ingredient";
 import { FOOD_PORTION_UNIQUE_RULE } from "@/lib/foodPortions";
 import {
+  COOKING_NOTES_READ_ONLY,
   IMAGE_FORMAT_LIST,
   METRIC_UNIT_OR_LIST,
   METRIC_UNIT_SLASHES,
   orList,
   RECIPE_INGREDIENT_ON_UPDATE_ERROR,
   RECIPE_INSTRUCTIONS_ON_UPDATE_ERROR,
+  RECIPE_TWO_URLS,
   TBSP_ML_EXAMPLE,
+  URL_ON_UPDATE_ERROR,
 } from "@/lib/mcp/copy";
 import { NUTRITION_FIELDS } from "@/lib/nutritionFields";
 import {
@@ -257,6 +260,56 @@ describe("the two recipe-create tools", () => {
       "name",
       "timeRequired",
     ]);
+  });
+});
+
+// Four tools answer with both urls and the fifth surface is the error a bare
+// `url` raises, so the account of which is which is one constant interpolated
+// into each. These catch a second copy typed into a sentence by hand — the
+// drift that a shared constant cannot prevent by itself.
+describe("the two-urls account", () => {
+  const ANSWERS_WITH_BOTH_URLS = [
+    TOOL.search_recipes,
+    TOOL.get_recipe,
+    TOOL.create_recipe_detailed,
+    TOOL.update_recipe,
+  ] as const;
+
+  for (const tool of ANSWERS_WITH_BOTH_URLS) {
+    it(`gives ${tool} the shared wording`, () => {
+      expect(descriptionOf(tool)).toContain(RECIPE_TWO_URLS);
+    });
+  }
+
+  it("states it once per description, not twice", () => {
+    for (const tool of ANSWERS_WITH_BOTH_URLS) {
+      expect(descriptionOf(tool).split(RECIPE_TWO_URLS)).toHaveLength(2);
+    }
+  });
+
+  it("is the wording a bare url is rejected with", () => {
+    expect(URL_ON_UPDATE_ERROR).toContain(RECIPE_TWO_URLS);
+  });
+});
+
+// Ignoring cookingNotes is a silent outcome on a successful call, so both
+// tools that take a schema say so in the same words, and the field itself
+// repeats it where a caller filling the schema will read it.
+describe("the cookingNotes read-only contract", () => {
+  for (const tool of ["create_recipe_detailed", "update_recipe"] as const) {
+    it(`states the rule in ${tool}'s description`, () => {
+      expect(descriptionOf(tool)).toContain(COOKING_NOTES_READ_ONLY);
+    });
+  }
+
+  it("names the one tool that may write it", () => {
+    expect(COOKING_NOTES_READ_ONLY).toContain(TOOL.clear_cooking_notes);
+  });
+
+  it("states it on the schema field it constrains", () => {
+    expect(
+      TOOL_SCHEMAS.update_recipe.properties.schema.properties.cookingNotes.description,
+    ).toContain("READ-ONLY");
   });
 });
 

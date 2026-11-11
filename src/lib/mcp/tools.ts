@@ -38,6 +38,7 @@ import {
   RECIPE_YIELD_ON_UPDATE_ERROR,
   URL_ON_UPDATE_ERROR,
 } from "./copy";
+import { TOOL } from "./toolNames";
 import { ARCHIVED_RECIPE_STATUS, recipeUpdateInputSchema } from "@/lib/schemas/recipe";
 import { RECIPE_TOKEN_TTL_SECONDS, signRecipeToken } from "./recipeToken";
 import { env } from "@/env";
@@ -343,9 +344,9 @@ export async function getToken(
 // cookingNotes is user-authored in cooking mode and read-only to agents: the
 // create/update tools strip it rather than fail, and surface why in the
 // response. The dedicated clear_cooking_notes tool is the only agent-writable
-// path. See CLAUDE.md "Cooking Notes" rules.
+// path. See .claude/docs/cooking-mode.md "Cooking Notes".
 const COOKING_NOTES_IGNORED_WARNING =
-  "cookingNotes is read-only for agents and was ignored — it is authored by users in cooking mode. Use the clear_cooking_notes tool when explicitly asked to clear it.";
+  `cookingNotes is read-only for agents and was ignored — it is authored by users in cooking mode. Use the ${TOOL.clear_cooking_notes} tool when explicitly asked to clear it.`;
 
 export type RecipeRowWithWarnings = RecipeRow & { warnings?: string[] };
 
@@ -389,24 +390,14 @@ export async function createRecipeDetailed(
 }
 
 /**
- * The simplified create path, and the one most callers want: the recipe's
- * fields ARE the argument object, `source` follows from the url rather than
- * being asked for, and the response says only that the row exists and where to
- * see it. Its field names are Schema.org's, but it is a shape of this app's own
- * choosing rather than a conformant Recipe — which is the whole point, since a
- * caller holding a page's JSON-LD can paste it and a caller holding nothing can
- * write it. What it cannot express, `createRecipeDetailed` can.
+ * The `url` answered is the recipe's page on this instance, not the `url`
+ * stored on the row: an upstream page given here stays in the column, because
+ * that column is the page `/rescrape` re-fetches and the one `source` is
+ * derived from.
  *
- * The `url` answered is the recipe's page on this instance, which is not the
- * `url` stored on the row: an upstream page given here stays in the column,
- * because that column is the page `/rescrape` re-fetches and the one `source`
- * is derived from. The caller is told where its recipe now lives, not where it
- * came from.
- *
- * The catalog matching this promises is `createRecipeRow`'s — it mints a
- * `recipe_ingredients` row per line and schedules the normalization run that
- * matches them, leaving whatever it cannot resolve unmatched. Nothing is
- * awaited here, so the response cannot report what matched.
+ * `createRecipeRow` schedules the normalization run that matches the lines to
+ * the catalog, and nothing here awaits it, so the response cannot report what
+ * matched.
  */
 export async function createRecipeSimple(
   args: RecipeCreateSimpleInput,

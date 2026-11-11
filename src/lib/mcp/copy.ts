@@ -39,13 +39,27 @@ export const RECIPE_INSTRUCTIONS_ON_UPDATE_ERROR = `schema.recipeInstructions is
 export const RECIPE_YIELD_ON_UPDATE_ERROR = `schema.recipeYield is not accepted on update — the call FAILS if you send one, it is not ignored. A recipe's serving count is column-backed: send \`servings\` ({ amount, unit? }) instead, where amount is the number of servings and unit is what they are counted in ("servings", "kebabs"). Omit \`servings\` to leave the count alone; send { "amount": null } to clear it. The whole recipe's raw weight goes through \`total_weight\` ({ amount, unit }), NOT a valueReference. ${TOOL.get_recipe} returns all four as servings_amount / servings_unit / total_weight_amount / total_weight_unit.`;
 
 /**
+ * Which of a recipe's two urls is which, said once for every tool that answers
+ * with both. An agent that picks the wrong one sends a person off to the site
+ * the recipe was scraped from, not to its page here.
+ */
+export const RECIPE_TWO_URLS =
+  "Every recipe answers with two urls: `pageUrl`, its page on this instance, which is where you send a person to look at it; and `sourceUrl`, the page it came from, which is what Re-scrape re-fetches. They hold the same value for a recipe with no upstream page.";
+
+/**
  * A recipe has two urls and this tool accepts only one of them, so a bare
  * `url` is ambiguous about which was meant. Rejected rather than stripped:
  * the input object drops keys it does not know, so a silently ignored `url`
  * looks to the agent like a source page it successfully set.
  */
-export const URL_ON_UPDATE_ERROR =
-  "url is not a field on this tool. A recipe has two: `sourceUrl`, the page it came from and the one Re-scrape re-fetches, which is what you set here; and `pageUrl`, its own page on this instance, which is derived from its id and reported back but never set. Send `sourceUrl` if you meant the first.";
+export const URL_ON_UPDATE_ERROR = `url is not a field on this tool. ${RECIPE_TWO_URLS} \`sourceUrl\` is the one you set here; \`pageUrl\` is derived from the recipe's id and never set. Send \`sourceUrl\` if you meant the first.`;
+
+/**
+ * What a write does with `cookingNotes`, said once for both tools that take a
+ * schema. Ignoring it is the surprise worth stating: the call succeeds, so an
+ * agent that is not told reads the success as notes it wrote.
+ */
+export const COOKING_NOTES_READ_ONLY = `cookingNotes is read-only for agents: if present it is ignored (the call still succeeds) and the response carries a 'warnings' note explaining why. ${TOOL.clear_cooking_notes} is the only agent-writable path.`;
 
 /**
  * "a, b, or c". Hand-rolled rather than Intl.ListFormat, whose output varies
