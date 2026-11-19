@@ -8,10 +8,9 @@ const mockRecipe = makeRecipe("test-id-123", "Chocolate Cake", {
   url: "https://example.com/recipe",
   source: "example.com",
   total_time: 3600,
+  description: "A rich, moist chocolate cake perfect for any occasion.",
   metadata: {
     schema: {
-      name: "Chocolate Cake",
-      description: "A rich, moist chocolate cake perfect for any occasion.",
       totalTime: "PT1H",
       recipeCategory: ["Dessert"],
     },
@@ -50,9 +49,7 @@ describe("RecipeCard", () => {
 
   it("renders image when provided", () => {
     const recipeWithImage = makeRecipe("test-id-123", "Chocolate Cake", {
-      metadata: {
-        schema: { ...mockRecipe.metadata.schema, image: "https://example.com/cake.jpg" },
-      },
+      image: "https://example.com/cake.jpg",
     });
     render(<RecipeCard recipe={recipeWithImage} />);
     const img = screen.getByRole("img");

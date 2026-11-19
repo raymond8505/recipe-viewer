@@ -72,7 +72,7 @@ export default function MealTabs({ recipes, activeIndex, onSelect, onRemove }: M
                   : "hover:bg-muted hover:text-gray-700 active:bg-gray-200",
               )}
             >
-              <span className="truncate max-w-[140px] block">{recipe.metadata.schema.name}</span>
+              <span className="truncate max-w-[140px] block">{recipe.name}</span>
             </Button>
             {hasClose && (
               <Button
@@ -83,7 +83,7 @@ export default function MealTabs({ recipes, activeIndex, onSelect, onRemove }: M
                   setTimeout(() => tabRefs.current[futureActive]?.focus(), 0);
                 }}
                 tabIndex={-1}
-                aria-label={`Remove ${recipe.metadata.schema.name} from meal`}
+                aria-label={`Remove ${recipe.name} from meal`}
                 className={cn(
                   "h-auto min-h-[44px] rounded-l-none rounded-r-full border-l px-2.5 text-sm",
                   sharedBg,

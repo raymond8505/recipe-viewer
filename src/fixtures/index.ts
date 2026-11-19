@@ -2,6 +2,7 @@ export { recipeFixtures, makeRecipe, makeNutritionRecipeRow } from "./recipes";
 export {
   ingredientFixtures,
   makeIngredient,
+  makeKeywordMatch,
   makeRecipeIngredientRow,
   makeRecipeIngredient,
   makeMatchedIngredient,

@@ -39,29 +39,16 @@ export const WithImage: Story = {
   args: { recipe: baseRecipe },
 };
 
+// The card reads the COLUMNS, so the absent state is a null column. Both of
+// these cleared `metadata.schema` instead and so rendered the image and blurb
+// they claimed to be without — a spread's result skips excess-property checks,
+// so neither the compiler nor the blob complained.
 export const NoImage: Story = {
-  args: {
-    recipe: {
-      ...baseRecipe,
-      metadata: {
-        schema: { ...baseRecipe.metadata.schema, image: undefined },
-      },
-    },
-  },
+  args: { recipe: { ...baseRecipe, image: null } },
 };
 
 export const NoDescription: Story = {
-  args: {
-    recipe: {
-      ...baseRecipe,
-      metadata: {
-        schema: {
-          ...baseRecipe.metadata.schema,
-          description: undefined,
-        },
-      },
-    },
-  },
+  args: { recipe: { ...baseRecipe, description: null } },
 };
 
 /** Nothing to say beyond the name: no time, and no badges of either kind. */

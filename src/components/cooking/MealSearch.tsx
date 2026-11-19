@@ -151,7 +151,7 @@ export default function MealSearch({ excludeIds, onAdd }: MealSearchProps) {
                 className="h-auto w-full min-h-[44px] flex-col items-start justify-center gap-0 whitespace-normal rounded-none border-b border-gray-100 px-4 py-3 text-left text-sm text-gray-800 hover:bg-brand-subtle hover:text-gray-800 active:bg-brand/10 last:border-0"
               >
                 <span className="block font-medium leading-snug">
-                  {recipe.metadata.schema.name}
+                  {recipe.name}
                 </span>
                 {recipe.source && (
                   <span className="block text-xs text-gray-400 mt-0.5">{recipe.source}</span>

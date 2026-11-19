@@ -4,7 +4,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { useState, type ReactNode } from "react";
 import type { RecipeRow } from "@/types/recipe";
-import { formatDuration, getFirstImage } from "@/lib/format";
+import { formatSeconds } from "@/lib/format";
 import {
   Card,
   CardContent,
@@ -34,11 +34,12 @@ export default function RecipeCard({
   badges,
 }: RecipeCardProps) {
   const {
-    metadata: { schema },
     id,
+    name,
+    image,
+    description,
   } = recipe;
-  const image = getFirstImage(schema.image);
-  const totalTime = formatDuration(schema.totalTime ?? schema.cookTime);
+  const totalTime = formatSeconds(recipe.total_time ?? recipe.cook_time);
   const [imgError, setImgError] = useState(false);
 
   return (
@@ -49,7 +50,7 @@ export default function RecipeCard({
             <div className="relative w-full aspect-square overflow-hidden bg-muted">
               <Image
                 src={image}
-                alt={schema.name}
+                alt={name}
                 fill
                 sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
                 className="object-cover group-hover:scale-105 transition-transform duration-200"
@@ -71,12 +72,12 @@ export default function RecipeCard({
 
         <CardContent className="flex flex-col flex-1 p-4 gap-2">
           <CardTitle className="font-semibold text-card-foreground leading-snug line-clamp-2 group-hover:text-brand transition-colors">
-            {schema.name}
+            {name}
           </CardTitle>
 
-          {schema.description && (
+          {description && (
             <CardDescription className="text-sm text-muted-foreground line-clamp-2">
-              {schema.description}
+              {description}
             </CardDescription>
           )}
 

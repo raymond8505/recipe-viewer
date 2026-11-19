@@ -13,6 +13,15 @@ import type { RecipeStatus } from "@/lib/schemas/recipe";
 
 export interface SaveRecipeBody {
   schema: SchemaRecipe;
+  /**
+   * The column-backed scalars. `description` and `notes` are nullable because
+   * emptying either field is a CLEAR — an omitted key means "leave it alone".
+   * `image` is omitted unless a newly uploaded file replaced it.
+   */
+  name: string;
+  description: string | null;
+  notes: string | null;
+  image?: string;
   /** The whole list; the editor always sends it. Lines keep their rows by id. */
   ingredients: RecipeIngredientGroupInput[];
   /** The whole step list; the editor always sends it. */
@@ -22,6 +31,12 @@ export interface SaveRecipeBody {
    * alone, which is what an invalid entry in the servings box degrades to.
    */
   servings?: { amount: number | null; unit?: string | null };
+  /**
+   * The three time columns in SECONDS, as the editor built them. Always sent:
+   * an unparseable entry falls back to the stored value, so there is no
+   * "leave it alone" case.
+   */
+  times: { prep: number | null; cook: number | null; total: number | null };
   status: string;
   url: string;
   source: string;
@@ -29,6 +44,12 @@ export interface SaveRecipeBody {
 
 export interface SavedRecipe {
   schema: SchemaRecipe;
+  /** The column-backed scalars as stored. */
+  name: string;
+  image: string | null;
+  description: string | null;
+  notes: string | null;
+  cooking_notes: string | null;
   ingredients: RecipeIngredientGroup[];
   /** The steps as stored — canonical form, which may differ from what was sent. */
   instructions: RecipeInstructionGroup[];
@@ -42,6 +63,8 @@ export interface SavedRecipe {
   total_weight_amount: number | null;
   total_weight_unit: string | null;
   status: RecipeStatus;
+  /** Stamped by the repo layer on every write — the header renders it. */
+  updated_at: string;
   url: string;
   source: string;
 }
@@ -68,6 +91,7 @@ export async function saveRecipe(
   const saved = await res.json();
   if (
     !saved.schema ||
+    typeof saved.name !== "string" ||
     !Array.isArray(saved.ingredients) ||
     !Array.isArray(saved.instructions)
   ) {

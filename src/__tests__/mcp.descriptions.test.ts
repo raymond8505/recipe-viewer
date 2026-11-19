@@ -42,12 +42,15 @@ import { FOOD_PORTION_UNIQUE_RULE } from "@/lib/foodPortions";
 import {
   COOKING_NOTES_READ_ONLY,
   IMAGE_FORMAT_LIST,
+  INGREDIENT_SEARCH_MODE,
   METRIC_UNIT_OR_LIST,
   METRIC_UNIT_SLASHES,
   orList,
   RECIPE_INGREDIENT_ON_UPDATE_ERROR,
   RECIPE_INSTRUCTIONS_ON_UPDATE_ERROR,
+  RECIPE_TIMES_ON_UPDATE_ERROR,
   RECIPE_TWO_URLS,
+  TIME_UPDATE_ARGS,
   TBSP_ML_EXAMPLE,
   URL_ON_UPDATE_ERROR,
 } from "@/lib/mcp/copy";
@@ -144,6 +147,40 @@ describe("rendered prose constants", () => {
     // pinned here (not just on the HTTP response) so an interpolated number
     // can't quietly reintroduce one.
     expect(descriptionOf("search_ingredients")).not.toMatch(/0\.85|0\.6\b/);
+  });
+
+  it("names every search mode the ingredient tool can answer with", () => {
+    // The mode is the agent's only signal for which score fields it got, so a
+    // mode the tool can return but the description never mentions is a number
+    // the agent has no instruction for.
+    const description = descriptionOf("search_ingredients");
+    for (const mode of Object.values(INGREDIENT_SEARCH_MODE)) {
+      expect(description).toContain(`\`${mode}\``);
+    }
+  });
+
+  it("tells an agent not to read a degraded result as an empty catalog", () => {
+    // The expensive mistake in keyword mode: a semantic-only match can't
+    // surface, and an agent that reads the gap as "absent" creates a duplicate.
+    const description = descriptionOf("search_ingredients");
+    expect(description).toContain("INCONCLUSIVE");
+    expect(description).toContain(TOOL.create_ingredient);
+  });
+
+  it("accounts for all three search arms and their precedence", () => {
+    // The search matches on the recipe name, a matched line's catalog
+    // name/alias, and the recipe's own parsed line wording (db/migrations/0027
+    // + 0029). An agent ranks its own next move on this precedence, so a
+    // description naming fewer arms than the SQL has sends it to
+    // search_ingredients to explain a gap search does not have.
+    const description = descriptionOf("search_recipes");
+    expect(description).toContain("NAME");
+    expect(description).toContain("ALIAS");
+    expect(description).toContain("OWN ingredient wording");
+    expect(description).toContain("BY WEIGHT");
+    // A line with no catalog match is still searched, by its own wording, so
+    // any sentence claiming otherwise contradicts the third arm.
+    expect(description).not.toContain("is NOT searched");
   });
 
   it("renders every accepted image format in the upload description", () => {
@@ -335,6 +372,45 @@ describe("update_recipe's ingredient contract", () => {
     await expect(
       updateRecipe({ id: "r1", schema: { recipeIngredient: ["1 egg"] } as never }),
     ).rejects.toMatchObject({ message: RECIPE_INGREDIENT_ON_UPDATE_ERROR });
+  });
+});
+
+describe("update_recipe's time contract", () => {
+  // The times twin of the blocks around it: one constant, three surfaces.
+  it("states the rule in the tool description", () => {
+    expect(descriptionOf("update_recipe")).toContain(RECIPE_TIMES_ON_UPDATE_ERROR);
+  });
+
+  it("states the rule on the schema field it constrains", () => {
+    expect(TOOL_SCHEMAS.update_recipe.properties.schema.description).toContain(
+      RECIPE_TIMES_ON_UPDATE_ERROR,
+    );
+  });
+
+  it("is the message the tool actually throws", async () => {
+    const { updateRecipe } = await import("@/lib/mcp/tools");
+    await expect(
+      updateRecipe({ id: "r1", schema: { cookTime: "PT5M" } as never }),
+    ).rejects.toMatchObject({ message: RECIPE_TIMES_ON_UPDATE_ERROR });
+  });
+
+  it("offers the times as a top-level argument and nowhere inside schema", () => {
+    const update = TOOL_SCHEMAS.update_recipe.properties;
+    expect(Object.keys(update.times.properties)).toEqual(["prep", "cook", "total"]);
+    for (const key of Object.keys(TIME_UPDATE_ARGS)) {
+      expect(update.schema.properties).not.toHaveProperty(key);
+    }
+  });
+
+  it("still advertises the ISO times on create, which is a Schema.org edge", () => {
+    // They left `update_recipe`, not the create door: a scrape speaks
+    // `prepTime`, and the server reduces it to the column once. The two tools
+    // shared one JSON Schema const, so removing the keys from the stored shape
+    // would have silently taken them off create as well.
+    const created = TOOL_SCHEMAS.create_recipe_detailed.properties.schema.properties;
+    for (const key of Object.keys(TIME_UPDATE_ARGS)) {
+      expect(created).toHaveProperty(key);
+    }
   });
 });
 

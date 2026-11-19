@@ -57,23 +57,25 @@ describe("POST /api/recipes/[id]/notes", () => {
     expect((await res.json()).ok).toBe(true);
   });
 
-  it("patches cookingNotes onto the recipe schema", async () => {
+  it("patches the cooking notes onto the recipe's column", async () => {
     const { updateRecipeRow } = await import("@/lib/recipes");
     vi.mocked(updateRecipeRow).mockResolvedValueOnce({} as never);
 
     await POST(makeJsonRequest({ cookingNotes: "reduce heat earlier" }), makeParams());
     expect(updateRecipeRow).toHaveBeenCalledWith("recipe-1", {
-      schema: { cookingNotes: "reduce heat earlier" },
+      cookingNotes: "reduce heat earlier",
     });
   });
 
-  it("clears cookingNotes (undefined) when an empty string is sent", async () => {
+  it("clears the notes when an empty string is sent", async () => {
     const { updateRecipeRow } = await import("@/lib/recipes");
     vi.mocked(updateRecipeRow).mockResolvedValueOnce({} as never);
 
     await POST(makeJsonRequest({ cookingNotes: "" }), makeParams());
+    // null, not undefined: emptying the notes box has to empty the column,
+    // and "leave it alone" would make that impossible.
     expect(updateRecipeRow).toHaveBeenCalledWith("recipe-1", {
-      schema: { cookingNotes: undefined },
+      cookingNotes: null,
     });
   });
 });

@@ -1,4 +1,4 @@
-import { parseDurationToSeconds, stripSchemaOrgKeys } from "./format";
+import { getFirstImage, parseDurationToSeconds, stripSchemaOrgKeys } from "./format";
 import { draftIngredientGroups } from "./recipeIngredients";
 import { parseYield } from "./units";
 import type {
@@ -17,6 +17,11 @@ import type {
 export function recipeDocument(row: RecipeDocumentSource): RecipeDocument {
   return {
     schema: row.metadata.schema,
+    name: row.name,
+    image: row.image,
+    description: row.description,
+    notes: row.notes,
+    cooking_notes: row.cooking_notes,
     ingredients: row.ingredients,
     instructions: row.instructions,
     prep_time: row.prep_time,
@@ -41,6 +46,11 @@ export function applyRecipeDocument(row: RecipeRow, doc: RecipeDocument): Recipe
   return {
     ...row,
     metadata: { ...row.metadata, schema: doc.schema },
+    name: doc.name,
+    image: doc.image,
+    description: doc.description,
+    notes: doc.notes,
+    cooking_notes: doc.cooking_notes,
     ingredients: doc.ingredients,
     instructions: doc.instructions,
     prep_time: doc.prep_time,
@@ -76,6 +86,15 @@ export function draftRecipeDocument(
   const yld = parseYield(schema.recipeYield);
   return {
     schema: stripSchemaOrgKeys(schema),
+    // Read before the strip takes them off, exactly as the yield is. `image`
+    // arrives in either Schema.org shape and is reduced to the one URL the
+    // column holds; a draft has no cooking notes, which are authored against a
+    // saved recipe in cooking mode.
+    name: schema.name,
+    image: getFirstImage(schema.image),
+    description: schema.description?.trim() || null,
+    notes: schema.notes?.trim() || null,
+    cooking_notes: null,
     ingredients: draftIngredientGroups(ingredients),
     instructions: [...instructions],
     prep_time: parseDurationToSeconds(schema.prepTime),

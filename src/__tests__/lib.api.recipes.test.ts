@@ -71,7 +71,10 @@ describe("uploadRecipeImageFile", () => {
 
 describe("saveRecipe", () => {
   const body = {
-    schema: { name: "Cake" },
+    schema: {},
+    name: "Cake",
+    description: null,
+    notes: null,
     ingredients: [{ ingredients: [{ id: "ri-1", raw_text: "2 cups flour" }] }],
     instructions: makeSteps(["Mix."]),
     status: "draft",
@@ -81,7 +84,12 @@ describe("saveRecipe", () => {
 
   it("POSTs the document to /update and returns what was persisted", async () => {
     const saved = {
-      schema: { name: "Cake" },
+      schema: {},
+      name: "Cake",
+      image: null,
+      description: null,
+      notes: null,
+      cooking_notes: null,
       ingredients: makeIngredientLines(["2 cups flour"]),
       instructions: makeSteps(["Mix."]),
       prep_time: 600,
@@ -104,14 +112,25 @@ describe("saveRecipe", () => {
 
   // The client re-seeds its whole document from the echo, so a response
   // missing any part would wipe state — fail at the boundary instead.
+  it("throws when a 200 response omits the name", async () => {
+    mockFetchOnce(200, {
+      schema: {},
+      ingredients: [],
+      instructions: [],
+      status: "draft",
+    });
+
+    await expect(saveRecipe("recipe-1", body)).rejects.toThrow(/no recipe/);
+  });
+
   it("throws when a 200 response omits the ingredients", async () => {
-    mockFetchOnce(200, { schema: { name: "Cake" }, instructions: [], status: "draft" });
+    mockFetchOnce(200, { schema: {}, name: "Cake", instructions: [], status: "draft" });
 
     await expect(saveRecipe("recipe-1", body)).rejects.toThrow(/no recipe/);
   });
 
   it("throws when a 200 response omits the instructions", async () => {
-    mockFetchOnce(200, { schema: { name: "Cake" }, ingredients: [], status: "draft" });
+    mockFetchOnce(200, { schema: {}, name: "Cake", ingredients: [], status: "draft" });
 
     await expect(saveRecipe("recipe-1", body)).rejects.toThrow(/no recipe/);
   });

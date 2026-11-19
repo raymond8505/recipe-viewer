@@ -12,6 +12,7 @@ import {
   getIngredientById,
   IngredientRepoError,
   matchIngredients,
+  searchIngredientsKeyword,
   updateIngredientRow,
   type UpdateIngredientPatch,
 } from "@/lib/ingredients";
@@ -28,14 +29,21 @@ import { exhaustiveKeys } from "@/lib/exhaustive";
 import { ingredientEmbeddingText, ingredientQueryText } from "@/lib/ingredientAliases";
 import {
   CUSTOM_RECIPE_SOURCE,
+  defaultSortFor,
   fromSchemaOrgInstructions,
+  parseDurationToSeconds,
   recipePageUrl,
   recipeSourceForUrl,
 } from "@/lib/format";
 import {
+  INGREDIENT_SEARCH_MODE,
   RECIPE_INGREDIENT_ON_UPDATE_ERROR,
   RECIPE_INSTRUCTIONS_ON_UPDATE_ERROR,
+  RECIPE_SCALARS_ON_UPDATE_ERROR,
+  RECIPE_TIMES_ON_UPDATE_ERROR,
   RECIPE_YIELD_ON_UPDATE_ERROR,
+  PROMOTED_UPDATE_ARGS,
+  TIME_UPDATE_ARGS,
   URL_ON_UPDATE_ERROR,
 } from "./copy";
 import { TOOL } from "./toolNames";
@@ -68,7 +76,11 @@ import type {
   IngredientSearchInput,
   IngredientUpdateToolInput,
 } from "@/lib/schemas/ingredient";
-import type { IngredientMatch, IngredientRow } from "@/types/ingredient";
+import type {
+  IngredientKeywordMatch,
+  IngredientMatch,
+  IngredientRow,
+} from "@/types/ingredient";
 
 // Every tool here is a thin wrapper over a repo helper (`@/lib/recipes`,
 // `@/lib/ingredients`). They handle argument typing + translate repo errors
@@ -132,6 +144,12 @@ export async function searchRecipes(
     status: args.status,
     page: args.page,
     limit: args.limit,
+    // The same default the reader's search box resolves to, from the same
+    // helper: an agent's query is a search, and relevance is the question a
+    // search asks. Only this sort reaches search_recipes_ranked, so without it
+    // an agent gets the newest matches rather than the best ones — and the
+    // tier order the tool description teaches would never run.
+    sort: defaultSortFor(args.query),
     // MCP callers are authenticated via OAuth — treat as logged-in so they see
     // drafts/archived rows when filtering explicitly by status.
     isLoggedIn: true,
@@ -141,33 +159,64 @@ export async function searchRecipes(
       id: row.id,
       pageUrl: recipePageUrl(row.id, env.MCP_PUBLIC_URL),
       sourceUrl: row.url,
-      name: row.metadata.schema.name,
-      description: row.metadata.schema.description,
+      name: row.name,
+      // The column says null; the wire omits the key, which is what the
+      // documented result shape promises and what an agent reads as "none".
+      description: row.description ?? undefined,
     })),
     count,
   };
 }
 
-// Semantic search over the ingredient catalog: embed the query with the same
-// model that embedded the catalog names, then cosine-match via the
-// match_ingredients RPC. IngredientMatch already carries everything an agent
-// needs (per-100g nutrition + density) — no follow-up fetch tool required.
+/**
+ * What `search_ingredients` answers with: the rows plus the ranking that
+ * produced them.
+ *
+ * A discriminated union rather than a mode flag beside one widened row type,
+ * because the two rankings carry different score fields — so reading
+ * `semantic_similarity` off a keyword result is a compile error here instead
+ * of an `undefined` an agent is told is a number.
+ */
+export type IngredientSearchResult =
+  | {
+      searchMode: typeof INGREDIENT_SEARCH_MODE.hybrid;
+      data: IngredientMatch[];
+    }
+  | {
+      searchMode: typeof INGREDIENT_SEARCH_MODE.keyword;
+      data: IngredientKeywordMatch[];
+    };
+
+// Search over the ingredient catalog, hybrid when the query can be embedded
+// and trigram-only when it can't. Either ranking returns everything an agent
+// needs on each row (per-100g nutrition + density), so neither leaves it
+// owing a follow-up fetch.
 export async function searchIngredients(
   args: IngredientSearchInput,
-): Promise<{ data: IngredientMatch[] }> {
+): Promise<IngredientSearchResult> {
   // ingredientQueryText, not the raw query: catalog vectors are built from
   // lowercased name + aliases, so the query side has to fold case identically
   // or the normalization works against the match instead of for it.
   const embedding = await generateEmbedding(ingredientQueryText(args.query));
-  if (!embedding) {
-    throw new ToolError(
-      "embedding_unavailable",
-      "Semantic ingredient search is temporarily unavailable (embedding generation failed) — retry shortly.",
-    );
-  }
 
   try {
-    return { data: await matchIngredients(args.query, embedding, args.limit) };
+    // No embedding means the Gemini call failed, which is not a reason to
+    // answer "the catalog has nothing": the trigram RPC ranks the same rows
+    // and returns the same nutrition and density, so a query naming a row or
+    // one of its aliases still finds it. Its reach is narrower — it cannot
+    // match wording the row doesn't carry — which is why the mode is reported
+    // rather than quietly substituted.
+    if (!embedding) {
+      return {
+        searchMode: INGREDIENT_SEARCH_MODE.keyword,
+        data: await searchIngredientsKeyword(args.query, args.limit),
+      };
+    }
+
+    return {
+      searchMode: INGREDIENT_SEARCH_MODE.hybrid,
+      data: await matchIngredients(args.query, embedding, args.limit),
+    };
   } catch (err) {
     if (err instanceof IngredientRepoError) {
       throw new ToolError("search_failed", err.detail);
@@ -503,16 +552,49 @@ export async function updateRecipe(
   if ("recipeYield" in schema) {
     throw new ToolError("invalid_input", RECIPE_YIELD_ON_UPDATE_ERROR);
   }
+  // Same rule for the scalars 0028 promoted: rejected rather than stripped,
+  // because a silently dropped rename looks to the agent like a rename.
+  for (const key of Object.keys(PROMOTED_UPDATE_ARGS)) {
+    if (key in schema) {
+      throw new ToolError("invalid_input", RECIPE_SCALARS_ON_UPDATE_ERROR);
+    }
+  }
+  // And for the times, which left the blob last. A `schema.cookTime` that was
+  // quietly stripped would read to the agent as a cook time it had set.
+  for (const key of Object.keys(TIME_UPDATE_ARGS)) {
+    if (key in schema) {
+      throw new ToolError("invalid_input", RECIPE_TIMES_ON_UPDATE_ERROR);
+    }
+  }
+  // ISO 8601 in, seconds out — reduced once, here, because the columns hold
+  // seconds and `RecipeUpdateInput` is the agent-facing contract, which reads
+  // in the units its JSON Schema advertises. `undefined` has to survive as
+  // absent: it means "leave this time alone", where null is a clear. zod has
+  // already refused anything `parseDurationToSeconds` would answer null to for
+  // a reason other than being a well-formed zero.
+  const times =
+    args.times &&
+    Object.fromEntries(
+      Object.entries(args.times).map(([arg, iso]) => [
+        arg,
+        iso === undefined ? undefined : parseDurationToSeconds(iso),
+      ]),
+    );
   try {
     const row = await updateRecipeRow(args.id, {
       url: args.sourceUrl,
       source: args.source,
       status: args.status,
+      name: args.name,
+      description: args.description,
+      notes: args.notes,
+      image: args.image,
       schema: args.schema !== undefined ? schema : undefined,
       ingredients: args.ingredients,
       instructions: args.instructions,
       servings: args.servings,
       totalWeight: args.total_weight,
+      times,
     });
     const answer = withNamedUrls({
       ...row,
@@ -530,7 +612,7 @@ export async function updateRecipe(
 // used when the user explicitly asks to clear notes (e.g. after applying them).
 export async function clearCookingNotes(args: RecipeIdInput): Promise<RecipeRow> {
   try {
-    return await updateRecipeRow(args.id, { schema: { cookingNotes: "" } });
+    return await updateRecipeRow(args.id, { cookingNotes: null });
   } catch (err) {
     throw toToolError(err, "update_failed");
   }
@@ -577,7 +659,7 @@ export async function uploadRecipeImage(
     throw new ToolError("upload_failed", err instanceof Error ? err.message : "Upload failed");
   }
   try {
-    return await updateRecipeRow(args.id, { schema: { image: imageUrl } });
+    return await updateRecipeRow(args.id, { image: imageUrl });
   } catch (err) {
     throw toToolError(err, "update_failed");
   }

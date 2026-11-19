@@ -6,11 +6,12 @@ import { makeIngredientLines, makeSteps } from "@/fixtures";
 import type { RecipeDocument, SchemaRecipe } from "@/types/recipe";
 
 const doc: RecipeDocument = {
-  schema: {
-    name: "Pancakes",
-    description: "Fluffy.",
-    notes: "Use buttermilk.",
-  },
+  schema: {},
+  name: "Pancakes",
+  image: null,
+  description: "Fluffy.",
+  notes: "Use buttermilk.",
+  cooking_notes: null,
   ingredients: makeIngredientLines(["2 cups flour", "1 egg"]),
   instructions: makeSteps(["Mix"]),
   prep_time: null,
@@ -83,13 +84,23 @@ describe("useRecipeEditor", () => {
     expect(result.current.isEditing).toBe(false);
   });
 
-  it("buildPatch merges the draft and falls back to base name when blank", () => {
+  // A blank title is a mistake to ignore — the column is NOT NULL. A blank
+  // description is the opposite: an explicit clear, which has to reach the
+  // column as null rather than vanish as an omitted key.
+  it("buildPatch falls back to the stored name when blank, and clears a blank description", () => {
     const { result } = renderHook(() => useRecipeEditor());
     act(() => result.current.begin(doc, ROW));
     act(() => result.current.patch({ name: "   ", description: "" }));
-    const built = result.current.buildPatch(doc).schema;
+    const built = result.current.buildPatch(doc);
     expect(built.name).toBe("Pancakes");
-    expect(built.description).toBeUndefined();
+    expect(built.description).toBeNull();
+  });
+
+  it("buildPatch clears a blank note rather than leaving the stored one", () => {
+    const { result } = renderHook(() => useRecipeEditor());
+    act(() => result.current.begin(doc, ROW));
+    act(() => result.current.patch({ notes: "  " }));
+    expect(result.current.buildPatch(doc).notes).toBeNull();
   });
 
   it("buildPatch produces the ingredient groups and the instruction groups beside the schema", () => {
@@ -351,9 +362,16 @@ describe("useRecipeEditor", () => {
   describe("recipe times", () => {
     // The columns carry the times; the schema deliberately carries stale
     // copies (a different prep, a total the column has cleared) so a read
-    // that consults the blob rather than the column fails visibly.
+    // that consults the blob rather than the column fails visibly. They are
+    // cast because `SchemaRecipe` does not declare them — the whole point of
+    // this block is that nothing reads a time from there.
     const timed: RecipeDocument = {
-      schema: { name: "Pancakes", prepTime: "PT5M", cookTime: "PT1H30M", totalTime: "PT2H" },
+      ...doc,
+      schema: {
+        prepTime: "PT5M",
+        cookTime: "PT1H30M",
+        totalTime: "PT2H",
+      } as unknown as SchemaRecipe,
       ingredients: [],
       instructions: [],
       prep_time: 900,
@@ -370,13 +388,13 @@ describe("useRecipeEditor", () => {
       expect(result.current.draft.totalTime).toBe("");
     });
 
-    it("buildPatch writes the edited H:MM back as ISO", () => {
+    it("buildPatch writes the edited H:MM back as column seconds", () => {
       const { result } = renderHook(() => useRecipeEditor());
       act(() => result.current.begin(timed, ROW));
       act(() => result.current.patch({ prepTime: "0:20", totalTime: "1:45" }));
-      const built = result.current.buildPatch(timed).schema;
-      expect(built.prepTime).toBe("PT20M");
-      expect(built.totalTime).toBe("PT1H45M");
+      const { times } = result.current.buildPatch(timed);
+      expect(times.prep).toBe(1200);
+      expect(times.total).toBe(6300);
     });
 
     it("clears a time to null when the field is emptied", () => {
@@ -384,26 +402,39 @@ describe("useRecipeEditor", () => {
       act(() => result.current.begin(timed, ROW));
       act(() => result.current.patch({ cookTime: "" }));
       // null, not undefined: undefined disappears in JSON, so after the POST
-      // the merge would read it as "absent, leave it alone" and the time the
+      // the patch would read it as "absent, leave it alone" and the time the
       // user just deleted would come straight back.
-      expect(result.current.buildPatch(timed).schema.cookTime).toBeNull();
+      expect(result.current.buildPatch(timed).times.cook).toBeNull();
     });
 
     it("degrades an unparseable time to the column's value rather than blocking the save", () => {
       const { result } = renderHook(() => useRecipeEditor());
       act(() => result.current.begin(timed, ROW));
       act(() => result.current.patch({ prepTime: "a while" }));
-      expect(result.current.buildPatch(timed).schema.prepTime).toBe("PT15M");
+      expect(result.current.buildPatch(timed).times.prep).toBe(900);
       expect(result.current.canSave).toBe(true);
     });
 
     it("round-trips an untouched recipe's column times unchanged", () => {
       const { result } = renderHook(() => useRecipeEditor());
       act(() => result.current.begin(timed, ROW));
-      const built = result.current.buildPatch(timed).schema;
-      expect(built.prepTime).toBe("PT15M");
-      expect(built.cookTime).toBe("PT1H30M");
-      expect(built.totalTime).toBeNull();
+      const { times } = result.current.buildPatch(timed);
+      expect(times.prep).toBe(900);
+      expect(times.cook).toBe(5400);
+      expect(times.total).toBeNull();
+    });
+
+    it("passes the stored blob through untouched instead of splicing times into it", () => {
+      // The blob goes through BY REFERENCE, never as an object literal built
+      // around a spread of it: a spread's result skips TypeScript's
+      // excess-property check, so a stray key written into a blob nothing
+      // reads would compile clean. Identity is what pins that down.
+      const { result } = renderHook(() => useRecipeEditor());
+      act(() => result.current.begin(timed, ROW));
+      act(() => result.current.patch({ prepTime: "0:20" }));
+      const patch = result.current.buildPatch(timed);
+      expect(patch.schema).toBe(timed.schema);
+      expect(patch.times.prep).toBe(1200);
     });
   });
 });

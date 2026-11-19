@@ -4,9 +4,8 @@ import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import Image from "next/image";
 import type { RecipeRow, RecipeDocument } from "@/types/recipe";
 import {
-  formatDuration,
+  formatSeconds,
   formatDate,
-  getFirstImage,
   toArray,
   isOwnRecipe,
   toSchemaOrgJsonLd,
@@ -77,16 +76,21 @@ export default function RecipeDetail({
   // it to the current location. Reading recipe.url instead made a saved URL edit
   // invisible until a refresh — the editor reopened on the pre-edit value.
   const [url, setUrl] = useState(recipe.url ?? "");
+  // The date the header shows. Held in state rather than read off the prop so a
+  // save updates it in place — the repo layer stamps the column on every write,
+  // and a header claiming the recipe last changed before the edit you just made
+  // is worse than no date at all.
+  const [updatedAt, setUpdatedAt] = useState(recipe.updated_at);
   // Cook mode takes a row, and the `recipe` prop is a server-render snapshot:
   // the row it opens with is the live document over the live row fields.
   const cookingRecipe = useMemo(
     () => ({ ...applyRecipeDocument(recipe, doc), status, url, source }),
     [recipe, doc, status, url, source],
   );
-  const image = getFirstImage(schema.image);
-  const prepTime = formatDuration(schema.prepTime);
-  const cookTime = formatDuration(schema.cookTime);
-  const totalTime = formatDuration(schema.totalTime);
+  const { name, image, description } = doc;
+  const prepTime = formatSeconds(doc.prep_time);
+  const cookTime = formatSeconds(doc.cook_time);
+  const totalTime = formatSeconds(doc.total_time);
   const categories = toArray(schema.recipeCategory);
   // Nutrition is a function of the lines the page holds right now, each with
   // its catalog row: the /update echo is hydrated, so a save keeps the numbers,
@@ -143,7 +147,7 @@ export default function RecipeDetail({
         const result = await res.json();
         if (!result.image || typeof result.image !== "string")
           throw new Error();
-        return { ...current, schema: { ...current.schema, image: result.image } };
+        return { ...current, image: result.image };
       },
       [recipe.id],
     ),
@@ -242,17 +246,28 @@ export default function RecipeDetail({
     editor.runSave(async () => {
       const {
         schema: updatedSchema,
+        name,
+        description,
+        notes,
         ingredients,
         instructions,
         servings,
+        times,
       } = editor.buildPatch(doc);
-      if (imageUpload.isStaged) {
-        updatedSchema.image = await imageUpload.upload(recipe.id);
-      }
+      // A staged file is uploaded only once the rest of the save is going
+      // through, so an abandoned edit leaves no orphan in storage.
+      const image = imageUpload.isStaged
+        ? await imageUpload.upload(recipe.id)
+        : undefined;
       const result = await saveRecipe(recipe.id, {
         schema: updatedSchema,
+        name,
+        description,
+        notes,
+        ...(image !== undefined ? { image } : {}),
         ingredients,
         instructions,
+        times,
         // Absent when the servings box holds something unusable, which the
         // route reads as "leave the count alone" rather than as a clear.
         ...(servings ? { servings } : {}),
@@ -269,6 +284,11 @@ export default function RecipeDetail({
       // spread, so a field left out here silently reverts to the pre-save value.
       setDoc({
         schema: result.schema,
+        name: result.name,
+        image: result.image,
+        description: result.description,
+        notes: result.notes,
+        cooking_notes: result.cooking_notes,
         ingredients: result.ingredients,
         instructions: result.instructions,
         prep_time: result.prep_time,
@@ -280,6 +300,7 @@ export default function RecipeDetail({
         total_weight_unit: result.total_weight_unit,
       });
       setStatus(result.status);
+      if (typeof result.updated_at === "string") setUpdatedAt(result.updated_at);
       // The url guard is a type check, not a truthiness one: url is persisted
       // verbatim, so a cleared field must survive as "" — only an absent key
       // (a malformed response) leaves the state alone.
@@ -347,7 +368,7 @@ export default function RecipeDetail({
             ) : (
               <>
                 <h1 className="text-3xl sm:text-4xl text-gray-900 leading-tight">
-                  {schema.name}
+                  {name}
                 </h1>
                 <CookingModeButton
                   recipe={cookingRecipe}
@@ -366,16 +387,16 @@ export default function RecipeDetail({
               className="p-3 text-lg leading-relaxed min-h-[80px] resize-y md:text-lg"
             />
           ) : (
-            schema.description && (
+            description && (
               <p className="text-gray-600 text-lg leading-relaxed">
-                {schema.description}
+                {description}
               </p>
             )
           )}
 
           <div className="flex flex-wrap items-center gap-x-6 gap-y-2 mt-4 text-sm text-gray-500">
-            {schema.datePublished && (
-              <span>{formatDate(schema.datePublished)}</span>
+            {formatDate(updatedAt) && (
+              <span>Updated {formatDate(updatedAt)}</span>
             )}
           </div>
         </header>
@@ -385,7 +406,7 @@ export default function RecipeDetail({
           <div className="w-full rounded-2xl overflow-hidden mb-8 bg-gray-100">
             <Image
               src={previewUrl ?? (image as string)}
-              alt={schema.name}
+              alt={name}
               width={0}
               height={0}
               sizes="(max-width: 768px) 100vw, 768px"
@@ -533,7 +554,7 @@ export default function RecipeDetail({
         </div>
 
         {/* Notes */}
-        {(isEditing || schema.notes) && (
+        {(isEditing || doc.notes) && (
           <div className="mt-8">
             <h2 className="text-xl text-gray-900 mb-3">Notes</h2>
             {isEditing ? (
@@ -546,7 +567,7 @@ export default function RecipeDetail({
               />
             ) : (
               <p className="text-gray-700 leading-relaxed whitespace-pre-line">
-                {schema.notes}
+                {doc.notes}
               </p>
             )}
           </div>

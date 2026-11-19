@@ -46,20 +46,22 @@ function makeRecipe(
     servings_unit: "servings",
     total_weight_amount: null,
     total_weight_unit: null,
+    name: "Test Recipe",
+    image: null,
+    description: null,
+    notes: null,
+    cooking_notes: null,
+    created_at: "2026-01-02T09:00:00.000Z",
+    updated_at: "2026-01-02T09:00:00.000Z",
     ...row,
-    metadata: {
-      schema: {
-        name: "Test Recipe",
-        ...schema,
-      },
-    },
+    metadata: { schema: { ...schema } },
   };
 }
 
 describe("RecipeDetail", () => {
   it("renders the recipe name", () => {
     render(
-      <RecipeDetail recipe={makeRecipe({ name: "Spaghetti Bolognese" })} />,
+      <RecipeDetail recipe={makeRecipe({}, { name: "Spaghetti Bolognese" })} />,
     );
     expect(screen.getByText("Spaghetti Bolognese")).toBeTruthy();
   });
@@ -67,7 +69,7 @@ describe("RecipeDetail", () => {
   it("renders description when present", () => {
     render(
       <RecipeDetail
-        recipe={makeRecipe({ description: "A hearty pasta dish." })}
+        recipe={makeRecipe({}, { description: "A hearty pasta dish." })}
       />,
     );
     expect(screen.getByText("A hearty pasta dish.")).toBeTruthy();
@@ -91,7 +93,7 @@ describe("RecipeDetail", () => {
   it("renders an image when present", () => {
     render(
       <RecipeDetail
-        recipe={makeRecipe({ image: "https://example.com/pasta.jpg" })}
+        recipe={makeRecipe({}, { image: "https://example.com/pasta.jpg" })}
       />,
     );
     expect(screen.getByRole("img")).toBeTruthy();
@@ -105,11 +107,10 @@ describe("RecipeDetail", () => {
   it("renders timing stats when present", () => {
     render(
       <RecipeDetail
-        recipe={makeRecipe({
-          prepTime: "PT10M",
-          cookTime: "PT30M",
-          totalTime: "PT40M",
-        })}
+        recipe={makeRecipe(
+          {},
+          { prep_time: 600, cook_time: 1800, total_time: 2400 },
+        )}
       />,
     );
     expect(screen.getByText("10 min")).toBeTruthy();
@@ -279,6 +280,11 @@ describe("RecipeDetail", () => {
       new Response(
         JSON.stringify({
           schema: recipe.metadata.schema,
+          name: recipe.name,
+          image: null,
+          description: null,
+          notes: null,
+          cooking_notes: null,
           ingredients: recipe.ingredients,
           instructions: recipe.instructions,
           prep_time: null,
@@ -331,6 +337,11 @@ describe("RecipeDetail", () => {
       new Response(
         JSON.stringify({
           schema: recipe.metadata.schema,
+          name: recipe.name,
+          image: null,
+          description: null,
+          notes: null,
+          cooking_notes: null,
           ingredients: echoedGroups,
           instructions: recipe.instructions,
           prep_time: null,
@@ -382,7 +393,7 @@ describe("RecipeDetail", () => {
         new Response(
           JSON.stringify({
             ...rescrapeSavedFixture,
-            schema: { ...rescrapeSavedFixture.schema, name: "Saved Name" },
+            name: "Saved Name",
             status: "draft",
             url: recipe.url,
             source: recipe.source,
@@ -783,7 +794,7 @@ describe("RecipeDetail — controls section", () => {
 
     render(
       <RecipeDetail
-        recipe={makeRecipe({ name: "Old Recipe Name" })}
+        recipe={makeRecipe({}, { name: "Old Recipe Name" })}
         isLoggedIn={true}
       />,
     );
@@ -817,7 +828,7 @@ describe("RecipeDetail — controls section", () => {
 
     render(
       <RecipeDetail
-        recipe={makeRecipe({ name: "Original Name" })}
+        recipe={makeRecipe({}, { name: "Original Name" })}
         isLoggedIn={true}
       />,
     );
@@ -852,7 +863,7 @@ describe("RecipeDetail — controls section", () => {
     vi.stubGlobal("fetch", mockFetch);
 
     render(
-      <RecipeDetail recipe={makeRecipe({ name: "Old" })} isLoggedIn={true} />,
+      <RecipeDetail recipe={makeRecipe({}, { name: "Old" })} isLoggedIn={true} />,
     );
     await clickAndConfirm(/re-scrape/i);
     await waitFor(() => {
@@ -891,7 +902,7 @@ describe("RecipeDetail — controls section", () => {
 
     render(
       <RecipeDetail
-        recipe={makeRecipe({ name: "My Recipe" })}
+        recipe={makeRecipe({}, { name: "My Recipe" })}
         isLoggedIn={true}
       />,
     );
@@ -916,7 +927,7 @@ describe("RecipeDetail — controls section", () => {
 
     render(
       <RecipeDetail
-        recipe={makeRecipe({ name: "My Recipe" })}
+        recipe={makeRecipe({}, { name: "My Recipe" })}
         isLoggedIn={true}
       />,
     );
@@ -957,7 +968,7 @@ describe("RecipeDetail — controls section", () => {
   it("enters edit mode when Edit is clicked", async () => {
     render(
       <RecipeDetail
-        recipe={makeRecipe({
+        recipe={makeRecipe({}, {
           description: "Tasty.",
           notes: "Use fresh herbs.",
         })}
@@ -977,7 +988,7 @@ describe("RecipeDetail — controls section", () => {
   it("populates description textarea with current value in edit mode", async () => {
     render(
       <RecipeDetail
-        recipe={makeRecipe({ description: "A hearty dish." })}
+        recipe={makeRecipe({}, { description: "A hearty dish." })}
         isLoggedIn={true}
       />,
     );
@@ -1003,7 +1014,7 @@ describe("RecipeDetail — controls section", () => {
   it("cancel returns to view mode without saving", async () => {
     render(
       <RecipeDetail
-        recipe={makeRecipe({ description: "Original." })}
+        recipe={makeRecipe({}, { description: "Original." })}
         isLoggedIn={true}
       />,
     );
@@ -1018,10 +1029,6 @@ describe("RecipeDetail — controls section", () => {
   });
 
   it("updates recipe state after a successful save", async () => {
-    const updatedSchema = {
-      ...rescrapeResponseFixture.schema,
-      description: "Updated description.",
-    };
     vi.stubGlobal(
       "fetch",
       vi
@@ -1029,7 +1036,8 @@ describe("RecipeDetail — controls section", () => {
         .mockResolvedValue(
           new Response(
             JSON.stringify({
-              schema: updatedSchema,
+              ...rescrapeSavedFixture,
+              description: "Updated description.",
               ingredients: [],
               instructions: [],
               status: "published",
@@ -1041,7 +1049,7 @@ describe("RecipeDetail — controls section", () => {
 
     render(
       <RecipeDetail
-        recipe={makeRecipe({ name: "Old Name" })}
+        recipe={makeRecipe({}, { name: "Old Name" })}
         isLoggedIn={true}
       />,
     );
@@ -1053,7 +1061,7 @@ describe("RecipeDetail — controls section", () => {
     });
 
     await waitFor(() => {
-      expect(screen.getByText(updatedSchema.name)).toBeTruthy();
+      expect(screen.getByText(rescrapeSavedFixture.name)).toBeTruthy();
     });
     expect(screen.getByRole("button", { name: /^edit$/i })).toBeTruthy();
   });
@@ -1381,7 +1389,7 @@ describe("RecipeDetail — controls section", () => {
   it("shows title input pre-filled with current name in edit mode", async () => {
     render(
       <RecipeDetail
-        recipe={makeRecipe({ name: "Original Title" })}
+        recipe={makeRecipe({}, { name: "Original Title" })}
         isLoggedIn={true}
       />,
     );
@@ -1407,7 +1415,7 @@ describe("RecipeDetail — controls section", () => {
 
     render(
       <RecipeDetail
-        recipe={makeRecipe({ name: "Old Title" })}
+        recipe={makeRecipe({}, { name: "Old Title" })}
         isLoggedIn={true}
       />,
     );
@@ -1425,7 +1433,7 @@ describe("RecipeDetail — controls section", () => {
 
     await waitFor(() => expect(mockFetch).toHaveBeenCalled());
     const body = JSON.parse(mockFetch.mock.calls[0][1].body);
-    expect(body.schema.name).toBe("New Title");
+    expect(body.name).toBe("New Title");
   });
 
   it("shows a servings input pre-filled with the base servings in edit mode", async () => {

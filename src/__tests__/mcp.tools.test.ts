@@ -3,6 +3,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import {
   makeIngredient,
   makeIngredientLines,
+  makeKeywordMatch,
   makeMatchedIngredient,
   makeRecipe,
   makeSteps,
@@ -44,6 +45,7 @@ vi.mock("@/lib/storage", () => ({
 
 vi.mock("@/lib/ingredients", () => ({
   matchIngredients: vi.fn(),
+  searchIngredientsKeyword: vi.fn(),
   getIngredientById: vi.fn(),
   createIngredientRow: vi.fn(),
   updateIngredientRow: vi.fn(),
@@ -85,6 +87,7 @@ import {
   getIngredientById,
   IngredientRepoError,
   matchIngredients,
+  searchIngredientsKeyword,
   updateIngredientRow,
 } from "@/lib/ingredients";
 import { generateEmbedding } from "@/lib/embedding";
@@ -118,23 +121,59 @@ describe("searchIngredients", () => {
 
     expect(generateEmbedding).toHaveBeenCalledWith("cumin");
     expect(matchIngredients).toHaveBeenCalledWith("cumin", [0.1, 0.2], 3);
-    expect(out).toEqual({ data: matches });
+    expect(out).toEqual({ searchMode: "hybrid", data: matches });
     // Aliases must survive to the agent (db/migrations/0012): the catalog is
     // named in USDA wording, so they are what identifies a row as the caller's
     // ingredient, and they're what an alias-adding update has to pass back.
     expect(out.data[0].aliases).toEqual(["cumin", "whole cumin"]);
   });
 
-  it("throws ToolError(embedding_unavailable) when embedding fails", async () => {
+  it("falls back to the keyword RPC when the embedding is unavailable", async () => {
+    // A failed Gemini call must not read to an agent as an empty catalog: the
+    // trigram RPC covers the same rows, so the tool answers from it and names
+    // the narrower ranking on its way out.
     vi.mocked(generateEmbedding).mockResolvedValueOnce(null);
+    const matches = [makeKeywordMatch("ing-1", "Spices, cumin seed")];
+    vi.mocked(searchIngredientsKeyword).mockResolvedValueOnce(matches);
+
+    const out = await searchIngredients({ query: "cumin", limit: 5 });
+
+    expect(searchIngredientsKeyword).toHaveBeenCalledWith("cumin", 5);
+    expect(matchIngredients).not.toHaveBeenCalled();
+    expect(out).toEqual({ searchMode: "keyword", data: matches });
+  });
+
+  it("names the ranking on every answer, so neither mode is silent", async () => {
+    // The two modes carry different score fields; an agent that cannot tell
+    // them apart reads a missing semantic_similarity as a zero match.
+    vi.mocked(generateEmbedding).mockResolvedValueOnce(null);
+    vi.mocked(searchIngredientsKeyword).mockResolvedValueOnce([]);
+    const degraded = await searchIngredients({ query: "cumin", limit: 5 });
+
+    vi.mocked(generateEmbedding).mockResolvedValueOnce([0.1]);
+    vi.mocked(matchIngredients).mockResolvedValueOnce([]);
+    const normal = await searchIngredients({ query: "cumin", limit: 5 });
+
+    expect([degraded.searchMode, normal.searchMode]).toEqual([
+      "keyword",
+      "hybrid",
+    ]);
+  });
+
+  it("translates a keyword-RPC failure into ToolError(search_failed)", async () => {
+    vi.mocked(generateEmbedding).mockResolvedValueOnce(null);
+    vi.mocked(searchIngredientsKeyword).mockRejectedValueOnce(
+      new IngredientRepoError("match_failed", "trigram rpc exploded"),
+    );
 
     const err = await searchIngredients({ query: "cumin", limit: 5 }).catch(
       (e: unknown) => e,
     );
 
+    // The fallback is a narrower search, not a looser contract: an RPC failure
+    // still has to surface as unavailable rather than as "no matches".
     expect(err).toBeInstanceOf(ToolError);
-    expect((err as ToolError).code).toBe("embedding_unavailable");
-    expect(matchIngredients).not.toHaveBeenCalled();
+    expect((err as ToolError).code).toBe("search_failed");
   });
 
   it("translates IngredientRepoError into ToolError(search_failed)", async () => {
@@ -555,6 +594,32 @@ describe("searchRecipes", () => {
     expect(out.data).toHaveLength(2);
   });
 
+  it("asks for the relevance sort, the only one the tiers reach", async () => {
+    // search_recipes_ranked runs for this sort alone, so an agent that did not
+    // ask for it would be handed the newest matches rather than the best.
+    const { getRecipes } = await import("@/lib/recipes");
+    vi.mocked(getRecipes).mockResolvedValueOnce({ data: [], count: 0 });
+
+    await searchRecipes({ query: "tofu" });
+
+    expect(getRecipes).toHaveBeenCalledWith(
+      expect.objectContaining({ sort: "relevance" }),
+    );
+  });
+
+  it("asks for newest when there is no query to rank", async () => {
+    // A filter-only call (source/status) has nothing to be relevant to, and
+    // relevance over an empty query would rank the whole corpus by nothing.
+    const { getRecipes } = await import("@/lib/recipes");
+    vi.mocked(getRecipes).mockResolvedValueOnce({ data: [], count: 0 });
+
+    await searchRecipes({ status: "draft" });
+
+    expect(getRecipes).toHaveBeenCalledWith(
+      expect.objectContaining({ sort: "newest" }),
+    );
+  });
+
   it("trims each result to id, both urls, name and description", async () => {
     const { getRecipes } = await import("@/lib/recipes");
     const fixture = recipeFixtures[0];
@@ -566,8 +631,8 @@ describe("searchRecipes", () => {
       id: fixture.id,
       pageUrl: `http://localhost:3000/recipes/${fixture.id}`,
       sourceUrl: fixture.url,
-      name: fixture.metadata.schema.name,
-      description: fixture.metadata.schema.description,
+      name: fixture.name,
+      description: fixture.description,
     });
     // Full-schema fields must not leak through search.
     expect(out.data[0]).not.toHaveProperty("metadata");
@@ -1154,22 +1219,67 @@ describe("createRecipeSimple", () => {
 describe("updateRecipe", () => {
   beforeEach(() => vi.clearAllMocks());
 
-  it("delegates to updateRecipeRow with the patch", async () => {
+  it("delegates the promoted scalars to updateRecipeRow as top-level fields", async () => {
     const { updateRecipeRow } = await import("@/lib/recipes");
     const existing = recipeFixtures[0];
-    const updated = {
+    vi.mocked(updateRecipeRow).mockResolvedValueOnce({
       ...existing,
-      metadata: { schema: { ...existing.metadata.schema, description: "patched" } },
-    };
-    vi.mocked(updateRecipeRow).mockResolvedValueOnce(updated);
+      description: "patched",
+    });
 
-    const out = await updateRecipe({ id: existing.id, schema: { description: "patched" } });
-    expect(out.metadata.schema.description).toBe("patched");
+    const out = await updateRecipe({ id: existing.id, description: "patched" });
+    expect(out.description).toBe("patched");
     expect(updateRecipeRow).toHaveBeenCalledWith(
       existing.id,
-      expect.objectContaining({ schema: { description: "patched" } }),
+      expect.objectContaining({ description: "patched" }),
     );
   });
+
+  it("reduces the times from ISO to column seconds, keeping absent distinct from null", async () => {
+    const { updateRecipeRow } = await import("@/lib/recipes");
+    const existing = recipeFixtures[0];
+    vi.mocked(updateRecipeRow).mockResolvedValueOnce(existing);
+
+    await updateRecipe({
+      id: existing.id,
+      times: { prep: "PT15M", cook: null },
+    });
+
+    // `undefined` must survive as absent — "leave the total alone" — where
+    // null is a clear. Collapsing the two would make every patch that sets one
+    // time wipe the others.
+    const [, patch] = vi.mocked(updateRecipeRow).mock.calls[0];
+    expect(patch.times).toEqual({ prep: 900, cook: null, total: undefined });
+  });
+
+  it("still merges what the blob is the source of", async () => {
+    const { updateRecipeRow } = await import("@/lib/recipes");
+    const existing = recipeFixtures[0];
+    vi.mocked(updateRecipeRow).mockResolvedValueOnce(existing);
+
+    await updateRecipe({ id: existing.id, schema: { recipeCuisine: "Thai" } });
+    expect(updateRecipeRow).toHaveBeenCalledWith(
+      existing.id,
+      expect.objectContaining({ schema: { recipeCuisine: "Thai" } }),
+    );
+  });
+
+  // Rejected rather than stripped, for the reason the yield is: an agent that
+  // sends schema.name and gets a 200 has every reason to think it renamed the
+  // recipe. The thrown message is the same constant the description renders.
+  it.each(["name", "description", "notes", "image"])(
+    "rejects schema.%s rather than silently dropping it",
+    async (key) => {
+      const { updateRecipeRow } = await import("@/lib/recipes");
+      await expect(
+        updateRecipe({
+          id: recipeFixtures[0].id,
+          schema: { [key]: "sent the old way" },
+        } as never),
+      ).rejects.toThrow(/not accepted on update/);
+      expect(updateRecipeRow).not.toHaveBeenCalled();
+    },
+  );
 
   it("answers with both urls named apart", async () => {
     const { updateRecipeRow } = await import("@/lib/recipes");
@@ -1177,7 +1287,7 @@ describe("updateRecipe", () => {
       makeRecipe("r1", "Mapo", { url: "https://seriouseats.com/mapo" }),
     );
 
-    const out = await updateRecipe({ id: "r1", schema: { description: "x" } });
+    const out = await updateRecipe({ id: "r1", description: "x" });
 
     expect(out).not.toHaveProperty("url");
     expect(out.sourceUrl).toBe("https://seriouseats.com/mapo");
@@ -1233,7 +1343,7 @@ describe("updateRecipe", () => {
     });
     vi.mocked(updateRecipeRow).mockResolvedValueOnce(existing);
 
-    const out = await updateRecipe({ id: "r1", schema: { description: "x" } });
+    const out = await updateRecipe({ id: "r1", description: "x" });
 
     const lines = out.ingredients.flatMap((group) => group.ingredients);
     expect(lines).toHaveLength(2);
@@ -1263,7 +1373,7 @@ describe("updateRecipe", () => {
     });
     vi.mocked(updateRecipeRow).mockResolvedValueOnce(existing);
 
-    const out = await updateRecipe({ id: "r1", schema: { description: "x" } });
+    const out = await updateRecipe({ id: "r1", description: "x" });
 
     expect(out.ingredients[0].name).toBe("Sauce");
     expect(out.ingredients[1]).not.toHaveProperty("name");
@@ -1277,12 +1387,13 @@ describe("updateRecipe", () => {
 
     const out = await updateRecipe({
       id: existing.id,
-      schema: { description: "patched", cookingNotes: "should be stripped" },
+      description: "patched",
+      schema: { cookingNotes: "should be stripped" },
     });
 
     expect(updateRecipeRow).toHaveBeenCalledWith(
       existing.id,
-      expect.objectContaining({ schema: { description: "patched" } }),
+      expect.objectContaining({ description: "patched", schema: {} }),
     );
     expect(out.warnings?.[0]).toMatch(/cookingNotes is read-only/);
   });
@@ -1412,7 +1523,7 @@ describe("updateRecipe", () => {
 describe("clearCookingNotes", () => {
   beforeEach(() => vi.clearAllMocks());
 
-  it("sets cookingNotes to an empty string via updateRecipeRow", async () => {
+  it("clears the cooking notes column via updateRecipeRow", async () => {
     const { updateRecipeRow } = await import("@/lib/recipes");
     const existing = recipeFixtures[0];
     vi.mocked(updateRecipeRow).mockResolvedValueOnce(existing);
@@ -1420,7 +1531,7 @@ describe("clearCookingNotes", () => {
     await clearCookingNotes({ id: existing.id });
 
     expect(updateRecipeRow).toHaveBeenCalledWith(existing.id, {
-      schema: { cookingNotes: "" },
+      cookingNotes: null,
     });
   });
 
@@ -1455,7 +1566,7 @@ describe("deleteRecipe", () => {
 describe("uploadRecipeImage", () => {
   beforeEach(() => vi.clearAllMocks());
 
-  it("fetches via imageUrl, uploads, and writes the new URL into schema.image", async () => {
+  it("fetches via imageUrl, uploads, and writes the new URL into the image column", async () => {
     const storage = await import("@/lib/storage");
     const { updateRecipeRow } = await import("@/lib/recipes");
     vi.mocked(storage.fetchImageBytes).mockResolvedValueOnce({
@@ -1467,13 +1578,7 @@ describe("uploadRecipeImage", () => {
     );
     const updated = {
       ...recipeFixtures[0],
-      metadata: {
-        ...recipeFixtures[0].metadata,
-        schema: {
-          ...recipeFixtures[0].metadata.schema,
-          image: "https://cdn.example.com/r1-from-url.jpg",
-        },
-      },
+      image: "https://cdn.example.com/r1-from-url.jpg",
     };
     vi.mocked(updateRecipeRow).mockResolvedValueOnce(updated);
 
@@ -1489,11 +1594,9 @@ describe("uploadRecipeImage", () => {
       "image/jpeg",
     );
     expect(updateRecipeRow).toHaveBeenCalledWith("r1", {
-      schema: { image: "https://cdn.example.com/r1-from-url.jpg" },
+      image: "https://cdn.example.com/r1-from-url.jpg",
     });
-    expect(out.metadata.schema.image).toBe(
-      "https://cdn.example.com/r1-from-url.jpg",
-    );
+    expect(out.image).toBe("https://cdn.example.com/r1-from-url.jpg");
   });
 
   it("translates StorageUploadError(unsupported_type) to ToolError(unsupported_type)", async () => {

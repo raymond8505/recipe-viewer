@@ -39,6 +39,61 @@ export const RECIPE_INSTRUCTIONS_ON_UPDATE_ERROR = `schema.recipeInstructions is
 export const RECIPE_YIELD_ON_UPDATE_ERROR = `schema.recipeYield is not accepted on update — the call FAILS if you send one, it is not ignored. A recipe's serving count is column-backed: send \`servings\` ({ amount, unit? }) instead, where amount is the number of servings and unit is what they are counted in ("servings", "kebabs"). Omit \`servings\` to leave the count alone; send { "amount": null } to clear it. The whole recipe's raw weight goes through \`total_weight\` ({ amount, unit }), NOT a valueReference. ${TOOL.get_recipe} returns all four as servings_amount / servings_unit / total_weight_amount / total_weight_unit.`;
 
 /**
+ * The column-backed scalars, keyed by the `schema.` spelling an agent might
+ * still reach for, valued by the top-level argument that sets each one. The
+ * handler looks a rejected key up here and the prose below renders it, so the
+ * list an agent is told about is the list the handler checks.
+ */
+export const PROMOTED_UPDATE_ARGS = {
+  name: "name",
+  description: "description",
+  notes: "notes",
+  image: "image",
+} as const;
+
+export type PromotedUpdateKey = keyof typeof PROMOTED_UPDATE_ARGS;
+
+const PROMOTED_KEY_LIST = Object.keys(PROMOTED_UPDATE_ARGS)
+  .map((k) => `schema.${k}`)
+  .join(", ");
+
+/**
+ * The scalars twin of the three rules above, and rejected for the same reason
+ * the yield is: an agent that sends `schema.name` and gets a 200 has every
+ * reason to believe it renamed the recipe. These are columns now, so the blob
+ * they landed in is read by nothing.
+ */
+export const RECIPE_SCALARS_ON_UPDATE_ERROR = `${PROMOTED_KEY_LIST} are not accepted on update — the call FAILS if you send one, it is not ignored. Each is a top-level argument now: send \`name\`, \`description\`, \`notes\` or \`image\` beside \`id\`. Omit one to leave it alone; send null to clear \`description\`, \`notes\` or \`image\` (\`name\` cannot be cleared). ${TOOL.get_recipe} returns all four at the top level of the row.`;
+
+/**
+ * The three time keys, by the `schema.` spelling an agent might still reach
+ * for, valued by the member of `times` that sets each one. Same contract as
+ * `PROMOTED_UPDATE_ARGS`: the handler rejects what this names and the prose
+ * below renders it, so an agent is told exactly the list that is checked.
+ */
+export const TIME_UPDATE_ARGS = {
+  prepTime: "prep",
+  cookTime: "cook",
+  totalTime: "total",
+} as const;
+
+export type TimeUpdateKey = keyof typeof TIME_UPDATE_ARGS;
+
+const TIME_KEY_LIST = Object.keys(TIME_UPDATE_ARGS)
+  .map((k) => `schema.${k}`)
+  .join(", ");
+
+const TIME_ARG_LIST = Object.values(TIME_UPDATE_ARGS).join(", ");
+
+/**
+ * The times twin of the rules above, rejected for the reason every one of them
+ * is: an agent that sends `schema.cookTime` and gets a 200 has every reason to
+ * believe it set the cook time. The times are columns; the blob keys of those
+ * names are read by nothing.
+ */
+export const RECIPE_TIMES_ON_UPDATE_ERROR = `${TIME_KEY_LIST} are not accepted on update — the call FAILS if you send one, it is not ignored. The times are column-backed: send \`times\` ({ ${TIME_ARG_LIST} }) instead, each an ISO 8601 duration of hours/minutes/seconds (e.g. "PT30M", "PT1H15M"). Omit a member to leave that time alone; send null to clear it. A duration this app cannot read ("20-22 min", "P4D") FAILS rather than clearing the column. ${TOOL.get_recipe} returns all three at the top level of the row as prep_time / cook_time / total_time, in SECONDS.`;
+
+/**
  * Which of a recipe's two urls is which, said once for every tool that answers
  * with both. An agent that picks the wrong one sends a person off to the site
  * the recipe was scraped from, not to its page here.
@@ -114,3 +169,22 @@ export const INGREDIENT_DETAIL_ONLY_FIELDS = exhaustiveKeys<
 ]);
 
 export const INGREDIENT_DETAIL_ONLY_LIST = INGREDIENT_DETAIL_ONLY_FIELDS.join(", ");
+
+/**
+ * The two rankings `search_ingredients` can answer with. Semantic matching
+ * needs a Gemini embedding of the query, which is a paid external call that
+ * can fail on its own; the trigram RPC needs nothing but Postgres. So the
+ * tool answers in whichever mode it could actually produce and NAMES it on
+ * every response, because the two carry different score fields and an agent
+ * must never have to infer which numbers it got.
+ *
+ * Interpolated into the tool description, so the literals an agent is told to
+ * read are the literals the tool returns.
+ */
+export const INGREDIENT_SEARCH_MODE = {
+  hybrid: "hybrid",
+  keyword: "keyword",
+} as const;
+
+export type IngredientSearchMode =
+  (typeof INGREDIENT_SEARCH_MODE)[keyof typeof INGREDIENT_SEARCH_MODE];

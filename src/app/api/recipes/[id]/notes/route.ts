@@ -9,7 +9,11 @@ export const POST = requireSessionOrRecipeToken(
     const { cookingNotes } = (await req.json()) as { cookingNotes: string };
 
     try {
-      await updateRecipeRow(id, { schema: { cookingNotes: cookingNotes || undefined } });
+      // The wire keeps saying `cookingNotes` — cooking mode and the MCP tool
+      // both speak it — and the column it lands in is `cooking_notes`. A blank
+      // body is a CLEAR: emptying the notes box has to be able to empty the
+      // column, which `undefined` ("leave it alone") could never do.
+      await updateRecipeRow(id, { cookingNotes: cookingNotes || null });
     } catch (err) {
       if (err instanceof RecipeRepoError) {
         return err.kind === "not_found"

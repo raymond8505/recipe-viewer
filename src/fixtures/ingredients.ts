@@ -1,5 +1,6 @@
 import { newRecipeIngredient } from "@/lib/recipeIngredients";
 import type {
+  IngredientKeywordMatch,
   IngredientNutrition,
   IngredientRow,
   RecipeIngredientRow,
@@ -186,6 +187,28 @@ export function makeIngredient(
     created_at: "2026-07-01T12:00:00.000Z",
     updated_at: "2026-07-01T12:00:00.000Z",
     last_checked: null,
+    ...overrides,
+  };
+}
+
+/**
+ * One `search_ingredients_keyword` hit (db/migrations/0008) — the catalog
+ * columns that RPC projects, plus its raw trigram `similarity`. Defaults to a
+ * perfect score: a caller testing the keyword path usually cares that the row
+ * came back at all, not what it scored.
+ */
+export function makeKeywordMatch(
+  id: string,
+  name: string,
+  overrides?: Partial<IngredientKeywordMatch>,
+): IngredientKeywordMatch {
+  return {
+    id,
+    name,
+    aliases: [],
+    nutrition: null,
+    density_g_per_ml: null,
+    similarity: 1,
     ...overrides,
   };
 }

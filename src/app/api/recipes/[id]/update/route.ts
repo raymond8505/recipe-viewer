@@ -23,6 +23,12 @@ export const POST = requireSessionOrRecipeToken(
 
     const body = (await req.json()) as {
       schema: SchemaRecipe;
+      // The column-backed scalars. `description`/`notes` are nullable: the
+      // editor sends null to clear one, and an absent key leaves it alone.
+      name?: string;
+      image?: string;
+      description?: string | null;
+      notes?: string | null;
       // The whole list; absent = leave the ingredients alone.
       ingredients?: RecipeIngredientGroupInput[];
       // Same contract for the steps.
@@ -30,6 +36,9 @@ export const POST = requireSessionOrRecipeToken(
       // Absent = leave the base servings alone, which is what an invalid entry
       // in the editor's servings box degrades to.
       servings?: { amount: number | null; unit?: string | null };
+      // The three time columns in SECONDS. The app's own save path never spells
+      // ISO 8601 — that is a wire form, and this is not the wire.
+      times?: { prep?: number | null; cook?: number | null; total?: number | null };
       status: RecipeStatus;
       url?: string;
       source?: string;
@@ -56,9 +65,14 @@ export const POST = requireSessionOrRecipeToken(
         url: effectiveUrl,
         source: effectiveSource,
         schema: body.schema,
+        name: body.name,
+        image: body.image,
+        description: body.description,
+        notes: body.notes,
         ingredients: body.ingredients,
         instructions: body.instructions,
         servings: body.servings,
+        times: body.times,
         status: body.status,
       });
     } catch (err) {
@@ -77,6 +91,11 @@ export const POST = requireSessionOrRecipeToken(
     // ingredient), or was parsed into a column (a time, the servings).
     return NextResponse.json({
       schema: saved.metadata.schema,
+      name: saved.name,
+      image: saved.image,
+      description: saved.description,
+      notes: saved.notes,
+      cooking_notes: saved.cooking_notes,
       ingredients: saved.ingredients,
       instructions: saved.instructions,
       prep_time: saved.prep_time,
@@ -87,6 +106,7 @@ export const POST = requireSessionOrRecipeToken(
       total_weight_amount: saved.total_weight_amount,
       total_weight_unit: saved.total_weight_unit,
       status: saved.status,
+      updated_at: saved.updated_at,
       url: saved.url,
       source: saved.source,
     });
